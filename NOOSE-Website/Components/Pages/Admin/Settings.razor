@@ -116,6 +116,33 @@
         </RecordSection>
     </AuthorizeView>
 
+    <AuthorizeView Policy="@Policies.AdminPage" Context="publicModulesSection">
+        <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-module" Label="Module &amp; Not-Aus"
+                       Icon="@Icons.Material.Filled.ToggleOn">
+            <PublicModulesPanel />
+        </RecordSection>
+    </AuthorizeView>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-seiten" Label="Öffentliche Seiten"
+                   Icon="@Icons.Material.Filled.MenuBook">
+        <PublicPagesPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="warnhinweise" Label="Warnhinweise"
+                   Icon="@Icons.Material.Filled.Warning">
+        <WarnhinweisPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-vorlagen" Label="Öffentliche Vorlagen"
+                   Icon="@Icons.Material.Filled.Mail">
+        <PublicTemplatesPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="buerger" Label="Bürgerkonten"
+                   Icon="@Icons.Material.Filled.Person">
+        <PublicCitizensPanel />
+    </RecordSection>
+
     @* Protokoll and Gegenaufklärung moved to /nachweis; only the value lists stay here. *@
     <RecordSection Group="Nachweis" Slug="basisdaten" Label="Wertelisten"
                    Icon="@Icons.Material.Filled.Storage">

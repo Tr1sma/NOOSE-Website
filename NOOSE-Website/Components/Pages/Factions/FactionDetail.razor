@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IPartnerVisibilityPolicyService PartnerPolicy
+@inject NOOSE_Website.Services.Public.IPublicFactionProfileService PublicProfiles
 
 <PageTitle>@(_faction?.Name ?? "Fraktion") · NOOSE</PageTitle>
 
@@ -21,6 +22,14 @@ else if (_faction is null)
 }
 else
 {
+    @if (_publicBanner is { Status: PublicProfileStatus.Veroeffentlicht } banner)
+    {
+        @* only the published state: a draft is not outside, and its existence is an internal matter *@
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="mb-4">
+            Diese Organisation ist öffentlich dargestellt (@PublicFactionStandingDisplay.Name(banner.Standing)).
+        </MudAlert>
+    }
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
         <CompromisedBadge EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
@@ -145,6 +154,12 @@ else
                 </RecordSection>
                 <RecordSection Group="Ermittlung" Slug="asservate-mitglieder" Label="Asservate (Mitglieder)" Icon="@Icons.Material.Filled.Inventory">
                     <EvidenceOwnerPanel FactionId="@_faction.Id" />
+                </RecordSection>
+                @* deliberately outside the "einstufung" section and internal only: PartnerTabCatalog lists that slug,
+                   so anything in it is visible to a released partner — and what NOOSE is preparing to publish is not
+                   partner business *@
+                <RecordSection Group="Akte" Slug="oeffentlich" Label="Öffentliches Profil" Icon="@Icons.Material.Filled.Public">
+                    <PublicFactionProfilePanel FactionId="@_faction.Id" User="_user" Changed="PublicProfileReloadAsync" />
                 </RecordSection>
                 }
                 @if (TabOn("bestaende"))
@@ -295,6 +310,26 @@ else
         }
     }
 
+    private PublicFactionProfileBanner? _publicBanner;
+
+    private async Task PublicProfileLoadAsync()
+    {
+        try
+        {
+            _publicBanner = _faction is null ? null : await PublicProfiles.GetBannerForFactionAsync(_faction.Id);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    private async Task PublicProfileReloadAsync()
+    {
+        await PublicProfileLoadAsync();
+        StateHasChanged();
+    }
+
     private async Task LoadAsync()
     {
         // Don't set _load=true on reload: remounting the rail would jump to the first section.
@@ -310,6 +345,7 @@ else
             if (!_isPartner)
             {
                 await InvestigationLeadLoadAsync();
+                await PublicProfileLoadAsync();
             }
         }
         _visibleTabs = _isPartner && _faction is not null

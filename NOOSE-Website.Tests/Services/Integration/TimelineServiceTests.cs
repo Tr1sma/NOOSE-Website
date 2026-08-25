@@ -1,10 +1,11 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
@@ -393,6 +394,110 @@ public sealed class TimelineServiceTests
     }
 
     [Fact]
+    public async Task GetTimelineAsync_Reward_ReachesTheFileOverThreeHops()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                Status = PublicWantedStatus.Gefasst, CreatedAt = Utc(2),
+            });
+            db.FahndungKopfgeldAnteile.Add(new FahndungKopfgeldAnteil
+            {
+                Id = "k1", WantedId = "f1", Amount = 50_000m, Status = BountyShareStatus.Ausgezahlt,
+                Timestamp = Utc(3), CreatedAt = Utc(3),
+            });
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "profil1", WantedId = "f1",
+                Text = "Am Hafen gesehen.", CreatedAt = Utc(3),
+            });
+            db.HinweisBelohnungen.Add(new HinweisBelohnung
+            {
+                Id = "b1", ReceiptNumber = "NOOSE-BEL-2026-0001", TipId = "h1", ShareId = "k1",
+                Amount = 50_000m, PaidAt = Utc(4), CreatedAt = Utc(4),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(HinweisBelohnung), EntityId = "b1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(4),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        // without the staged fan-out and the MapAudit arm this would be missing or read as "Akte geändert"
+        Assert.Contains(result, e => e.Title == "Belohnung ausgezahlt");
+        Assert.DoesNotContain(result, e => e.Title == "Akte geändert");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_PublicWanted_AuditFanOut_ShowsExactlyOneRowPerEvent()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                Status = PublicWantedStatus.Veroeffentlicht, CreatedAt = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Modified,
+                AgentName = "Falcon", Timestamp = Utc(3),
+                ChangesJson = "{\"Status\":[\"Veroeffentlicht\",\"Zurueckgezogen\"]}",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var rows = result.Where(e => e.Title.Contains("Öffentliche Ausschreibung", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, rows.Count);
+        // no second, Person-typed manual row: that one would fall through MapAudit and read as "Akte geändert"
+        Assert.DoesNotContain(result, e => e.Title == "Akte geändert");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_PublicWanted_OfADeletedNotice_StaysOnTheFile()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                IsDeleted = true, DeletedAt = Utc(4), CreatedAt = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Deleted,
+                AgentName = "Falcon", Timestamp = Utc(4),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Contains(result, e => e.Title == "Öffentliche Ausschreibung gelöscht");
+    }
+
+    [Fact]
     public async Task GetTimelineAsync_PhotoRemoval_AuditFanOut_ShowsRemoval()
     {
         using var ctx = new SqliteTestContext();
@@ -466,6 +571,34 @@ public sealed class TimelineServiceTests
 
         var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Change));
         Assert.Equal("Sonderfeld geändert", entry.Title);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_TakeoverLink_NamesTheTipByCaseNumber()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "profil1",
+                Text = "Am Hafen gesehen.", CreatedAt = Utc(1),
+            });
+            db.Links.Add(new Link
+            {
+                SourceType = "Hinweis", SourceId = "h1", TargetType = "Person", TargetId = "p1",
+                Label = "Übernahme aus Bürgerhinweis NOOSE-H-2026-0001", Automatic = false, CreatedAt = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        // RecordsReference resolves the counterpart; without its arm the entry would read "Akte"
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Link));
+        Assert.Contains("Bürgerhinweis NOOSE-H-2026-0001", entry.Title, StringComparison.Ordinal);
     }
 
     [Fact]

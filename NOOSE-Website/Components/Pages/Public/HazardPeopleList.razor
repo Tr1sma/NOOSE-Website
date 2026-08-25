@@ -1,0 +1,103 @@
+@page "/gefahr/personen"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService Wanted
+
+<PageTitle>Gefährlichste Personen · NOOSE</PageTitle>
+
+@* the rows are published wanted notices, so the wanted module gates them as well as the hazard lists do *@
+<PublicModuleGate Module="@PublicModules.HazardLists" Title="Gefahrenlisten">
+<PublicModuleGate Module="@PublicModules.Wanted" Title="Gefahrenlisten">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <div>
+            <MudText Typo="Typo.h4">Gefährlichste gesuchte Personen</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                Die @HazardRanking.Limit am höchsten eingeschätzten laufenden Ausschreibungen. Nähern Sie sich
+                niemandem selbst — melden Sie Beobachtungen der nächsten Dienststelle.
+            </MudText>
+        </div>
+
+        <MudStack Row="true" Spacing="1">
+            <MudChip T="string" Href="/gefahr/fraktionen" Variant="Variant.Outlined" Color="Color.Primary"
+                     Size="Size.Small">Organisationen</MudChip>
+            <MudChip T="string" Href="/gefahr/personen" Variant="Variant.Filled" Color="Color.Primary"
+                     Size="Size.Small">Personen</MudChip>
+        </MudStack>
+
+        <MudDivider />
+
+        @if (_rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit ist keine Ausschreibung mit einer Gefahrenstufe veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th style="width:4rem;">#</th>
+                        <th>Person</th>
+                        <th>Gefahrenstufe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < _rows.Count; i++)
+                    {
+                        var card = _rows[i];
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>
+                                <MudLink Href="@($"/gesucht/{card.CaseNumber}")">@card.DisplayName</MudLink>
+                            </td>
+                            <td>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                                    @HazardLevelLogic.Name(card.HazardLevel)
+                                </MudChip>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        <div>
+            <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.PersonSearch">Alle Ausschreibungen</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+</PublicModuleGate>
+
+@code {
+    // no own read path: the board already carries the hazard level, behind the same suppression belt. A second query
+    // would have to repeat that belt — exactly the trap the wanted phase measured
+    private List<PublicWantedCard> _rows = [];
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        try
+        {
+            // only actual manhunts: a missing person or a witness appeal carries a hazard level too, and listing
+            // either under "most dangerous" would be an accusation the notice never made
+            _rows = HazardRanking.Rank(
+                (await Wanted.GetBoardAsync()).Cards.Where(c => c.Kind == PublicWantedKind.Fahndung),
+                c => c.HazardLevel, c => c.PublishedAt);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

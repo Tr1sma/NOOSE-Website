@@ -1,0 +1,127 @@
+@page "/organisationen"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicFactionProfileService Profiles
+
+<PageTitle>Organisationen · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Organisations" Title="Organisationen">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <div>
+            <MudText Typo="Typo.h4">Beobachtete und verbotene Organisationen</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                Das National Office of Security Enforcement veröffentlicht hier, welche Organisationen es
+                beobachtet und welche verboten sind. Mitglieder werden nicht namentlich genannt.
+            </MudText>
+        </div>
+
+        @* static render, no circuit: the filters are links that rewrite the query, not interactive controls *@
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+            <MudChip T="string" Href="/organisationen" Variant="@ChipVariant(Standing is null)"
+                     Color="Color.Primary" Size="Size.Small">Alle</MudChip>
+            @foreach (var standing in PublicFactionStandingDisplay.All.Where(s => _cards.Any(c => c.Standing == s)))
+            {
+                <MudChip T="string" Href="@($"/organisationen?einordnung={standing}")" Size="Size.Small"
+                         Variant="@ChipVariant(Standing == standing)" Color="Color.Primary">
+                    @PublicFactionStandingDisplay.Name(standing)
+                </MudChip>
+            }
+        </MudStack>
+
+        <MudDivider />
+
+        @if (Filtered.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                @(_cards.Count == 0
+                    ? "Derzeit sind keine Organisationen veröffentlicht."
+                    : "Zu dieser Einordnung ist derzeit nichts veröffentlicht.")
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @foreach (var card in Filtered)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudPaper Outlined="true" Class="pa-4" Style="height:100%;">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                             Color="@(card.Standing == PublicFactionStanding.Verboten ? Color.Error : Color.Warning)">
+                                        @PublicFactionStandingDisplay.Name(card.Standing)
+                                    </MudChip>
+                                    @if (card.HazardLevel != HazardLevel.No)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                                            Gefahr: @HazardLevelLogic.Name(card.HazardLevel)
+                                        </MudChip>
+                                    }
+                                </MudStack>
+                                <MudText Typo="Typo.h6">@card.DisplayName</MudText>
+                                @if (!string.IsNullOrWhiteSpace(card.DescriptionHtml))
+                                {
+                                    @* raw markup, never RichHtml: that resolves @{Typ:GUID} and would hand out internal record names *@
+                                    <div class="dokument-html">@((MarkupString)card.DescriptionHtml!)</div>
+                                }
+                                @if (card.PublishedAt is { } published)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        Veröffentlicht am @published.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        <div>
+            <MudButton Href="/gefahr/fraktionen" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Warning">Gefährlichste Organisationen</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    // a string, not the enum: Blazor answers a value it cannot parse with HTTP 500, and anyone can append a query
+    // to a public URL
+    [SupplyParameterFromQuery(Name = "einordnung")]
+    public string? StandingRaw { get; set; }
+
+    private IReadOnlyList<PublicFactionCard> _cards = [];
+    private bool _loaded;
+
+    private PublicFactionStanding? Standing =>
+        Enum.TryParse<PublicFactionStanding>(StandingRaw, ignoreCase: true, out var parsed)
+            && PublicFactionStandingDisplay.All.Contains(parsed)
+                ? parsed
+                : null;
+
+    private List<PublicFactionCard> Filtered =>
+        _cards.Where(c => Standing is null || c.Standing == Standing).ToList();
+
+    private static Variant ChipVariant(bool active) => active ? Variant.Filled : Variant.Outlined;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        try
+        {
+            _cards = (await Profiles.GetBoardAsync()).Cards;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

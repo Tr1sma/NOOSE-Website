@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
@@ -155,6 +156,14 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Observation), x.Id)] = ($"Observation – {x.PersonName} ({x.Start.ToLocalTime():dd.MM.yyyy})", x.IsClassified, $"/personen/{x.PersonId}?tab=ueberwachung");
         }
 
+        // citizen tips: the case number only. A tip carries a citizen behind it, and the designation must not
+        var tipIds = pairs.Where(p => p.OtherType == nameof(Hinweis)).Select(p => p.OtherId).Distinct().ToList();
+        foreach (var x in await db.Hinweise.Where(h => tipIds.Contains(h.Id))
+                     .Select(h => new { h.Id, h.CaseNumber }).ToListAsync(cancellationToken))
+        {
+            targets[(nameof(Hinweis), x.Id)] = ($"Bürgerhinweis {x.CaseNumber}", false, $"/hinweise/{x.Id}");
+        }
+
         // library documents: classified if any VS flag is set, leadership-gated below
         var documentIds = pairs.Where(p => p.OtherType == nameof(Document)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Documents.Where(d => documentIds.Contains(d.Id))
@@ -213,7 +222,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
             nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
             nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
-            nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem),
+            nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem), nameof(Hinweis),
         };
         // partners: only links to released, releasable-type records
         HashSet<(string, string)>? releasedTargets = null;

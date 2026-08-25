@@ -61,6 +61,36 @@ public enum NotificationType
 
     /// <summary>New website feedback filed.</summary>
     Feedback = 18,
+
+    /// <summary>A wanted notice went public. Routable — this one is meant for the outside channel.</summary>
+    PublicWantedPublished = 19,
+
+    /// <summary>A published notice reached its expiry date. Deliberately not routable: it is an internal fact.</summary>
+    PublicWantedExpired = 20,
+
+    /// <summary>The advertised bounty on a live notice went up. Routable — a raise is meant for the outside channel.</summary>
+    PublicWantedBountyRaised = 21,
+
+    /// <summary>A citizen filed a tip. Deliberately not routable: it belongs in the inbox, not in a public channel.</summary>
+    PublicTipReceived = 22,
+
+    /// <summary>The agency wrote to a citizen about their tip. Not routable for the same reason.</summary>
+    PublicTipAnswered = 23,
+
+    /// <summary>A citizen's tip was rewarded. Not routable: a reward announcement in the public channel outs the tipster.</summary>
+    PublicRewardPaid = 24,
+
+    /// <summary>A citizen opened a ticket. Not routable: the concern of a named citizen has no place in a public channel.</summary>
+    PublicTicketOpened = 25,
+
+    /// <summary>Leadership answered a ticket. Not routable for the same reason.</summary>
+    PublicTicketAnswered = 26,
+
+    /// <summary>A citizen objected to a public notice. Not routable — it names a citizen disputing an accusation.</summary>
+    PublicObjectionReceived = 27,
+
+    /// <summary>The agency decided an objection. Not routable for the same reason; it is addressed to one citizen.</summary>
+    PublicObjectionDecided = 28,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -87,6 +117,16 @@ public static class NotificationTypeDisplay
         NotificationType.AbductionFiled => "Agenten-Entführung",
         NotificationType.Financing => "Finanzierung",
         NotificationType.Feedback => "Feedback",
+        NotificationType.PublicWantedPublished => "Öffentliche Ausschreibung",
+        NotificationType.PublicWantedExpired => "Ausschreibung abgelaufen",
+        NotificationType.PublicWantedBountyRaised => "Kopfgeld erhöht",
+        NotificationType.PublicTipReceived => "Bürgerhinweis",
+        NotificationType.PublicTipAnswered => "Antwort zu deinem Hinweis",
+        NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
+        NotificationType.PublicTicketOpened => "Neues Bürger-Ticket",
+        NotificationType.PublicTicketAnswered => "Antwort zu deinem Ticket",
+        NotificationType.PublicObjectionReceived => "Einspruch gegen eine Ausschreibung",
+        NotificationType.PublicObjectionDecided => "Entscheidung zu deinem Einspruch",
         _ => "Benachrichtigung",
     };
 
@@ -112,6 +152,16 @@ public static class NotificationTypeDisplay
         NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
         NotificationType.Financing => Icons.Material.Filled.RequestQuote,
         NotificationType.Feedback => Icons.Material.Filled.Feedback,
+        NotificationType.PublicWantedPublished => Icons.Material.Filled.PersonSearch,
+        NotificationType.PublicWantedExpired => Icons.Material.Filled.TimerOff,
+        NotificationType.PublicWantedBountyRaised => Icons.Material.Filled.Paid,
+        NotificationType.PublicTipReceived => Icons.Material.Filled.TipsAndUpdates,
+        NotificationType.PublicTipAnswered => Icons.Material.Filled.MarkEmailUnread,
+        NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
+        NotificationType.PublicTicketOpened => Icons.Material.Filled.Forum,
+        NotificationType.PublicTicketAnswered => Icons.Material.Filled.MarkChatUnread,
+        NotificationType.PublicObjectionReceived => Icons.Material.Filled.Balance,
+        NotificationType.PublicObjectionDecided => Icons.Material.Filled.Gavel,
         _ => Icons.Material.Filled.Notifications,
     };
 }

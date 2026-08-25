@@ -30,6 +30,7 @@ using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Llm;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -234,6 +235,23 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BewerbungTestAssignment> BewerbungTestAssignments => Set<BewerbungTestAssignment>();
     public DbSet<BewerbungTestAnswer> BewerbungTestAnswers => Set<BewerbungTestAnswer>();
     public DbSet<Bewerbungssperre> Bewerbungssperren => Set<Bewerbungssperre>();
+
+    // ---- public area (citizen accounts) ----
+    public DbSet<BuergerProfil> BuergerProfile => Set<BuergerProfil>();
+    public DbSet<OeffentlichesModul> OeffentlicheModule => Set<OeffentlichesModul>();
+    public DbSet<OeffentlicheSeite> OeffentlicheSeiten => Set<OeffentlicheSeite>();
+    public DbSet<OeffentlicheFahndung> OeffentlicheFahndungen => Set<OeffentlicheFahndung>();
+    public DbSet<Warnhinweis> Warnhinweise => Set<Warnhinweis>();
+    public DbSet<FahndungWarnhinweis> FahndungWarnhinweise => Set<FahndungWarnhinweis>();
+    public DbSet<FahndungKopfgeldAnteil> FahndungKopfgeldAnteile => Set<FahndungKopfgeldAnteil>();
+    public DbSet<Hinweis> Hinweise => Set<Hinweis>();
+    public DbSet<HinweisNachricht> HinweisNachrichten => Set<HinweisNachricht>();
+    public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
+    public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
+    public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
+    public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1341,6 +1359,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.RequesterName).HasMaxLength(100);
             b.Property(a => a.DeciderName).HasMaxLength(100);
             b.Property(a => a.CreatedById).HasMaxLength(64);
+            b.Property(a => a.PublicationWantedId).HasMaxLength(64);
+            b.Property(a => a.BountyShareId).HasMaxLength(64);
             b.HasIndex(a => new { a.Type, a.Status });
             b.HasIndex(a => new { a.TargetType, a.TargetId });
             b.HasIndex(a => a.CreatedById);
@@ -1609,6 +1629,275 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AssignmentId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(a => a.Question).WithMany()
                 .HasForeignKey(a => a.QuestionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BuergerProfil>(b =>
+        {
+            b.Property(p => p.UserId).HasMaxLength(64).IsRequired();
+            b.Property(p => p.FirstName).HasMaxLength(64);
+            b.Property(p => p.LastName).HasMaxLength(64);
+            b.Property(p => p.BlockedReason).HasColumnType("longtext");
+            b.Property(p => p.BlockedById).HasMaxLength(64);
+            b.Property(p => p.LinkedPersonId).HasMaxLength(64);
+            // one citizen profile per identity user
+            b.HasIndex(p => p.UserId).IsUnique();
+            b.HasIndex(p => p.IsBlocked);
+            b.HasOne(p => p.User).WithMany()
+                .HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(p => p.BlockedById).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Person>().WithMany()
+                .HasForeignKey(p => p.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlichesModul>(b =>
+        {
+            b.Property(m => m.Key).HasMaxLength(64).IsRequired();
+            b.Property(m => m.OfflineText).HasColumnType("longtext");
+            b.Property(m => m.LabelOverride).HasMaxLength(64);
+            // an icon name from the allowlist, not the SVG itself
+            b.Property(m => m.IconOverride).HasMaxLength(64);
+            // one row per catalog key; a duplicate would let two switches fight over one module
+            b.HasIndex(m => m.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<OeffentlicheSeite>(b =>
+        {
+            b.Property(p => p.Slug).HasMaxLength(64).IsRequired();
+            b.Property(p => p.Title).HasMaxLength(200).IsRequired();
+            b.Property(p => p.MenuTitle).HasMaxLength(64);
+            // an icon name from the allowlist, not the SVG itself
+            b.Property(p => p.IconName).HasMaxLength(64);
+            b.Property(p => p.ContentHtml).HasColumnType("longtext");
+            b.Property(p => p.DraftHtml).HasColumnType("longtext");
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // NOT unique: a soft-deleted page keeps its slug, and a unique index would block reusing the address
+            b.HasIndex(p => p.Slug);
+            b.HasIndex(p => p.Status);
+            b.HasOne(p => p.PublishedBy).WithMany()
+                .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicheFahndung>(b =>
+        {
+            b.Property(f => f.CaseNumber).HasMaxLength(32);
+            b.Property(f => f.DisplayName).HasMaxLength(200).IsRequired();
+            b.Property(f => f.AliasText).HasMaxLength(400);
+            b.Property(f => f.PhotoFileName).HasMaxLength(128);
+            b.Property(f => f.PhotoContentType).HasMaxLength(64);
+            b.Property(f => f.PhotoSourceId).HasMaxLength(64);
+            b.Property(f => f.ChargeHtml).HasColumnType("longtext");
+            b.Property(f => f.LastArea).HasMaxLength(200);
+            b.Property(f => f.VehicleText).HasMaxLength(400);
+            b.Property(f => f.RetractedReason).HasColumnType("longtext");
+            b.Property(f => f.PersonId).HasMaxLength(64);
+            b.Property(f => f.FactionId).HasMaxLength(64);
+            b.Property(f => f.PublishedById).HasMaxLength(64);
+            // unique, unlike the page slug: a counter number is issued once and never reused, so a
+            // soft-deleted row blocks no address anyone could want back
+            b.HasIndex(f => f.CaseNumber).IsUnique();
+            b.HasIndex(f => new { f.Status, f.PublishedAt });
+            b.HasIndex(f => f.PersonId);
+            b.HasIndex(f => f.FactionId);
+            b.HasIndex(f => f.ExpiresAt);
+            b.HasOne(f => f.Person).WithMany()
+                .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(f => f.Faction).WithMany()
+                .HasForeignKey(f => f.FactionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(f => f.PublishedBy).WithMany()
+                .HasForeignKey(f => f.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Warnhinweis>(b =>
+        {
+            b.Property(w => w.Name).HasMaxLength(60).IsRequired();
+            // a colour NAME from the allowlist, not a free value: this one is rendered anonymously
+            b.Property(w => w.Colour).HasMaxLength(32);
+            b.HasIndex(w => w.Name).IsUnique();
+            b.HasIndex(w => new { w.IsActive, w.SortOrder });
+        });
+
+        modelBuilder.Entity<FahndungWarnhinweis>(b =>
+        {
+            b.Property(z => z.FahndungId).HasMaxLength(64);
+            b.Property(z => z.WarnhinweisId).HasMaxLength(64);
+            // cascade on both ends: the row says nothing without either of them, and it is what keeps the unique
+            // index on Bezeichnung usable after a hard delete. No cascade-path clash — the notice itself hangs on
+            // Personen/Fraktionen/Agent with Restrict, so the chain ends at OeffentlicheFahndungen
+            b.HasOne(z => z.Fahndung).WithMany()
+                .HasForeignKey(z => z.FahndungId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(z => z.Warnhinweis).WithMany()
+                .HasForeignKey(z => z.WarnhinweisId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(z => new { z.FahndungId, z.WarnhinweisId }).IsUnique();
+        });
+
+        modelBuilder.Entity<FahndungKopfgeldAnteil>(b =>
+        {
+            b.Property(k => k.WantedId).HasMaxLength(64);
+            b.Property(k => k.DonorAgentId).HasMaxLength(64);
+            b.Property(k => k.KassenBuchungId).HasMaxLength(255);
+            b.Property(k => k.Amount).HasPrecision(18, 2);
+            b.Property(k => k.WithdrawnReason).HasMaxLength(500);
+            // Restrict, unlike the warning assignment: a money trail must not disappear with its target, and the
+            // notice is only ever soft-deleted anyway
+            b.HasOne(k => k.Wanted).WithMany()
+                .HasForeignKey(k => k.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(k => k.DonorAgent).WithMany()
+                .HasForeignKey(k => k.DonorAgentId).OnDelete(DeleteBehavior.Restrict);
+            // the sum path
+            b.HasIndex(k => new { k.WantedId, k.Status });
+            // one booking backs at most one share, mirroring FinancingRequest
+            b.HasIndex(k => k.KassenBuchungId).IsUnique();
+        });
+
+        modelBuilder.Entity<HinweisBelohnung>(b =>
+        {
+            b.Property(x => x.ReceiptNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.TipId).HasMaxLength(64);
+            b.Property(x => x.ShareId).HasMaxLength(64);
+            b.Property(x => x.KassenBuchungId).HasMaxLength(255);
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            // Restrict for the same reason as the share: a payment trail must not disappear with its target
+            b.HasOne(x => x.Tip).WithMany()
+                .HasForeignKey(x => x.TipId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Share).WithMany()
+                .HasForeignKey(x => x.ShareId).OnDelete(DeleteBehavior.Restrict);
+            // not unique: one tip may draw from several shares, and its rows share the receipt
+            b.HasIndex(x => x.ReceiptNumber);
+            b.HasIndex(x => x.TipId);
+            b.HasIndex(x => x.ShareId);
+            b.HasIndex(x => x.KassenBuchungId).IsUnique();
+        });
+
+        modelBuilder.Entity<Hinweis>(b =>
+        {
+            b.Property(h => h.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(h => h.CitizenProfileId).HasMaxLength(64);
+            b.Property(h => h.WantedId).HasMaxLength(64);
+            b.Property(h => h.HandlerId).HasMaxLength(64);
+            b.Property(h => h.DuplicateGroupId).HasMaxLength(64);
+            b.Property(h => h.AnonymityResolvedById).HasMaxLength(64);
+            b.Property(h => h.Text).HasColumnType("longtext");
+            b.Property(h => h.AttachmentFileName).HasMaxLength(128);
+            b.Property(h => h.AttachmentOriginalName).HasMaxLength(255);
+            b.Property(h => h.AttachmentContentType).HasMaxLength(128);
+            // Restrict throughout: a tip outlives the account, the notice and the handler it names
+            b.HasOne(h => h.CitizenProfile).WithMany()
+                .HasForeignKey(h => h.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(h => h.Wanted).WithMany()
+                .HasForeignKey(h => h.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(h => h.Handler).WithMany()
+                .HasForeignKey(h => h.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(h => h.CaseNumber).IsUnique();
+            // the inbox order: priority first, creation time as the tie-break
+            b.HasIndex(h => new { h.Status, h.Priority });
+            b.HasIndex(h => new { h.Status, h.CreatedAt });
+            // the rate-limit count
+            b.HasIndex(h => new { h.CitizenProfileId, h.CreatedAt });
+            b.HasIndex(h => h.WantedId);
+            // duplicate groups: the sibling list and the per-group count
+            b.HasIndex(h => h.DuplicateGroupId);
+        });
+
+        modelBuilder.Entity<HinweisNachricht>(b =>
+        {
+            b.Property(m => m.HinweisId).HasMaxLength(64);
+            b.Property(m => m.AuthorAgentId).HasMaxLength(64);
+            b.Property(m => m.Text).HasColumnType("longtext");
+            b.HasOne(m => m.Hinweis).WithMany()
+                .HasForeignKey(m => m.HinweisId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(m => m.AuthorAgent).WithMany()
+                .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(m => new { m.HinweisId, m.Audience });
+            b.HasIndex(m => new { m.HinweisId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<Ticket>(b =>
+        {
+            b.Property(t => t.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(t => t.CitizenProfileId).HasMaxLength(64);
+            b.Property(t => t.Subject).HasMaxLength(160).IsRequired();
+            b.Property(t => t.HandlerId).HasMaxLength(64);
+            b.Property(t => t.ClosedById).HasMaxLength(64);
+            // Restrict throughout: a ticket outlives the account and the handler it names
+            b.HasOne(t => t.CitizenProfile).WithMany()
+                .HasForeignKey(t => t.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(t => t.Handler).WithMany()
+                .HasForeignKey(t => t.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(t => t.CaseNumber).IsUnique();
+            // the desk order: newest activity first within a status tab
+            b.HasIndex(t => new { t.Status, t.LastActivityAt });
+            // both caps of the quota read these
+            b.HasIndex(t => new { t.CitizenProfileId, t.Status });
+            b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+        });
+
+        modelBuilder.Entity<TicketNachricht>(b =>
+        {
+            b.Property(m => m.TicketId).HasMaxLength(64);
+            b.Property(m => m.AuthorAgentId).HasMaxLength(64);
+            b.Property(m => m.Text).HasColumnType("longtext");
+            b.HasOne(m => m.Ticket).WithMany()
+                .HasForeignKey(m => m.TicketId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(m => m.AuthorAgent).WithMany()
+                .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(m => new { m.TicketId, m.Audience });
+            b.HasIndex(m => new { m.TicketId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<OeffentlicheVorlage>(b =>
+        {
+            b.Property(v => v.Title).HasMaxLength(160).IsRequired();
+            // longtext: the body is a message, and a length cap here would truncate it without a word
+            b.Property(v => v.Text).HasColumnType("longtext");
+            // the only shape the read path knows: the active templates of one kind, in order
+            b.HasIndex(v => new { v.Kind, v.IsActive, v.SortOrder });
+        });
+
+        modelBuilder.Entity<OeffentlichesFraktionsprofil>(b =>
+        {
+            b.Property(p => p.DisplayName).HasMaxLength(200).IsRequired();
+            // longtext: the description may carry images, and a cap here would truncate it without a word
+            b.Property(p => p.DescriptionHtml).HasColumnType("longtext");
+            b.Property(p => p.RetractedReason).HasColumnType("longtext");
+            b.Property(p => p.FactionId).HasMaxLength(64);
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // No unique index on FraktionId: with soft delete it would block the faction forever, the same trap the
+            // page slug documents. "One live profile per faction" is enforced over the living rows in the service.
+            b.HasIndex(p => new { p.Status, p.PublishedAt });
+            b.HasIndex(p => p.FactionId);
+            b.HasOne(p => p.Faction).WithMany()
+                .HasForeignKey(p => p.FactionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(p => p.PublishedBy).WithMany()
+                .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FahndungEinspruch>(b =>
+        {
+            b.Property(e => e.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(e => e.WantedId).HasMaxLength(64);
+            b.Property(e => e.CitizenProfileId).HasMaxLength(64);
+            b.Property(e => e.DecidedById).HasMaxLength(64);
+            b.Property(e => e.LinkedCaseId).HasMaxLength(64);
+            // longtext on both: an objection is an argument, and a cap would truncate it without a word
+            b.Property(e => e.Text).HasColumnType("longtext");
+            b.Property(e => e.DecisionNote).HasColumnType("longtext");
+            // Restrict throughout: an objection outlives the account and the agent it names, and deleting a notice
+            // out from under it would erase what was disputed
+            b.HasOne(e => e.Wanted).WithMany()
+                .HasForeignKey(e => e.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.CitizenProfile).WithMany()
+                .HasForeignKey(e => e.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.DecidedBy).WithMany()
+                .HasForeignKey(e => e.DecidedById).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.LinkedCase).WithMany()
+                .HasForeignKey(e => e.LinkedCaseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(e => e.CaseNumber).IsUnique();
+            // the desk order: newest first within a status tab
+            b.HasIndex(e => new { e.Status, e.CreatedAt });
+            // the two caps and the banner on a notice read these
+            b.HasIndex(e => new { e.CitizenProfileId, e.CreatedAt });
+            b.HasIndex(e => new { e.WantedId, e.Status });
         });
 
         // global soft-delete filter

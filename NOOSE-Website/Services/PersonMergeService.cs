@@ -5,11 +5,13 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonMergeService" />
-public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPersonMergeService
+public class PersonMergeService(
+    IDbContextFactory<AppDbContext> dbFactory, IPublicWantedService publicWanted) : IPersonMergeService
 {
     public async Task MergeAsync(string sourceId, string targetId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
@@ -261,9 +263,12 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // open requests: point to the target record, refresh the designation
+        // open requests: point to the target record, refresh the designation. A publication request is left behind on
+        // purpose — its snapshot still names the source, so following the target would approve a notice for a file the
+        // request was never about; it is closed with the source's notices below instead.
         foreach (var request in await db.Requests
-                     .Where(a => a.TargetType == type && a.TargetId == sourceId)
+                     .Where(a => a.TargetType == type && a.TargetId == sourceId
+                         && a.Type != RequestType.Veroeffentlichung)
                      .ToListAsync(cancellationToken))
         {
             request.TargetId = targetId;
@@ -276,6 +281,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             target.Description = source.Description;
         }
         // classified status carries over to the merged record
+        var targetBecomesRestricted = !target.IsRestricted && source.IsClassified;
         target.IsClassified = target.IsClassified || source.IsClassified;
         // target's classification/life status left untouched (rank-gated)
 
@@ -296,5 +302,13 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
         db.People.Remove(source);
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // the source file is gone, and the merge may have classified the target without going through PersonService —
+        // both leave a public notice standing that nothing backs any more
+        await publicWanted.RetractForRecordAsync(sourceId, "Akte zusammengeführt.", actor, cancellationToken);
+        if (targetBecomesRestricted)
+        {
+            await publicWanted.RetractForRecordAsync(targetId, "Akte als Verschlusssache eingestuft.", actor, cancellationToken);
+        }
     }
 }

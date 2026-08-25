@@ -1,0 +1,109 @@
+@inject ITipService Tips
+@inject ISnackbar Snackbar
+
+@* Tips of the citizen accounts tied to this file. A promised anonymity keeps a tip out of here entirely. *@
+<MudPaper Outlined="true" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.h6">Hinweisgeber</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Bürgerhinweise der mit dieser Akte verknüpften Bürgerkonten.
+            </MudText>
+        </MudStack>
+
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_rows.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Filled.TipsAndUpdates" Title="Keine Hinweise"
+                        Text="Mit dieser Akte ist kein Bürgerkonto verknüpft, oder es hat noch nichts gemeldet. Hinweise mit Anonymitätszusage erscheinen hier nicht." />
+        }
+        else
+        {
+            <MudTable Items="_rows" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Aktenzeichen</MudTh>
+                    <MudTh>Hinweisgeber</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Eingegangen</MudTh>
+                    <MudTh>Auszug</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Aktenzeichen">
+                        <MudLink Href="@($"/hinweise/{context.Id}")">@context.CaseNumber</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Hinweisgeber">
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                            @(context.CitizenName ?? "—")
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                                @TipTrust.Label(context.TrustTier)
+                            </MudChip>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                            @TipStatusDisplay.Name(context.Status)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Eingegangen">@context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+                    <MudTd DataLabel="Auszug">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Excerpt</MudText>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public string PersonId { get; set; } = default!;
+
+    [Parameter]
+    [EditorRequired]
+    public ClaimsPrincipal User { get; set; } = default!;
+
+    private IReadOnlyList<TipHistoryRow> _rows = Array.Empty<TipHistoryRow>();
+    private bool _load = true;
+    private string? _loadedId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == PersonId)
+        {
+            return;
+        }
+        _loadedId = PersonId;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Tips.GetForLinkedPersonAsync(PersonId, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private static Color StatusColour(TipStatus status) => status switch
+    {
+        TipStatus.Neu => Color.Info,
+        TipStatus.InPruefung => Color.Primary,
+        TipStatus.Rueckfrage => Color.Warning,
+        TipStatus.Bestaetigt => Color.Success,
+        TipStatus.FuehrteZurErgreifung => Color.Success,
+        _ => Color.Default,
+    };
+}

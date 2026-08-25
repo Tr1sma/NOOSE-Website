@@ -155,6 +155,10 @@
                                 <MudItem xs="12" sm="4">@Flag("Admin", _definition.RequireAdmin, v => _definition.RequireAdmin = v)</MudItem>
                             </MudGrid>
 
+                            @* the organisation condition: resolved over the acting account's civilian profile *@
+                            @Flag("Teilt Organisation mit der Ziel-Akte", _definition.ActorSharesOrgWithTarget,
+                                v => _definition.ActorSharesOrgWithTarget = v)
+
                             <MudSelect T="CounterIntelPartnerScope" Label="Zugehörigkeit" @bind-Value="_definition.PartnerScope"
                                        Variant="Variant.Outlined" Dense="true">
                                 @foreach (var s in CounterIntelPartnerScopeDisplay.All)
@@ -437,6 +441,7 @@
             if (_definition.RequireTru is not null) parts.Add("TRU");
             if (_definition.RequireHrb is not null) parts.Add("HRB");
             if (_definition.RequireAdmin is not null) parts.Add("Admin");
+            if (_definition.ActorSharesOrgWithTarget is not null) parts.Add("Organisation");
             if (_definition.PartnerScope != CounterIntelPartnerScope.Any)
             {
                 parts.Add(CounterIntelPartnerScopeDisplay.Name(_definition.PartnerScope));

@@ -9,6 +9,7 @@ using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Factions;
 using NOOSE_Website.Models.People;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
@@ -31,7 +32,8 @@ public sealed class FactionRecencyStampTests
             Substitute.For<IPersonService>(),
             Substitute.For<IFactionPhotoStorageService>(),
             Substitute.For<IThreatScoreService>(),
-            Substitute.For<INotificationService>());
+            Substitute.For<INotificationService>(),
+            Substitute.For<IPublicFactionProfileService>());
     }
 
     private static async Task<Faction> ReloadAsync(SqliteTestContext ctx, string id = "f1")

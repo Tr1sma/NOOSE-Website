@@ -35,8 +35,9 @@ public class AgentManagementService(
     public async Task<List<Agent>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // applicants are not agents; they are managed in the recruiting area, never in agent rosters
-        return await readDb.Users.AsNoTracking().Where(a => a.Status != AgentStatus.Applicant)
+        // applicants and citizens are not agents; they live in recruiting and the public area, never in agent rosters
+        return await readDb.Users.AsNoTracking()
+            .Where(a => a.Status != AgentStatus.Applicant && a.Status != AgentStatus.Civilian)
             .OrderByDescending(a => a.Status == AgentStatus.Pending)
             .ThenBy(a => a.Codename)
             .ToListAsync(cancellationToken);

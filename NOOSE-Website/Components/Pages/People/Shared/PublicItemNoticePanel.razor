@@ -1,0 +1,225 @@
+@* Vehicle and weapon notices drawn from this file: they carry no name and no photo outside. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IPublicWantedService Wanted
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.DirectionsCar"
+                 Color="@(_rows.Any(r => r.Status == PublicWantedStatus.Veroeffentlicht) ? Color.Error : Color.Default)" />
+        <MudText Typo="Typo.subtitle1">Gesuchte Fahrzeuge &amp; Waffen</MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Nach außen geht das Kennzeichen beziehungsweise die Bezeichnung, nicht der Name der Halterin — und kein
+        Foto. Intern bleibt der Aktenbezug: wird die Akte zur Verschlusssache, geht auch das Kennzeichen offline.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (!_mayOpen)
+    {
+        @* never "there is none": that would be a statement about a file this role may not read here *@
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Öffentliche Ausschreibungen sieht nur ein interner Agent.
+        </MudAlert>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            @if (_rows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Für diese Akte ist kein Fahrzeug und keine Waffe ausgeschrieben.
+                </MudText>
+            }
+            else
+            {
+                <MudExpansionPanels MultiExpansion="true" Elevation="0" Outlined="true">
+                    @foreach (var row in _rows)
+                    {
+                        <MudExpansionPanel Expanded="@_open.Contains(row.Id)"
+                                           ExpandedChanged="@(open => Toggle(row.Id, open))">
+                            <TitleContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudIcon Size="Size.Small" Icon="@KindIcon(row.Kind)" />
+                                    <MudText Typo="Typo.body1">@row.DisplayName</MudText>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                             Color="@StatusColour(row.Status)">
+                                        @PublicWantedStatusDisplay.Name(row.Status)
+                                    </MudChip>
+                                    @if (!string.IsNullOrWhiteSpace(row.CaseNumber))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CaseNumber</MudText>
+                                    }
+                                </MudStack>
+                            </TitleContent>
+                            <ChildContent>
+                                @* only the open panel builds an editor: each one carries a Quill instance and its
+                                   own bounty panel, and a file may advertise several vehicles at once *@
+                                @if (_open.Contains(row.Id))
+                                {
+                                    <PublicWantedEditor Id="@row.Id" User="User" Changed="ReloadAsync"
+                                                        Closed="ReloadAsync" />
+                                }
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    }
+                </MudExpansionPanels>
+            }
+
+            @if (_mayWrite)
+            {
+                <MudDivider />
+                @if (_sources.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Der Steckbrief dieser Akte führt kein Fahrzeug und keine Waffe.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudSelect T="string" @bind-Value="_selected" Label="Aus dem Steckbrief" Dense="true"
+                                   Variant="Variant.Outlined" Style="min-width:280px;">
+                            @foreach (var source in _sources)
+                            {
+                                <MudSelectItem T="string" Value="@source.Id" Disabled="@source.Advertised">
+                                    @PublicWantedKindDisplay.Name(source.Kind): @source.Label
+                                    @(source.Advertised ? " (bereits ausgeschrieben)" : string.Empty)
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton OnClick="CreateAsync" Variant="Variant.Filled" Color="Color.Primary"
+                                   Disabled="@(_busy || string.IsNullOrEmpty(_selected))"
+                                   StartIcon="@Icons.Material.Filled.Add">Ausschreibung anlegen</MudButton>
+                    </MudStack>
+                }
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private IReadOnlyList<PublicWantedEdit> _rows = [];
+    private IReadOnlyList<PublicWantedItemSource> _sources = [];
+    private readonly HashSet<string> _open = new(StringComparer.Ordinal);
+    private string? _selected;
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayWrite;
+    private bool _mayOpen;
+    private string? _loadedId;
+
+    protected override void OnInitialized()
+    {
+        _mayWrite = User.MayWrite() && !User.IsCitizen();
+        // mirrors Permission.RequirePublicWantedRecordRead; which notices actually resolve is decided by the file
+        _mayOpen = !User.IsPartner() && !User.IsCitizen();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == PersonId)
+        {
+            return;
+        }
+        _loadedId = PersonId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = _mayOpen ? await Wanted.GetItemsForPersonAsync(PersonId, User) : [];
+            _sources = _mayWrite ? await Wanted.GetItemSourcesAsync(PersonId, User) : [];
+            // the picked row may be gone: the file's profile children are replaced on every save of the file
+            if (_selected is not null && _sources.All(s => s.Id != _selected))
+            {
+                _selected = null;
+            }
+        }
+        catch
+        {
+            /* best effort */
+            _rows = [];
+            _sources = [];
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void Toggle(string id, bool open)
+    {
+        if (open)
+        {
+            _open.Add(id);
+        }
+        else
+        {
+            _open.Remove(id);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        var source = _sources.FirstOrDefault(s => s.Id == _selected);
+        if (source is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (source.Kind == PublicWantedKind.Fahrzeug)
+            {
+                await Wanted.CreateDraftFromVehicleAsync(source.Id, User);
+            }
+            else
+            {
+                await Wanted.CreateDraftFromWeaponAsync(source.Id, User);
+            }
+            _selected = null;
+            Snackbar.Add("Entwurf angelegt — er ist noch nicht öffentlich.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string KindIcon(PublicWantedKind kind) => kind == PublicWantedKind.Waffe
+        ? Icons.Material.Filled.Dangerous
+        : Icons.Material.Filled.DirectionsCar;
+
+    private static Color StatusColour(PublicWantedStatus status) => status switch
+    {
+        PublicWantedStatus.Veroeffentlicht => Color.Error,
+        PublicWantedStatus.Beantragt => Color.Warning,
+        PublicWantedStatus.Gefasst => Color.Success,
+        _ => Color.Default,
+    };
+}

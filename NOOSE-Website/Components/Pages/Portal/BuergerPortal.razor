@@ -1,0 +1,163 @@
+@page "/buerger"
+@layout BuergerLayout
+@attribute [AllowAnonymous]
+@using NOOSE_Website.Services.Public
+@inject IBuergerService BuergerService
+@inject ITipService Tips
+@inject ITicketService Tickets
+@inject IPublicModuleService Modules
+@inject NavigationManager Nav
+
+<PageTitle>Bürgerbereich · NOOSE</PageTitle>
+
+@if (_ready)
+{
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerbereich</MudText>
+                <MudText Typo="Typo.h4">@(_needsProfile ? "Willkommen" : $"Willkommen, {_name}")</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:640px;">
+                    Über dieses Konto wirst du künftig Hinweise an das NOOSE übermitteln und den Stand deiner
+                    Meldungen verfolgen können. Die zuständigen Agenten bleiben dabei in jeder Kommunikation anonym.
+                </MudText>
+            </MudStack>
+
+            @if (_needsProfile)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Zum Ansehen reicht dein Konto. Für eine eigene Einreichung brauchst du Vor- und Nachnamen
+                    unter „Mein Konto".
+                </MudAlert>
+            }
+
+            @if (_blocked)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    Dieses Konto ist für Einreichungen gesperrt. Öffentliche Inhalte kannst du weiterhin einsehen.
+                    @if (!string.IsNullOrWhiteSpace(_blockedReason))
+                    {
+                        <div class="mt-2"><b>Begründung:</b> @_blockedReason</div>
+                    }
+                </MudAlert>
+            }
+
+            <MudDivider />
+
+            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h6">Mein Konto</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Vor- und Nachname sind Pflicht, damit eine Meldung zugeordnet und eine Belohnung
+                            abgewickelt werden kann.
+                        </MudText>
+                        <MudButton Href="/buerger/profil" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Edit" Class="mt-2">Angaben bearbeiten</MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
+                        <MudBadge Content="@_unreadTips" Visible="@(_unreadTips > 0)" Color="Color.Error" Overlap="true">
+                            <MudIcon Icon="@Icons.Material.Filled.TipsAndUpdates" Color="Color.Primary" Size="Size.Large" />
+                        </MudBadge>
+                        <MudText Typo="Typo.h6">Meine Hinweise</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Übermittelte Beobachtungen, ihr Bearbeitungsstand und Rückfragen der Behörde.
+                        </MudText>
+                        <MudButton Href="/buerger/hinweise" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.TipsAndUpdates" Class="mt-2">Hinweise ansehen</MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
+                        <MudBadge Content="@_unreadTickets" Visible="@(_unreadTickets > 0)" Color="Color.Error" Overlap="true">
+                            <MudIcon Icon="@Icons.Material.Filled.Forum" Color="Color.Primary" Size="Size.Large" />
+                        </MudBadge>
+                        <MudText Typo="Typo.h6">Meine Tickets</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Anliegen an die Führungsebene und ihre Antworten. Die zuständigen Agenten bleiben anonym.
+                        </MudText>
+                        <MudButton Href="/buerger/tickets" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Forum" Class="mt-2">
+                            @(_ticketsOn ? "Tickets ansehen" : "Bestehende Tickets")
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h6">Einspruch</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Widerspruch gegen eine öffentliche Ausschreibung, mit Begründung. Die Führungsebene
+                            entscheidet und antwortet.
+                        </MudText>
+                        <MudButton Href="/buerger/einspruch" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Balance" Class="mt-2">Einsprüche ansehen</MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h6">Öffentlicher Bereich</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Fahndungen, Presse und die Kommunikation mit der Führungsebene werden hier
+                            schrittweise freigeschaltet.
+                        </MudText>
+                        <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Home" Class="mt-2">Zur Startseite</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _ready;
+    private string _name = string.Empty;
+    private bool _blocked;
+    private string? _blockedReason;
+    private bool _needsProfile;
+    private int _unreadTips;
+    private int _unreadTickets;
+    private bool _ticketsOn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        if (!user.MayUseCitizenPortal())
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        var profile = await BuergerService.GetOwnAsync(user);
+        _name = profile is null ? string.Empty : $"{profile.FirstName} {profile.LastName}".Trim();
+        _blocked = profile?.IsBlocked ?? false;
+        _blockedReason = profile?.BlockedReason;
+        // an agent, partner or applicant may look around without a civilian identity; submissions need one
+        _needsProfile = string.IsNullOrWhiteSpace(_name);
+
+        // its own try: an unread counter must never cost the whole page
+        try { _unreadTips = await Tips.GetOwnUnreadCountAsync(user); }
+        catch { /* best effort */ }
+
+        // and its own again: the ticket module is switched separately from the tip one
+        try { _unreadTickets = await Tickets.GetOwnUnreadCountAsync(user); }
+        catch { /* best effort */ }
+
+        try { _ticketsOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Tickets); }
+        catch { /* best effort */ }
+
+        _ready = true;
+    }
+}

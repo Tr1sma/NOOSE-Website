@@ -712,6 +712,68 @@ public class AgentPrincipalExtensionsTests
         Assert.False(user.IsApplicant());
     }
 
+    // ---------- IsCitizen ----------
+
+    [Fact]
+    public void IsCitizen_statusCivilian_returnsTrue()
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.True(user.IsCitizen());
+    }
+
+    [Fact]
+    public void IsCitizen_neverTrueForAgentApplicantOrAnonymous()
+    {
+        Assert.False(ClaimsPrincipalBuilder.Agent().Build().IsCitizen());
+        Assert.False(ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Applicant).Build().IsCitizen());
+        Assert.False(ClaimsPrincipalBuilder.Anonymous().IsCitizen());
+    }
+
+    [Fact]
+    public void IsCitizen_andIsApplicant_areMutuallyExclusive()
+    {
+        ClaimsPrincipal citizen = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.True(citizen.IsCitizen());
+        Assert.False(citizen.IsApplicant());
+    }
+
+    [Fact]
+    public void IsCitizen_grantsNoAgencyRights()
+    {
+        // the admin flag is a separate axis, but a citizen account never carries one; assert the plain shape
+        ClaimsPrincipal citizen = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.False(citizen.IsAdmin());
+        Assert.False(citizen.IsLeadership());
+        Assert.False(citizen.MayClassifiedRead());
+        Assert.False(citizen.MayRealNameSee());
+    }
+
+    // ---------- MayUseCitizenPortal ----------
+
+    [Theory]
+    [InlineData(AgentStatus.Civilian)]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Applicant)]
+    public void MayUseCitizenPortal_anySignedInAccount_returnsTrue(AgentStatus status)
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithStatus(status).Build();
+        Assert.True(user.MayUseCitizenPortal());
+    }
+
+    [Fact]
+    public void MayUseCitizenPortal_partnerAndReadOnlySupervision_returnTrue()
+    {
+        // the area is readable for them; writing a civilian identity is still barred by the write guard
+        Assert.True(ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build()
+            .MayUseCitizenPortal());
+        Assert.True(ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director).Build()
+            .MayUseCitizenPortal());
+    }
+
+    [Fact]
+    public void MayUseCitizenPortal_anonymous_returnsFalse()
+        => Assert.False(ClaimsPrincipalBuilder.Anonymous().MayUseCitizenPortal());
+
     // ---------- IsHrbOrLeadership (IsHRB || IsLeadership) ----------
 
     [Fact]

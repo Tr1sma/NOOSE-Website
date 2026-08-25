@@ -1,0 +1,108 @@
+@page "/buerger/profil"
+@layout BuergerLayout
+@attribute [AllowAnonymous]
+@inject IBuergerService BuergerService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Mein Konto · NOOSE</PageTitle>
+
+@if (_ready)
+{
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h4">Mein Konto</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="max-width:620px;">
+                    Vor- und Nachname sind für jede Einreichung im öffentlichen Bereich verpflichtend. Gib den Namen
+                    an, unter dem du auftrittst — eine Belohnung kann nur an eine benannte Person ausgezahlt werden.
+                </MudText>
+            </MudStack>
+
+            @if (_isNew)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    @(_mustComplete
+                        ? "Bitte vervollständige deine Angaben, um den Bürgerbereich nutzen zu können."
+                        : "Ohne diese Angaben kannst du den Bürgerbereich ansehen, aber nichts einreichen.")
+                </MudAlert>
+            }
+
+            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                <MudTextField @bind-Value="_firstName" Label="Vorname" Variant="Variant.Outlined"
+                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
+                <MudTextField @bind-Value="_lastName" Label="Nachname" Variant="Variant.Outlined"
+                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
+            </MudStack>
+
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+                @if (!_isNew || !_mustComplete)
+                {
+                    <MudButton Href="/buerger" Variant="Variant.Text" Color="Color.Default">Zurück</MudButton>
+                }
+            </MudStack>
+
+            @if (_blocked)
+            {
+                <MudDivider />
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    Dieses Konto ist für Einreichungen gesperrt. Deine Angaben kannst du weiterhin korrigieren.
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _ready;
+    private bool _saving;
+    private bool _isNew;
+    private bool _mustComplete;
+    private bool _blocked;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (!_user.MayUseCitizenPortal())
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        var profile = await BuergerService.GetOwnAsync(_user);
+        _firstName = profile?.FirstName ?? string.Empty;
+        _lastName = profile?.LastName ?? string.Empty;
+        _blocked = profile?.IsBlocked ?? false;
+        _isNew = string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName);
+        // only a citizen account is held on this page until the names are there
+        _mustComplete = _user.IsCitizen();
+        _ready = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await BuergerService.SaveOwnAsync(_firstName, _lastName, _user);
+            Snackbar.Add("Angaben gespeichert.", Severity.Success);
+            Nav.NavigateTo("/buerger");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,447 @@
+@page "/hinweise/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject ITipService Tips
+@inject ITipTakeoverService Takeover
+@inject IRewardService Reward
+@inject IPersonService PersonService
+@inject TipsBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_tip?.CaseNumber ?? "Bürgerhinweis") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_tip is null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Hinweis nicht gefunden"
+                Text="Der Hinweis existiert nicht oder wurde gelöscht." />
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.TipsAndUpdates"
+                Title="@($"Bürgerhinweis {_tip.CaseNumber}")"
+                Subtitle="@($"Eingegangen am {_tip.CreatedAt.ToLocalTime():dd.MM.yyyy HH:mm}")"
+                BackHref="/hinweise">
+        <Actions>
+            @if (_canWrite)
+            {
+                @if (_tip.HandlerId is null)
+                {
+                    <MudButton OnClick="AssignAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AssignmentInd">Übernehmen</MudButton>
+                }
+                <MudMenu Label="Status setzen" Variant="Variant.Outlined" Color="Color.Default"
+                         StartIcon="@Icons.Material.Filled.Flag">
+                    @foreach (var target in TipRules.AllowedTargets(_tip.Status))
+                    {
+                        <MudMenuItem OnClick="@(() => SetStatusAsync(target))">@TipStatusDisplay.Name(target)</MudMenuItem>
+                    }
+                </MudMenu>
+                <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <MudStack Spacing="4">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColour(_tip.Status)">
+                                @TipStatusDisplay.Name(_tip.Status)
+                            </MudChip>
+                            @if (_tip.WantsAnonymity && !_tip.AnonymityResolved)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.VisibilityOff">anonym</MudChip>
+                            }
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.LowPriority">Priorität @_tip.Priority</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Filled.Verified">@TipTrust.Label(_tip.TrustTier)</MudChip>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Bearbeiter: @(string.IsNullOrWhiteSpace(_tip.HandlerCodename) ? "—" : _tip.HandlerCodename)
+                            </MudText>
+                        </MudStack>
+
+                        @if (_tip.WantedCaseNumber is not null)
+                        {
+                            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
+                                      Icon="@Icons.Material.Filled.PersonSearch">
+                                Bezug: <b>@_tip.WantedDisplayName</b> (@_tip.WantedCaseNumber)
+                            </MudAlert>
+                        }
+
+                        @if (_rewards.Count > 0)
+                        {
+                            @* the paying agent is not named: the reward row carries them, the panel does not need to *@
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true"
+                                      Icon="@Icons.Material.Filled.Redeem">
+                                Belohnt: <b>@Money.Format(_rewards.Sum(r => r.Amount))</b> ·
+                                Beleg @string.Join(", ", _rewards.Select(r => r.ReceiptNumber).Distinct())
+                            </MudAlert>
+                        }
+
+                        <MudDivider />
+                        <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_tip.Text</MudText>
+
+                        @if (_tip.HasAttachment)
+                        {
+                            <MudDivider />
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Anhang</MudText>
+                                <MudImage Src="@($"/dateien/hinweise/{_tip.Id}?inline=true")"
+                                          Alt="Anhang" Fluid="true" Class="rounded" Style="max-width:100%;" />
+                                <MudButton Href="@($"/dateien/hinweise/{_tip.Id}")" Target="_blank"
+                                           Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Download">
+                                    @(_tip.AttachmentName ?? "Herunterladen")
+                                </MudButton>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">Hinweisgeber</MudText>
+                        @if (_tip.CitizenName is not null)
+                        {
+                            <MudText Typo="Typo.body1">@_tip.CitizenName</MudText>
+                            @if (_tip.CitizenConfirmedTips is { } confirmed)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Bisher bestätigte Hinweise: @confirmed
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Der Hinweisgeber hat um Anonymität gebeten. Für eine Belohnung muss die Führungsebene
+                                sie ausdrücklich aufheben.
+                            </MudText>
+                            <AuthorizeView Policy="@Policies.Leadership" Context="leadCtx">
+                                <MudTextField @bind-Value="_reason" Label="Begründung der Auflösung" Lines="2"
+                                              Variant="Variant.Outlined" />
+                                <div>
+                                    <MudButton OnClick="ResolveAsync" Disabled="_busy" Variant="Variant.Filled"
+                                               Color="Color.Warning" StartIcon="@Icons.Material.Filled.LockOpen">
+                                        Anonymität aufheben
+                                    </MudButton>
+                                </div>
+                            </AuthorizeView>
+                        }
+                        @if (_tip.AnonymityResolved && _tip.AnonymityResolvedAt is { } resolvedAt)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Anonymität aufgehoben am @resolvedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @(_tip.AnonymityResolvedByCodename is null ? string.Empty : $" von {_tip.AnonymityResolvedByCodename}")
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                @if (_canWrite)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6">Übernahme</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Aus dem Hinweis wird eine Akte. Jede Übernahme hinterlässt eine Verknüpfung, damit die
+                                Herkunft an der Akte sichtbar bleibt.
+                            </MudText>
+
+                            @if (_takeover.Count > 0)
+                            {
+                                <MudStack Spacing="1">
+                                    @foreach (var link in _takeover)
+                                    {
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                                @TakeoverType(link.OtherType)
+                                            </MudChip>
+                                            @if (link.Href is not null)
+                                            {
+                                                <MudLink Href="@link.Href" Typo="Typo.body2">@link.OtherDesignation</MudLink>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body2">@link.OtherDesignation</MudText>
+                                            }
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                                <MudDivider />
+                            }
+
+                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                                <MudTextField @bind-Value="_newPersonName" Label="Name der neuen Personenakte"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                              Style="min-width:240px;" />
+                                <MudButton OnClick="ToNewPersonAsync" Disabled="_busy" Variant="Variant.Filled"
+                                           Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd">
+                                    Personenakte anlegen
+                                </MudButton>
+                                <MudButton OnClick="ToCaseAsync" Disabled="_busy" Variant="Variant.Outlined"
+                                           Color="Color.Default" StartIcon="@Icons.Material.Filled.FolderOpen">
+                                    Vorgang anlegen
+                                </MudButton>
+                            </MudStack>
+
+                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                                <MudTextField @bind-Value="_personSearch" Label="Bestehende Person suchen"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                              Style="min-width:240px;" />
+                                <MudButton OnClick="SearchPeopleAsync" Disabled="_busy" Variant="Variant.Outlined"
+                                           StartIcon="@Icons.Material.Filled.Search">Suchen</MudButton>
+                            </MudStack>
+
+                            @if (_people.Count > 0)
+                            {
+                                <MudList T="string" Dense="true">
+                                    @foreach (var person in _people)
+                                    {
+                                        <MudListItem T="string">
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                                <MudText Typo="Typo.body2"><b>@person.Name</b></MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@person.CaseNumber</MudText>
+                                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                                           StartIcon="@Icons.Material.Filled.Link"
+                                                           OnClick="@(() => AttachPersonAsync(person.Id))">Verknüpfen</MudButton>
+                                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                                           StartIcon="@Icons.Material.Filled.Visibility"
+                                                           OnClick="@(() => ToObservationAsync(person.Id))">Als Observation</MudButton>
+                                            </MudStack>
+                                        </MudListItem>
+                                    }
+                                </MudList>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                @if (_duplicates.Count > 0)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.h6">Dubletten (@(_duplicates.Count + 1))</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Diese Meldungen beschreiben nach Textvergleich denselben Vorfall.
+                            </MudText>
+                            @foreach (var sibling in _duplicates)
+                            {
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                    <MudLink Href="@($"/hinweise/{sibling.Id}")">@sibling.CaseNumber</MudLink>
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(sibling.Status)">
+                                        @TipStatusDisplay.Name(sibling.Status)
+                                    </MudChip>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @sibling.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @sibling.Excerpt
+                                    </MudText>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudStack Spacing="4">
+                <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Buerger"
+                                 CaseNumber="@_tip.CaseNumber" CitizenName="@_tip.CitizenName"
+                                 CanWrite="@(_canWrite && !TipRules.IsClosed(_tip.Status))" />
+                <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Intern"
+                                 CanWrite="_canWrite" />
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private TipDetail? _tip;
+    private IReadOnlyList<TipDuplicateRow> _duplicates = Array.Empty<TipDuplicateRow>();
+    private IReadOnlyList<LinkDisplay> _takeover = Array.Empty<LinkDisplay>();
+    private List<Person> _people = new();
+    private string _newPersonName = string.Empty;
+    private string _personSearch = string.Empty;
+    private string _reason = string.Empty;
+    private bool _load = true;
+    private bool _busy;
+    private bool _canWrite;
+    private IReadOnlyList<RewardRow> _rewards = [];
+    private string? _loadedId;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _canWrite = _user.MayWrite();
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _tip = await Tips.GetAsync(Id, _user);
+            _duplicates = _tip?.DuplicateGroupId is null
+                ? Array.Empty<TipDuplicateRow>()
+                : await Tips.GetDuplicatesAsync(Id, _user);
+            _takeover = _tip is null
+                ? Array.Empty<LinkDisplay>()
+                : await Takeover.GetStateAsync(Id, _user);
+            _rewards = _tip is null
+                ? Array.Empty<RewardRow>()
+                : await Reward.GetForTipAsync(Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _tip = null;
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private Task AssignAsync() => RunAsync(() => Tips.AssignSelfAsync(Id, _user));
+
+    private Task ToNewPersonAsync() => RunAsync(async () =>
+    {
+        await Takeover.ToNewPersonAsync(Id, _newPersonName, _user);
+        _newPersonName = string.Empty;
+        Snackbar.Add("Personenakte angelegt und verknüpft.", Severity.Success);
+    });
+
+    private Task ToCaseAsync() => RunAsync(async () =>
+    {
+        await Takeover.ToCaseAsync(Id, null, _user);
+        Snackbar.Add("Vorgang angelegt und verknüpft.", Severity.Success);
+    });
+
+    private Task AttachPersonAsync(string personId) => RunAsync(async () =>
+    {
+        await Takeover.AttachPersonAsync(Id, personId, _user);
+        _people = new();
+        _personSearch = string.Empty;
+        Snackbar.Add("Mit der Personenakte verknüpft.", Severity.Success);
+    });
+
+    private Task ToObservationAsync(string personId) => RunAsync(async () =>
+    {
+        await Takeover.ToObservationAsync(Id, personId, _user);
+        _people = new();
+        _personSearch = string.Empty;
+        Snackbar.Add("Als Observation erfasst und verknüpft.", Severity.Success);
+    });
+
+    private async Task SearchPeopleAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_personSearch))
+        {
+            _people = new();
+            return;
+        }
+        try
+        {
+            _people = await PersonService.SearchAsync(_personSearch, _user.IsLeadership());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static string TakeoverType(string type) => type switch
+    {
+        nameof(Person) => "Personenakte",
+        nameof(Case) => "Vorgang",
+        nameof(Observation) => "Observation",
+        _ => type,
+    };
+
+    private Task SetStatusAsync(TipStatus status) => RunAsync(() => Tips.SetStatusAsync(Id, status, _user));
+
+    private Task ResolveAsync() => RunAsync(() => Tips.ResolveAnonymityAsync(Id, _reason, _user));
+
+    private async Task DeleteAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Tips.DeleteAsync(Id, _user);
+            Snackbar.Add("Hinweis in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/hinweise");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OnModified(string tipId)
+    {
+        if (tipId != Id)
+        {
+            return;
+        }
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color StatusColour(TipStatus status) => status switch
+    {
+        TipStatus.Neu => Color.Info,
+        TipStatus.InPruefung => Color.Primary,
+        TipStatus.Rueckfrage => Color.Warning,
+        TipStatus.Bestaetigt => Color.Success,
+        TipStatus.FuehrteZurErgreifung => Color.Success,
+        _ => Color.Default,
+    };
+}

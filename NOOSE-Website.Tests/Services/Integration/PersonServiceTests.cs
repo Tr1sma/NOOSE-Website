@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
@@ -10,6 +10,7 @@ using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.People;
 using NOOSE_Website.Services;
 using NSubstitute;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -28,7 +29,8 @@ public sealed class PersonServiceTests
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("NOOSE-P-2026-0001");
         var threat = Substitute.For<IThreatScoreService>();
-        var svc = new PersonService(ctx.Factory, fileStorage, suggestion, caseNo, threat, Substitute.For<INotificationService>());
+        var svc = new PersonService(ctx.Factory, fileStorage, suggestion, caseNo, threat,
+            Substitute.For<INotificationService>(), Substitute.For<IPublicWantedService>());
         return (svc, fileStorage, suggestion, caseNo, threat);
     }
 

@@ -79,7 +79,7 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **`Program.cs`** ist Composition-Root (Top-Level-Statements): alle DI-Registrierungen inline, nach Build-„Phase" gruppiert/kommentiert.
 - **Render-Mode** wird pro Seite in `App.razor` gesetzt: `InteractiveServer`, außer `[ExcludeFromInteractiveRouting]` (Error, NotFound, Login, Pending, Blocked, Legal) → statisch.
 - **Culture global auf de-DE** fixiert (`UseRequestLocalization` + `CultureInfo.DefaultThread*`).
-- **Middleware-Reihenfolge** (load-bearing): `UseForwardedHeaders` (zuerst, vertraut nur Loopback/nginx) → `RequestLocalization` → (nur Prod) `ExceptionHandler`+`HSTS` → `StatusCodePagesWithReExecute("/not-found")` → `HttpsRedirection` → `Authentication` → `Authorization` → `RateLimiter` → `Antiforgery` → `MapStaticAssets` → `/health` → `MapRazorComponents<App>` → `Map*Endpoints`-Gruppen.
+- **Middleware-Reihenfolge** (load-bearing): `UseForwardedHeaders` (zuerst, vertraut nur Loopback/nginx) → `RequestLocalization` → `PublicIndexingMiddleware` (noindex außerhalb der öffentlichen Routen; **vor** dem ExceptionHandler, damit re-executete Fehlerseiten den Header behalten) → (nur Prod) `ExceptionHandler`+`HSTS` → `StatusCodePagesWithReExecute("/not-found")` → `HttpsRedirection` → `Authentication` → `Authorization` → `RateLimiter` → `Antiforgery` → `MapStaticAssets` → `/health` → `MapRazorComponents<App>` → `Map*Endpoints`-Gruppen.
 - **SignalR Hub:** `MaximumReceiveMessageSize = 25 MB` (für den RichTextEditor, der volles HTML inkl. base64-Bildern über SignalR streamt — nicht zurücksetzen).
 - **Background-Worker** (`AddHostedService`): `FollowupDueWorker` (Wiedervorlagen), `ThreatScoreSweepWorker` (tägl. Score-Decay, seedet Fraktionen beim ersten Start), `SituationReportWorker` (monatl. Lageberichte). Laufen pro Host-Instanz → keine Multi-Instanz gegen eine DB.
 - **Health-Check** `/health` (`AddDbContextCheck`) — von Deploy-Skript und Status-Seite genutzt.
@@ -104,7 +104,7 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **Interface-first:** jeder DI-Service ist `I<Name>Service` + `<Name>Service`, `AddScoped`. Implementierungen nutzen **Primary Constructors**. Jede public-async-Methode hat ein trailing `CancellationToken cancellationToken = default`.
 - **Live-Updates per Singleton-Broadcaster/Dispatcher:** scoped Service schreibt die Row, ruft dann den Singleton (`NotificationBroadcaster`, `TaskforceChatBroadcaster`, `SharesBroadcaster`, `AcknowledgmentBroadcaster`, `WatchlistDispatcher`) zum Push an verbundene Circuits.
 - **Authorization wird IM Service-Layer durchgesetzt**, nicht nur in der UI: statische Guards `Permission.Require*` (werfen `UnauthorizedAccessException`), Sichtbarkeit zentral in statischem `Visibility`/`*Visibility`/`RecordsReference`. Write-Methoden nehmen `ClaimsPrincipal actor` und rufen den Guard als erste Anweisung.
-- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `AgentSelection`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`. Geteilte Logik dorthin extrahieren statt kopieren.
+- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `AgentSelection`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`, `Public/PublicModules`, `Public/PublicVisibility`, `Public/PublicRoutes`. Geteilte Logik dorthin extrahieren statt kopieren.
 - **Wer in eine Agenten-Auswahlliste darf, entscheidet ausschließlich `Services/AgentSelection.cs`.**
   `db.Users.OnlySelectable()` = `Active && !IsTeamLead && PartnerAgency == null` für **jeden** Picker,
   Dropdown, Roster und Roster-Fan-out (also überall, wo Empfänger *aus dem Gesamtbestand* gewählt werden);
@@ -157,9 +157,12 @@ Schichten innerhalb von `NOOSE-Website/`:
     nur die Navigation gated hat). Es gibt **keinen** separaten Partner-Suchpfad mehr.
   - **`SearchCoverageTests` reflektiert über alle `DbSet`s:** jede Entität braucht einen Provider oder einen Eintrag
     in `SearchCatalog.NotSearchable` **mit Begründung**. Eine neue Tabelle macht den Build rot, bis jemand
-    entschieden hat — das ist die eigentliche Garantie, nicht der Katalog.
+    entschieden hat — das ist die eigentliche Garantie, nicht der Katalog. **Seit dem öffentlichen Bereich sind es
+    zwei Wächter:** dieselbe neue Tabelle braucht zusätzlich einen Eintrag in `PublicVisibility`.
 - **Maintenance/Banner/Theme/Logo:** `SystemSettingService` über Key/Value-Tabelle, 10s `IMemoryCache`. Logo/Uploads liegen **außerhalb wwwroot** unter `App_Data/uploads`, ausgeliefert über autorisierte Minimal-API-Endpoints.
-- **Drei getrennte Token-Systeme, nie vermischen:** `PlaceholderService` (`{{Name}}`, `{{Aktenzeichen}}`, `{{Datum}}`, `{{Uhrzeit}}`, `{{Agent}}`, `{{Dienstgrad}}` — Dokument-/Aktivitäts-/Personal-Vorlagen) · `BewerbungTemplateRenderer` (bare `NAME`/`BEWERBER`/`DATUM`/`UHRZEIT`/`DIENSTGRAD`, nur Bewerbungs-Anschreiben) · `MentionParser` (`@{Typ:GUID}`, aufgelöst über `MentionService.ResolveManyAsync` → `<MentionText>`).
+- **Vier getrennte Token-Systeme, nie vermischen:** `PlaceholderService` (`{{Name}}`, `{{Aktenzeichen}}`, `{{Datum}}`, `{{Uhrzeit}}`, `{{Agent}}`, `{{Dienstgrad}}` — Dokument-/Aktivitäts-/Personal-Vorlagen) · `BewerbungTemplateRenderer` (bare `NAME`/`BEWERBER`/`DATUM`/`UHRZEIT`/`DIENSTGRAD`, nur Bewerbungs-Anschreiben) · `MentionParser` (`@{Typ:GUID}`, aufgelöst über `MentionService.ResolveManyAsync` → `<MentionText>`) ·
+  `PublicTemplateRenderer` (bare `BUERGER`/`AKTENZEICHEN`/`DATUM`/`UHRZEIT`/`NAME`, nur Bürger-Nachrichten,
+  **ohne** HTML-Encoding — siehe „Phase 11" im öffentlichen Bereich).
 - **Platzhalter werden NUR beim Anwenden einer Vorlage expandiert**, nicht beim Speichern: Vorlagen-*Editoren* und der Edit-Modus gespeicherter Records lassen Tokens bewusst roh stehen (dort sind sie der Payload).
 
 ## Authorization, Ränge & Rollen
@@ -181,8 +184,8 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 
 ## UI / Blazor-Komponenten
 
-- **Ein Feature-Ordner je Bereich** unter `Components/Pages/` (Account, Admin, Board, Calendar, Cases, Factions, Graph, Groups, Jobs, Laws, Operations, OrgChart, Parties, People, Personnel, Search, Statistics, Taskforces, Wanted, Watchlist). Pro Feature: `*List`/`*Editor`/`*Detail`/`*Print` + `Shared/`. Cross-Feature → `Components/Common/Shared/`.
-- **Deutsche Routen:** `/personen`, `/fraktionen`, `/vorgaenge`, `/aufgaben`, `/operationen`, `/parteien`, `/personengruppen`, `/taskforces`, `/kalender`, `/organigramm`, `/statistik`, `/brett`, `/gesetze`, `/suche`, `/graph`, `/fahndung`. CRUD-Subroutes `/{feature}/neu`, `/{Id}`, `/{Id}/bearbeiten`, `/{Id}/druck`.
+- **Ein Feature-Ordner je Bereich** unter `Components/Pages/` (Account, Admin, Board, Calendar, Cases, Factions, Graph, Groups, Jobs, Laws, Operations, OrgChart, Parties, People, Personnel, Search, Statistics, Taskforces, Tips, Wanted, Watchlist). Pro Feature: `*List`/`*Editor`/`*Detail`/`*Print` + `Shared/`. Cross-Feature → `Components/Common/Shared/`.
+- **Deutsche Routen:** `/personen`, `/fraktionen`, `/vorgaenge`, `/aufgaben`, `/operationen`, `/parteien`, `/personengruppen`, `/taskforces`, `/kalender`, `/organigramm`, `/statistik`, `/brett`, `/gesetze`, `/suche`, `/graph`, `/fahndung`, `/hinweise`. CRUD-Subroutes `/{feature}/neu`, `/{Id}`, `/{Id}/bearbeiten`, `/{Id}/druck`.
 - **Neu-/Bearbeiten liegen in EINER Datei** (`*Editor.razor` mit zwei `@page`-Direktiven). Beide Routen binden
   denselben Komponententyp → Blazor recycelt die Instanz beim Wechsel. **Laden gehört deshalb in
   `OnParametersSetAsync` mit `_loadedId`-Guard, nie in `OnInitializedAsync`** (läuft sonst nicht erneut).
@@ -276,7 +279,7 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - **`graph.js`-JSON-Keys = englische CLR-Typnamen** (`nameof`), nicht die deutschen Display-Namen; C#- und JS-Map müssen synchron bleiben.
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
-- **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen.
+- **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen. Dokumentierte Ausnahmen von dieser Guard-Pflicht: `FactionRecency.StampAsync`, `PublicWantedService.CountViewAsync`, `TipPriorityService` und `RecomputeConfirmedTipsAsync` — abgeleitete Werte hinter einem schon abgesicherten Schreibpfad.
 - **Fraktions-Aktualität hängt NICHT an `GeaendertAm`**, sondern an vier eigenen Stempeln auf `Fraktionen`
   (`MitgliederAktualisiertAm`, `BestaendeAktualisiertAm`, `AktivitaetenAktualisiertAm`, `DoksAktualisiertAm`).
   Der **älteste** davon bestimmt die Ampel; Stammdaten-Edits setzen sie nicht zurück. Alles zentral in
@@ -453,6 +456,717 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
   mechanisch geschützt, nicht per Prompt. Danach laufen harte Prüfungen (Zahlen, Aktenzeichen, `{{…}}`,
   Erwähnungen, Bewerbungs-Tokens) — ein Verstoß verwirft die Antwort.
 
+## Öffentlicher Bereich
+
+Gebaut sind Phase 1–12 und 13a aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen
+Seiten, die öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
+Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
+Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
+Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten
+und die Sachfahndung (gesuchte Fahrzeuge und Waffen). Der Einspruch (13b), die Presse und die öffentlichen
+Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+
+- **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
+  liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
+  Führungs-Gate. `AgentSelection` schließt `Civilian` überall aus.
+- **Zugang und Status sind zwei Fragen.** Den Bürgerbereich betreten darf **jedes angemeldete Konto**
+  (`MayUseCitizenPortal()`, `Policies.CitizenPortal`, `Permission.RequireCitizenPortal`) — Agent, Partner,
+  Nur-Lese-Aufsicht und Bewerber haben auch eine Zivil-Identität. `IsCitizen()` beantwortet nur noch, ob das
+  Konto ein Profil haben **muss**: `BuergerLayout` erzwingt Vor-/Nachname zentral in `OnParametersSetAsync`
+  (nicht `OnInitializedAsync`: die Layout-Instanz überlebt die Navigation zwischen Bürgerseiten) — aber **nur
+  für `IsCitizen()`**. Sonst liefe eine Nur-Lese-Aufsicht in eine Umleitungsschleife auf ein Profil, das sie
+  gar nicht anlegen darf: `SaveOwnAsync` ist ein Schreibpfad und hält zusätzlich `RequireWriteAccess`.
+  Wer kein Profil hat, sieht die Seiten ohne eigene Zeilen; jeder Einreichungspfad geht über
+  `RequireSubmittingCitizenAsync` (vollständig + nicht gesperrt).
+- **Welche Module es gibt, steht ausschließlich in `Services/Public/PublicModules.cs`** — eine Zeile je
+  Modul, auch für noch nicht gebaute. `PublicModuleSeeder` legt fehlende Zeilen beim Start an und
+  überschreibt **nie** eine gespeicherte Wahl; ein Modul geht deshalb nie durch ein Deploy online.
+  `Available = false` heißt „Seiten fehlen noch"; nur ein gebautes Modul darf `DefaultEnabled` sein
+  (`PublicModulesCatalogTests` hält das fest).
+- **Modul-Aus wirkt im Service, nicht in der UI.** `IPublicModuleService.RequireEnabledAsync` wirft; die
+  Seite wickelt ihren Inhalt in `PublicModuleGate` (Offline-Text statt Inhalt, weil eine bekannte URL die
+  Route trotzdem erreicht); und der **Login-Endpoint prüft mit** — `source=bewerbung`/`source=buerger`
+  fragen ihr Modul, bevor ein Konto entsteht. Eine versteckte Schaltfläche lässt den POST offen.
+- **Not-Aus** (`SystemSettingKeys.PublicAreaKillSwitch`) schlägt jedes Einzelmodul, **ohne** eine
+  gespeicherte Wahl zu verändern — sonst veröffentlicht das Wiedereinschalten einen anderen Stand als den
+  vorherigen. Der interne **Wartungsmodus wirkt nach außen bewusst nicht**; dafür ist dieser Schalter da.
+  Er lässt `/buerger` bewusst offen: das ist der private Kontobereich eines angemeldeten Bürgers, nicht
+  öffentlicher Inhalt. Er hinterlässt **zwei** Protokollzeilen — die rohe `SystemSetting`-Zeile des
+  Interceptors (`SystemSetting` **ist** `IAuditable`) und eine `ManualAudit`-Zeile, die die Aktion benennt,
+  weil „SystemSetting/OeffentlicherBereichNotAus" im Protokoll niemandem hilft. Muster der vier bestehenden
+  Config-Services — deren Kommentar „SystemSetting is not auditable on its own" ist sachlich falsch.
+- **Ein Modul ohne Seiten bekommt keinen Nav-Tab**, auch eingeschaltet nicht (`NavEntries()` filtert
+  `Available`): vorab einschalten ist erlaubt, ein Tab auf eine 404-Route nicht. Die gespeicherte Wahl bleibt,
+  der Tab erscheint von selbst, sobald die bauende Phase `Available` umstellt.
+- **Ein neuer Audit-`EntityType` braucht eine Zeile in `AuditEntityDisplay`** (Label **und** Route), sonst
+  steht der rohe CLR-Name in der deutschen UI von `/nachweis`. Kein Test erzwingt das — `BuergerProfil` fiel
+  deshalb bis Phase 2 durch.
+- Snapshot ist **10 s gecacht** (`IMemoryCache`) — nach einem Umschalten kann eine öffentliche Seite bis zu
+  10 Sekunden alt sein. Bei unerreichbarer DB fällt der Service auf die Katalog-Standards zurück: fast alles
+  aus, wie bei einer frischen Installation.
+- **Icon-Overrides sind eine Allowlist**, gespeichert wird der Name (`PublicModules.IconChoices`). MudBlazor
+  rendert einen Icon-Wert als Markup — ein freies SVG in der Spalte liefe bei jedem anonymen Besucher.
+- **`Services/Public/PublicVisibility.cs` ist die eigene Achse „was darf nach draußen"**, Vorbild
+  `SearchCatalog`. `PublicVisibilityCoverageTests` reflektiert über alle `DbSet`s: jede Entität steht in
+  `Publishable` (mit **was** rausgeht) oder in `NeverPublic` (mit **warum nicht**). Eine Akte selbst ist nie
+  publizierbar — nach außen geht ab Phase 4 ein Publikations-Snapshot.
+- **`Services/Public/PublicRoutes.cs` ist die einzige Wahrheit der öffentlichen Pfade**; die Nav-Routen
+  werden aus dem Katalog **abgeleitet**, nicht wiederholt — eine Route, die ein Modul schon nennt, gehört
+  **nicht** zusätzlich in `ExtraPrefixes` (`/info` stand dort, bis das Modul sie übernahm). Danach richten sich `wwwroot/robots.txt`
+  (geprüft von `PublicRoutesTests`) und `PublicIndexingMiddleware`. **`/buerger` ist bewusst nicht dabei:**
+  das Konto eines Bürgers ist privat, nicht öffentlich.
+- **Redaktionelle Seiten (`OeffentlicheSeite`, `/info/{Slug}`) trennen zwei HTML-Spalten mit je einer
+  Bedeutung:** `EntwurfHtml` ist die Arbeitskopie, `InhaltHtml` wird **nur** von `PublishAsync` geschrieben.
+  Speichern ist deshalb keine Publikation. `Status` entscheidet über die öffentliche Sichtbarkeit, `ImMenue`
+  nur über die Verlinkung — eine veröffentlichte Seite darf bewusst nur per Direktlink erreichbar sein.
+  `RetractAsync` behält `InhaltHtml` (die Sichtbarkeit hängt an `Status`), `RestoreAsync` bringt eine Seite
+  aus dem Papierkorb **als Entwurf** zurück, damit ein Rückgängig nichts nebenbei wieder veröffentlicht.
+  `HtmlCleanup.Clean` läuft beim Speichern **und** beim Veröffentlichen — Letzteres ist der Moment, in dem
+  das Markup anonym erreichbar wird.
+  - **Der `Slug` ist absichtlich nicht unique indexiert:** bei Soft-Delete würde der Index die Adresse für
+    immer blockieren. Eindeutigkeit prüft `PublicPageService` über die lebenden Zeilen — mit ausgeschriebenen
+    Zweigen, weil `Id != input.Id` mit `null` zu SQL-`NULL` übersetzt und stumm nichts finden würde.
+    Erlaubte Form steht ausschließlich in `Services/Public/PublicPageSlug.cs`.
+    **Deshalb prüft auch `RestoreAsync` die Adresse:** eine gelöschte Seite behält ihren Slug, die Adresse darf
+    inzwischen neu belegt sein, und Wiederherstellen darüber hinweg ergäbe zwei lebende Seiten auf einer Adresse.
+    Der Lesepfad dedupliziert zusätzlich (`GroupBy` statt `ToDictionary`) — sonst wirft der Aufbau des Snapshots,
+    der `catch` verschluckt es, und **jede** redaktionelle Seite verschwindet statt nur der strittigen.
+  - **`PublicPageInput.DraftHtml`: `null` heißt „unverändert", `""` heißt „leeren".** Ohne diese Trennung würde
+    ein Aufruf, der nur den Titel ändert, den Text still löschen. **`PublicPageEdit` trägt kein HTML** — Bilder
+    liegen als base64 im Body, eine Liste mit Entwürfen wäre Megabyte pro Render; der Editor holt den einen
+    Entwurf über `GetDraftAsync`. Aus demselben Grund projiziert `GetAllAsync` auf den Codename statt den
+    Identity-User zu laden: dessen `RealName` hat in einem Panel nichts zu suchen, das die Aufsicht rendert.
+  - **„Leer" heißt: weder Text noch Bild.** Eine Seite, die nur aus einem Organigramm besteht, ist Inhalt;
+    `HtmlCleanup.PlainText` allein hätte sie als leeren Entwurf abgelehnt.
+  - **Eine fehlende Seite trägt `noindex`** (per `<HeadContent>`): `/info` ist indexierbar, und die Route
+    antwortet für jeden erfundenen Slug mit 200 — ohne das Meta-Tag indexiert ein Crawler beliebig viele
+    Soft-404s.
+  - **Öffentlicher Inhalt wird als rohes `MarkupString` gerendert, nie über `RichHtml`** (das löst
+    `@{Typ:GUID}` auf und würde interne Aktennamen ausliefern), und der `RichTextEditor` läuft dort **ohne
+    `Ai` und ohne `Mentions`**.
+  - **Ein Query-Parameter einer öffentlichen Route wird als `string` gebunden, nicht als `bool`/`int`.**
+    Blazor antwortet auf einen Wert, den es nicht parsen kann, mit HTTP 500 — und an eine öffentliche URL
+    hängt jeder eine Query. `?vorschau=1` war genau so ein 500.
+    Und er wird als **public** Property deklariert: `[SupplyParameterFromQuery]` auf einem privaten Feld
+    bindet nicht — kein Fehler, kein Warning, der Filter tut einfach nichts (`?einordnung=` auf
+    `/organisationen` war genau das). Kein Test fängt es, weil `.razor` ohne bUnit nicht testbar ist.
+  - Ein Tab je Seite gibt es nicht: `Infoseiten` hat **einen** Tab auf den Hub `/info`, damit die Nav weiter
+    allein aus `PublicModules` kommt.
+- **Eine öffentliche Ausschreibung (`OeffentlicheFahndung`, `/gesucht/{Aktenzeichen}`) ist ein
+  Publikations-Snapshot, kein Blick in die Akte.** Jedes Außenfeld steht auf der Zeile; die Personenakte wird
+  nach dem Publizieren nur noch für **eine** Frage gelesen, und zwar negativ (siehe Unterdrückungsgürtel).
+  Eigener Aktenzeichen-Präfix **`FA`** — `F` gehört den Fraktionen, und `CaseNumberCounter` ist auf
+  `(Präfix, Jahr)` verschlüsselt. Das Aktenzeichen ist **nullable** (erst bei der ersten Publikation geprägt)
+  und **unique** indexiert — anders als der Seiten-Slug, weil eine Zählernummer nie wiederverwendet wird.
+  - **`Status` allein entscheidet die öffentliche Sichtbarkeit.** Zurückziehen behält Aktenzeichen, Vorwurf und
+    Fotokopie, damit ein Wiedereinschalten ein Klick auf derselben Adresse ist; Löschen ist erst nach dem
+    Zurückziehen erlaubt, sonst wäre es eine stille Depublikation ohne Grund auf der Akte.
+  - **Zurückziehen und „gefasst" lassen das Modul-Gate bewusst aus.** Publizieren braucht ein lebendes Modul,
+    *De*publizieren nie — sonst machte der Not-Aus das Zurückziehen unmöglich, genau verkehrt herum.
+  - **Der Unterdrückungsgürtel im Lesepfad ist eine zweite Abfrage, keine Unterabfrage — und das ist der
+    eigentliche Punkt.** `IgnoreQueryFilters()` gilt **für die ganze Kompilierung, nicht für den Operanden**:
+    in einer Unterabfrage benutzt, entfernt es den Soft-Delete-Filter auch vom **äußeren** Set. Genau so ging
+    eine soft-gelöschte, veröffentlichte Ausschreibung anonym live (nachgemessen, nicht vermutet). `f.Person`
+    ist als Navigation ebenso unbrauchbar: sie erbt den Filter und ist für eine gelöschte Akte `null`, also
+    zeigte `f.Person == null || …` genau die Zeilen, die es verbergen soll. Deshalb: Zeilen laden, dann
+    `OpenRecordsAsync`/`VisibleRecordsAsync` als **eigene** Abfrage, dann im Speicher filtern — dort kann
+    `IgnoreQueryFilters` nur das weiten, was es weiten soll. Zusätzlich zieht `RetractForRecordAsync` die Zeile
+    selbst offline, gerufen aus `PersonService.EditAsync`/`DeleteAsync` und `PersonMergeService` (das
+    `IsClassified` an `PersonService` vorbei setzt) — der Gürtel ist der Gurt, der Hook der Airbag.
+  - **Eine Ausschreibung trägt den Inhalt der Akte, also gilt für sie das Lesegate der Akte.** `GetAllAsync`,
+    `GetDraftAsync`, `GetOptionsAsync` und `GetForPersonAsync` filtern über `RecordVisibility.IsVisible` —
+    ohne das las ein Rang-3-Agent Name, Aktenzeichen, Vorwurf und über `GetOptionsAsync` sogar die **aktuellen**
+    `PersonOrte` einer Verschlusssache, die er nirgends sonst öffnen darf. Eine Akte, die gar nicht mehr
+    auflöst, ist nicht sichtbar (fail closed).
+  - **Zwei Lese-Guards, nicht einer.** `RequirePublicWantedRead` (Rang ≥ 3 oder Aufsicht) gilt nur für die
+    **Querliste**; die Ausschreibung *einer* Akte öffnet `RequirePublicWantedRecordRead` (jeder interne Agent).
+    Sonst legt ein Rang-2-Agent einen Entwurf an und kommt nie wieder an ihn heran — und die ganze Rang-Weiche
+    samt Antrag ist toter Code.
+  - **Die VS-Sperre prüft alle drei Flags und ihre Meldung hängt vom Akteur ab:** wer keine eingestuften Akten
+    lesen darf, bekommt wortgleich das „nicht gefunden" — sonst verrät der Publizieren-Knopf die Einstufung.
+  - **Zwei eigene Guards, und `RequireWriteAccess` ist keiner davon.** Der blockt nur Aufsicht und Partner; ein
+    angemeldeter Bürger trägt keinen Rang-Claim und fiele in den „Rang 1–2 ⇒ Antrag"-Zweig. Deshalb
+    `Permission.RequirePublicWantedWrite`. Lesen ist `RequirePublicWantedRead` (Rang ≥ 3 **oder** Aufsicht),
+    bewusst weiter als `RequireClassifiedRead`: wer direkt publizieren darf, muss seine Entwürfe öffnen können.
+  - **Die Inhaltsprüfung sitzt im gemeinsamen Publish-Rumpf, nicht im Aufrufer.** Genehmigen ist der zweite
+    Eingang, und eine `Beantragt`-Zeile lässt sich zwischen Antrag und Entscheidung bearbeiten — läuft die
+    Prüfung nur in `PublishAsync`, geht ein Platzhalter oder eine Erwähnung über die Genehmigung live.
+    Genauso braucht der Genehmigungspfad `RequirePublicWantedWrite` **vor** `RequireHighestClassification`:
+    Letzteres allein lässt die Nur-Lese-Aufsicht und das Demo-Principal durch, die dann Aktenzeichen und
+    Fotokopie erzeugen, bevor der `ReadOnlyBarrierInterceptor` das Speichern verweigert.
+  - **Löschen schließt offene Anträge**, sonst zählt das Nav-Badge eine Zeile, die der Posteingang nicht mehr
+    findet und niemand mehr entscheiden kann. Zähler und Liste kommen deshalb aus **derselben** Abfrage.
+  - **Foto-Wechsel gilt sofort, nicht erst beim nächsten Publizieren.** `UpdateSnapshotAsync` kopiert bei einer
+    laufenden Ausschreibung neu und löscht die alte Kopie — sonst meldet das Entfernen eines Fotos Erfolg,
+    während es anonym weiter abrufbar bleibt. Schlägt ein Publizieren fehl, wird die frische Kopie entfernt:
+    sie ist die einzige Nebenwirkung, die ein Rollback nicht zurücknimmt.
+  - **Rang ≥ 3 publiziert, Rang 1–2 erzeugt einen `Request` mit `RequestType.Veroeffentlichung`** — entschieden
+    wird er in `IPublicWantedService`, **nie** über `RequestService.DecideAsync` (Präzedenz: `PartnerFreigabe`).
+    Deshalb weist `DecideAsync` jeden Nicht-`Upgrade`-Antrag jetzt ab: Genehmigen heißt dort bedingungslos „setze
+    die Einstufung", mit `Classification.Unknown` wäre das eine stille Herabstufung. `HasOpenRequestAsync` und
+    der Dedup in `UpgradeRequestAsync` sind aus demselben Grund typ-gebunden.
+    **`GetOpenCountAsync` bleibt unangetastet** — `DashboardService` liest es unbedingt für jeden Agenten und
+    beschriftet die Zahl „Hochstufung"; der Publikationszähler kommt nur in `NavMenu` dazu.
+  - **Das Foto wird beim Publizieren kopiert** (`App_Data/uploads/fahndung`, eigener
+    `IPublicWantedPhotoStorageService`). `PersonService.PhotoRemoveAsync` löscht die Datei hart, während die
+    Zeile nur soft-gelöscht wird — eine Referenz zerrisse den Steckbrief lautlos. Der Endpoint
+    `/gesucht/{Aktenzeichen}/foto` ist die **einzige** `[AllowAnonymous]`-Dateiroute der App: die Autorisierung
+    ist die Publikationsprüfung, und er liefert **eine** `404` für jeden Fehlschlag, sonst wäre er ein
+    Existenz-Orakel. Er liegt unter `/gesucht`, weil das Präfix schon öffentlich ist — eine eigene
+    `/dateien/…`-Route bräuchte `PublicRoutes.ExtraPrefixes` **und** eine `robots.txt`-Zeile.
+  - **Nach außen geht die Gefahrenstufe, nicht der Score.** `OeffentlicheGefahrenstufe` wird beim Publizieren
+    festgehalten (Aktion „Stufe aktualisieren" im Panel). Der rohe 0–100-Wert wäre der einzige verbliebene
+    Grund, `Personen` für Inhalt zu lesen, und die Score-Konfiguration steht in `NeverPublic` als „Anleitung
+    zur Umgehung". `PublicWantedModelTests` hält das als **positive** Allowlist der Nach-außen-Typen fest —
+    eine Ausnahmeliste wird pro Datei erteilt und weitet sich still.
+  - **Publizieren schreibt kein `ManualAudit.Row` gegen die Personenakte** (entgegen Leitsatz 9 in
+    `PublicPlan.md`): die Zeile ist `IAuditable`, und eine zweite, `Person`-getypte Zeile fiele in
+    `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als „Akte geändert". Der Zeitstrahl kommt über
+    den Fan-out in `TimelineService.AuditSourceAsync` — und der verlangt **vier** Registrierungen, nicht drei:
+    `AuditSourceAsync`, `MapAudit`, `AuditEntityDisplay` **und `ChronikParentResolver`**.
+  - **Der Aufrufzähler ist die dritte dokumentierte Ausnahme von „Bulk-Write ⇒ Guard selbst rufen"** (neben
+    Score-Writes und `FactionRecency.StampAsync`): es gibt keinen `ClaimsPrincipal`, der Aufrufer ist ein anonymer
+    Besucher, und die eine Zahl verlässt das Haus nie. `CountViewAsync` schreibt über `ExecuteUpdateAsync`, weil ein
+    getracktes Inkrement `GeaendertAm` stempeln, **eine `AuditLog`-Zeile pro anonymem Aufruf** schreiben und die
+    Ausschreibung bei jedem Seitenaufruf auf den Zeitstrahl der Personenakte schieben würde. Das ganze
+    Publikations-Prädikat steht im `Where`, nicht in einem vorgelagerten Lesen — ein zählender Schreibvorgang darf
+    eine Zeile, die nicht draußen ist, baulich nicht berühren. Gezählt wird **nur** in `WantedProfile`: der
+    Foto-Endpoint zählte Thumbnails statt Leser, und das Poster wird von einem Steckbrief aus geöffnet, der schon
+    gezählt hat.
+  - **Das Panel in `PersonDetail` liegt außerhalb des `einstufung`-Abschnitts** (`@if (!_isPartner)`):
+    `PartnerTabCatalog` listet diesen Slug, dort wäre alles einem freigegebenen Partner sichtbar. Der Warnbanner
+    zeigt nur `Veroeffentlicht` — ein `Beantragt` ist nicht draußen und verriete eine offene interne Entscheidung.
+    Der Übersichts-Abschnitt auf `/fahndung?tab=oeffentlich` hängt in `AuthorizeView Policy="InternalAgent"`,
+    weil `/fahndung` keine Seiten-Policy trägt und `ActiveAgent` erbt — was ein Partner erfüllt.
+  - **`DemoModeMiddleware.ExcludedPrefixes` wird aus `PublicRoutes.Prefixes` abgeleitet**, nicht ein zweites Mal
+    gepflegt — sonst trägt ein anonymer Besucher bei aktivem Demo-Modus das Demo-Principal. `/gesucht` stand dort
+    von Hand; `/gefasst` ist eine **Geschwister**-Route, kein Kind davon, und wäre genauso durchgerutscht. Ebenso
+    gibt `PartnerRoutes.IsAllowed` für jede öffentliche Route `true` zurück: ein Partner kann dieselbe Seite
+    abgemeldet öffnen, die Sperrmeldung behauptete also eine Einschränkung, die es nicht gibt.
+  - Die öffentlichen Seiten heißen `WantedHub`/`WantedProfile`/`WantedArchiveHub`/`WantedPoster`, **nicht**
+    `WantedBoard`: `Services/WantedBoard.cs` ist eine global importierte statische Klasse, und `/fahndung` bleibt
+    die interne Seite.
+
+- **Phase 5 (Ausbau) — was daran anders ist als am Rest des öffentlichen Bereichs:**
+  - **Genau ein Speicherpfad, genau ein Cache-Schlüssel.** `PublicWantedService.SaveAndInvalidateAsync` ist die
+    einzige Stelle mit `SaveChangesAsync` **und** die einzige mit `cache.Remove`; ein Dateiscan
+    (`PublicWantedCacheDisciplineTests`) hält das fest, samt „kein zweiter Produktionsdateiname kennt den
+    Schlüssel". Board und Archiv liegen deshalb in **einem** Snapshot-Record: sie stammen aus derselben Tabelle,
+    werden von denselben Schreibpfaden ungültig, und „gefasst setzen" verschiebt eine Zeile zwischen beiden Listen
+    auf einmal. Ein zweiter Schlüssel verdoppelte jede Invalidierungsstelle. Die **Modul-Flags** werden weiterhin
+    außerhalb des Caches gelesen, je Menge eines: Archiv aus darf das Board nicht mitnehmen und umgekehrt.
+  - **Das Warnhinweis-Label ist der einzige Außenwert, der live gelesen wird** statt auf der Snapshot-Zeile zu
+    stehen. Bewusst: ein Warnhinweis ist ein redaktionelles Etikett der Behörde, kein Akteninhalt — eine Kopie
+    ließe einen korrigierten Tippfehler auf jedem laufenden Poster stehen, und `IstAktiv = false` müsste vierzig
+    Ausschreibungen einzeln nacharbeiten. **Der Preis:** das Label geht ohne Publikationsschritt live, also prüft
+    `WarnhinweisService` beim Schreiben dieselben drei Regeln wie ein Vorwurf (Klartext, keine `@{…}`-Erwähnung,
+    kein `{{`-Platzhalter) plus Längendeckel. Die **Farbe** ist eine Allowlist (`WarnhinweisColours`) — **nie
+    `Enum.Parse`**: ein in der Spalte gelandeter Wert wäre auf einer `[AllowAnonymous]`-Seite ein HTTP 500,
+    dieselbe Klasse wie `?vorschau=1`. Unsichtbare Farben (`Inherit`, `Transparent`, `Surface`, `Dark`) stehen
+    nicht drin; ein Warnhinweis, den niemand sieht, ist schlechter als keiner.
+  - **`Gefasst` gehört in die Rückzugs-Statusmenge.** `PubliclyVisible` (= `Veroeffentlicht`, `Beantragt`,
+    `Gefasst`) wird von `RetractForRecordAsync` **und** dem Guard von `RetractAsync` benutzt — kein zweites
+    Literal-Array. Ohne das zeigte `/gefasst` weiter Foto, Namen und Datum einer Person, die im August gefasst und
+    im September als Informant eingestuft wird; und der einzige Weg aus dem Archiv wäre `DeleteAsync` gewesen, also
+    eine stille Depublikation ohne Grund auf der Akte.
+  - **`/gefasst` ist eine Liste und verlinkt auf nichts.** `/gesucht/{az}` antwortet für eine gefasste Zeile weiter
+    „nicht gefunden"; ein Link dorthin wäre eine Sackgasse und suggerierte eine laufende Fahndung. Eigener
+    Nach-außen-Record `PublicWantedArchiveCard` statt nullable Felder auf der Board-Karte — was nicht auf dem Typ
+    ist, kann keine Seite versehentlich rendern. Gedeckelt auf die 100 jüngsten.
+  - **Der Foto-Endpoint bleibt unverändert.** `GetPublishedPhotoAsync` weitet intern auf `Gefasst`, steigt aber
+    weiter **nur** über den Snapshot ein (also durch den Unterdrückungsgürtel) und prüft **das Modul der Menge,
+    in der es die Zeile gefunden hat**. Kein Query-Parameter: der wäre angreifer-kontrolliert und machte
+    „gefasst?" getrennt von „veröffentlicht?" abfragbar — genau das Existenz-Orakel, das die eine `404` verhindert.
+  - **Das Poster benutzt `PrintFrame` nicht.** Das druckt über JS-Interop in `OnAfterRenderAsync` und
+    `MudButton OnClick` — beides tot auf einer `[ExcludeFromInteractiveRouting]`-Seite, also *stumm* kaputt — und
+    rendert „Gedruckt am … von {PrintedBy}", den VS-Stempel und „NOOSE-interne Akte". Stattdessen ein eigener
+    statischer Rahmen mit rohem `onclick="window.print()"`, **ohne** Auto-Druck. Die Seite bleibt unter
+    `Components/Pages/Public/` (ein Umzug nähme sie aus **allen vier** `PublicPageScanTests`-Prüfungen), zieht
+    **beide** Modul-Gates selbst — `PrintLayout` trägt weder `PublicNav` noch den Not-Aus-Banner — und trägt
+    **immer** `noindex`, nicht nur im Nichtgefunden-Fall.
+  - **Zwei `NotificationType`-Werte, nicht einer.** `NotificationService.NotifyManyAsync` ruft am Ende unbedingt
+    `discord.PushAsync`, also schriebe ein routbarer Betriebs-Typ jede abgelaufene Ausschreibung in den
+    öffentlichen Kanal. `PublicWantedPublished` ist routbar, `PublicWantedExpired` bewusst nicht. Der Push sitzt
+    **nach dem Commit** in `PublishRowAsync` (eine Discord-Nachricht lässt sich nicht zurückrufen) und nimmt als
+    Parameter **nur** einen `PublicWantedCard` — dieser Record kann `PersonId`, das interne `NOOSE-P-`-Aktenzeichen,
+    einen Codenamen oder einen Score strukturell nicht tragen, also die Nachricht auch nicht. Kein Vorwurfstext:
+    nach einem Rückzug ist der Post dann ein toter Link statt einer stehengebliebenen Anschuldigung.
+  - **Der Ablauf-Worker ist keine Sicherheitskontrolle.** `LoadAsync` filtert `ExpiresAt > now` ohnehin; ein toter,
+    verspäteter oder doppelt laufender Worker leakt nichts, er lässt nur den internen Status unehrlich. Genau
+    deshalb darf niemand den Ablauf-Filter aus dem Lesepfad entfernen, „weil der Worker das jetzt macht". Er hält
+    keinen `DbContext` (Gürtel, Statusregeln und Cache-Invalidierung dürfen nicht an einer zweiten Stelle liegen),
+    nimmt **nur** `Veroeffentlicht` (ein `Beantragt` mit Ablaufdatum stürbe sonst still, ohne dass sein offener
+    Antrag geschlossen wird), rechnet in `UtcNow` und schickt **eine** Sammelmeldung je Lauf. Der Statuswechsel ist
+    der Idempotenz-Token — deshalb braucht die Tabelle keine `NotifiedAt`-Spalte, anders als `Followup`.
+  - **Eine Chip-Zuordnung überlebt das Deaktivieren ihres Warnhinweises.** `SetHintsAsync` nimmt Zeilen an, die
+    *aktiv **oder** bereits zugeordnet* sind: **Hinzufügen** bleibt auf aktive beschränkt (der Riegel gegen einen
+    manipulierten Dialog-Post), **Bestehendes** bleibt. Nur-aktiv hätte die Zuordnung beim nächsten „Übernehmen"
+    still gelöscht — der Picker bietet einen inaktiven nicht an, der Agent sähe also nicht, was er zerstört.
+    Der Editor zeigt ihn deshalb grau mit „(inaktiv, nicht öffentlich)". Und der Schreibpfad prüft die
+    **Aktensichtbarkeit immer**, nicht nur bei einer laufenden Ausschreibung — sonst könnte, wer die Id eines
+    Entwurfs kennt, eine Verschlusssache bechippen und eine Audit-Zeile gegen sie schreiben.
+  - **`MySqlTranslationTests` kompiliert die neuen Abfrageformen gegen Pomelo, nicht gegen SQLite.** Alle
+    Integrationstests laufen auf SQLite, das ein anderer Übersetzer ist; eine dort akzeptierte Form kann auf
+    Pomelo mit „could not be translated" werfen — zur Laufzeit, auf einer anonymen Seite. `ToQueryString()`
+    kompiliert ohne Verbindung, der Test braucht also keinen Server. Neue Abfrageform im öffentlichen Bereich
+    ⇒ eine Zeile dort.
+  - **`WatchlistRecordRollup` ist die fünfte Registry**, die eine neue auditierte Entität braucht. Ihr Default-Arm
+    **warnt nur**, also lief der ganze öffentliche Bereich seit Phase 1 mit einer Logzeile pro Schreibvorgang —
+    im Serverlog aufgefallen, nicht im Test. `OeffentlicheFahndung` rollt auf ihre `Person` (Publizieren ist die
+    folgenreichste Änderung, die einer Akte passieren kann), die übrigen öffentlichen Tabellen sind „not watchable".
+  - **`PublicWantedModelTests` ist keine handgepflegte Liste mehr**, sondern Reflection über den ganzen Namensraum
+    `Models.Public`: jeder Record steht in `Outward` **oder** in `Inward` — mit Begründung, Muster
+    `PublicVisibility`. Vorher war ein neuer Nach-außen-Record schlicht ungelistet und nichts wurde rot. Generische
+    Argumente von Sammlungs-Properties werden mitgescannt, sonst bliebe `IReadOnlyList<PublicWantedHint>` ungeprüft.
+  - **`AuditEntityDisplay`-Wächter nur für den öffentlichen Bereich.** Rund siebzig interne Kindtabellen laufen seit
+    jeher ohne Label; das zu beheben ist eigene Arbeit. Und geprüft wird gegen die **Quelle**, nicht gegen
+    `Label(name) != name`: „Warnhinweis" liest sich in beiden Sprachen gleich, ein Wertvergleich hielte den
+    korrekten Arm für einen Treffer.
+- **Phase 6 (Kopfgeld) — was daran anders ist:**
+  - **Nach außen geht eine Zahl, nie eine Aufschlüsselung.** `PublicBounty(Total, IsCap)` kann Herkunft, Stifter,
+    Konto, Kassenbuchung und Anzahl der Anteile strukturell nicht tragen; eine Aufschlüsselung wäre ein öffentliches
+    Verzeichnis, welcher Agent eigenes Geld auf wen gesetzt hat. Zwei Schichten: der Typ **und** ein Dateiscan über
+    `Components/Pages/Public/` (`PublicSurfaceGuardTests`), weil eine Seite den Dienst auch selbst fragen könnte.
+  - **Die Summe wird im Snapshot berechnet, hinter dem Gürtel** — fünfte Abfrage in `LoadAsync`, exakt neben
+    `HintsAsync`. **Keine Spalte** auf der Ausschreibungszeile (eine denormalisierte Summe driftet still, und eine
+    falsche Zahl über Geld ist schlimmer als eine 10 s alte) und **kein zweiter Lesepfad** (der müsste den
+    Unterdrückungsgürtel wiederholen — genau die Phase-4-Falle). Eine Summe `<= 0` erzeugt keinen Eintrag statt
+    „0 $" außen.
+  - **`SaveAndInvalidateAsync` nimmt jetzt `AppDbContext?`.** Der öffentliche Einstieg
+    `IPublicWantedService.InvalidatePublicViewAsync()` ruft dieselbe Methode mit `null` — dadurch bleibt
+    `PublicWantedService.cs` bei **einem** `SaveChangesAsync(` und **einem** `cache.Remove(`, und
+    `PublicWantedCacheDisciplineTests` musste nicht angefasst werden. Der zweite Wächter dazu:
+    jede Produktionsdatei, die `FahndungKopfgeldAnteile` **und** `SaveChangesAsync` nennt, muss auch
+    `InvalidatePublicViewAsync` nennen.
+  - **`IBountyService` besitzt die Anteile, `IPublicWantedService` die Obergrenze.** `KopfgeldIstObergrenze` ist ein
+    Snapshot-Feld auf der Ausschreibungszeile, und deren Tabelle hat genau einen Schreibpfad.
+  - **In der öffentlichen Summe zählen nur `Zugesagt` und `Gesichert`.** Ein `Beantragt` ist kein Geld — und
+    verriete nebenbei eine laufende interne Entscheidung. `Ausgezahlt` ist ausgegeben (gesetzt wird es erst mit der
+    Belohnungsphase), `Zurueckgezogen` ist weg. Diese Regel steht **einmal**, in `Services/Public/BountyShares.cs`:
+    als EF-Prädikat `Advertised` und als In-Memory-Zwilling `IsAdvertised` (Muster `AgentSelection`). Sie entscheidet
+    den öffentlichen Snapshot, die interne Aufschlüsselung **und** das Vorher/Nachher einer Erhöhung — ausgeschrieben
+    driftet sie.
+  - **Der Kopfgeld-Posteingang verlangt, dass die Ausschreibung noch existiert** (`PendingRequests`), genau wie der
+    Veröffentlichungs-Posteingang. Ein gelöschter Entwurf macht seinen Antrag sonst unentscheidbar — Genehmigen
+    antwortet „nicht gefunden" — während das Nav-Badge ihn weiterzählt.
+  - **Rang 1–2 beantragt behördliches Geld** (`RequestType.Kopfgeld` mit eigener Spalte `KopfgeldAnteilId`, **nicht**
+    `VeroeffentlichungFahndungId` — `PublicWantedService.PendingRequests` joint darauf und sammelte den Antrag sonst
+    im falschen Posteingang ein). Der Anteil entsteht als `Beantragt`; Genehmigen schaltet ihn auf `Zugesagt`,
+    Ablehnen auf `Zurueckgezogen`. Guard-Reihenfolge wie beim Veröffentlichungsantrag: `RequireBountyWrite` **vor**
+    `RequireHighestClassification`.
+  - **`Permission.RequireBountyWrite` ist ein eigener Guard**, weil `RequireWriteAccess` nur Aufsicht und Partner
+    blockt — ein angemeldeter Bürger käme durch.
+  - **Die Deckung zählt zwei Summanden**, und der zweite ist der nicht offensichtliche: offene **behördliche**
+    Zusagen **plus** bereits eingezahltes **privates** Geld. Eine Einzahlung hebt den Kontostand und ist trotzdem
+    schon vergeben; ohne sie meldet die Deckung Entwarnung, die es nicht gibt. Warnung, **keine** Sperre.
+  - **Einzahlen ist ein Compare-and-swap**, wörtlich nach `FinancingService.PayAsync`: zwei Tabs würden sonst zwei
+    Einzahlungen auf denselben Anteil buchen (verschiedene Ids, der Unique-Index greift nicht). `ExecuteUpdate`
+    umgeht den Interceptor ⇒ `ManualAudit.Row` von Hand. Die öffentliche Summe ändert sich dabei **nicht**.
+  - **Anteile sind `IAuditable`, aber **nicht** `ISoftDelete`** — Geldhistorie ist append-only, zurückgezogen wird
+    per Status. Deshalb keine `TrashService`-Registrierung.
+  - **Discord meldet nur Erhöhungen** (`PublicWantedBountyRaised`, routbar), und nur auf einer laufenden,
+    nicht abgelaufenen Ausschreibung bei eingeschaltetem Modul. Eine Senkung bleibt still: sie untergräbt die eigene
+    Ausschreibung, und der alte Post steht ohnehin unkorrigierbar weiter. Die Compose-Methode nimmt ausschließlich
+    `PublicBountyAnnouncement`.
+  - **Der Anteil rollt bewusst nicht auf die Beobachtungsliste.** `WatchlistRecordRollup` ist eine statische Map ohne
+    Datenbank, und Anteil → Ausschreibung → Akte sind zwei Hops; das Publizieren der Ausschreibung bleibt das
+    beobachtbare Ereignis. Zeitstrahl und Chronik gehen dagegen sehr wohl über beide Hops
+    (`TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `ChronikParentResolver`).
+- **Phase 7 (Bürgerhinweise) — was daran anders ist:**
+  - **`/hinweis` ist das öffentliche Formular, `/hinweise` der interne Eingang** — ein Buchstabe Unterschied,
+    getrennt durch die Segmentgrenze in `PublicRoutes.Matches` (Präzedenz `/fahndung` vs. `/gesucht`, mit Test).
+    Der **NavCatalog-Key ist `buergerhinweise`**: `hinweise` gehört den algorithmischen *Ermittlungs*hinweisen
+    (`/ermittlungshinweise`), und gespeicherte Favoriten zeigen darauf.
+  - **Erste interaktive Seite unter `Components/Pages/Public/`.** Leitsatz 5 erlaubt das für Formulare;
+    `PublicPageScanTests` hält jede *Lese*seite weiter statisch und führt dafür `InteractiveExempt` (eine Ausnahme
+    je Datei **mit Begründung**, Muster `LayoutExempt`). Der Knopf am Steckbrief ist deshalb ein **Link** auf
+    `/hinweis?fahndung={Aktenzeichen}` — ein Dialog wäre auf der statischen Seite stumm tot.
+  - **Der Bezug wird über das Aktenzeichen aufgelöst, nie über eine Id vom Client.** `SubmitAsync` fragt
+    `IPublicWantedService.GetByCaseNumberAsync` (also den Lesepfad hinter dem Unterdrückungsgürtel) und sucht die
+    Zeilen-Id erst danach. Eine rohe `FahndungId` machte das Formular zum Existenz-Orakel für Entwürfe.
+  - **Das Rate-Limit steht im Dienst, nicht in der Middleware** — die Einreichung läuft über SignalR und erreicht
+    `UseRateLimiter` nie. `TipRules.PerDay` wird in `SubmitAsync` gezählt, **mit `IgnoreQueryFilters`**, sonst kauft
+    Löschen einen weiteren Versuch. Die Policy `noose-hinweis` hängt nur am Datei-Endpoint.
+  - **Anonymität ist eine Projektion und eine Audit-Regel, keine UI-Bedingung.** `TipDetail.CitizenName` bleibt
+    `null`, solange die Zusage gilt. Und weil der Interceptor beim Einreichen das *einreichende Konto* stempelt —
+    ein Agent kann über seine Zivil-Identität melden —, streichen **Zeitstrahl und Chronik den Akteur** einer
+    `Hinweis`-Zeile: eine Regel in `Services/Public/TipAnonymity.cs`, von `TimelineService` und
+    `GlobalChronikService` genannt. Das Änderungsprotokoll auf `/nachweis` ruft sie **bewusst nicht** — dort ist
+    das Konto die Missbrauchskontrolle.
+  - **Eine Bürger-Zeile trägt baulich keinen Agenten.** `HinweisNachricht.AutorAgentId` wird nur auf
+    `Intern`-Zeilen gesetzt, `CitizenTipMessage` hat gar kein Autorfeld, der Absender ist konstant „NOOSE". Nach
+    außen adressiert ein Bürger seinen Hinweis über das **Aktenzeichen**, nie über die Zeilen-Id.
+  - **Zwei Guards.** `Permission.RequireTipRead` = jeder interne Agent **inkl. Nur-Lese-Aufsicht** (sie liest
+    sonst alles; der Eingang wäre die einzige Ausnahme), `RequireTipHandling` = zusätzlich Schreibrecht. Beide über
+    die neue `AgentPrincipalExtensions.IsInternalAgent()` — `Status == Active` erledigt dort vier Ausschlüsse auf
+    einmal (Pending, Blocked, Bewerber, Bürger).
+  - **Der Anhang ist nicht öffentlich**: eigener Pfad `App_Data/uploads/hinweise`, eigener Storage-Dienst,
+    `/dateien/hinweise/{id}` mit `.RequireAuthorization()` — anders als die Fahndungs-Fotoroute, deren
+    Autorisierung die Publikationsprüfung ist. Eigentümer und Bearbeiter bekommen etwas, alle anderen eine `404`.
+  - **`PublicTipReceived`/`PublicTipAnswered` sind nicht routbar.** `NotifyManyAsync` pusht jede routbare Kategorie
+    nach Discord, und ein eingehender Hinweis im öffentlichen Kanal outet den Hinweisgeber. Benachrichtigt wird die
+    Führung; alle anderen haben das Nav-Badge (`tips`).
+  - **Kein Suchprovider, kein NOOSEI-Zugriff** — beide Tabellen stehen in `SearchCatalog.NotSearchable`: ein Provider
+    müsste die Anonymitätszusage mittragen, die bisher nur die Bearbeiter-Projektion kennt. Kommt mit Phase 16.
+  - Registriert in `PublicVisibility` (beide `NeverPublic`), `SearchCatalog`, `TrashService`/`TrashProjection`
+    (die Papierkorb-Zeile nennt weder Bürger noch Text), `AuditEntityDisplay`, `WatchlistRecordRollup`
+    (beide „not watchable"), den vier Zeitstrahl-Stellen und `MergedPageSections.Trash`.
+- **Phase 8a (Hinweis-Triage) — was daran anders ist:**
+  - **Die Priorität multipliziert Bänder mit Untergrenze 1.** `TipPriority` (Kopfgeldband × Gefahrenstufenband ×
+    Vertrauensband, 1..100) ist die einzige Wahrheit der Formel. Wörtlich multipliziert wäre sie ohne Kopfgeld
+    immer 0 und ein `Critical`-Hinweis sortierte unter eine Bagatelle. Folge, bewusst: ein Hinweis **ohne**
+    Fahndungsbezug liegt unter jedem bezogenen — der Eingang trennt ohnehin nach Status in drei Reiter.
+  - **`Prioritaet` ist ein Cache, `TipPriorityService` sein einziger Schreiber**, und der hängt **nur** am
+    `IDbContextFactory` — genau deshalb dürfen `PublicWantedService` und `BountyService` ihn rufen, ohne einen
+    DI-Zyklus zu bauen (`TipService → IPublicWantedService` besteht schon). Er stempelt per `ExecuteUpdateAsync`
+    und nur **offene** Hinweise (`TipRules.OpenRows`): getrackt stempelte er `GeaendertAm`, schriebe eine
+    `AuditLog`-Zeile und schöbe den Hinweis bei jeder Kopfgeld-Erhöhung auf den Zeitstrahl der Personenakte.
+    **Vierter dokumentierter Fall von „Bulk-Write ⇒ Guard selbst rufen"** neben Score-Writes,
+    `FactionRecency.StampAsync` und `CountViewAsync` — hier ohne eigenen Guard, weil jeder Aufrufer schon ein
+    abgesicherter Schreibpfad ist. `BountyService.SaveAsync` nimmt dafür die `wantedId`: ein Choke-Point für
+    beide Folgen eines Anteil-Writes (Snapshot verwerfen **und** nachstempeln).
+  - **`TipPriorityService` nennt `FahndungKopfgeldAnteile`, aber kein `SaveChangesAsync`** — deshalb greift
+    `PublicSurfaceGuardTests.EveryWriterOfTheBountyTable_DropsThePublicSnapshot` dort bewusst nicht. Wer ein
+    `SaveChangesAsync` ergänzt, braucht `InvalidatePublicViewAsync`, und der Wächter sagt es ihm.
+  - **Dublettenerkennung ist ein symmetrisches Maß, nicht `TextSimilarity.PhraseSimilar`.** Das verlangt für
+    *jedes* Wort einer Seite einen Partner: zwei Meldungen zum selben Vorfall mit ungleicher Länge fielen immer
+    durch, und ein Zweizeiler schluckte einen ausführlichen Bericht. `TipDuplicates` mittelt beide Richtungen
+    (Schwelle 0.6, mindestens vier tragende Wörter), in-memory wie die Suche. Gruppiert wird **nach** dem
+    Commit, Kandidatenfenster 30 Tage bei **gleichem** Fahndungsbezug (beide `null` als gleich, mit
+    ausgeschriebenen Zweigen — `== null` gegen eine Variable übersetzt zu SQL-`NULL`), und ein Fehlschlag der
+    Erkennung kippt die Einreichung nie.
+  - **Die Vertrauensstufe wird neu berechnet, nicht inkrementiert.** `TipRules.IsTransitionAllowed` erlaubt
+    `Bestaetigt → InPruefung → Bestaetigt`; ein Inkrement zählte doppelt und bliebe nach einem Rückzieher zu
+    hoch. `IBuergerService.RecomputeConfirmedTipsAsync` zählt die Zeilen (selbstheilend) und wird auch beim
+    Löschen und Wiederherstellen gerufen. `TipRules.PerDay` **ist** `TipTrust.DailyQuota(1)`; ein Test hält die
+    Gleichheit, zwei Zahlen wären Drift.
+  - **Die Vertrauens*stufe* geht auch bei anonymen Hinweisen nach innen, die exakte Zahl nicht.** Sie steckt als
+    Faktor in der sichtbaren Priorität und ließe sich zurückrechnen; die Zusage gilt der Identität, nicht der
+    Erfolgsbilanz. `CitizenConfirmedTips` bleibt gesperrt, `CitizenName` unverändert `null`.
+- **Phase 8b (Übernahme) — was daran anders ist:**
+  - **Jede Übernahme endet in einer *manuellen* Verknüpfung.** `TimelineService`, `ChronikParentResolver` und
+    `LinkPanel` filtern `!v.Automatic` — automatisch wäre sie auf dem Zeitstrahl unsichtbar, und genau dort ist
+    sie der Herkunftsnachweis. Ein zweites `ManualAudit.Row` gegen die Personenakte gibt es **nicht**
+    (Präzedenz Phase 4: eine `Person`-getypte Zusatzzeile liest sich als „Akte geändert").
+  - **`TipTakeoverService` ruft nur Dienste, es baut keine Entität** (Vorbild `ApplicationCaseService`):
+    Klassifizierungs-Gates bleiben bei `PersonService`/`ObservationService`, die Ziel-Sichtbarkeit bei
+    `LinkService.CreateAsync`, und `ICaseNumberService.NextAsync` bekommt seine Transaktion von den Diensten.
+    **Ausnahme, die eine eigene Prüfung braucht:** `ObservationService.CreateAsync` gatet nur die
+    `SecrecyLevel` der Akte, nicht ihre Einstufung, und die `personId` kommt vom Client — `ToObservationAsync`
+    ruft deshalb selbst `Visibility.IsRecordVisibleAsync`. `AttachPersonAsync` braucht das nicht, dort prüft
+    `LinkService` das Ziel.
+    Guard ist `RequireTipHandling` — `MayWrite` allein ließe ein angemeldetes Bürgerkonto durch. Ein
+    `Neu`-Hinweis geht danach auf `InPruefung`; bestätigen bleibt eine eigene Entscheidung.
+  - **Doppelklick-Schutz statt Compare-and-swap:** es gibt keine Anspruchsspalte auf `Hinweise`, also prüft
+    `ToNewPersonAsync` vorab auf eine bestehende `Hinweis → Person`-Verknüpfung; verliert ein zweiter Tab das
+    Rennen doch, wird die frische Akte soft-gelöscht und die Verwerfung auditiert. Anders als bei Geld ist eine
+    doppelte Akte ein Papierkorb-Eintrag.
+  - **`Hinweis` als Verknüpfungs-Gegenstück braucht drei Registries:** `LinkService` (Auflösungs-Arm **und**
+    `knownTypes` — ohne den Arm rendert der `else`-Zweig die rohe GUID), `RecordsReference` (sonst steht auf dem
+    Zeitstrahl „Akte") und `LinkPanel.TypeDisplay`. Nach draußen geht nur das Aktenzeichen; für einen Partner
+    fällt die Verknüpfung automatisch heraus, weil `releasedTargets` den Typ nicht kennt.
+  - **Die Hinweisgeber-Historie an der Personenakte listet nur offengelegte Hinweise — auch nicht als Zähler.**
+    Der Abschnitt ist über die Identität des Bürgers verschlüsselt, eine Zahl nannte ihn durch Rechnen. Regel:
+    `TipAnonymity.IsHidden` plus Query-Zwilling `TipAnonymity.Disclosable`, an einer Stelle, von beiden
+    Lesepfaden genannt. Der Abschnitt ist intern (`@if (!_isPartner)`), sein Slug steht **nicht** in `_tabs`
+    und **nicht** in `PartnerTabCatalog`.
+  - **`IBuergerService.LinkPersonAsync` prüft mehr als sein Vorbild:** `RequireLeadership` +
+    `RequireWriteAccess` **und** `Visibility.IsRecordVisibleAsync`. `BewerbungService.LinkPersonAsync` prüft nur
+    `AnyAsync(p => p.Id == personId)` und ließe eine Verschlusssache verlinken, die der Akteur nicht öffnen
+    darf — bewusst nicht kopiert.
+  - **Die Gegenaufklärungs-Engine hat keine Regel-Art, sondern eine Bedingungsmenge.** Ein neuer Fall ist
+    deshalb eine **Bedingungskategorie** an **sieben** Stellen: Tri-State `ActorSharesOrgWithTarget` +
+    `NeedsOrgLookup` in `CounterIntelRuleDefinition`, drei Felder auf `CounterIntelEvent`, Anreicherung in
+    `CounterIntelEventLoader`, ein **fail-closed** Arm in `CounterIntelRuleEvaluator.Matches`, ein `if`-Block in
+    `CounterIntelRuleDisplay.Summary` (muss mit `Matches` im Gleichschritt bleiben), `Flag(...)` + `ActorLabel`
+    im `CounterIntelRuleDialog`, und die Vorgabe-Regel in `CounterIntelRuleDefaults` **plus** ihr JSON-Literal in
+    der Migration. **Der Default muss `null` sein** — die geseedeten Regeln kennen die Eigenschaft nicht.
+  - **Aufgelöst wird über die Zivil-Identität des handelnden Kontos**, nicht über den Agentenstatus: ein Agent,
+    der über sein Bürgerprofil meldet, ist derselbe Konflikt. Ziel-Person ist bei `Hinweis` die Person hinter
+    der Ausschreibung, bei `Person` die Akte selbst, sonst `null` (Bedingung baulich unerfüllbar). Meldung über
+    die **eigene** Akte gilt als geteilt.
+  - **Das Cockpit ist keine Hintertür um `ResolveAnonymityAsync`:** sind alle gezählten Ereignisse einer Gruppe
+    Hinweise mit gewahrter Zusage, heißt das Subjekt „Anonymer Hinweisgeber" und trägt **kein** `Href`; sonst
+    zeigt ein Bürgerkonto auf `/einstellungen?tab=buerger` statt auf `/personal/{id}`, das für einen Zivilisten
+    ins Leere führt. Gemeldet wird das Muster, der Name kommt weiter nur über den auditierten Weg.
+- **Phase 9 (Belohnung) — was daran anders ist:**
+  - **Ein Auszahlungspfad, eine Transaktion.** `RewardService.PayoutAsync` bucht je Anteil über
+    `IKassenService.BookAsync(db, …)`, legt die `HinweisBelohnungen` an, setzt die Anteile auf `Ausgezahlt` und
+    schließt die Hinweise über `ITipService.MarkRewardedAsync(db, …)` — alles in **einem** Kontext und **einer**
+    Transaktion, weil kein Geld ohne Statuswechsel und kein Statuswechsel ohne Geld existieren darf. Die Transaktion
+    ist ohnehin Pflicht: `ICaseNumberService.NextAsync` verweigert ohne umschließende Transaktion. Nach dem Commit,
+    nie davor: `InvalidatePublicViewAsync`, `StampForNoticeAsync`, `AfterRewardAsync`.
+  - **Eigener `IRewardService`, nicht `IBountyService.PayoutAsync`.** `BountyService` ist einaudienz-intern; die
+    Belohnung ist der erste Geldpfad mit einer **Bürger**-Leseseite (Beleg). Er besitzt `HinweisBelohnungen` und ist
+    der einzige Schreiber von `BountyShareStatus.Ausgezahlt` — das macht ihn zum Schreiber der Anteil-Tabelle, also
+    greift `PublicSurfaceGuardTests.EveryWriterOfTheBountyTable_DropsThePublicSnapshot` und verlangt
+    `InvalidatePublicViewAsync`. Richtig so: `Ausgezahlt` fällt aus `BountyShares.Advertised`, die öffentliche Summe
+    sinkt auf 0.
+  - **`Gefasst` ist Vorbedingung, keine Nebenwirkung.** Die Auszahlung weist eine nicht gefasste Ausschreibung ab,
+    statt sie selbst umzuschalten — die Fahndungstabelle behält ihren einen Schreibpfad (`PublicWantedService`), und
+    das Panel schreibt den Hinweis darauf hin, statt einen toten Knopf zu zeigen.
+  - **Eine Auszahlung je Ausschreibung.** Danach sind **alle** beworbenen Anteile `Ausgezahlt`; der Statuswechsel ist
+    der Idempotenz-Token (Muster Ablauf-Worker), gesetzt per Compare-and-swap wie in `PayInAsync`, mit
+    `ManualAudit.Row` je Anteil, weil `ExecuteUpdate` den Interceptor umgeht. **`Ausgezahlt` heißt erledigt, nicht
+    restlos geleert** — sonst zählt `GetCoverageAsync` einen abgeschlossenen Fall für immer als offene Verpflichtung.
+  - **Die Verteilregel steht einmal**, in `Services/Public/RewardAllocation.cs`: zuerst Geld ohne persönliche
+    Übergabe (`Gesichert`, `NooseKasse`), dann unbezahlte private Zusagen (`AgentPrivat` + `Zugesagt` ⇒ keine
+    Buchung, `SelbstAusgezahltAm`), je Gruppe ältester Anteil zuerst, `AnteilId` als Gleichstand-Entscheider —
+    dieselbe Auszahlung muss immer dieselben Buchungen erzeugen. Dort sitzen auch die Σ-Invariante und die Ablehnung
+    einer dritten Dezimalstelle (die Spalte hält zwei, MySQL schneidet die dritte wortlos ab).
+  - **`HinweisBelohnung` ist `IAuditable`, aber **nicht** `ISoftDelete`** — Geldhistorie ist append-only, Präzedenz
+    `FahndungKopfgeldAnteil`. Keine `TrashService`-Registrierung; eine Fehlbuchung wird in der Kasse gegengebucht.
+    Die **`BelegNummer` trägt eine Gruppe** (je Auszahlung und Hinweis) und ist deshalb **nicht** unique indexiert:
+    eine Zeile ist ein (Hinweis × Anteil)-Paar, der Bürger bekommt einen Beleg je Hinweis, und der Beleg summiert
+    seine Zeilen. Unique ist `KassenBuchungId`. Präfix **`BEL`** (`B` gehört den Bewerbungen).
+  - **Der Verwendungszweck der Kassenbuchung nennt nur Aktenzeichen.** `/kasse` liest jeder Agent; ein Bürgername
+    dort wäre die Anonymitätszusage über das Kassenbuch umgangen — auch bei aufgelöster Anonymität. Eigener Test.
+  - **Anonym ist unauszahlbar** (`TipAnonymity.IsHidden`): Geld braucht einen Empfänger, und der Beleg nennt ihn.
+    Ein `Neu`-Hinweis ebenso — `TipRules` erlaubt den Sprung nach `FuehrteZurErgreifung` bewusst nicht. Der Dialog
+    listet beide Fälle mit Grund.
+  - **`Permission.RequireRewardPayout` ist eine eigene Achse** (interner Agent + Schreibrecht + Führung):
+    `RequireKassenBookingWrite` greift nur im Buchungszweig, eine vollständig aus privater Zusage bezahlte Belohnung
+    liefe also ohne Führungsprüfung durch. Schreib-Guard vor allem anderen (Präzedenz Phase 6).
+  - **Das Modul-Gate sitzt auf den Bürger-Lesepfaden, nicht auf der Auszahlung** — Präzedenz „Publizieren braucht
+    ein lebendes Modul, *De*publizieren nie"; eine interne Geldbewegung hängt an keinem öffentlichen Schalter.
+    Gefragt wird die **gespeicherte Wahl allein** (`PublicModuleSnapshot.Find(key)?.IsEnabled`), nicht
+    `RequireEnabledAsync`: das faltet den Not-Aus ein, und der lässt `/buerger` bewusst offen. Derselbe Grund führt
+    `PartnerRoutes.IsAllowed` für `/buerger/**` auf `true` — `BuergerLayout` fragt die Liste nie, `PrintLayout`
+    schon, und ohne die Zeile wäre der Beleg die einzige Bürgerseite mit „nicht freigegeben" für einen Partner.
+  - **Beleg: Eigentümer und Führung**, jeder andere bekommt `null` ⇒ „nicht gefunden" (nie „kein Zugriff", sonst
+    Existenz-Orakel). Der Bearbeiter steht auf **keiner** Projektion — `CitizenRewardReceipt` kann ihn strukturell
+    nicht tragen —, und `RewardReceipt.razor` setzt `PrintedBy` nicht. Die Seite liegt unter `Pages/Portal/`, nicht
+    unter `Pages/Public/`: der Kontobereich eines angemeldeten Bürgers ist nicht öffentlich, also greifen
+    `PublicPageScanTests` und `PublicRoutes` dort nicht — und `PrintFrame` funktioniert, weil Portal-Seiten
+    interaktiv sind (anders als das Fahndungsposter).
+  - **`PublicRewardPaid` ist nicht routbar** — eine Belohnungsmeldung im öffentlichen Kanal outet den Hinweisgeber.
+  - **Zeitstrahl über drei Hops, in zwei Abfragen.** Belohnung → Anteil → Ausschreibung → Akte; gestaffelt statt
+    verschachtelt, weil `IgnoreQueryFilters()` kompilierungsweit gilt (Phase-4-Falle). Registriert in
+    `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `AuditEntityDisplay` und
+    `ChronikParentResolver`; **nicht** im `WatchlistRecordRollup` (statische Map ohne Datenbank — beobachtbar ist
+    das Gefasst-Setzen).
+- **Phase 10 (Ticket-Chat) — was daran anders ist:**
+  - **Ein Ticket hängt an keiner Akte.** Es ist Schriftwechsel, kein Aktenmaterial: **kein** Eintrag in
+    `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `ChronikParentResolver`, `RecordsReference`
+    oder `LinkService` — es gibt keinen Elternteil, auf den es fan-in könnte. Registriert ist es in
+    `PublicVisibility`, `SearchCatalog` (`NotSearchable`, Provider mit Phase 16), `AuditEntityDisplay`
+    (Label **und** Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` und
+    `MergedPageSections.Trash`.
+  - **`MayClassifiedRead` ist die Service-Seite von `Policies.LeadershipPage`.** `Permission.RequireTicketRead`
+    = `IsInternalAgent() && MayClassifiedRead()`, also Führung *oder* Nur-Lese-Aufsicht — genau die Menge, die
+    die Seiten-Policy hereinlässt. `RequireTicketHandling` legt `MayWrite()` darüber, **vor** der Rangprüfung
+    (Präzedenz Phase 6/9), damit Aufsicht und Demo-Principal nicht erst ein Aktenzeichen prägen.
+    `IsInternalAgent()` steht davor, weil ein Bürgerkonto überhaupt keinen Rang-Claim trägt.
+  - **Der Absender außen ist eine Konstante** (`TicketRules.AgencySender`), kein UI-Zweig: die Bürger-Zeile wird
+    mit `AutorAgentId = null` geschrieben, und `CitizenTicketMessage` hat kein Autorfeld. Zweite Schicht ist ein
+    Dateiscan über `Components/Pages/Portal/` (`PublicSurfaceGuardTests`), der auf **ganze Bezeichner** matcht —
+    `CitizenTicketDetail` enthält `TicketDetail`, ein Teilstring-Treffer meldete die Typen, die die Zusage
+    einhalten. Der Öffnen-Dialog liegt deshalb unter `Pages/Portal/Shared/`: der Ordner ist die Grenze des Wächters.
+  - **Zwei Deckel, nur einer ignoriert den Soft-Delete.** `MaxOpen = 2` zählt lebende Zeilen
+    (`TicketRules.OpenRows`), `PerDay = 3` zählt mit `IgnoreQueryFilters` — Löschen gibt den Platz zurück, nicht
+    das Tageskontingent. Beide im Dienst, nicht in der Middleware: das Öffnen läuft über SignalR.
+  - **Geschlossen ist geschlossen.** Die Bürger-Antwort auf ein abgeschlossenes Ticket wird abgewiesen, nur die
+    Führung öffnet wieder (`Geschlossen → InBearbeitung`, nie zurück auf `Offen`). Wiedereröffnen räumt
+    `GeschlossenAm`/`GeschlossenVonId` — die Felder beschreiben die aktuelle Schließung, nicht ihre Geschichte.
+    Automatisch bewegen sich nur zwei Kanten (Führung antwortet ⇒ `WartetAufBuerger`, Bürger antwortet von dort
+    ⇒ `InBearbeitung`); ein **unangetastetes** Ticket bleibt `Offen`, sonst behauptete der Status Arbeit.
+  - **Lesestände per `ExecuteUpdateAsync`, `LetzteAktivitaetAm` getrackt.** Der Stempel reitet auf dem
+    Statuswechsel mit, der ihn verursacht — anders als bei einem Hinweis unschädlich, weil kein Zeitstrahl daran
+    hängt. Je Seite ein eigener Lesestand; die Aufsicht setzt keinen (`MayWrite()` im Dienst, nicht erst im
+    Interceptor).
+  - **`PublicTicketOpened`/`PublicTicketAnswered` sind nicht routbar** — eine Ticketmeldung im öffentlichen Kanal
+    nennt einen namentlich bekannten Bürger. Beim Bürger klingelt es nur bei `WartetAufBuerger` und `Geschlossen`.
+  - **`TicketBroadcaster` trägt Zeilen-Id *und* Aktenzeichen:** der Schalter adressiert über die Id, die
+    Bürgerseite nur über das Aktenzeichen — ohne das zweite Handle lädt jeder Bürger-Circuit bei jeder
+    Ticketänderung im Haus neu. **`TicketArt` hat genau einen Wert**; die Spalte existiert, damit eine zweite Art
+    ein Enum-Wert und keine Migration ist.
+  - **Der Nav-Eintrag ist der Zugangsschutz:** `NavSection.VerwaltungFuehrung` **ist** `Policies.LeadershipPage`,
+    also ist „ein Junior-Agent sieht nichts davon" eine Katalog-Eigenschaft. Die Papierkorb-Zeile nennt Betreff
+    und Status, nie den Bürger oder den Schriftwechsel.
+  - **Das Änderungsprotokoll auf `/nachweis` liest jeder interne Agent — Inhalt kommt trotzdem nie dort an.**
+    Der `AuditSaveChangesInterceptor` erfasst Feldwerte nur bei `Modified`/`Deleted`, nicht bei `Created`: das
+    Anlegen eines Tickets und **jede** Nachricht schreiben eine Zeile ohne `ChangesJson`, und an einem Ticket
+    ändern sich später nur Status, Bearbeiter und Zeitstempel. Sichtbar ist damit „Ticket existiert, Status
+    bewegte sich" plus das handelnde Konto — dieselbe bewusste Offenlegung wie bei `Hinweis` (dort trotz
+    Anonymitätszusage, weil das Konto die Missbrauchskontrolle ist). In **Chronik und Zeitstrahl** taucht ein
+    Ticket gar nicht auf: `GlobalChronikService.RecordTypes` ist eine geschlossene Liste von zehn Aktenarten,
+    und ein Typ ohne Elternteil fällt dort heraus.
+- **Phase 11 (Öffentliche Vorlagen) — was daran anders ist:**
+  - **Klartext, kein HTML — und das ist der Grund, `BewerbungTemplateRenderer` nicht wiederzuverwenden.**
+    `HinweisNachricht.Text` und `TicketNachricht.Text` sind Klartext; der Bewerbungs-Renderer `HtmlEncode`t
+    jede Ersetzung, weil ein Anschreiben Markup ist, und hätte dem Bürger „Müller &amp;amp; Sohn" zugestellt.
+    `PublicTemplateRenderer` encodet deshalb **nichts** (eigener Test hält die Abweichung fest) und
+    `OeffentlicheVorlage.Text` ist `longtext` mit mehrzeiligem Textfeld statt RichTextEditor: Zeilenumbrüche
+    sind die Formatierung.
+  - **Fünf Arten, jede mit Konsument** (`TicketEingang`, `TicketAntwort`, `HinweisEingang`,
+    `HinweisRueckfrage`, `HinweisAblehnung`). `Belohnungszusage` und `Pressemitteilung` aus dem Plantext sind
+    **nicht** gebaut — der erste bräuchte einen neuen Schreibpfad in `RewardService` (der schickt dem Bürger
+    heute nur Glocke und Beleg), der zweite kommt mit Phase 14. Aus demselben Grund fehlt `BETRAG`: ein nie
+    ersetztes Token geht als Literal nach draußen. Präzedenz `TicketArt` mit einem Wert.
+  - **Ein Fallback für `BUERGER`, und der anonyme Hinweis ist der Grund.** Die Auto-Bestätigung fragt
+    `TipAnonymity.IsHidden` — die Zusage gilt auch gegen die eigene Bestätigung der Behörde, nicht nur gegen
+    die Bearbeiter-Projektion. `NAME` wird **zuerst** geschwärzt (Muster Bewerber-Pfad), damit nichts
+    Eingesetztes nachträglich getroffen wird.
+  - **Die Lesepfade tragen bewusst keinen Guard** (`IPublicTemplateService`): eine Vorlage ist
+    Behörden-Textbaustein, kein Akteninhalt, und die Auto-Bestätigung wird gelesen, während ein **Bürger**
+    handelt — ein Guard hätte sie mit `UnauthorizedAccessException` beantwortet. Muster
+    `IDocumentTemplateService.GetActiveAsync`. Geschrieben wird nur über
+    `Permission.RequirePublicTemplateWrite` (Schreibprüfung vor der Rangprüfung).
+  - **Tokens bleiben beim Speichern roh, Fremdtokens werden abgewiesen** (`HasForeignToken`: `{{…}}`,
+    Erwähnungen, `BEWERBER`, `DIENSTGRAD`). `DATUM`/`UHRZEIT` teilt sich der Satz bewusst mit dem
+    Bewerber-Pfad. **`MentionParser.Parse` als Ablehnungsprüfung ist erlaubt** (wie in `WarnhinweisService`);
+    verboten ist das Auflösen im öffentlichen Pfad — deshalb steht er nicht im Datei-Scan, und der streicht
+    Kommentare, bevor er sucht: die Sätze, die erklären, warum ein System nicht benutzt wird, müssen es
+    nennen dürfen.
+  - **Die Auto-Bestätigung bewegt keinen Status und läutet nicht.** Ticket bleibt `Offen`, Hinweis bleibt
+    `Neu`; `Public*Answered` ist für eine echte Antwort. Sie entsteht in **derselben** Transaktion wie Akte
+    und erste Nachricht (Bestätigung ohne Vorgang ist damit unmöglich), die Vorlage wird davor gelesen.
+    **Ohne aktive Vorlage passiert nichts** — es gibt keinen Fallback-Text im Code, der Aktiv-Schalter ist
+    also auch der Aus-Schalter. `PublicTemplateSeeder` füllt je Art eine Startvorlage, aber **nur bei ganz
+    leerer Tabelle** (Muster `WarnhinweisSeeder`).
+  - **`PublicTemplateRules.MaxLength` ist abgeleitet** (`TicketRules.MaxMessageLength` minus Reserve): was
+    gespeichert wird, muss gerendert noch in eine Nachricht passen.
+  - **Kein `PublicModules`-Schlüssel** (interne Konfiguration) und **kein Papierkorb-Eintrag**
+    (Konfigurationstabelle, Präzedenz `Warnhinweis`/`DocumentTemplate` — beide `ISoftDelete` und trotzdem
+    nicht im globalen Papierkorb; zurückgezogen wird über `IstAktiv`). Registriert ist die Tabelle in
+    `PublicVisibility`, `SearchCatalog` (`NotSearchable`), `AuditEntityDisplay` (Label **und** Route),
+    `MergedPageSections.Settings`, `WatchlistRecordRollup` — **und in `FeedbackPageTabs`, der sechsten
+    Registry**, die jeder neue `/einstellungen`-Abschnitt braucht (`FeedbackPageTabsTests` verlangt jeden
+    `MergedPageSections`-Slug im Feedback-Picker).
+- **Phase 12 (Organisationen & Gefahrenlisten) — was daran anders ist:**
+  - **Nach außen geht die Gefahrenstufe, nie der rohe Score** — und das ist mechanisch gesichert, nicht nur
+    verabredet: `PublicPageScanTests.InternalMarkers` enthält wörtlich `"ThreatScore"`, eine öffentliche
+    Seite, die ihn nennt, macht den Build rot. Die Zahl ließe die Formel aus `AlgoPlan.md` rückwärts rechnen,
+    und die Score-Konfiguration steht in `NeverPublic` als „Anleitung zur Umgehung". Festgehalten wird die
+    Stufe beim Publizieren, nachgezogen nur auf Knopfdruck.
+  - **Zwei Statusachsen auf einer Zeile.** `Status` (`PublicProfileStatus`) entscheidet allein die
+    öffentliche Sichtbarkeit, `Einordnung` (`PublicFactionStanding`) ist das Etikett beobachtet/verboten. Ein
+    Feld für beides könnte eine Publikation nicht zurückziehen, ohne die Einordnung zu verlieren. Die
+    Einordnung wird **nie** aus `Faction.Classification` abgeleitet — die interne Einstufung nach außen zu
+    spiegeln veröffentlichte, woran die Behörde arbeitet. Erlaubt ist nur, was in
+    `PublicFactionStandingDisplay.All` steht (`RequireKnownStanding`), sonst stünde draußen eine rohe Zahl.
+  - **Keine Rang-Weiche, deshalb zwei Guards statt drei.** Alles ab `SeniorSpecialAgent(3)`:
+    `Permission.RequirePublicFactionProfileWrite` (interner Agent mit Schreibrecht — `RequireWriteAccess`
+    allein ließe ein Bürgerkonto durch) **vor** `RequireHighestClassification`, und
+    `RequirePublicFactionProfileRead` (Rang ≥ 3 oder Aufsicht). Die Antrags-Weiche der Fahndung existiert
+    dort nur, weil Rang 1–2 Entwürfe anlegen darf; hier gibt es diesen Zweig nicht, also keinen fünften
+    `RequestType`, keine Spalte auf `Antraege`, keinen Posteingang, kein Badge — und ein dritter
+    „RecordRead"-Guard hätte niemanden einzulassen.
+  - **Ein Hub, keine Detailseite.** Name, Einordnung, Stufe und Kurzbeschreibung stehen auf der Karte; eine
+    Detailseite wiederholte dieselben vier Felder. Kein Aktenzeichen-Präfix, kein `CaseNumberCounter`. Die
+    Ausschreibung verlinkt bewusst **nicht** auf die Organisation: `OeffentlicheFahndung.FraktionId` ist ein
+    interner FK, und den Fraktionsnamen beim Rendern nachzulesen wäre ein Live-Blick statt eines Snapshots.
+  - **Eigener Cache-Schlüssel, ein Speicherpfad.** `SaveAndInvalidateAsync` ist die einzige Stelle mit
+    `SaveChangesAsync` **und** `cache.Remove`; `PublicFactionProfileCacheDisciplineTests` hält das per
+    Dateiscan fest, samt „kein zweiter Produktionsdateiname kennt den Schlüssel" und „wer die Profiltabelle
+    schreibt, ist dieser eine Dienst". Eigener Schlüssel neben dem Fahndungs-Snapshot, weil es eine andere
+    Tabelle ist — das Phase-5-Argument gegen einen zweiten Schlüssel galt Board **und** Archiv aus
+    *derselben* Tabelle.
+  - **Der Unterdrückungsgürtel ist wieder eine zweite Abfrage** (`OpenFactionsAsync`), nie eine
+    Unterabfrage: `IgnoreQueryFilters()` gilt kompilierungsweit. `p.Faction` als Navigation ist ebenso
+    unbrauchbar — sie erbt den Filter und ist für eine gelöschte Akte `null`. Zusätzlich zieht
+    `RetractForRecordAsync` die Zeile offline, gerufen aus `FactionService.RefreshAsync` (sobald die Akte VS
+    wird) und `.DeleteAsync`; einen `FactionMergeService` gibt es nicht.
+  - **`/gefahr/personen` hat keinen eigenen Lesepfad**, es projiziert
+    `IPublicWantedService.GetBoardAsync().Cards` — die Stufe steht dort schon, hinter demselben Gürtel. Eine
+    zweite Abfrage müsste ihn wiederholen, genau die Phase-4-Falle. Die Ranking-Regel steht einmal, in
+    `Services/Public/HazardRanking.cs` (Stufe absteigend, Publikationsdatum als Gleichstand-Entscheider,
+    `HazardLevel.No` fällt heraus, Deckel 25) — zwei Oberflächen lesen sie, ausgeschrieben driftet sie. Der
+    **Deckel wird auf der Seite genannt**, weil ein stiller Schnitt sich wie Vollständigkeit liest. Die
+    Personenliste filtert vorher auf `PublicWantedKind.Fahndung`: eine Vermisstenmeldung und ein
+    Zeugenaufruf tragen ebenfalls eine Gefahrenstufe, und beide unter „gefährlichste Personen" zu listen
+    wäre eine Anschuldigung, die die Ausschreibung nie erhoben hat. Heute wird nur `Fahndung` ausgegeben —
+    die Zeile ist für Phase 13 da, die `Fahrzeug` und `Waffe` bringt.
+  - **Gates je Datenmenge, verschachtelt:** `/organisationen` an `Organisationen`, `/gefahr/fraktionen` an
+    `Gefahrenlisten` **und** `Organisationen`, `/gefahr/personen` an `Gefahrenlisten` **und** `Fahndung`
+    (Präzedenz `GetPublishedPhotoAsync`: „das Modul der Menge, in der es die Zeile gefunden hat").
+    `PublicModuleGate` nimmt genau ein Modul; zwei verschachtelt zeigen je den eigenen Offline-Text, was
+    genau richtig ist — die Meldung sagt, welcher Schalter es war. Zurückziehen und Löschen fragen das Modul
+    **nie**.
+  - **Kein Discord-Push.** Ein Organisationsprofil ist kein Handlungsaufruf, und ein Kanal-Post wäre eine
+    bleibende Anschuldigung gegen eine ganze Fraktion, die ein Rückzug nicht zurückruft (Präzedenz: eine
+    Senkung des Kopfgelds bleibt still). Damit kein neuer `NotificationType`.
+  - **Die Inhaltsprüfung sitzt im Publish-Rumpf** (Klartext vorhanden, keine `@{…}`-Erwähnung, kein barer
+    `{{`-Opener wie in `WarnhinweisService`) — anders als in Phase 4 gibt es nur *einen* Eingang, also
+    genügt eine Stelle. Ein **Entwurf** darf eine Erwähnung tragen, er ist intern; eine laufende Publikation
+    wird beim Speichern erneut geprüft. Der Schreibpfad prüft die **Aktensichtbarkeit immer**, nicht nur bei
+    laufender Publikation — sonst schriebe, wer die Id eines Entwurfs kennt, gegen eine Verschlusssache
+    (Präzedenz `SetHintsAsync`).
+  - **Kein Unique-Index auf `FraktionId`** — mit Soft-Delete sperrte er die Fraktion für immer
+    (Phase-3-Lektion vom Seiten-Slug). „Ein lebendes Profil je Fraktion" ist eine Dienst-Regel, und
+    **Wiederherstellen ist der zweite Weg, sie zu verletzen**: es prüft die Adresse erneut und bringt das
+    Profil als **Entwurf** zurück, damit ein Rückgängig nichts nebenbei wieder veröffentlicht.
+  - **`FeedbackPageTabs` gilt auch für einen `/fahndung`-Abschnitt**, nicht nur für `/einstellungen` — der
+    Wächter verlangt jeden `MergedPageSections`-Slug im Feedback-Picker. Und `TrashServiceTests` vergleicht
+    die Papierkorb-Slugs **der Reihenfolge nach** gegen `TrashService.Kinds`: die neue Zeile muss dort
+    stehen, wo ihre `Source` steht.
+  - **Nicht registriert, mit Grund:** `RecordsReference`/`LinkService` (das Profil ist kein
+    Verknüpfungsziel, sondern eine Eigenschaft seiner Fraktion) · `PublicRoutes`/`robots.txt` (`/gefahr`
+    steht seit Phase 2 in `ExtraPrefixes`, `/organisationen` ist eine Modul-Nav-Route und damit unabhängig
+    von `Available` schon in `Prefixes`) · `CaseNumberCounter` · kein Foto, kein Ablaufdatum, kein
+    Aufrufzähler (ein Hub ohne Detailseite hat nichts zu zählen).
+- **Phase 13a (Sachfahndung) — was daran anders ist:**
+  - **Keine Migration, und das ist ein Fund.** Geplant war eine Spalte auf die Quellzeile des Steckbriefs.
+    `PersonService.EditAsync` ersetzt die Steckbrief-Kinder aber **vollständig**
+    (`db.PersonVehicles.RemoveRange(person.Vehicles)` + `ChildrenMap`) — jede `PersonVehicle`-/
+    `PersonWeapon`-Id ist nach dem nächsten Speichern der Akte eine neue GUID. Ein gespeicherter Verweis
+    wäre toter Zeiger, und als FK mit `Restrict` hätte er **jeden Steckbrief-Edit** einer ausgeschriebenen
+    Person blockiert. Die Quellzeile ist deshalb reine Vorbefüllung: einmal gelesen, nie gespeichert.
+    Dedupliziert wird folgerichtig auf `(Akte, Art, Anzeigename)` — das Kennzeichen benennt die
+    Ausschreibung ohnehin nach außen.
+  - **„Ohne Personenbezug" gilt nach außen, nicht intern.** `PersonId` bleibt gesetzt, weil daran
+    Unterdrückungsgürtel, Zeitstrahl, Chronik und `RetractForRecordAsync` hängen: eine als Verschlusssache
+    eingestufte Halterin zieht ihr Kennzeichen ohne eine Zeile neuen Code offline. Der Riegel in
+    `PublishAsync` gegen `PersonId is null` bleibt deshalb stehen — eine trägerlose Ausschreibung wäre die
+    einzige öffentliche Zeile, hinter der keine Akte steht, also die einzige ohne Gürtel.
+  - **Kein Foto, in drei Schichten.** Der einzige Fotospeicher im Haus ist `PersonPhotos`, und
+    `PhotoSourceSetAsync` löst über `row.PersonId` auf — mit gesetzter `PersonId` **würde** ein Lichtbild
+    der Halterin an einem Kennzeichen auflösen. `GetOptionsAsync` bietet keins an, `UpdateSnapshotAsync`
+    **weist** ein `PhotoSourceId` **ab** statt es still zu nullen (Präzedenz `SetHintsAsync`: der Riegel
+    gilt dem manipulierten Dialog-Post), `PhotoCopyAsync` räumt bedingungslos.
+  - **Der Vorwurf wird bewusst nicht vorbefüllt.** `Person.WantedReason` ist ein Vorwurf gegen die Person
+    und nennt sie im Freitext meist beim Namen; auf einer Kennzeichen-Karte wäre das genau der Bezug, den
+    die Phase nicht veröffentlicht. `RequirePublishableContent` verlangt den Text ohnehin.
+  - **`Services/Public/WantedKinds.cs` ist die einzige Art-Achse** (`IsItem` + die zwei EF-Zwillinge,
+    Muster `BountyShares`/`TipAnonymity`). `Vermisst` und `Zeugenaufruf` liegen auf der **Personen**-Seite:
+    beide sind Aussagen über einen Menschen, auch wenn sie noch niemand ausstellt.
+  - **`FahndungFahrzeuge` ist ein Unterschalter von `Fahndung`**, kein zweites Board: `/gesucht` hängt am
+    Board-Modul, aus ⇒ alles dunkel; nur die Sachfahndung aus ⇒ die Kennzeichen fallen, die Personen
+    bleiben. Umgesetzt über `PublicWantedBoard.WithoutItems()`, das Karten, Steckbriefe, Archiv **und**
+    Kopfgeld-Wörterbuch in einem Zug räumt — **kein zweiter Cache-Schlüssel**, aus demselben Grund, aus dem
+    Board und Archiv sich schon einen teilen. `GetByCaseNumberAsync`/`GetBountyAsync` gehen darüber und
+    brauchten keine Änderung; `GetPublishedPhotoAsync` bekam das Gate trotzdem ausdrücklich, weil ein
+    Endpoint sich nicht auf eine Regel verlassen darf, die in einer anderen Datei steht.
+  - **Kein eigener Nav-Tab.** Die `art=`-Chips auf `/gesucht` existieren seit Phase 4 und erzeugen sich aus
+    den Arten, die tatsächlich auf dem Board liegen; ein Tab auf `/gesucht?art=…` wäre eine zweite Wahrheit
+    über dieselbe Seite (`NavRoute` bleibt `null`, Muster `Kopfgeld`).
+  - **Der Personen-Pfad wurde art-eng gezogen:** „eine Ausschreibung je Akte" gilt jetzt nur noch für
+    `WantedKinds.PersonRows`, sonst sperrte ein ausgeschriebenes Kennzeichen die Personenfahndung derselben
+    Akte. `GetForPersonAsync` und `GetBannerForPersonAsync` ignorieren Sach-Zeilen — der rote Banner
+    behauptet, diese **Person** sei öffentlich ausgeschrieben, was ein Kennzeichen nicht wahr macht.
+  - **Keine Registry-Runde**, weil keine neue Entität entsteht: kein `AuditEntityDisplay`, kein
+    `WatchlistRecordRollup`, kein Papierkorb, kein Zeitstrahl-Arm, kein `SearchCatalog`, keine
+    `MergedPageSections`, keine Route, kein Aktenzeichen-Präfix, kein `NotificationType`. Geändert wurden
+    zwei Zeilen: der `Available`-Schalter und der `PublicVisibility`-Text der Ausschreibung.
+  - **Publizieren gatet auf beide Schalter, und das Gate sitzt hinter dem Zeilen-Ladevorgang.**
+    `RequireModulesAsync(kind)` verlangt immer `Fahndung` und zusätzlich `FahndungFahrzeuge` für eine
+    Sach-Art — sonst ginge ein Kennzeichen bei ausgeschaltetem Sach-Modul auf `Veroeffentlicht`, der
+    Lesepfad striche es weg, und der **nicht zurückrufbare** Discord-Post verlinkte auf eine 404. Welches
+    Modul greift, hängt an der Art, also muss die Zeile vorher geladen sein; `RequirePublicWantedWrite`
+    läuft weiter davor, damit die Nur-Lese-Aufsicht nichts über Schalterstände erfährt. Dieselbe Regel
+    gilt für Bearbeiten, Chips und Kopfgeld-Obergrenze einer laufenden Zeile — *De*publizieren gatet nach
+    wie vor nie.
+  - **Die Gefahrenstufe kommt weiter aus dem Score der Akte**, auch auf einer Sach-Ausschreibung: die Stufe
+    ist die nach außen zulässige Form des Werts, und sie sagt hier, wie gefährlich die Annäherung an das
+    Fahrzeug ist. `HazardLevel.No` auf jeder Sach-Karte wäre die schlechtere Aussage — sie läse sich als
+    „harmlos“. In der Personen-Rangliste taucht sie trotzdem nicht auf: `/gefahr/personen` filtert seit
+    Phase 12 auf `Kind == Fahndung`, und dieser Filter wird jetzt erst scharf.
+  - Im Archiv heißt es **„Sichergestellt"**, nicht „Gefasst" — ein Fahrzeug wird nicht gefasst. Route und
+    Überschrift behalten das gemeinsame Wort.
+- **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
+  interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
+  `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
+
 ## Domänen-Glossar
 
 | Begriff | Bedeutung |
@@ -478,7 +1192,7 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen, beschlossen aber noch nicht begonnen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–12 und 13a gebaut**, 13b–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

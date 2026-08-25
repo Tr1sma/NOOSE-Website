@@ -1,0 +1,128 @@
+@* Public wanted notice of this file: create, edit and publish the snapshot that goes outside. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IPublicWantedService Wanted
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.Public"
+                 Color="@(_row?.Status == PublicWantedStatus.Veroeffentlicht ? Color.Error : Color.Default)" />
+        <MudText Typo="Typo.subtitle1">Öffentliche Ausschreibung</MudText>
+        <MudSpacer />
+        <MudButton Href="/fahndung?tab=oeffentlich" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.List">Alle Ausschreibungen</MudButton>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Was hier steht, ist ein eigener Publikations-Snapshot: spätere Änderungen an der Akte wirken sich erst
+        beim nächsten Veröffentlichen aus. Eine Verschlusssache lässt sich nicht ausschreiben.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_row is null)
+    {
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Für diese Akte gibt es keine öffentliche Ausschreibung.
+            </MudText>
+            @if (_mayWrite)
+            {
+                <div>
+                    <MudButton OnClick="CreateAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.Add">Ausschreibung anlegen</MudButton>
+                </div>
+            }
+        </MudStack>
+    }
+    else
+    {
+        @if (_row.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Gefasst
+            or PublicWantedStatus.Abgelaufen)
+        {
+            @* the counter is an internal figure and lives on an internal projection, so it cannot reach a public page *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+                @_row.ViewCount öffentliche Aufrufe
+            </MudText>
+        }
+        @* every internal agent may open the notice of a file he can see — a rank 1-2 agent has to, or he could file
+           a draft and never reach the request that is the whole point of the rank switch *@
+        <PublicWantedEditor Id="@_row.Id" User="User" Changed="ReloadAsync" Closed="ReloadAsync" />
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private PublicWantedEdit? _row;
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayWrite;
+    private bool _mayOpen;
+    private string? _loadedId;
+
+    protected override void OnInitialized()
+    {
+        _mayWrite = User.MayWrite() && !User.IsCitizen();
+        // mirrors Permission.RequirePublicWantedRecordRead; which notices actually resolve is decided by the file
+        _mayOpen = !User.IsPartner() && !User.IsCitizen();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == PersonId)
+        {
+            return;
+        }
+        _loadedId = PersonId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _row = _mayOpen ? await Wanted.GetForPersonAsync(PersonId, User) : null;
+        }
+        catch
+        {
+            /* best effort */
+            _row = null;
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Wanted.CreateDraftFromPersonAsync(PersonId, User);
+            Snackbar.Add("Entwurf angelegt — er ist noch nicht öffentlich.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

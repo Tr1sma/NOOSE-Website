@@ -70,7 +70,11 @@ public static class AuthorizationRegistration
                 .RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Applicant))
             .AddPolicy(Policies.HrbOrLeadership, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.IsHrbOrLeadership()));
+                .RequireAssertion(ctx => ctx.User.IsHrbOrLeadership()))
+            // public area
+            .AddPolicy(Policies.CitizenPortal, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.MayUseCitizenPortal()));
 
         return services;
     }

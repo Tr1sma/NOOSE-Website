@@ -28,7 +28,8 @@ public static class AgentSelection
         a => !string.IsNullOrEmpty(a.Codename);
 
     private static readonly Expression<Func<Agent, bool>> PersonnelFileRule =
-        a => a.Status != AgentStatus.Applicant && a.Status != AgentStatus.Blocked && !a.IsTeamLead;
+        a => a.Status != AgentStatus.Applicant && a.Status != AgentStatus.Civilian
+             && a.Status != AgentStatus.Blocked && !a.IsTeamLead;
 
     private static readonly Func<Agent, bool> PersonnelFileInMemory = PersonnelFileRule.Compile();
 
@@ -52,9 +53,9 @@ public static class AgentSelection
     /// <summary>Agents that have a personnel file: the roster of <c>/personal</c> and the search over it.</summary>
     /// <remarks>
     /// Wider than <see cref="OnlySelectable"/> — a terminated agent keeps their file, and a partner account has one
-    /// too. Narrower in the other direction: an applicant is not an agent (they belong to recruiting), a blocked
-    /// account is hidden, and a team lead is invisible RP-wide. The global search MUST go through this, or it hands
-    /// out exactly the accounts the page hides.
+    /// too. Narrower in the other direction: an applicant is not an agent (they belong to recruiting), a citizen is
+    /// not one either (they belong to the public area), a blocked account is hidden, and a team lead is invisible
+    /// RP-wide. The global search MUST go through this, or it hands out exactly the accounts the page hides.
     /// </remarks>
     public static IQueryable<Agent> OnlyWithPersonnelFile(this IQueryable<Agent> agents) => agents.Where(PersonnelFileRule);
 

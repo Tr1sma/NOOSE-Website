@@ -13,6 +13,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
@@ -93,6 +94,40 @@ public static class TrashProjection
         => new("feedback", x.Id, null,
             $"{FeedbackKindDisplay.Name(x.Kind)}: {Snippet(x.Text)}",
             x.Agent?.Codename ?? x.AgentId, x.DeletedAt);
+
+    // editorial pages carry no Aktenzeichen; the address identifies the row and the state is the detail
+    public static TrashItem PublicPage(OeffentlicheSeite x)
+        => new("oeffentliche-seiten", x.Id, null, x.Title,
+            Join($"/info/{x.Slug}", PublicPageStatusDisplay.Name(x.Status)), x.DeletedAt);
+
+    // never the accusation text: the trash page is a list, and the snapshot's markup belongs to the editor
+    public static TrashItem PublicWanted(OeffentlicheFahndung x)
+        => new("oeffentliche-fahndungen", x.Id, x.CaseNumber, x.DisplayName,
+            Join(PublicWantedKindDisplay.Name(x.Kind), PublicWantedStatusDisplay.Name(x.Status)), x.DeletedAt);
+
+    // never the description: same reason, and it may carry images
+    public static TrashItem PublicFactionProfile(OeffentlichesFraktionsprofil x)
+        => new("oeffentliche-fraktionsprofile", x.Id, null, x.DisplayName,
+            Join(PublicFactionStandingDisplay.Name(x.Standing), PublicProfileStatusDisplay.Name(x.Status)),
+            x.DeletedAt);
+
+    // no citizen name and no text: the trash list is read by every handler, and the anonymity promise does not
+    // pause because a row was deleted
+    public static TrashItem Tip(Hinweis x)
+        => new("hinweise", x.Id, x.CaseNumber, $"Bürgerhinweis {x.CaseNumber}",
+            TipStatusDisplay.Name(x.Status), x.DeletedAt);
+
+    // the subject travels, the conversation does not: the trash page is a list, and the thread is the part
+    // that belongs to the two people having it
+    public static TrashItem Ticket(Data.Entities.Public.Ticket x)
+        => new("tickets", x.Id, x.CaseNumber, x.Subject,
+            TicketStatusDisplay.Name(x.Status), x.DeletedAt);
+
+    // neither the citizen nor the argument: the bin is a list every handler reads, and what was disputed is the
+    // part that belongs to the two sides of it
+    public static TrashItem Objection(FahndungEinspruch x)
+        => new("fahndungs-einsprueche", x.Id, x.CaseNumber, $"Einspruch {x.CaseNumber}",
+            ObjectionStatusDisplay.Name(x.Status), x.DeletedAt);
 
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");

@@ -10,6 +10,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
@@ -17,6 +18,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -107,7 +109,10 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToListAsync(cancellationToken))
         {
             var (kat, title) = TimelineDisplay.MapAudit(log.EntityType, log.Action);
-            raw.Add(new Raw(log.Timestamp, kat, title, null, log.AgentName, null, null,
+            // a tip carries the submitting account as its actor, and an agent may report through his civilian
+            // identity — naming him on the file he reported about is exactly what the promise forbids
+            var actor = TipAnonymity.HidesActor(log.EntityType) ? null : log.AgentName;
+            raw.Add(new Raw(log.Timestamp, kat, title, null, actor, null, null,
                 AuditDisplay.Parse(log.ChangesJson)));
         }
 
@@ -311,13 +316,34 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             case nameof(Person):
                 ids.UnionWith(await db.PersonDocs.IgnoreQueryFilters().Where(d => d.PersonId == id).Select(d => d.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PersonPhotos.IgnoreQueryFilters().Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct));
-                types.AddRange([nameof(PersonDoc), nameof(PersonPhoto)]);
+                var noticeIds = await db.OeffentlicheFahndungen.IgnoreQueryFilters()
+                    .Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct);
+                ids.UnionWith(noticeIds);
+                // second hop: the money on a head hangs off the notice, not off the file
+                ids.UnionWith(await db.FahndungKopfgeldAnteile
+                    .Where(k => noticeIds.Contains(k.WantedId)).Select(k => k.Id).ToListAsync(ct));
+                // second hop as well; the messages are left out on purpose, a conversation is not file history
+                ids.UnionWith(await db.Hinweise.IgnoreQueryFilters()
+                    .Where(h => h.WantedId != null && noticeIds.Contains(h.WantedId)).Select(h => h.Id).ToListAsync(ct));
+                // second hop as well: an objection disputes the notice, so it belongs to the file behind it
+                ids.UnionWith(await db.FahndungEinsprueche.IgnoreQueryFilters()
+                    .Where(e => noticeIds.Contains(e.WantedId)).Select(e => e.Id).ToListAsync(ct));
+                // third hop, and staged rather than nested: the reward hangs off a share, which hangs off the notice
+                var shareIds = await db.FahndungKopfgeldAnteile
+                    .Where(k => noticeIds.Contains(k.WantedId)).Select(k => k.Id).ToListAsync(ct);
+                ids.UnionWith(await db.HinweisBelohnungen
+                    .Where(b => shareIds.Contains(b.ShareId)).Select(b => b.Id).ToListAsync(ct));
+                types.AddRange([nameof(PersonDoc), nameof(PersonPhoto), nameof(OeffentlicheFahndung),
+                    nameof(FahndungKopfgeldAnteil), nameof(Hinweis), nameof(HinweisBelohnung),
+                    nameof(FahndungEinspruch)]);
                 break;
             case nameof(Faction):
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.FactionAgents.IgnoreQueryFilters().Where(a => a.FactionId == id).Select(a => a.Id).ToListAsync(ct));
                 ids.UnionWith(await db.FactionPhotos.IgnoreQueryFilters().Where(f => f.FactionId == id).Select(f => f.Id).ToListAsync(ct));
-                types.AddRange([nameof(FactionMember), nameof(FactionAgent), nameof(FactionPhoto)]);
+                ids.UnionWith(await db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().Where(p => p.FactionId == id).Select(p => p.Id).ToListAsync(ct));
+                types.AddRange([nameof(FactionMember), nameof(FactionAgent), nameof(FactionPhoto),
+                    nameof(OeffentlichesFraktionsprofil)]);
                 break;
             case nameof(PersonGroup):
                 ids.UnionWith(await db.PersonGroupMembers.IgnoreQueryFilters().Where(m => m.PersonGroupId == id).Select(m => m.Id).ToListAsync(ct));

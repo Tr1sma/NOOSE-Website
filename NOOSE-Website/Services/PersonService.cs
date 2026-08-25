@@ -11,13 +11,15 @@ using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.People;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonService" />
 public class PersonService(
     IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, IProfileSuggestionService suggestion,
-    ICaseNumberService caseNumber, IThreatScoreService threat, INotificationService notifications) : IPersonService
+    ICaseNumberService caseNumber, IThreatScoreService threat, INotificationService notifications,
+    IPublicWantedService publicWanted) : IPersonService
 {
     public async Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -166,6 +168,7 @@ public class PersonService(
         var altStatus = person.LifeStatus;
         var altDeadUntil = person.DeadUntil;
         var oldMentions = person.Description;
+        var wasRestricted = person.IsRestricted;
 
         person.Name = input.Name.Trim();
         person.Description = input.Description.TrimToNull();
@@ -198,6 +201,13 @@ public class PersonService(
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
         await MentionNotify.DeltaAsync(notifications, oldMentions, person.Description, "einer Personenakte",
             nameof(Person), id, actor, cancellationToken);
+
+        // a file that just became a Verschlusssache must not stay on the public board; the read side hides it anyway,
+        // this closes the row itself so the state is honest and audited
+        if (!wasRestricted && person.IsRestricted)
+        {
+            await publicWanted.RetractForRecordAsync(id, "Akte als Verschlusssache eingestuft.", actor, cancellationToken);
+        }
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -210,6 +220,9 @@ public class PersonService(
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
         db.People.Remove(person);
         await db.SaveChangesAsync(cancellationToken);
+
+        // a poster for a deleted file has nothing behind it any more
+        await publicWanted.RetractForRecordAsync(id, "Akte gelöscht.", actor, cancellationToken);
     }
 
     public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

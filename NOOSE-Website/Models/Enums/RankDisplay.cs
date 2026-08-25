@@ -42,6 +42,7 @@ public static class AgentStatusDisplay
         AgentStatus.Blocked => "Gesperrt",
         AgentStatus.Applicant => "Bewerber",
         AgentStatus.Terminated => "Gekündigt",
+        AgentStatus.Civilian => "Bürger",
         _ => "—",
     };
 
@@ -52,6 +53,8 @@ public static class AgentStatusDisplay
         AgentStatus.Blocked => Color.Error,
         AgentStatus.Applicant => Color.Info,
         AgentStatus.Terminated => Color.Error,
+        // grey: outside the agency
+        AgentStatus.Civilian => Color.Default,
         _ => Color.Default,
     };
 
@@ -62,6 +65,7 @@ public static class AgentStatusDisplay
         AgentStatus.Blocked => Icons.Material.Filled.Block,
         AgentStatus.Applicant => Icons.Material.Filled.HowToReg,
         AgentStatus.Terminated => Icons.Material.Filled.PersonOff,
+        AgentStatus.Civilian => Icons.Material.Filled.Person,
         _ => Icons.Material.Filled.HelpOutline,
     };
 }

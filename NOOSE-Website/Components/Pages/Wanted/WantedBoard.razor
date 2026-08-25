@@ -10,6 +10,18 @@
     <RecordSection Slug="fahndung" Label="Fahndung" Icon="@Icons.Material.Filled.PersonSearch">
         <WantedBoardPanel />
     </RecordSection>
+    @* /fahndung carries no page policy and inherits ActiveAgent, which a partner satisfies — gate the section itself *@
+    <AuthorizeView Policy="@Policies.InternalAgent" Context="intern">
+        <RecordSection Slug="oeffentlich" Label="Öffentliche Ausschreibungen" Icon="@Icons.Material.Filled.Public">
+            <PublicWantedListPanel />
+        </RecordSection>
+        <RecordSection Slug="organisationen" Label="Öffentliche Organisationsprofile" Icon="@Icons.Material.Filled.Groups">
+            <PublicFactionProfileListPanel />
+        </RecordSection>
+        <RecordSection Slug="einsprueche" Label="Einsprüche" Icon="@Icons.Material.Filled.Balance">
+            <ObjectionListPanel />
+        </RecordSection>
+    </AuthorizeView>
     <RecordSection Slug="observationen" Label="Observationen" Icon="@Icons.Material.Filled.Visibility">
         <ObservationsPanel />
     </RecordSection>

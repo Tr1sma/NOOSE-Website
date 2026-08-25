@@ -29,12 +29,20 @@ public static class FeedbackPageTabs
         new("ki-kontingente", "Kontingente"),
         new("ki-anfragen", "NOOSEI-Anfragen"),
         new("partner", "Sichtbarkeit & Freigaben"),
+        new("oeffentliche-module", "Module & Not-Aus"),
+        new("oeffentliche-seiten", "Öffentliche Seiten"),
+        new("warnhinweise", "Warnhinweise"),
+        new("oeffentliche-vorlagen", "Öffentliche Vorlagen"),
+        new("buerger", "Bürgerkonten"),
         new("basisdaten", "Wertelisten"),
     ];
 
     public static readonly FeedbackTab[] Wanted =
     [
         new("fahndung", "Fahndung"),
+        new("oeffentlich", "Öffentliche Ausschreibungen"),
+        new("organisationen", "Öffentliche Organisationsprofile"),
+        new("einsprueche", "Einsprüche"),
         new("observationen", "Observationen"),
         new("doks", "Vernehmungen & Maßnahmen"),
     ];

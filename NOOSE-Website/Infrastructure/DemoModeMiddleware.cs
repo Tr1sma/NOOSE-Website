@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Infrastructure;
 
@@ -10,10 +11,17 @@ public sealed class DemoModeMiddleware(RequestDelegate next, IConfiguration conf
     private readonly bool _forceDemo = configuration.GetValue<bool>("Demo:AutoSetup");
 
     // login + framework + asset paths must not be hijacked
-    private static readonly string[] ExcludedPrefixes =
+    private static readonly string[] InfrastructurePrefixes =
     [
         "/Account", "/signin-discord", "/health", "/_blazor", "/_framework", "/system/logo",
     ];
+
+    /// <summary>Infrastructure plus every public route: an anonymous visitor outside must stay anonymous.</summary>
+    /// <remarks>
+    /// Derived from <see cref="PublicRoutes"/> rather than repeated. /gesucht used to be listed by hand, and
+    /// /gefasst is a sibling route rather than a child of it — it would have been missed the same way.
+    /// </remarks>
+    public static readonly string[] ExcludedPrefixes = [.. InfrastructurePrefixes, .. PublicRoutes.Prefixes];
 
     public async Task InvokeAsync(HttpContext context, ISystemSettingService settings)
     {

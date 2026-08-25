@@ -17,6 +17,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
@@ -59,12 +60,19 @@ public static class WatchlistRecordRollup
             case Comment k: return One(k.EntityType, k.EntityId);
             case Source q: return One(q.EntityType, q.EntityId);
             case TagMapping tz: return One(tz.EntityType, tz.EntityId);
+            // going public is the most consequential thing that can happen to a file, so followers hear about it
+            case OeffentlicheFahndung of: return One(nameof(Person), of.PersonId);
+            // publishing is the most consequential thing that happens to a faction file
+            case OeffentlichesFraktionsprofil ofp: return One(nameof(Faction), ofp.FactionId);
 
             // ---- relations ----
             case Link vk: return Two((vk.SourceType, vk.SourceId), (vk.TargetType, vk.TargetId));
             case PersonRelation pb: return Two((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
             // not watchable
+            // the objection is two hops from a file (notice, then record) and this map has no database; the
+            // publication of the notice stays the watchable event
+            case FahndungEinspruch:
             case Job:
             case JobAssignment:
             case Announcement:
@@ -84,6 +92,28 @@ public static class WatchlistRecordRollup
             case FinancingRequest:
             case FinancingRequestLine:
             case FinancingItem:
+            // the public area's own tables carry no record reference anyone follows: editorial pages, module
+            // switches, a citizen's own account, and the warning value list are configuration, not casework
+            case OeffentlicheSeite:
+            case OeffentlichesModul:
+            case BuergerProfil:
+            case Warnhinweis:
+            // the bounty is treasury, not casework, and resolving it would need two hops through the database
+            // this static map has no access to — publishing the notice is the watchable event
+            case FahndungKopfgeldAnteil:
+            // a tip reaches its file over two hops as well, and every chat line would fire again — the tip is
+            // watched through the notice that was published, not line by line
+            case Hinweis:
+            case HinweisNachricht:
+            // a reward is three hops from a file (reward, share, notice) and money at that: the watchable event is
+            // the notice being marked captured
+            case HinweisBelohnung:
+            // a ticket hangs off no record at all — it is correspondence with a citizen, so there is nothing
+            // for a follower of a file to be told about
+            case Ticket:
+            case TicketNachricht:
+            // a template is configuration; what a follower could care about is the message it produced
+            case OeffentlicheVorlage:
                 return Array.Empty<(string, string)>();
 
             default:

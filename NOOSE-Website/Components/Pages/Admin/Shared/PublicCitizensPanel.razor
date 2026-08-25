@@ -1,0 +1,343 @@
+@inject IBuergerService BuergerService
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Konten von Spielern, die sich über den öffentlichen Bereich mit Discord angemeldet haben. Diese Konten haben
+    keinerlei Rechte in der Behörde und erscheinen in keiner Agenten-Auswahlliste. Eine Sperre nimmt dem Konto
+    nur das Einreichen — öffentliche Inhalte bleiben lesbar. Die Sperre hängt am Discord-Konto, nicht am Namen.
+</MudText>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-4">
+    <MudTextField @bind-Value="_search" @bind-Value:after="LoadAsync" Placeholder="Suchen (Name, Discord)…"
+                  Immediate="true" DebounceInterval="300" Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Style="max-width:340px;" Class="mt-0" />
+    <MudSpacer />
+    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@_rows.Count Konten</MudChip>
+    @if (_blockedCount > 0)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error">@_blockedCount gesperrt</MudChip>
+    }
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Bürgerkonten registriert.</MudAlert>
+}
+else
+{
+    <MudTable Items="_rows" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Discord</MudTh>
+            <MudTh>Registriert</MudTh>
+            <MudTh>Bestätigte Hinweise</MudTh>
+            <MudTh>Personenakte</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Discord">@(context.DiscordUsername ?? "—")</MudTd>
+            <MudTd DataLabel="Registriert">@context.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Bestätigte Hinweise">@context.ConfirmedTips</MudTd>
+            <MudTd DataLabel="Personenakte">
+                @if (context.LinkedPersonId is not null)
+                {
+                    <MudLink Href="@($"/personen/{context.LinkedPersonId}")">Akte öffnen</MudLink>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsBlocked)
+                {
+                    <MudTooltip Text="@(context.BlockedReason ?? "")">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Gesperrt</MudChip>
+                    </MudTooltip>
+                }
+                else if (!context.HasCompleteProfile)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Angaben fehlen</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Aktiv</MudChip>
+                }
+            </MudTd>
+            <MudTd>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="writeCtx">
+                    @if (context.IsBlocked)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.LockOpen"
+                                   OnClick="() => UnblockAsync(context)">Entsperren</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Block"
+                                   OnClick="() => StartBlock(context)">Sperren</MudButton>
+                    }
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.Link"
+                               OnClick="() => StartLinkAsync(context)">Personenakte</MudButton>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@if (_linkTarget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mt-4">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">@_linkTarget.DisplayName mit einer Personenakte verknüpfen</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Die Verknüpfung zeigt an der Personenakte die nicht anonymen Hinweise dieses Kontos.
+            </MudText>
+
+            @if (_linkInfo is not null)
+            {
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudLink Href="@($"/personen/{_linkInfo.PersonId}")">@_linkInfo.Name</MudLink>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_linkInfo.CaseNumber</MudText>
+                    @if (_linkInfo.ThreatScore is { } score)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">EHK-Score: @score</MudChip>
+                    }
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.LinkOff" OnClick="UnlinkAsync">Verknüpfung entfernen</MudButton>
+                </MudStack>
+            }
+            else if (_linkTarget.LinkedPersonId is not null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Die verknüpfte Personenakte ist für dich nicht sichtbar.
+                </MudText>
+            }
+
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudTextField @bind-Value="_personSearch" Label="Person suchen" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Immediate="true" Style="min-width:240px;" />
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Search"
+                           OnClick="SearchPeopleAsync">Suchen</MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelLink">Schließen</MudButton>
+            </MudStack>
+
+            @if (_people.Count > 0)
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var person in _people)
+                    {
+                        <MudListItem T="string" OnClick="@(() => LinkAsync(person.Id))">
+                            @person.Name
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@person.CaseNumber</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@if (_blockTarget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mt-4">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">@_blockTarget.DisplayName sperren</MudText>
+            <MudTextField @bind-Value="_blockReason" Label="Sperrgrund" Variant="Variant.Outlined"
+                          Lines="2" Immediate="true" />
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Block"
+                           OnClick="ConfirmBlockAsync">Sperren</MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelBlock">Abbrechen</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private string? _search;
+    private IReadOnlyList<CitizenRow> _rows = Array.Empty<CitizenRow>();
+    private CitizenRow? _blockTarget;
+    private string _blockReason = string.Empty;
+    private CitizenRow? _linkTarget;
+    private LinkedPersonInfo? _linkInfo;
+    private string _personSearch = string.Empty;
+    private List<Person> _people = new();
+
+    private int _blockedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await BuergerService.ListAsync(_user, _search);
+            _blockedCount = _rows.Count(r => r.IsBlocked);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task StartLinkAsync(CitizenRow row)
+    {
+        _linkTarget = row;
+        _people = new();
+        _personSearch = string.Empty;
+        await RefreshLinkAsync();
+    }
+
+    private async Task RefreshLinkAsync()
+    {
+        if (_linkTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            _linkInfo = await BuergerService.GetLinkedPersonAsync(_linkTarget.Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void CancelLink()
+    {
+        _linkTarget = null;
+        _linkInfo = null;
+        _people = new();
+        _personSearch = string.Empty;
+    }
+
+    private async Task SearchPeopleAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_personSearch))
+        {
+            _people = new();
+            return;
+        }
+        try
+        {
+            _people = await PersonService.SearchAsync(_personSearch, _user.IsLeadership());
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LinkAsync(string personId)
+    {
+        if (_linkTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            await BuergerService.LinkPersonAsync(_linkTarget.Id, personId, _user);
+            Snackbar.Add("Personenakte verknüpft.", Severity.Success);
+            _people = new();
+            _personSearch = string.Empty;
+            await LoadAsync();
+            _linkTarget = _rows.FirstOrDefault(r => r.Id == _linkTarget.Id) ?? _linkTarget;
+            await RefreshLinkAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task UnlinkAsync()
+    {
+        if (_linkTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            await BuergerService.LinkPersonAsync(_linkTarget.Id, null, _user);
+            Snackbar.Add("Verknüpfung entfernt.", Severity.Info);
+            _linkInfo = null;
+            await LoadAsync();
+            _linkTarget = _rows.FirstOrDefault(r => r.Id == _linkTarget.Id) ?? _linkTarget;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartBlock(CitizenRow row)
+    {
+        _blockTarget = row;
+        _blockReason = string.Empty;
+    }
+
+    private void CancelBlock()
+    {
+        _blockTarget = null;
+        _blockReason = string.Empty;
+    }
+
+    private async Task ConfirmBlockAsync()
+    {
+        if (_blockTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            await BuergerService.BlockAsync(_blockTarget.Id, _blockReason, _user);
+            Snackbar.Add("Konto gesperrt.", Severity.Info);
+            CancelBlock();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task UnblockAsync(CitizenRow row)
+    {
+        try
+        {
+            await BuergerService.UnblockAsync(row.Id, _user);
+            Snackbar.Add("Sperre aufgehoben.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

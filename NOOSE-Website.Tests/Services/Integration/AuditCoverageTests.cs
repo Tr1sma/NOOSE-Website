@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
@@ -8,6 +8,8 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -142,7 +144,7 @@ public sealed class AuditCoverageTests
             db.People.Add(Seed.Person("tgt", "Ziel"));
             db.SaveChanges();
         }
-        var svc = new PersonMergeService(ctx.Factory);
+        var svc = new PersonMergeService(ctx.Factory, Substitute.For<IPublicWantedService>());
 
         await svc.MergeAsync("src", "tgt", Leader());
 

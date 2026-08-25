@@ -57,6 +57,11 @@ public static class NavCatalog
 
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung & Überwachung", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Gesuchte Personen, Observationen und Vernehmungen"),
+        // key is not "hinweise": that one belongs to the algorithmic Ermittlungshinweise above, and stored
+        // favourites reference it
+        new NavEntry("buergerhinweise", "/hinweise", Icons.Material.Filled.TipsAndUpdates, "Bürgerhinweise",
+            NavSection.Fahndung, NavArea.Ermittlung, BadgeKey: "tips",
+            Description: "Meldungen aus der Bevölkerung: Eingang, Bearbeitung und Rückfragen"),
         new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Vertrauliche Quellen (V-Personen) mit Treffen-Protokollen"),
         new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,
@@ -105,6 +110,9 @@ public static class NavCatalog
             Description: "NOOSE-Kasse: Schwarz- und Grüngeld buchen, Vorlagen und Statistik"),
         new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),
+        new NavEntry("tickets", "/tickets", Icons.Material.Filled.Forum, "Bürger-Tickets",
+            NavSection.VerwaltungFuehrung, NavArea.Verwaltung, BadgeKey: "tickets",
+            Description: "Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss"),
         new NavEntry("papierkorb", "/papierkorb", Icons.Material.Filled.Delete, "Papierkorb", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Gelöschte Akten aller Typen wiederherstellen"),
     };

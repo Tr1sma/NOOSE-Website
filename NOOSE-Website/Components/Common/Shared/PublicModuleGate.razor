@@ -1,0 +1,59 @@
+@inject IPublicModuleService ModuleService
+
+@* Renders a public module's content, or its offline notice while the module (or the whole area) is off. *@
+@if (_loaded)
+{
+    @if (_enabled)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <MudPaper Elevation="4" Class="pa-8">
+            <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(Title) ? "Nicht verfügbar" : Title)</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="text-align:center;max-width:520px;">
+                    @_offlineText
+                </MudText>
+                <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Home">Zur Startseite</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+}
+
+@code {
+    // The gate is the page's own check, not a nav decoration: a visitor who knows the URL of a module that was
+    // switched off reaches the route, so the route itself has to answer.
+    [Parameter, EditorRequired]
+    public string Module { get; set; } = string.Empty;
+
+    /// <summary>Heading of the offline notice; the page title is usually the right value.</summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool _loaded;
+    private bool _enabled;
+    private string _offlineText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var snapshot = await ModuleService.GetAsync();
+            _enabled = snapshot.IsEnabled(Module);
+            var text = snapshot.Find(Module)?.OfflineText;
+            _offlineText = string.IsNullOrWhiteSpace(text) ? "Dieser Bereich ist derzeit nicht verfügbar." : text;
+        }
+        catch
+        {
+            /* best effort */
+            _offlineText = "Dieser Bereich ist derzeit nicht verfügbar.";
+        }
+        _loaded = true;
+    }
+}

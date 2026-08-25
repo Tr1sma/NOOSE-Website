@@ -106,11 +106,15 @@
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
     [Inject] private IPersonnelFileService PersonnelFileService { get; set; } = default!;
     [Inject] private IRequestService RequestService { get; set; } = default!;
+    [Inject] private NOOSE_Website.Services.Public.IPublicWantedService PublicWanted { get; set; } = default!;
+    [Inject] private NOOSE_Website.Services.Public.IBountyService Bounty { get; set; } = default!;
     [Inject] private IAnnouncementService BoardService { get; set; } = default!;
     [Inject] private SharesBroadcaster SharesBroadcaster { get; set; } = default!;
     [Inject] private AcknowledgmentBroadcaster AcknowledgmentBroadcaster { get; set; } = default!;
     [Inject] private FinancingBroadcaster FinancingBroadcaster { get; set; } = default!;
     [Inject] private IFinancingService FinancingService { get; set; } = default!;
+    [Inject] private NOOSE_Website.Services.Public.ITipService TipService { get; set; } = default!;
+    [Inject] private NOOSE_Website.Services.Public.ITicketService TicketService { get; set; } = default!;
     [Inject] private IPartnerVisibilityPolicyService PartnerPolicy { get; set; } = default!;
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
@@ -120,6 +124,8 @@
     private int _openShares;
     private int _openAcknowledgments;
     private int _openFinancing;
+    private int _openTips;
+    private int _openTickets;
     private IReadOnlySet<string>? _allowedPartnerTypes;
     private IReadOnlyList<NavEntry> _partnerEntries = [];
     private string? _filter;
@@ -200,6 +206,14 @@
         @if (entry.BadgeKey == "financing" && _openFinancing > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Class="ml-2">@_openFinancing</MudChip>
+        }
+        @if (entry.BadgeKey == "tickets" && _openTickets > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openTickets</MudChip>
+        }
+        @if (entry.BadgeKey == "tips" && _openTips > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openTips</MudChip>
         }
     </MudNavLink>;
 
@@ -344,6 +358,8 @@
         await LoadSharesAsync();
         await LoadAcknowledgmentsAsync();
         await LoadFinancingAsync();
+        await LoadTipsAsync();
+        await LoadTicketsAsync();
     }
 
     // partners get one runtime area; internal agents get the areas holding at least one permitted entry
@@ -422,6 +438,10 @@
             if (_user.MayHighestClassification())
             {
                 open += await RequestService.GetOpenCountAsync(_user.IsLeadership());
+                // added here rather than inside GetOpenCountAsync: the dashboard reads that one unconditionally for
+                // every agent and labels the number "Hochstufung"
+                open += await PublicWanted.GetPendingRequestCountAsync();
+                open += await Bounty.GetPendingRequestCountAsync();
             }
 
             // registrations, name changes, profile pictures, taskforce and promotion requests are leadership-only
@@ -458,6 +478,44 @@
         {
             /* best effort */
             Logger.LogWarning(ex, "Finanzierungs-Badge konnte nicht geladen werden.");
+        }
+    }
+
+    // every internal agent works the tip inbox, so every internal agent gets the count
+    private async Task LoadTipsAsync()
+    {
+        if (_user is null || !_user.IsInternalAgent())
+        {
+            _openTips = 0;
+            return;
+        }
+        try
+        {
+            _openTips = await TipService.GetOpenCountAsync();
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            Logger.LogWarning(ex, "Hinweis-Badge konnte nicht geladen werden.");
+        }
+    }
+
+    // the ticket desk is leadership only, and so is its count
+    private async Task LoadTicketsAsync()
+    {
+        if (_user is null || !_user.IsInternalAgent() || !_user.MayClassifiedRead())
+        {
+            _openTickets = 0;
+            return;
+        }
+        try
+        {
+            _openTickets = await TicketService.GetOpenCountAsync();
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            Logger.LogWarning(ex, "Ticket-Badge konnte nicht geladen werden.");
         }
     }
 

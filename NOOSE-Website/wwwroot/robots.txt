@@ -1,0 +1,32 @@
+# NOOSE — only the public area may be indexed. Everything else is an internal records database.
+# Second layer: an X-Robots-Tag: noindex header on every non-public route (PublicIndexingMiddleware).
+# Kept in sync with Services/Public/PublicRoutes.cs by RobotsTests.
+
+User-agent: *
+Disallow: /
+
+Allow: /$
+Allow: /karriere
+Allow: /datenschutz
+Allow: /nutzungsbedingungen
+Allow: /info
+Allow: /gefahr
+Allow: /gesucht
+Allow: /gefasst
+Allow: /organisationen
+Allow: /presse
+Allow: /lageberichte
+Allow: /warnungen
+Allow: /recht
+Allow: /lage
+Allow: /hinweis
+Allow: /suche-oeffentlich
+
+# assets the public pages need to render
+Allow: /_framework
+Allow: /_content
+Allow: /css
+Allow: /lib
+Allow: /app.css
+Allow: /NooseIcon.png
+Allow: /favicon.png

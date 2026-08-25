@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IPublicModuleService ModuleService
 
 @* Public site shell (landing, career) with top tab nav; no maintenance wall, no auth chrome. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
@@ -18,16 +19,29 @@
             </MudStack>
             <AuthorizeView>
                 <Authorized Context="authCtx">
-                    @if (authCtx.User.IsApplicant())
-                    {
-                        <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Badge">Zum Bewerber-Portal</MudButton>
-                    }
-                    else
-                    {
-                        <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Shield">Zum Agent-Portal</MudButton>
-                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        @if (!authCtx.User.IsCitizen())
+                        {
+                            @* the citizen area is open to every account, so it stays reachable next to the own one *@
+                            <MudButton Href="/buerger" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Person">Bürgerbereich</MudButton>
+                        }
+                        @if (authCtx.User.IsApplicant())
+                        {
+                            <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Badge">Zum Bewerber-Portal</MudButton>
+                        }
+                        else if (authCtx.User.IsCitizen())
+                        {
+                            <MudButton Href="/buerger" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Person">Zum Bürgerbereich</MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Shield">Zum Agent-Portal</MudButton>
+                        }
+                    </MudStack>
                 </Authorized>
                 <NotAuthorized>
                     @* secret agency: the public never gets a usable agent login, only a dead notice *@
@@ -38,6 +52,14 @@
 
         <MudDivider Class="mb-2" />
         <PublicNav />
+
+        @if (_killSwitchActive)
+        {
+            @* the internal maintenance mode deliberately does not reach out here; this is its public counterpart *@
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true" Class="mt-4">
+                Der öffentliche Bereich ist derzeit abgeschaltet. Bitte versuche es später erneut.
+            </MudAlert>
+        }
 
         <div class="mt-4">
             @Body
@@ -53,3 +75,19 @@
         </MudStack>
     </div>
 </div>
+
+@code {
+    private bool _killSwitchActive;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _killSwitchActive = (await ModuleService.GetAsync()).KillSwitchActive;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

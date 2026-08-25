@@ -1,0 +1,329 @@
+@* The money on one head: the advertised total, its breakdown, the coverage warning and the share history. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IBountyService Bounty
+@inject IRewardService Reward
+@inject IPublicWantedService Wanted
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.subtitle2">Kopfgeld</MudText>
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                 Variant="@(_summary.Advertised > 0 ? Variant.Filled : Variant.Outlined)">
+            @(_summary.IsCap ? "bis " : string.Empty)@_summary.Advertised.ToString("N0") $
+        </MudChip>
+        @if (_summary.Pending > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                @_summary.Pending.ToString("N0") $ beantragt
+            </MudChip>
+        }
+        <MudSpacer />
+        @if (MayWrite)
+        {
+            <MudSwitch T="bool" Value="_summary.IsCap" ValueChanged="SetCapAsync" Color="Color.Warning"
+                       Label="Obergrenze" Disabled="_busy" />
+            <MudButton OnClick="AddAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       Disabled="_busy" StartIcon="@Icons.Material.Filled.Paid">Setzen</MudButton>
+            @if (IsLeadership && _summary.Advertised > 0 && _rewards.Count == 0)
+            {
+                <MudButton OnClick="PayoutAsync" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                           Disabled="_busy" StartIcon="@Icons.Material.Filled.Redeem">Auszahlen</MudButton>
+            }
+        }
+    </MudStack>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Nach außen geht ausschließlich die Gesamtsumme — keine Herkunft, kein Stifter, keine Anzahl.
+        Ein beantragter Anteil zählt erst nach der Entscheidung.
+    </MudText>
+
+    @if (_shortfalls.Count > 0)
+    {
+        @* agency-wide, not this notice: the figure counts every open bounty against the account, and reading it as
+           "this head is underfunded" would be wrong *@
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+            Deckungslücke der Kasse (alle Ausschreibungen):
+            @string.Join(" · ", _shortfalls.Select(c =>
+                $"{KassenKontoDisplay.Name(c.Account)} {c.Shortfall.ToString("N0")} $ zu wenig"))
+        </MudAlert>
+    }
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_shares.Count == 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Auf diesen Kopf ist kein Kopfgeld ausgesetzt.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="false" Elevation="0">
+            <thead>
+                <tr>
+                    <th>Betrag</th>
+                    <th>Herkunft</th>
+                    <th>Stifter</th>
+                    <th>Status</th>
+                    <th>Seit</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var share in _shares)
+                {
+                    <tr>
+                        <td>@share.Amount.ToString("N0") $</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                     Color="@BountyOriginDisplay.ChipColor(share.Origin)">
+                                @BountyOriginDisplay.Name(share.Origin)@(share.Account is { } a ? $" · {KassenKontoDisplay.Name(a)}" : string.Empty)
+                            </MudChip>
+                        </td>
+                        <td>@share.DonorName</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                     Color="@BountyShareStatusDisplay.ChipColor(share.Status)">
+                                @BountyShareStatusDisplay.Name(share.Status)
+                            </MudChip>
+                            @if (!string.IsNullOrWhiteSpace(share.BookingCaseNumber))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@share.BookingCaseNumber</MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(share.WithdrawnReason))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@share.WithdrawnReason</MudText>
+                            }
+                        </td>
+                        <td>@share.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td class="text-right">
+                            @if (MayWrite && share.Origin == BountyOrigin.AgentPrivat
+                                && share.Status == BountyShareStatus.Zugesagt && (share.IsOwn || IsLeadership))
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Savings" Size="Size.Small"
+                                               Color="Color.Success" Disabled="_busy"
+                                               OnClick="@(() => PayInAsync(share))" />
+                            }
+                            @if (MayWrite && share.Status is BountyShareStatus.Zugesagt or BountyShareStatus.Beantragt
+                                && (share.IsOwn || IsLeadership))
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                                               Color="Color.Error" Disabled="_busy"
+                                               OnClick="@(() => WithdrawAsync(share))" />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+
+    @if (_rewards.Count > 0)
+    {
+        <MudDivider />
+        <MudText Typo="Typo.subtitle2">Ausgezahlte Belohnung</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Striped="false" Elevation="0">
+            <thead>
+                <tr>
+                    <th>Beleg</th>
+                    <th>Hinweis</th>
+                    <th>Empfänger</th>
+                    <th>Betrag</th>
+                    <th>Buchung</th>
+                    <th>Am</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var reward in _rewards)
+                {
+                    <tr>
+                        <td>@reward.ReceiptNumber</td>
+                        <td><MudLink Href="@($"/hinweise/{reward.TipId}")">@reward.TipCaseNumber</MudLink></td>
+                        <td>@(reward.CitizenName ?? "—")</td>
+                        <td>@Money.Format(reward.Amount)</td>
+                        <td>
+                            @if (reward.SelfPaid)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                                    selbst ausgezahlt
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @(reward.BookingCaseNumber ?? "—")@(reward.Account is { } acc ? $" · {KassenKontoDisplay.Name(acc)}" : string.Empty)
+                                </MudText>
+                            }
+                        </td>
+                        <td>@reward.PaidAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else if (MayWrite && IsLeadership && _summary.Advertised > 0 && !IsCaptured)
+    {
+        @* not a dead button: the payout needs a captured notice, and the wanted service owns that write *@
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Auszahlen wird möglich, sobald die Ausschreibung auf gefasst gesetzt ist.
+        </MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string WantedId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Whether the hosting editor is in write mode; the read-only supervision sees the numbers only.</summary>
+    [Parameter] public bool MayWrite { get; set; }
+
+    /// <summary>Whether the notice is marked captured; a reward is paid only after the arrest.</summary>
+    [Parameter] public bool IsCaptured { get; set; }
+
+    private IReadOnlyList<BountyShareRow> _shares = [];
+    private IReadOnlyList<RewardRow> _rewards = [];
+    private BountySummary _summary = BountySummary.Empty;
+    private List<BountyCoverage> _shortfalls = [];
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayCommit;
+    private string? _loadedId;
+
+    private bool IsLeadership => User.IsLeadership();
+
+    protected override void OnInitialized() => _mayCommit = User.MayHighestClassification();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == WantedId)
+        {
+            return;
+        }
+        _loadedId = WantedId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _shares = await Bounty.GetSharesAsync(WantedId, User);
+            _summary = await Bounty.GetSummaryAsync(WantedId, User);
+            _rewards = await Reward.GetForNoticeAsync(WantedId, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _shares = [];
+            _summary = BountySummary.Empty;
+            _rewards = [];
+        }
+        finally
+        {
+            _load = false;
+        }
+
+        // its own try: a failing treasury read must not blank the shares that were just loaded, it may only cost
+        // the coverage line
+        try
+        {
+            _shortfalls = (await Bounty.GetCoverageAsync(User)).Where(c => c.IsShort).ToList();
+        }
+        catch
+        {
+            /* best effort */
+            _shortfalls = [];
+        }
+    }
+
+    private async Task AddAsync() => await RunAsync(async () =>
+    {
+        var picked = await BountyDialog.ShowAsync(DialogService, mayOfficial: true, mayCommit: _mayCommit);
+        if (picked is null)
+        {
+            return;
+        }
+        if (picked.Origin == BountyOrigin.NooseKasse)
+        {
+            var outcome = await Bounty.AddOfficialAsync(WantedId, picked.Amount, picked.Account,
+                picked.Justification, User);
+            Snackbar.Add(outcome == BountyAddOutcome.Committed
+                ? "Behördliches Kopfgeld gesetzt."
+                : "Kopfgeld beantragt — die Führung entscheidet.", Severity.Success);
+            return;
+        }
+        await Bounty.AddPrivateAsync(WantedId, picked.Amount, User);
+        Snackbar.Add("Privates Kopfgeld gesetzt.", Severity.Success);
+    });
+
+    private async Task PayInAsync(BountyShareRow share) => await RunAsync(async () =>
+    {
+        var account = await BountyPayInDialog.ShowAsync(DialogService, share.Amount);
+        if (account is null)
+        {
+            return;
+        }
+        await Bounty.PayInAsync(share.Id, account.Value, User);
+        Snackbar.Add("Anteil eingezahlt und gesichert.", Severity.Success);
+    });
+
+    private async Task WithdrawAsync(BountyShareRow share) => await RunAsync(async () =>
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Anteil zurückziehen?",
+            $"{share.Amount:N0} $ fallen aus der öffentlichen Summe.", "Zurückziehen", "Grund",
+            mandatoryReason: true);
+        if (reason is null)
+        {
+            return;
+        }
+        await Bounty.WithdrawAsync(share.Id, reason, User);
+        Snackbar.Add("Anteil zurückgezogen.", Severity.Success);
+    });
+
+    private async Task PayoutAsync() => await RunAsync(async () =>
+    {
+        var draft = await Reward.GetDraftAsync(WantedId, User);
+        if (!draft.IsCaptured)
+        {
+            Snackbar.Add("Erst die Ausschreibung auf gefasst setzen, dann die Belohnung auszahlen.", Severity.Warning);
+            return;
+        }
+        var amounts = await RewardPayoutDialog.ShowAsync(DialogService, draft);
+        if (amounts is null || amounts.Count == 0)
+        {
+            return;
+        }
+        var receipts = await Reward.PayoutAsync(new RewardPayoutInput { WantedId = WantedId, Tips = amounts }, User);
+        Snackbar.Add($"Belohnung ausgezahlt · {string.Join(", ", receipts)}", Severity.Success);
+    });
+
+    private async Task SetCapAsync(bool isCap) => await RunAsync(async () =>
+    {
+        await Wanted.SetBountyIsCapAsync(WantedId, isCap, User);
+        Snackbar.Add(isCap ? "Wird als Obergrenze angezeigt." : "Wird als feste Summe angezeigt.", Severity.Success);
+    });
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

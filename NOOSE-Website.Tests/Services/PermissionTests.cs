@@ -626,6 +626,7 @@ public sealed class PermissionTests
     [InlineData(AgentStatus.Pending)]
     [InlineData(AgentStatus.Blocked)]
     [InlineData(AgentStatus.Terminated)]
+    [InlineData(AgentStatus.Civilian)]
     public void RequireApplicant_nonApplicantStatus_throws(AgentStatus status)
     {
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
@@ -635,4 +636,33 @@ public sealed class PermissionTests
     [Fact]
     public void RequireApplicant_anonymous_throws()
         => AssertDenied(() => Permission.RequireApplicant(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ---------------------------------------------------------------- RequireCitizenPortal
+
+    [Theory]
+    [InlineData(AgentStatus.Civilian)]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Applicant)]
+    [InlineData(AgentStatus.Pending)]
+    [InlineData(AgentStatus.Blocked)]
+    [InlineData(AgentStatus.Terminated)]
+    public void RequireCitizenPortal_anySignedInStatus_passes(AgentStatus status)
+    {
+        // the citizen area is readable for every account; only submissions need a civilian identity
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
+        AssertAllowed(() => Permission.RequireCitizenPortal(actor));
+    }
+
+    [Fact]
+    public void RequireCitizenPortal_partnerAndOnlyReader_pass()
+    {
+        AssertAllowed(() => Permission.RequireCitizenPortal(
+            ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Chief)));
+        AssertAllowed(() => Permission.RequireCitizenPortal(
+            ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director)));
+    }
+
+    [Fact]
+    public void RequireCitizenPortal_anonymous_throws()
+        => AssertDenied(() => Permission.RequireCitizenPortal(ClaimsPrincipalBuilder.Anonymous()));
 }

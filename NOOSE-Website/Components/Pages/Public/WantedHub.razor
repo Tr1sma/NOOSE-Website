@@ -1,0 +1,190 @@
+@page "/gesucht"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService Wanted
+
+<PageTitle>Gesucht · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Wanted" Title="Gesucht">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Öffentliche Fahndung</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Das National Office of Security Enforcement sucht die hier ausgeschriebenen Personen, Fahrzeuge und
+            Waffen. Nähern Sie sich niemandem und nichts davon selbst — melden Sie Beobachtungen der nächsten
+            Dienststelle.
+        </MudText>
+
+        @* static render, no circuit: the filters are links that rewrite the query, not interactive controls *@
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+            <MudChip T="string" Href="/gesucht" Variant="@ChipVariant(Kind is null && Level is null)"
+                     Color="Color.Primary" Size="Size.Small">Alle</MudChip>
+            @foreach (var kind in PublicWantedKindDisplay.All.Where(k => Cards.Any(c => c.Kind == k)))
+            {
+                <MudChip T="string" Href="@Query(kind: kind, level: Level)" Size="Size.Small"
+                         Variant="@ChipVariant(Kind == kind)" Color="Color.Primary">
+                    @PublicWantedKindDisplay.Name(kind)
+                </MudChip>
+            }
+            @foreach (var level in HazardLevelLogic.All.Where(l => l != HazardLevel.No && Cards.Any(c => c.HazardLevel == l)))
+            {
+                <MudChip T="string" Href="@Query(kind: Kind, level: level)" Size="Size.Small"
+                         Variant="@ChipVariant(Level == level)" Color="Color.Warning">
+                    @HazardLevelLogic.Name(level)
+                </MudChip>
+            }
+        </MudStack>
+
+        <MudDivider />
+
+        @if (Filtered.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                @(Cards.Count == 0
+                    ? "Derzeit sind keine Ausschreibungen veröffentlicht."
+                    : "Zu dieser Auswahl gibt es derzeit keine Ausschreibung.")
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @foreach (var card in Filtered)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Outlined="true" Class="pa-0" Style="height:100%;">
+                            <MudLink Href="@($"/gesucht/{card.CaseNumber}")" Underline="Underline.None">
+                                @if (card.HasPhoto)
+                                {
+                                    <MudImage Src="@($"/gesucht/{card.CaseNumber}/foto")" Alt="@card.DisplayName"
+                                              ObjectFit="ObjectFit.Cover" Width="100" Height="180" Fluid="true"
+                                              Class="rounded-t" Style="width:100%;object-position:center 25%;" />
+                                }
+                                else if (WantedKinds.IsItem(card.Kind))
+                                {
+                                    @* an item notice carries no picture by design, so the card gets a banded head
+                                       instead of the blank slot a missing mugshot would leave *@
+                                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center"
+                                              Class="rounded-t py-8"
+                                              Style="background:var(--mud-palette-background-grey);">
+                                        <MudIcon Icon="@KindIcon(card.Kind)" Size="Size.Large" Color="Color.Primary" />
+                                    </MudStack>
+                                }
+                                <MudStack Spacing="1" Class="pa-4">
+                                    <MudText Typo="Typo.h6" Style="@NameStyle(card.Kind)">@card.DisplayName</MudText>
+                                    @if (!string.IsNullOrWhiteSpace(card.AliasText))
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                            @(WantedKinds.IsItem(card.Kind) ? "auch" : "alias") @card.AliasText
+                                        </MudText>
+                                    }
+                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                            @PublicWantedKindDisplay.Name(card.Kind)
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                                 Color="@LevelColour(card.HazardLevel)">
+                                            @HazardLevelLogic.Name(card.HazardLevel)
+                                        </MudChip>
+                                    </MudStack>
+                                    @if (_board.BountyFor(card.CaseNumber) is { } bounty)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning"
+                                                 Icon="@Icons.Material.Filled.Paid">
+                                            @BountyText(bounty)
+                                        </MudChip>
+                                    }
+                                    <WarnhinweisChips Hints="@card.Hints" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@card.CaseNumber</MudText>
+                                </MudStack>
+                            </MudLink>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    /// <summary>Filter by kind.</summary>
+    /// <remarks>
+    /// Bound as a string, not the enum: Blazor answers a value it cannot parse with a 500, and anyone can append a
+    /// query to a public route.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = "art")]
+    public string? KindFilter { get; set; }
+
+    /// <summary>Filter by hazard level; a string for the same reason as <see cref="KindFilter"/>.</summary>
+    [SupplyParameterFromQuery(Name = "stufe")]
+    public string? LevelFilter { get; set; }
+
+    private PublicWantedBoard _board = PublicWantedBoard.Empty;
+    private string? _loadedKey;
+
+    private IReadOnlyList<PublicWantedCard> Cards => _board.Cards;
+
+    /// <summary>What the outside reads: one number, prefixed when it is a ceiling.</summary>
+    private static string BountyText(PublicBounty bounty)
+        => $"{(bounty.IsCap ? "bis " : string.Empty)}{bounty.Total:N0} $";
+
+    private PublicWantedKind? Kind
+        => Enum.TryParse<PublicWantedKind>(KindFilter, ignoreCase: true, out var kind) && Enum.IsDefined(kind)
+            ? kind : null;
+
+    private HazardLevel? Level
+        => Enum.TryParse<HazardLevel>(LevelFilter, ignoreCase: true, out var level) && Enum.IsDefined(level)
+            ? level : null;
+
+    private List<PublicWantedCard> Filtered => Cards
+        .Where(c => Kind is null || c.Kind == Kind)
+        .Where(c => Level is null || c.HazardLevel == Level)
+        .ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // the whole board is cached; the filters only narrow what is rendered from it
+        var key = $"{KindFilter}|{LevelFilter}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        try
+        {
+            _board = await Wanted.GetBoardAsync();
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    private static string Query(PublicWantedKind? kind, HazardLevel? level)
+    {
+        var parts = new List<string>();
+        if (kind is { } k) { parts.Add($"art={k}"); }
+        if (level is { } l) { parts.Add($"stufe={l}"); }
+        return parts.Count == 0 ? "/gesucht" : $"/gesucht?{string.Join("&", parts)}";
+    }
+
+    private static Variant ChipVariant(bool active) => active ? Variant.Filled : Variant.Outlined;
+
+    private static string KindIcon(PublicWantedKind kind) => kind == PublicWantedKind.Waffe
+        ? Icons.Material.Filled.Dangerous
+        : Icons.Material.Filled.DirectionsCar;
+
+    /// <summary>A licence plate reads as a plate, not as a name.</summary>
+    private static string? NameStyle(PublicWantedKind kind)
+        => WantedKinds.IsItem(kind) ? "font-family:monospace;letter-spacing:.08em;" : null;
+
+    private static Color LevelColour(HazardLevel level) => level switch
+    {
+        HazardLevel.Critical => Color.Error,
+        HazardLevel.High => Color.Warning,
+        HazardLevel.Medium => Color.Info,
+        _ => Color.Default,
+    };
+}

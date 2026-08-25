@@ -1,0 +1,57 @@
+@page "/info"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicPageService Pages
+
+<PageTitle>Information · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.InfoPages" Title="Information">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Information</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Auftrag, Befugnisse und Zuständigkeiten des National Office of Security Enforcement.
+        </MudText>
+
+        @if (_links.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine Informationsseiten veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                @foreach (var link in _links)
+                {
+                    <MudPaper Outlined="true" Class="pa-0">
+                        <MudButton Href="@($"/info/{link.Slug}")" Variant="Variant.Text" Color="Color.Default"
+                                   StartIcon="@link.Icon" FullWidth="true" Class="justify-start pa-4">
+                            @link.MenuTitle
+                        </MudButton>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicPageLink> _links = Array.Empty<PublicPageLink>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _links = await Pages.GetMenuAsync();
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

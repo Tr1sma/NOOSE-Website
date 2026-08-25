@@ -17,6 +17,12 @@ public class FileUploadOptions
 
     /// <summary>Max profile picture size; smaller than the record cap, an avatar is never a document.</summary>
     public long AvatarMaxBytes { get; set; } = 2 * 1024 * 1024;
+  
+    /// <summary>Public wanted-notice photo path; holds copies, so deleting a file photo cannot break a poster.</summary>
+    public string WantedPath { get; set; } = "App_Data/uploads/fahndung";
+
+    /// <summary>Citizen tip attachment path; its own base path, so no authorized reader can wander into a file photo.</summary>
+    public string TipsPath { get; set; } = "App_Data/uploads/hinweise";
 
     /// <summary>Max file size.</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;

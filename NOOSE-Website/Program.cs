@@ -15,6 +15,7 @@ using NOOSE_Website.Components.Factions;
 using NOOSE_Website.Components.People;
 using NOOSE_Website.Components.Common;
 using NOOSE_Website.Components.Recruiting;
+using NOOSE_Website.Components.Public;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Announcements;
@@ -33,8 +34,10 @@ using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
+using NOOSE_Website.Infrastructure.Public;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 using NOOSE_Website.Services.Search;
 using NOOSE_Website.Services.Statistics;
 
@@ -161,6 +164,8 @@ builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
 builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
 builder.Services.AddScoped<IAgentAvatarStorageService, AgentAvatarStorageService>();
+builder.Services.AddScoped<IPublicWantedPhotoStorageService, PublicWantedPhotoStorageService>();
+builder.Services.AddScoped<ITipAttachmentStorageService, TipAttachmentStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
@@ -334,7 +339,26 @@ builder.Services.AddScoped<ICareerRequirementsService, CareerRequirementsService
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
+
+// ---- public area (citizen accounts, module switches) ----
+builder.Services.AddScoped<IBuergerService, BuergerService>();
+builder.Services.AddScoped<IPublicModuleService, PublicModuleService>();
+builder.Services.AddScoped<IPublicPageService, PublicPageService>();
+builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
+builder.Services.AddHostedService<PublicWantedExpiryWorker>();
+builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
+builder.Services.AddScoped<IBountyService, BountyService>();
+builder.Services.AddScoped<ITipPriorityService, TipPriorityService>();
+builder.Services.AddScoped<ITipService, TipService>();
+builder.Services.AddScoped<ITipTakeoverService, TipTakeoverService>();
+builder.Services.AddScoped<IRewardService, RewardService>();
+builder.Services.AddScoped<ITicketService, TicketService>();
+builder.Services.AddScoped<IPublicTemplateService, PublicTemplateService>();
+builder.Services.AddScoped<IPublicFactionProfileService, PublicFactionProfileService>();
+builder.Services.AddScoped<IObjectionService, ObjectionService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
+builder.Services.AddSingleton<TipsBroadcaster>();
+builder.Services.AddSingleton<TicketBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -342,6 +366,14 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter(IdentityComponentsEndpointRouteBuilderExtensions.LoginRateLimitPolicy, limiter =>
     {
         limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+    // guards the tip attachment endpoint only. The submission itself travels over SignalR and never reaches this
+    // middleware, so the real quota is the count in TipService.SubmitAsync
+    options.AddFixedWindowLimiter(TipFileEndpointRouteBuilderExtensions.TipRateLimitPolicy, limiter =>
+    {
+        limiter.PermitLimit = 60;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
@@ -368,6 +400,9 @@ app.UseRequestLocalization(new RequestLocalizationOptions()
     .SetDefaultCulture("de-DE")
     .AddSupportedCultures("de-DE")
     .AddSupportedUICultures("de-DE"));
+
+// noindex for everything outside the public routes; before the error handler so re-executed pages keep the header
+app.UseMiddleware<NOOSE_Website.Infrastructure.PublicIndexingMiddleware>();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -397,6 +432,8 @@ app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
 app.MapNooseRecruitingFileEndpoints();
+app.MapNoosePublicWantedFileEndpoints();
+app.MapNooseTipFileEndpoints();
 
 // apply pending migrations on startup
 using (var scope = app.Services.CreateScope())
@@ -415,6 +452,18 @@ using (var scope = app.Services.CreateScope())
 
     // seed the auto-provisioned Sicherheitsüberprüfung case-document template (idempotent)
     await NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db);
+
+    // seed one switch row per public module (idempotent; never overwrites a stored choice)
+    await NOOSE_Website.Infrastructure.PublicModuleSeeder.SeedAsync(db);
+
+    // seed the four editorial starter pages as drafts (idempotent; never overwrites an edited page)
+    await NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db);
+
+    // seed the four starting warning chips (only while the table is empty; a deleted one stays deleted)
+    await NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db);
+
+    // seed one starting template per kind (only while the table is empty; a deleted one stays deleted)
+    await NOOSE_Website.Infrastructure.PublicTemplateSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

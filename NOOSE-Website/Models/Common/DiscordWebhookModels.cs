@@ -17,6 +17,12 @@ public static class DiscordRouting
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
         NotificationType.PersonnelEntry,
+        // PublicWantedExpired is deliberately absent: NotificationService.NotifyManyAsync pushes every routable
+        // category on its own, so a routable operating category would post each expiry into the public channel
+        NotificationType.PublicWantedPublished,
+        NotificationType.PublicWantedBountyRaised,
+        // PublicTipReceived/PublicTipAnswered are absent for the same reason and a sharper one: a tip is a
+        // citizen's submission, and its arrival in a public channel would out the person who filed it
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);

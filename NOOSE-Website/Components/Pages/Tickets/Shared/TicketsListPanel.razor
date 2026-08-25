@@ -1,0 +1,125 @@
+@inject ITicketService Tickets
+@inject TicketBroadcaster Broadcaster
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4">
+    <MudTextField T="string" @bind-Value="_search" Label="Suche" Placeholder="Aktenzeichen, Betreff oder Name"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search" DebounceInterval="300"
+                  OnDebounceIntervalElapsed="ReloadAsync" Style="max-width:340px;" />
+    <MudSwitch T="bool" @bind-Value="_onlyMine" Color="Color.Primary" Label="Nur meine"
+               @bind-Value:after="ReloadAsync" />
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Forum" Title="Keine Tickets"
+                Text="In dieser Ansicht liegt derzeit nichts vor." />
+}
+else
+{
+    <MudTable Items="_rows" Hover="true" Dense="true" Style="cursor:pointer;"
+              OnRowClick="@((TableRowClickEventArgs<TicketRow> e) => Open(e.Item))">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Betreff</MudTh>
+            <MudTh>Bürger</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Bearbeiter</MudTh>
+            <MudTh>Letzte Aktivität</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    @context.CaseNumber
+                    @if (context.AwaitingAnswer)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.MarkEmailUnread" Size="Size.Small" Color="Color.Warning" />
+                    }
+                    @if (context.UnreadCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning">
+                            @context.UnreadCount neu
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Betreff">@context.Subject</MudTd>
+            <MudTd DataLabel="Bürger">@context.CitizenName</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                    @TicketStatusDisplay.Name(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Bearbeiter">@(string.IsNullOrWhiteSpace(context.HandlerCodename) ? "—" : context.HandlerCodename)</MudTd>
+            <MudTd DataLabel="Letzte Aktivität">@context.LastActivityAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public TicketInboxScope Scope { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<TicketRow> _rows = Array.Empty<TicketRow>();
+    private string? _search;
+    private bool _onlyMine;
+    private bool _load = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        Broadcaster.Modified += OnModified;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Tickets.GetInboxAsync(Scope, _search, _onlyMine, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void Open(TicketRow? row)
+    {
+        if (row is not null)
+        {
+            Nav.NavigateTo($"/tickets/{row.Id}");
+        }
+    }
+
+    private void OnModified(string ticketId, string caseNumber)
+        => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color StatusColour(TicketStatus status) => status switch
+    {
+        TicketStatus.Offen => Color.Info,
+        TicketStatus.InBearbeitung => Color.Primary,
+        TicketStatus.WartetAufBuerger => Color.Warning,
+        TicketStatus.Geschlossen => Color.Default,
+        _ => Color.Default,
+    };
+}

@@ -1,0 +1,217 @@
+@page "/tickets/{Id}"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject ITicketService Tickets
+@inject TicketBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_ticket?.CaseNumber ?? "Bürger-Ticket") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_ticket is null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Ticket nicht gefunden"
+                Text="Das Ticket existiert nicht oder wurde gelöscht." />
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.Forum"
+                Title="@($"Ticket {_ticket.CaseNumber}")"
+                Subtitle="@($"Eröffnet am {_ticket.CreatedAt.ToLocalTime():dd.MM.yyyy HH:mm}")"
+                BackHref="/tickets">
+        <Actions>
+            @if (_canWrite)
+            {
+                @if (_ticket.HandlerId is null)
+                {
+                    <MudButton OnClick="AssignAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AssignmentInd">Übernehmen</MudButton>
+                }
+                <MudMenu Label="Status setzen" Variant="Variant.Outlined" Color="Color.Default"
+                         StartIcon="@Icons.Material.Filled.Flag">
+                    @foreach (var target in TicketRules.AllowedTargets(_ticket.Status))
+                    {
+                        <MudMenuItem OnClick="@(() => SetStatusAsync(target))">
+                            @TicketStatusDisplay.Name(target)
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+                <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="5">
+            <MudStack Spacing="4">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColour(_ticket.Status)">
+                                @TicketStatusDisplay.Name(_ticket.Status)
+                            </MudChip>
+                            @if (_ticket.CitizenIsBlocked)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.Block">Konto gesperrt</MudChip>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.h6">@_ticket.Subject</MudText>
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bürger</MudText>
+                            <MudText Typo="Typo.body2">@_ticket.CitizenName</MudText>
+                        </MudStack>
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bearbeiter</MudText>
+                            <MudText Typo="Typo.body2">
+                                @(string.IsNullOrWhiteSpace(_ticket.HandlerCodename) ? "—" : _ticket.HandlerCodename)
+                            </MudText>
+                        </MudStack>
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Letzte Aktivität</MudText>
+                            <MudText Typo="Typo.body2">
+                                @_ticket.LastActivityAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        </MudStack>
+                        @if (_ticket.ClosedAt is not null)
+                        {
+                            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                                Geschlossen am @_ticket.ClosedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @(_ticket.ClosedByCodename is null ? string.Empty : $" von {_ticket.ClosedByCodename}")
+                                — der Bürger kann darauf nicht mehr antworten.
+                            </MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
+                                    Audience="TicketMessageAudience.Intern" CanWrite="@_canWrite" />
+            </MudStack>
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
+                                Audience="TicketMessageAudience.Buerger"
+                                CaseNumber="@_ticket.CaseNumber" CitizenName="@_ticket.CitizenName"
+                                CanWrite="@(_canWrite && TicketRules.IsOpen(_ticket.Status))" />
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private TicketDetail? _ticket;
+    private bool _load = true;
+    private bool _canWrite;
+    private string? _loadedId;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _canWrite = _user.MayWrite() && _user.IsLeadership();
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        await LoadAsync();
+        // opening is reading; the mark moves before the desk draws its unread count again
+        await Tickets.MarkAgentReadAsync(Id, _user);
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _ticket = await Tickets.GetAsync(Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task AssignAsync()
+    {
+        try
+        {
+            await Tickets.AssignSelfAsync(Id, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SetStatusAsync(TicketStatus status)
+    {
+        try
+        {
+            await Tickets.SetStatusAsync(Id, status, _user);
+            await LoadAsync();
+            Snackbar.Add($"Status: {TicketStatusDisplay.Name(status)}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        try
+        {
+            await Tickets.DeleteAsync(Id, _user);
+            Snackbar.Add("Ticket in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/tickets");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void OnModified(string ticketId, string caseNumber)
+    {
+        if (ticketId != Id)
+        {
+            return;
+        }
+        // the mark moves again: a line arriving while the handler has the ticket open has been read
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            await Tickets.MarkAgentReadAsync(Id, _user);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color StatusColour(TicketStatus status) => status switch
+    {
+        TicketStatus.Offen => Color.Info,
+        TicketStatus.InBearbeitung => Color.Primary,
+        TicketStatus.WartetAufBuerger => Color.Warning,
+        TicketStatus.Geschlossen => Color.Default,
+        _ => Color.Default,
+    };
+}

@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IPartnerVisibilityPolicyService PartnerPolicy
+@inject NOOSE_Website.Services.Public.IPublicWantedService PublicWanted
 @implements IAsyncDisposable
 
 <PageTitle>@(_person?.Name ?? "Akte") · NOOSE</PageTitle>
@@ -22,6 +23,20 @@ else if (_person is null)
 }
 else
 {
+    @if (_publicBanner is { } banner && banner.Status == PublicWantedStatus.Veroeffentlicht)
+    {
+        @* only the published state; "beantragt" is not outside yet and would leak a pending decision to a partner *@
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="mb-4">
+            Diese Akte ist öffentlich ausgeschrieben (@banner.CaseNumber).
+        </MudAlert>
+    }
+    else if (_publicBanner is { Status: PublicWantedStatus.Beantragt } && !_isPartner)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            Für diese Akte liegt ein Antrag auf öffentliche Ausschreibung vor.
+        </MudAlert>
+    }
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
         <CompromisedBadge EntityType="@nameof(Person)" EntityId="@_person.Id" />
@@ -123,6 +138,19 @@ else
                 </RecordSection>
                 <RecordSection Group="Akte" Slug="asservate" Label="Asservate" Icon="@Icons.Material.Filled.Inventory2">
                     <EvidenceOwnerPanel OwnerType="@nameof(Person)" OwnerId="@_person.Id" />
+                </RecordSection>
+                @* deliberately outside the "einstufung" section: PartnerTabCatalog lists that slug, so anything in it
+                   is visible to a released partner — and what NOOSE is preparing to publish is not partner business *@
+                <RecordSection Group="Akte" Slug="oeffentlich" Label="Öffentliche Ausschreibungen" Icon="@Icons.Material.Filled.Public">
+                    <MudStack Spacing="3">
+                        <PublicWantedPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                        <PublicItemNoticePanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                    </MudStack>
+                </RecordSection>
+                @* internal only for the same reason: who reported to the agency is not partner business, and the
+                   slug stays out of _tabs and PartnerTabCatalog *@
+                <RecordSection Group="Ermittlung" Slug="hinweisgeber" Label="Hinweisgeber" Icon="@Icons.Material.Filled.TipsAndUpdates">
+                    <TipHistoryPanel PersonId="@_person.Id" User="_user" />
                 </RecordSection>
                 }
                 @if (TabOn("einstufung"))
@@ -231,6 +259,7 @@ else
     private Timer? _timer;
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
+    private PublicWantedBanner? _publicBanner;
 
     // Slugs of every section on this page; the rail owns which one is active.
     private static readonly string[] _tabs =
@@ -285,6 +314,16 @@ else
             ? await PartnerPolicy.GetVisibleTabsAsync(_user, nameof(Person), _person.Id)
             : null;
         RebuildRenderTabs();
+        // dictionary lookup on the cached public snapshot in the steady state, one indexed query per cache window
+        try
+        {
+            _publicBanner = _person is null ? null : await PublicWanted.GetBannerForPersonAsync(_person.Id);
+        }
+        catch
+        {
+            /* best effort */
+            _publicBanner = null;
+        }
         _load = false;
     }
 

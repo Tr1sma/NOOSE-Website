@@ -1,0 +1,274 @@
+@* Public profile of this faction file: create, edit and publish the snapshot that goes outside. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IPublicFactionProfileService Profiles
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.Groups"
+                 Color="@(_draft?.Status == PublicProfileStatus.Veroeffentlicht ? Color.Error : Color.Default)" />
+        <MudText Typo="Typo.subtitle1">Öffentliches Organisationsprofil</MudText>
+        <MudSpacer />
+        <MudButton Href="/fahndung?tab=organisationen" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.List">Alle Profile</MudButton>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Was hier steht, ist ein eigener Publikations-Snapshot: spätere Änderungen an der Akte wirken sich erst beim
+        nächsten Veröffentlichen aus. Eine Verschlusssache wird nicht öffentlich dargestellt, und Mitglieder werden
+        nie genannt.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (!_mayRead)
+    {
+        @* never "there is none": the banner above may say the opposite, and a contradiction reads as a bug *@
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Öffentliche Organisationsprofile sieht Senior Special Agent aufwärts.
+        </MudAlert>
+    }
+    else if (_draft is null)
+    {
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Für diese Akte gibt es kein öffentliches Profil.
+            </MudText>
+            @if (_mayWrite)
+            {
+                <div>
+                    <MudButton OnClick="CreateAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.Add">Profil anlegen</MudButton>
+                </div>
+            }
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(_draft.Status)">
+                    @PublicProfileStatusDisplay.Name(_draft.Status)
+                </MudChip>
+                @if (_row?.HazardLevel is { } level && level != HazardLevel.No)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                        Öffentliche Stufe: @HazardLevelLogic.Name(level)
+                    </MudChip>
+                }
+                @if (_row?.PublishedAt is { } published)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Veröffentlicht am @published.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                }
+            </MudStack>
+
+            <MudTextField @bind-Value="_input.DisplayName" Label="Anzeigename" Variant="Variant.Outlined"
+                          MaxLength="200" Immediate="false" Disabled="!_mayWrite" />
+            <MudSelect @bind-Value="_input.Standing" Label="Einordnung" Variant="Variant.Outlined"
+                       Disabled="!_mayWrite">
+                @foreach (var standing in PublicFactionStandingDisplay.All)
+                {
+                    <MudSelectItem Value="@standing">@PublicFactionStandingDisplay.Name(standing)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Die Einordnung ist eine redaktionelle Aussage der Behörde, nicht die interne Einstufung der Akte.
+            </MudText>
+
+            <MudDivider />
+
+            <MudText Typo="Typo.subtitle2">Kurzbeschreibung</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
+            </MudText>
+            @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
+            <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.DescriptionHtml" MinHeight="200px" />
+
+            @if (!_mayWrite)
+            {
+                @* the read-only supervision must see what the agency publishes, it just may not be the one publishing *@
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.
+                </MudAlert>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.Save">Speichern</MudButton>
+                    @if (_draft.Status != PublicProfileStatus.Veroeffentlicht)
+                    {
+                        <MudButton OnClick="PublishAsync" Variant="Variant.Filled" Color="Color.Error" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Campaign">Veröffentlichen</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton OnClick="RetractAsync" Variant="Variant.Outlined" Color="Color.Default" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Block">Zurückziehen</MudButton>
+                        <MudButton OnClick="RefreshHazardAsync" Variant="Variant.Text" Color="Color.Default" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Refresh">Stufe aktualisieren</MudButton>
+                    }
+                    <MudSpacer />
+                    @if (_draft.Status != PublicProfileStatus.Veroeffentlicht)
+                    {
+                        <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string FactionId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private PublicFactionProfileEdit? _row;
+    private PublicFactionProfileDraft? _draft;
+    private readonly PublicFactionProfileInput _input = new();
+    private RichTextEditor? _editor;
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayWrite;
+    private bool _mayRead;
+    private string? _loadedId;
+
+    protected override void OnInitialized()
+    {
+        // mirrors the two guards: writing needs rank ≥ 3 as well, so there is no draft a reader could own here
+        _mayRead = User.MayHighestClassification() || User.IsOnlyReader();
+        _mayWrite = User.MayHighestClassification() && User.MayWrite() && !User.IsCitizen() && !User.IsPartner();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == FactionId)
+        {
+            return;
+        }
+        _loadedId = FactionId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _row = _mayRead ? await Profiles.GetForFactionAsync(FactionId, User) : null;
+            _draft = _row is null ? null : await Profiles.GetDraftAsync(_row.Id, User);
+            if (_draft is not null)
+            {
+                _input.Id = _draft.Id;
+                _input.DisplayName = _draft.DisplayName;
+                _input.Standing = _draft.Standing;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _row = null;
+            _draft = null;
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task CreateAsync() => await RunAsync(async () =>
+    {
+        await Profiles.CreateDraftFromFactionAsync(FactionId, User);
+        Snackbar.Add("Entwurf angelegt — er ist noch nicht öffentlich.", Severity.Success);
+    });
+
+    private async Task StoreAsync()
+    {
+        // null would tell the service to keep the stored description; the editor always has the current text
+        _input.DescriptionHtml = _editor is null ? _draft?.DescriptionHtml : await _editor.GetHtmlAsync();
+        await Profiles.UpdateSnapshotAsync(_input, User);
+    }
+
+    private async Task SaveAsync() => await RunAsync(async () =>
+    {
+        await StoreAsync();
+        Snackbar.Add("Profil gespeichert.", Severity.Success);
+    });
+
+    private async Task PublishAsync() => await RunAsync(async () =>
+    {
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Profil veröffentlichen?",
+            "Name, Einordnung, Gefahrenstufe und Kurzbeschreibung sind danach anonym lesbar.", "Veröffentlichen"))
+        {
+            return;
+        }
+        // saved first, so what goes outside is what stands in the fields
+        await StoreAsync();
+        await Profiles.PublishAsync(_input.Id, User);
+        Snackbar.Add("Profil veröffentlicht.", Severity.Success);
+    });
+
+    private async Task RetractAsync() => await RunAsync(async () =>
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Profil zurückziehen?",
+            "Das Profil verschwindet sofort von der öffentlichen Seite.", "Zurückziehen", "Grund",
+            mandatoryReason: true, colour: Color.Warning);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return;
+        }
+        await Profiles.RetractAsync(_input.Id, reason, User);
+        Snackbar.Add("Profil zurückgezogen.", Severity.Success);
+    });
+
+    private async Task RefreshHazardAsync() => await RunAsync(async () =>
+    {
+        await Profiles.RefreshHazardLevelAsync(_input.Id, User);
+        Snackbar.Add("Gefahrenstufe aktualisiert.", Severity.Success);
+    });
+
+    private async Task DeleteAsync() => await RunAsync(async () =>
+    {
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Profil löschen?",
+            "Der Entwurf wandert in den Papierkorb."))
+        {
+            return;
+        }
+        await Profiles.DeleteAsync(_input.Id, User);
+        Snackbar.Add("Profil gelöscht.", Severity.Success);
+    });
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color StatusColour(PublicProfileStatus status) => status switch
+    {
+        PublicProfileStatus.Veroeffentlicht => Color.Error,
+        PublicProfileStatus.Zurueckgezogen => Color.Default,
+        _ => Color.Info,
+    };
+}

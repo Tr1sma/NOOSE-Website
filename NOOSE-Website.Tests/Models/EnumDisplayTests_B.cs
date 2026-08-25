@@ -29,6 +29,8 @@ public class EnumDisplayTests_B
     [InlineData(NotificationType.MeetingScheduled, "Besprechung")]
     [InlineData(NotificationType.MeetingReminder, "Besprechung beginnt bald")]
     [InlineData(NotificationType.AbsenceFiled, "Abmeldung")]
+    [InlineData(NotificationType.PublicWantedPublished, "Öffentliche Ausschreibung")]
+    [InlineData(NotificationType.PublicWantedExpired, "Ausschreibung abgelaufen")]
     public void NotificationTypeName_definedValue_mapsToLabel(NotificationType type, string expected)
         => Assert.Equal(expected, NotificationTypeDisplay.Name(type));
 
@@ -53,6 +55,24 @@ public class EnumDisplayTests_B
         Assert.Equal(Icons.Material.Filled.Groups, NotificationTypeDisplay.Icon(NotificationType.MeetingScheduled));
         Assert.Equal(Icons.Material.Filled.NotificationsActive, NotificationTypeDisplay.Icon(NotificationType.MeetingReminder));
         Assert.Equal(Icons.Material.Filled.EventBusy, NotificationTypeDisplay.Icon(NotificationType.AbsenceFiled));
+        Assert.Equal(Icons.Material.Filled.PersonSearch, NotificationTypeDisplay.Icon(NotificationType.PublicWantedPublished));
+        Assert.Equal(Icons.Material.Filled.TimerOff, NotificationTypeDisplay.Icon(NotificationType.PublicWantedExpired));
+    }
+
+    [Fact]
+    public void EveryNotificationType_HasADisplayNameAndIcon()
+    {
+        // both switches end in a silent fallback, so a new enum value shows up nameless in the bell and in the
+        // Discord admin panel without any test going red — this is that test
+        var nameless = Enum.GetValues<NotificationType>()
+            .Where(t => NotificationTypeDisplay.Name(t) == "Benachrichtigung"
+                || NotificationTypeDisplay.Icon(t) == Icons.Material.Filled.Notifications)
+            .Select(t => t.ToString())
+            .Order()
+            .ToArray();
+
+        Assert.True(nameless.Length == 0,
+            "Jeder Benachrichtigungstyp braucht Namen und Icon: " + string.Join(", ", nameless));
     }
 
     [Fact]
@@ -255,12 +275,71 @@ public class EnumDisplayTests_B
     [Theory]
     [InlineData(RequestType.Upgrade, "Hochstufung")]
     [InlineData(RequestType.PartnerFreigabe, "Partner-Freigabe")]
+    [InlineData(RequestType.Veroeffentlichung, "Veröffentlichung")]
     public void RequestTypeName_definedValue_mapsToLabel(RequestType type, string expected)
         => Assert.Equal(expected, RequestTypeDisplay.Name(type));
 
     [Fact]
     public void RequestTypeName_undefinedValue_returnsDash()
         => Assert.Equal("—", RequestTypeDisplay.Name((RequestType)99));
+
+    // ---------------------------------------------------------------------
+    // PublicWantedKindDisplay / PublicWantedStatusDisplay
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(PublicWantedKind.Fahndung, "Fahndung")]
+    [InlineData(PublicWantedKind.Vermisst, "Vermisst")]
+    [InlineData(PublicWantedKind.Zeugenaufruf, "Zeugenaufruf")]
+    [InlineData(PublicWantedKind.Fahrzeug, "Fahrzeug")]
+    [InlineData(PublicWantedKind.Waffe, "Waffe")]
+    public void PublicWantedKindName_definedValue_mapsToLabel(PublicWantedKind kind, string expected)
+        => Assert.Equal(expected, PublicWantedKindDisplay.Name(kind));
+
+    [Fact]
+    public void PublicWantedKindName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicWantedKindDisplay.Name((PublicWantedKind)99));
+
+    [Theory]
+    [InlineData(PublicWantedStatus.Entwurf, "Entwurf")]
+    [InlineData(PublicWantedStatus.Beantragt, "Beantragt")]
+    [InlineData(PublicWantedStatus.Veroeffentlicht, "Veröffentlicht")]
+    [InlineData(PublicWantedStatus.Gefasst, "Gefasst")]
+    [InlineData(PublicWantedStatus.Zurueckgezogen, "Zurückgezogen")]
+    [InlineData(PublicWantedStatus.Abgelaufen, "Abgelaufen")]
+    public void PublicWantedStatusName_definedValue_mapsToLabel(PublicWantedStatus status, string expected)
+        => Assert.Equal(expected, PublicWantedStatusDisplay.Name(status));
+
+    [Fact]
+    public void PublicWantedStatusName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicWantedStatusDisplay.Name((PublicWantedStatus)99));
+
+    [Theory]
+    [InlineData(ObjectionStatus.Neu, "Neu", "Eingegangen")]
+    [InlineData(ObjectionStatus.InPruefung, "In Prüfung", "In Prüfung")]
+    [InlineData(ObjectionStatus.Angenommen, "Stattgegeben", "Stattgegeben")]
+    [InlineData(ObjectionStatus.Abgelehnt, "Abgelehnt", "Zurückgewiesen")]
+    public void ObjectionStatusName_definedValue_mapsToBothLabels(
+        ObjectionStatus status, string expected, string citizen)
+    {
+        Assert.Equal(expected, ObjectionStatusDisplay.Name(status));
+        Assert.Equal(citizen, ObjectionStatusDisplay.CitizenName(status));
+    }
+
+    [Fact]
+    public void ObjectionStatusName_undefinedValue_returnsDash()
+    {
+        Assert.Equal("—", ObjectionStatusDisplay.Name((ObjectionStatus)99));
+        Assert.Equal("—", ObjectionStatusDisplay.CitizenName((ObjectionStatus)99));
+        Assert.Equal(Enum.GetValues<ObjectionStatus>().Length, ObjectionStatusDisplay.All.Count);
+    }
+
+    [Fact]
+    public void PublicWantedDisplays_ListEveryDefinedValue()
+    {
+        Assert.Equal(Enum.GetValues<PublicWantedKind>().Length, PublicWantedKindDisplay.All.Count);
+        Assert.Equal(Enum.GetValues<PublicWantedStatus>().Length, PublicWantedStatusDisplay.All.Count);
+    }
 
     // ---------------------------------------------------------------------
     // SourceTypeDisplay
@@ -455,6 +534,7 @@ public class EnumDisplayTests_B
     [InlineData(AgentStatus.Blocked, "Gesperrt")]
     [InlineData(AgentStatus.Applicant, "Bewerber")]
     [InlineData(AgentStatus.Terminated, "Gekündigt")]
+    [InlineData(AgentStatus.Civilian, "Bürger")]
     public void AgentStatusName_definedValue_mapsToLabel(AgentStatus status, string expected)
         => Assert.Equal(expected, AgentStatusDisplay.Name(status));
 
@@ -551,4 +631,45 @@ public class EnumDisplayTests_B
                 MeasureOutcome.Injection, MeasureOutcome.Shot,
             },
             MeasureOutcomeDisplay.All);
+
+    // ---------------------------------------------------------------------
+    // PublicFactionStandingDisplay / PublicProfileStatusDisplay
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(PublicFactionStanding.Beobachtet, "Beobachtet")]
+    [InlineData(PublicFactionStanding.Verboten, "Verboten")]
+    public void PublicFactionStandingName_definedValue_mapsToLabel(PublicFactionStanding standing, string expected)
+        => Assert.Equal(expected, PublicFactionStandingDisplay.Name(standing));
+
+    [Fact]
+    public void PublicFactionStandingName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicFactionStandingDisplay.Name((PublicFactionStanding)99));
+
+    [Fact]
+    public void PublicFactionStandingAll_containsAllInDeclarationOrder()
+        => Assert.Equal(
+            new[] { PublicFactionStanding.Beobachtet, PublicFactionStanding.Verboten },
+            PublicFactionStandingDisplay.All);
+
+    [Theory]
+    [InlineData(PublicProfileStatus.Entwurf, "Entwurf")]
+    [InlineData(PublicProfileStatus.Veroeffentlicht, "Veröffentlicht")]
+    [InlineData(PublicProfileStatus.Zurueckgezogen, "Zurückgezogen")]
+    public void PublicProfileStatusName_definedValue_mapsToLabel(PublicProfileStatus status, string expected)
+        => Assert.Equal(expected, PublicProfileStatusDisplay.Name(status));
+
+    [Fact]
+    public void PublicProfileStatusName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicProfileStatusDisplay.Name((PublicProfileStatus)99));
+
+    [Fact]
+    public void PublicProfileStatusAll_containsAllInDeclarationOrder()
+        => Assert.Equal(
+            new[]
+            {
+                PublicProfileStatus.Entwurf, PublicProfileStatus.Veroeffentlicht,
+                PublicProfileStatus.Zurueckgezogen,
+            },
+            PublicProfileStatusDisplay.All);
 }

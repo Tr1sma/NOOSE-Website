@@ -421,6 +421,46 @@ public static class SearchCatalog
             ["BewerbungTestAnswer"] = "Bewertetes Material.",
             ["NooseiMessage"] = "Der Rechte-Stempel macht gespeicherte Werkzeug-Antworten gegenüber dem aktuellen "
                 + "Scope potenziell veraltet; nur der Titel der Unterhaltung ist durchsuchbar.",
+
+            // --- public area ---
+            ["BuergerProfil"] = "Konto des öffentlichen Bereichs, keine Akte. Der Name ist eine Fremdeingabe ohne "
+                + "Aktenbezug und wird ausschließlich über den Bürger-Bestand in /einstellungen gesucht.",
+            ["OeffentlichesModul"] = "Ein-/Aus-Schalter einer öffentlichen Seite, kein Inhalt. Der Katalog steht im "
+                + "Code, bedient wird er in /einstellungen.",
+            ["OeffentlicheSeite"] = "Redaktionelle Außendarstellung ohne Aktenbezug; gepflegt wird sie in "
+                + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["OeffentlicheFahndung"] = "Publikations-Snapshot einer Personenakte; jedes Feld stammt aus der Akte, "
+                + "die schon durchsuchbar ist. Gefunden wird sie über die Akte, gepflegt in /fahndung. Ein eigener "
+                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["Warnhinweis"] = "Werteliste des öffentlichen Bereichs ohne Aktenbezug; gepflegt in /einstellungen. "
+                + "Gesucht wird die Ausschreibung, die den Hinweis trägt, nicht der Hinweis selbst.",
+            ["FahndungWarnhinweis"] = "Zuordnungszeile zwischen Ausschreibung und Warnhinweis; sie trägt keinen "
+                + "eigenen Text.",
+            ["FahndungKopfgeldAnteil"] = "Geldposten an einer Ausschreibung ohne eigenen Text; gefunden wird die "
+                + "Akte, gepflegt wird der Anteil an ihrem Fahndungs-Panel. Eine durchsuchbare Geldliste wäre "
+                + "obendrein ein Verzeichnis, welcher Agent privat auf wen gesetzt hat.",
+            ["Hinweis"] = "Bürgereinreichung; bearbeitet wird sie im Eingang unter /hinweise. Ein eigener "
+                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er müsste zusätzlich die "
+                + "Anonymitätszusage tragen, die bisher nur die Bearbeiter-Projektion kennt.",
+            ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; gefunden wird der Hinweis, nicht die "
+                + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst an der "
+                + "Bearbeiter-Prüfung vorbei lesbar.",
+            ["HinweisBelohnung"] = "Auszahlung an einen Hinweisgeber; gesucht wird der Hinweis oder die "
+                + "Kassenbuchung. Eine durchsuchbare Geldliste müsste zusätzlich die Anonymitätszusage tragen.",
+            ["Ticket"] = "Bürgeranliegen an die Führungsebene; bearbeitet wird es am Schalter unter "
+                + "/tickets. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er "
+                + "müsste zusätzlich das Führungs-Gate tragen, das bisher nur der Schalter kennt.",
+            ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
+                + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
+                + "Führungs-Gate vorbei lesbar.",
+            ["FahndungEinspruch"] = "Widerspruch eines Bürgers gegen eine Ausschreibung; bearbeitet wird er "
+                + "unter /fahndung?tab=einsprueche. Ein eigener Provider kommt mit der Suchanbindung des "
+                + "öffentlichen Bereichs — er müsste dasselbe Gate tragen, das bisher nur der Abschnitt kennt.",
+            ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
+                + "die Nachricht, die daraus entstand, nicht der Baustein.",
+            ["OeffentlichesFraktionsprofil"] = "Publikations-Snapshot einer Fraktion; intern gefunden wird "
+                + "die Fraktionsakte selbst. Die öffentliche Suche über Veröffentlichtes kommt mit der "
+                + "Suchanbindung des öffentlichen Bereichs.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

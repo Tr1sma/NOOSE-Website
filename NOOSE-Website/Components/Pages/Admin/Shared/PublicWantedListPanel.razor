@@ -1,0 +1,179 @@
+@* Every public wanted notice: state, publication and the editor. Mounted on the internal Fahndung page. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService WantedService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Öffentliche Ausschreibungen unter <code>/gesucht/&lt;aktenzeichen&gt;</code>. Jede Zeile ist ein
+    Publikations-Snapshot der Akte, kein Live-Blick auf sie: was hier steht, ändert sich erst beim nächsten
+    Veröffentlichen. Angelegt wird eine Ausschreibung in der Personenakte. Sichtbar sind sie nur, solange das
+    Modul „Gesucht" eingeschaltet ist.
+</MudText>
+
+@if (!_mayList)
+{
+    @* the cross-record list is rank 3 and up; a rank 1-2 agent works his own notice in the person file *@
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+        Die Gesamtübersicht sieht Senior Special Agent aufwärts. Eine einzelne Ausschreibung bearbeitest du im
+        Abschnitt „Öffentliche Ausschreibung" der Personenakte.
+    </MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_editId is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="CloseEditor" aria-label="Zurück zur Liste" />
+        <MudText Typo="Typo.h6">Ausschreibung bearbeiten</MudText>
+    </MudStack>
+    <MudPaper Outlined="true" Class="pa-4">
+        <PublicWantedEditor Id="@_editId" User="_user" Changed="LoadAsync" Closed="CloseEditor" />
+    </MudPaper>
+}
+else
+{
+    <MudTable Items="_rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Anzeigename</MudTh>
+            <MudTh>Art</MudTh>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Stufe</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
+            <MudTh>Kopfgeld</MudTh>
+            <MudTh>Aufrufe</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Anzeigename">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@KindIcon(context.Kind)" Size="Size.Small" />
+                    <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                    @if (context.HasPhoto)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Small" Class="mud-text-secondary" />
+                    }
+                </MudStack>
+            </MudTd>
+            @* the list mixes person notices with vehicles and weapons; without this column a plate is only
+               distinguishable by its name *@
+            <MudTd DataLabel="Art">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                    @PublicWantedKindDisplay.Name(context.Kind)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.CaseNumber ?? "—")
+                    @if (context.PersonCaseNumber is { Length: > 0 } akte)
+                    {
+                        <text> · @akte</text>
+                    }
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(context.Status)">
+                    @PublicWantedStatusDisplay.Name(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Stufe">
+                <MudText Typo="Typo.caption">@HazardLevelLogic.Name(context.HazardLevel)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Veröffentlicht">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.PublishedAt is { } published
+                        ? $"{published.ToLocalTime():dd.MM.yyyy} · {context.PublishedByName ?? "—"}"
+                        : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Kopfgeld">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.Bounty > 0 ? $"{context.Bounty:N0} $" : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aufrufe">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ViewCount</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @if (context.Status == PublicWantedStatus.Veroeffentlicht && context.CaseNumber is { Length: > 0 } cn)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                                   Href="@($"/gesucht/{cn}")" Target="_blank" aria-label="Öffentliche Seite öffnen" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => OpenEditor(context.Id))" aria-label="Bearbeiten" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Es gibt noch keine öffentliche Ausschreibung. Angelegt wird sie im Abschnitt „Öffentliche
+                Ausschreibung" einer Personenakte.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private IReadOnlyList<PublicWantedEdit> _rows = Array.Empty<PublicWantedEdit>();
+    private ClaimsPrincipal _user = default!;
+    private string? _editId;
+    private bool _load = true;
+    private bool _mayList;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // mirrors Permission.RequirePublicWantedRead
+        _mayList = _user.MayHighestClassification() || _user.IsOnlyReader();
+        if (_mayList)
+        {
+            await LoadAsync();
+        }
+        _load = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await WantedService.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void OpenEditor(string id) => _editId = id;
+
+    private async Task CloseEditor()
+    {
+        _editId = null;
+        await LoadAsync();
+    }
+
+    private static string KindIcon(PublicWantedKind kind) => kind switch
+    {
+        PublicWantedKind.Fahrzeug => Icons.Material.Filled.DirectionsCar,
+        PublicWantedKind.Waffe => Icons.Material.Filled.Dangerous,
+        _ => Icons.Material.Filled.PersonSearch,
+    };
+
+    private static Color StatusColour(PublicWantedStatus status) => status switch
+    {
+        PublicWantedStatus.Veroeffentlicht => Color.Error,
+        PublicWantedStatus.Beantragt => Color.Warning,
+        PublicWantedStatus.Gefasst => Color.Success,
+        _ => Color.Default,
+    };
+}

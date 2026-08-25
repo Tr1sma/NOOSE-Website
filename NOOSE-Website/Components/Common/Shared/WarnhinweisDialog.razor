@@ -1,0 +1,100 @@
+@* Create/edit one warning chip of the public value list. *@
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_name" Label="Bezeichnung" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Bezeichnung ist erforderlich"
+                              MaxLength="60" AutoFocus="true" Immediate="true"
+                              HelperText="Erscheint als Chip auf Board, Steckbrief und Poster."
+                              OnKeyDown="@(async e => { if (e.Key == "Enter") await Save(); })" />
+                @* an allowlist, not a free value: the chip is rendered on an anonymous page *@
+                <MudSelect T="string" Label="Farbe" @bind-Value="_colour" Variant="Variant.Outlined">
+                    @foreach (var choice in WarnhinweisColours.All)
+                    {
+                        <MudSelectItem T="string" Value="@choice.Name">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudChip T="string" Size="Size.Small" Color="@choice.Colour" Variant="Variant.Filled">
+                                    @(_name.Length == 0 ? choice.Label : _name)
+                                </MudChip>
+                                <MudText Typo="Typo.body2">@choice.Label</MudText>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudNumericField @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                 Min="0" Max="9999" />
+                <MudSwitch @bind-Value="_isActive" Color="Color.Primary" Label="Aktiv"
+                           T="bool" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Ein inaktiver Warnhinweis verschwindet binnen weniger Sekunden von allen laufenden
+                    Ausschreibungen und steht nicht mehr zur Auswahl.
+                </MudText>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public string? Colour { get; set; }
+    [Parameter] public int SortOrder { get; set; }
+    [Parameter] public bool IsActive { get; set; } = true;
+
+    private MudForm _form = default!;
+    private string _name = string.Empty;
+    private string _colour = "Error";
+    private int _sortOrder;
+    private bool _isActive = true;
+
+    protected override void OnInitialized()
+    {
+        _name = Name ?? string.Empty;
+        _colour = WarnhinweisColours.IsKnown(Colour) ? Colour! : "Error";
+        _sortOrder = SortOrder;
+        _isActive = IsActive;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new WarnhinweisInput
+        {
+            Name = _name.Trim(),
+            Colour = _colour,
+            SortOrder = _sortOrder,
+            IsActive = _isActive,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the create/edit dialog; returns null on cancel.</summary>
+    public static async Task<WarnhinweisInput?> ShowAsync(IDialogService dialog, string title,
+        string? name = null, string? colour = null, int sortOrder = 0, bool isActive = true)
+    {
+        var parameters = new DialogParameters<WarnhinweisDialog>
+        {
+            { x => x.Name, name },
+            { x => x.Colour, colour },
+            { x => x.SortOrder, sortOrder },
+            { x => x.IsActive, isActive },
+        };
+        var reference = await dialog.ShowAsync<WarnhinweisDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: WarnhinweisInput e } ? e : null;
+    }
+}

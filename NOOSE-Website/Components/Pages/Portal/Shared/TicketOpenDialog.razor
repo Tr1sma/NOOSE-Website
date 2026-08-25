@@ -1,0 +1,74 @@
+@* Opens a citizen ticket to leadership. Under Pages/Portal so the citizen-surface scan covers it too. *@
+@inject ITicketService Tickets
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:480px;max-width:600px;">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Dein Anliegen geht an die Führungsebene des NOOSE. Die zuständigen Agenten bleiben dabei anonym;
+                du erhältst die Antwort hier im Bürgerbereich.
+            </MudText>
+
+            <MudTextField @bind-Value="_subject" Label="Betreff" Variant="Variant.Outlined"
+                          MaxLength="@TicketRules.SubjectMaxLength" Immediate="true" />
+            <MudTextField @bind-Value="_text" Label="Dein Anliegen" Lines="6" Variant="Variant.Outlined"
+                          MaxLength="@TicketRules.MaxMessageLength" Immediate="true" />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Mindestens @TicketRules.SubjectMinLength Zeichen im Betreff und
+                @TicketRules.MinLength Zeichen im Text. Höchstens @TicketRules.MaxOpen offene Tickets
+                und @TicketRules.PerDay neue Tickets pro Tag.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_busy || !MayOpen)"
+                   OnClick="SubmitAsync" StartIcon="@Icons.Material.Filled.Send">Ticket öffnen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private string _subject = string.Empty;
+    private string _text = string.Empty;
+    private bool _busy;
+
+    private bool MayOpen => _subject.Trim().Length >= TicketRules.SubjectMinLength
+                            && _text.Trim().Length >= TicketRules.MinLength;
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        try
+        {
+            var caseNumber = await Tickets.OpenAsync(
+                new TicketInput { Subject = _subject, Text = _text }, User);
+            Snackbar.Add($"Ticket {caseNumber} eröffnet.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(caseNumber));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the form; returns the new case number or null when nothing was opened.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
+    {
+        var parameters = new DialogParameters<TicketOpenDialog> { { x => x.User, user } };
+        var reference = await dialog.ShowAsync<TicketOpenDialog>("Neues Ticket", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string caseNumber } ? caseNumber : null;
+    }
+}

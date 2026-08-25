@@ -34,6 +34,22 @@ public static class AuditEntityDisplay
         "FinancingRequestLine" => "Finanzierungsposition (Antrag)",
         "FinancingItem" => "Finanzierungs-Katalogposition",
         "FinancingBudgetConfig" => "Finanzierungs-Budgets",
+        "SystemSetting" => "Systemeinstellung",
+        "BuergerProfil" => "Bürgerkonto",
+        "OeffentlichesModul" => "Öffentliches Modul",
+        "OeffentlicheSeite" => "Öffentliche Seite",
+        "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
+        "Warnhinweis" => "Warnhinweis",
+        "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
+        "Hinweis" => "Bürgerhinweis",
+        "HinweisNachricht" => "Hinweis-Nachricht",
+        "HinweisBelohnung" => "Hinweis-Belohnung",
+        "Ticket" => "Bürger-Ticket",
+        "TicketNachricht" => "Ticket-Nachricht",
+        "OeffentlicheVorlage" => "Öffentliche Vorlage",
+        "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
+        "FahndungEinspruch" => "Einspruch gegen eine Ausschreibung",
+        "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
 
@@ -63,6 +79,25 @@ public static class AuditEntityDisplay
         // catalog positions and config have no own page; point at the section that edits them
         "FinancingItem" => "/finanzierungen?tab=katalog",
         "FinancingBudgetConfig" => "/einstellungen?tab=finanzierung",
+        "BuergerProfil" => "/einstellungen?tab=buerger",
+        "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
+        "PublicArea" => "/einstellungen?tab=oeffentliche-module",
+        "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
+        "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
+        "Warnhinweis" => "/einstellungen?tab=warnhinweise",
+        // the share has no page of its own; it is managed at the notice, which is managed here
+        "FahndungKopfgeldAnteil" => "/fahndung?tab=oeffentlich",
+        "Hinweis" => $"/hinweise/{id}",
+        // the reward has no page of its own; it is worked at the notice, like the share
+        "HinweisBelohnung" => "/fahndung?tab=oeffentlich",
+        // a message has no page; point at the tip that carries the conversation is impossible from here, so the inbox
+        "HinweisNachricht" => "/hinweise",
+        "Ticket" => $"/tickets/{id}",
+        // same as the tip message: the row has no page, so the desk it belongs to
+        "TicketNachricht" => "/tickets",
+        "OeffentlicheVorlage" => "/einstellungen?tab=oeffentliche-vorlagen",
+        "OeffentlichesFraktionsprofil" => "/fahndung?tab=organisationen",
+        "FahndungEinspruch" => "/fahndung?tab=einsprueche",
         _ => null,
     };
 }

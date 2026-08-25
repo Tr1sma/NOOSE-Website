@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
@@ -9,6 +9,8 @@ using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -17,7 +19,8 @@ public sealed class PersonMergeServiceTests
 {
     private const string PersonType = nameof(Person);
 
-    private static PersonMergeService NewService(SqliteTestContext ctx) => new(ctx.Factory);
+    private static PersonMergeService NewService(SqliteTestContext ctx)
+        => new(ctx.Factory, Substitute.For<IPublicWantedService>());
 
     // Rank >= SupervisorySpecialAgent AND not a read-only team lead -> passes both guards.
     private static ClaimsPrincipal Boss()

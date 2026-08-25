@@ -1,0 +1,85 @@
+@* Printable reward receipt for the citizen who earned it. *@
+@page "/buerger/belohnung/{ReceiptNumber}/druck"
+@layout PrintLayout
+@attribute [AllowAnonymous]
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IRewardService Reward
+
+<PageTitle>@(_receipt is null ? "Beleg" : $"Beleg {_receipt.ReceiptNumber}") · NOOSE</PageTitle>
+
+@* a receipt is nobody's search result, and the route answers for any invented number *@
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_receipt is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diesen Beleg gibt es nicht.</MudAlert>
+}
+else
+{
+    @* no PrintedBy: the paying agent appears nowhere on a citizen's receipt, and the record cannot carry them *@
+    <PrintFrame Title="Belohnung für einen Bürgerhinweis"
+                BackHref="@($"/buerger/hinweise/{_receipt.TipCaseNumber}")" BackText="Zurück zum Hinweis"
+                Footer="Beleg der NOOSE über eine ausgezahlte Belohnung. Bitte für die eigenen Unterlagen aufbewahren."
+                IsClassified="false">
+        <section>
+            <h2>Beleg @_receipt.ReceiptNumber</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Belegnummer</th><td>@_receipt.ReceiptNumber</td></tr>
+                    <tr><th>Empfänger</th><td>@_receipt.RecipientName</td></tr>
+                    <tr><th>Hinweis</th><td>@_receipt.TipCaseNumber</td></tr>
+                    @if (_receipt.WantedCaseNumber is not null)
+                    {
+                        <tr><th>Ausschreibung</th><td>@_receipt.WantedCaseNumber</td></tr>
+                    }
+                    <tr><th>Betrag</th><td>@Money.Format(_receipt.Amount)</td></tr>
+                    <tr>
+                        <th>Ausgezahlt am</th>
+                        <td>@_receipt.PaidAt.ToLocalTime().ToString("dddd, d. MMMM yyyy 'um' HH:mm")</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string ReceiptNumber { get; set; } = string.Empty;
+
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private CitizenRewardReceipt? _receipt;
+    private bool _load = true;
+    private string? _loadedNumber;
+
+    // OnParametersSet rather than OnInitialized: PrintLayout keeps the instance across a number change
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedNumber == ReceiptNumber)
+        {
+            return;
+        }
+        _loadedNumber = ReceiptNumber;
+        _load = true;
+
+        ClaimsPrincipal user = (await AuthStateTask).User;
+        try
+        {
+            _receipt = await Reward.GetReceiptAsync(ReceiptNumber, user);
+        }
+        catch
+        {
+            // a closed module and a signed-out visitor answer like an unknown number; the page is no oracle
+            _receipt = null;
+        }
+        _load = false;
+    }
+}

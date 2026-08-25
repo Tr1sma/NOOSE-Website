@@ -1,0 +1,222 @@
+@page "/buerger/einspruch"
+@layout BuergerLayout
+@attribute [AllowAnonymous]
+@inject IObjectionService Objections
+@inject IPublicWantedService Wanted
+@inject IPublicModuleService Modules
+@inject ISnackbar Snackbar
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+
+<PageTitle>Mein Einspruch · NOOSE</PageTitle>
+
+@if (_anonymous)
+{
+    @* reached from a public profile, so an anonymous visitor lands here: a bounce to the landing page would
+       look like the link was broken *@
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h4">Einspruch gegen eine Ausschreibung</MudText>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Melde dich mit Discord an, um Einspruch einzulegen und die Entscheidung zu verfolgen.
+            </MudAlert>
+            <div>
+                <form method="post" action="/Account/PerformExternalLogin">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl()" />
+                    <input type="hidden" name="source" value="buerger" />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                               Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
+                        Mit Discord anmelden
+                    </MudButton>
+                </form>
+            </div>
+        </MudStack>
+    </MudPaper>
+}
+else if (_ready)
+{
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerbereich</MudText>
+                <MudText Typo="Typo.h4">Einspruch gegen eine Ausschreibung</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:680px;">
+                    Wenn du einer öffentlichen Ausschreibung widersprechen willst, begründe das hier. Die
+                    Führungsebene prüft jeden Einspruch und antwortet mit einer Entscheidung.
+                </MudText>
+            </MudStack>
+
+            @if (!_moduleOn)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Einsprüche werden derzeit nicht angenommen. Bereits eingelegte kannst du weiter einsehen.
+                </MudAlert>
+            }
+            else
+            {
+                <MudDivider />
+                <MudText Typo="Typo.h6">Neuer Einspruch</MudText>
+                @* resolved on change, not in OnParametersSetAsync: typing changes no parameter, so the
+                   confirmation line below would otherwise never catch up *@
+                <MudTextField @bind-Value="_input.WantedCaseNumber" @bind-Value:after="ResolveAsync"
+                              Label="Aktenzeichen der Ausschreibung" Variant="Variant.Outlined"
+                              HelperText="Steht auf dem Steckbrief, zum Beispiel NOOSE-FA-2026-0001." />
+                @if (_notice is not null)
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                        Ausschreibung: <b>@_notice.DisplayName</b>
+                    </MudAlert>
+                }
+                <MudTextField @bind-Value="_input.Text" Label="Begründung" Variant="Variant.Outlined"
+                              Lines="8" Counter="@ObjectionRules.MaxLength"
+                              MaxLength="@ObjectionRules.MaxLength"
+                              HelperText="@($"Mindestens {ObjectionRules.MinLength} Zeichen. Schildere, was an der Ausschreibung nicht stimmt.")" />
+                <div>
+                    <MudButton OnClick="SubmitAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               Disabled="_busy" StartIcon="@Icons.Material.Filled.Balance">Einspruch einlegen</MudButton>
+                </div>
+            }
+
+            <MudDivider />
+            <MudText Typo="Typo.h6">Meine Einsprüche</MudText>
+            @if (_rows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Du hast bisher keinen Einspruch eingelegt.
+                </MudText>
+            }
+            else
+            {
+                @foreach (var row in _rows)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@StatusColour(row.Status)">
+                                    @ObjectionStatusDisplay.CitizenName(row.Status)
+                                </MudChip>
+                                <MudText Typo="Typo.body2"><b>@row.CaseNumber</b></MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    gegen @row.WantedDisplayName (@row.WantedCaseNumber)
+                                </MudText>
+                                <MudSpacer />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@row.Text</MudText>
+                            @if (!string.IsNullOrWhiteSpace(row.DecisionNote))
+                            {
+                                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                                    <b>Antwort der Behörde</b>
+                                    <div style="white-space:pre-wrap;">@row.DecisionNote</div>
+                                </MudAlert>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+
+@code {
+    /// <summary>Notice to object to, prefilled from its profile.</summary>
+    /// <remarks>
+    /// A string and a public property: Blazor answers a query value it cannot parse with a 500, and a
+    /// [SupplyParameterFromQuery] on a private member binds nothing at all — silently.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = "fahndung")]
+    public string? Fahndung { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private readonly ObjectionInput _input = new();
+    private IReadOnlyList<CitizenObjectionRow> _rows = [];
+    private PublicWantedDetail? _notice;
+    private bool _moduleOn;
+    private bool _ready;
+    private bool _busy;
+    private bool _loaded;
+    private bool _anonymous;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (!_user.MayUseCitizenPortal())
+        {
+            _anonymous = true;
+            _ready = true;
+            return;
+        }
+
+        if (!_loaded)
+        {
+            _loaded = true;
+            if (!string.IsNullOrWhiteSpace(Fahndung))
+            {
+                _input.WantedCaseNumber = Fahndung!.Trim();
+            }
+            try { _moduleOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Objection); }
+            catch { /* best effort */ }
+            await ResolveAsync();
+            await LoadAsync();
+            _ready = true;
+        }
+    }
+
+    /// <summary>Confirmation line only; the service resolves the case number again through the same read path.</summary>
+    private async Task ResolveAsync()
+    {
+        try { _notice = await Wanted.GetByCaseNumberAsync(_input.WantedCaseNumber?.Trim()); }
+        catch { /* best effort */ _notice = null; }
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _rows = await Objections.GetOwnAsync(_user); }
+        catch { /* best effort */ _rows = []; }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        try
+        {
+            var caseNumber = await Objections.SubmitAsync(_input, _user);
+            _input.Text = string.Empty;
+            Snackbar.Add($"Einspruch {caseNumber} eingelegt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string ReturnUrl()
+        => string.IsNullOrWhiteSpace(Fahndung)
+            ? "/buerger/einspruch"
+            : $"/buerger/einspruch?fahndung={Uri.EscapeDataString(Fahndung)}";
+
+    private static Color StatusColour(ObjectionStatus status) => status switch
+    {
+        ObjectionStatus.Angenommen => Color.Success,
+        ObjectionStatus.Abgelehnt => Color.Error,
+        ObjectionStatus.InPruefung => Color.Warning,
+        _ => Color.Default,
+    };
+}

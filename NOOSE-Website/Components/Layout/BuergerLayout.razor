@@ -1,0 +1,119 @@
+@inherits LayoutComponentBase
+@inject IBuergerService BuergerService
+@inject NavigationManager Nav
+
+@* Shell for the authenticated citizen area; no internal nav, no maintenance wall. *@
+<MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
+    <div style="max-width:860px;margin:0 auto;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Bürgerbereich</MudText>
+                </MudStack>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                @if (!string.IsNullOrWhiteSpace(_displayName))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Angemeldet als <b>@_displayName</b></MudText>
+                }
+                <MudButton Href="/buerger/profil" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Badge">Mein Konto</MudButton>
+                @if (_returnHref is not null)
+                {
+                    <MudButton Href="@_returnHref" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.ArrowBack">@_returnLabel</MudButton>
+                }
+                <form method="post" action="/Account/Logout">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/" />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
+                </form>
+            </MudStack>
+        </MudStack>
+
+        @Body
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="mt-6">
+            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
+                     Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/nutzungsbedingungen" Typo="Typo.caption" Color="Color.Default">Nutzungsbedingungen</MudLink>
+        </MudStack>
+    </div>
+</div>
+
+@code {
+    // Profile enforcement lives here, not in the pages: every citizen page inherits this shell, so a new page
+    // cannot forget the gate and accept a submission from a nameless account.
+    private const string ProfileRoute = "/buerger/profil";
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? _displayName;
+    private string? _returnHref;
+    private string _returnLabel = string.Empty;
+    private bool _mustComplete;
+
+    // OnParametersSet, not OnInitialized: the layout instance survives navigation between citizen pages, so an
+    // incomplete profile has to be re-checked on each of them instead of once per shell.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is null)
+        {
+            return;
+        }
+
+        BuergerProfil? profile;
+        try
+        {
+            var user = (await AuthState).User;
+            if (!user.MayUseCitizenPortal())
+            {
+                return;
+            }
+
+            // an agent, partner or applicant keeps a way back to their own area
+            if (!user.IsCitizen())
+            {
+                _returnHref = user.IsApplicant() ? "/portal" : "/dashboard";
+                _returnLabel = user.IsApplicant() ? "Bewerber-Portal" : "Interner Bereich";
+            }
+            // only a citizen is pushed into the form: for everyone else the area is readable without a civilian
+            // identity, and a read-only account could not create one anyway
+            _mustComplete = user.IsCitizen();
+            profile = await BuergerService.GetOwnAsync(user);
+        }
+        catch
+        {
+            /* best effort */
+            return;
+        }
+
+        _displayName = profile is null ? null : $"{profile.FirstName} {profile.LastName}".Trim();
+
+        // outside the try on purpose: during static rendering NavigateTo signals the redirect by throwing,
+        // and catching that would swallow it
+        var incomplete = profile is null
+            || string.IsNullOrWhiteSpace(profile.FirstName)
+            || string.IsNullOrWhiteSpace(profile.LastName);
+        if (_mustComplete && incomplete && !OnProfilePage())
+        {
+            Nav.NavigateTo(ProfileRoute);
+        }
+    }
+
+    private bool OnProfilePage()
+        => ("/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('#')[0].TrimEnd('/'))
+            .Equals(ProfileRoute, StringComparison.OrdinalIgnoreCase);
+}

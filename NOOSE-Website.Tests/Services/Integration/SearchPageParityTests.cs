@@ -12,6 +12,7 @@ using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -103,7 +104,7 @@ public class SearchPageParityTests
     private static PersonService People(SqliteTestContext ctx)
         => new(ctx.Factory, Substitute.For<IFileStorageService>(), Substitute.For<IProfileSuggestionService>(),
             Substitute.For<ICaseNumberService>(), Substitute.For<IThreatScoreService>(),
-            Substitute.For<INotificationService>());
+            Substitute.For<INotificationService>(), Substitute.For<IPublicWantedService>());
 
     private static async Task<IReadOnlyList<string>> CanonicalAsync(
         string category, SqliteTestContext ctx, ClaimsPrincipal user)
@@ -122,7 +123,8 @@ public class SearchPageParityTests
 
             case nameof(Data.Entities.Factions.Faction):
                 var factions = new FactionService(ctx.Factory, caseNo, suggest, People(ctx),
-                    Substitute.For<IFactionPhotoStorageService>(), threat, notify);
+                    Substitute.For<IFactionPhotoStorageService>(), threat, notify,
+                    Substitute.For<IPublicFactionProfileService>());
                 return (await factions.GetListAsync(scope)).Select(x => x.Id).ToList();
 
             case nameof(Data.Entities.Groups.PersonGroup):

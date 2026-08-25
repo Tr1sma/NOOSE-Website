@@ -4,6 +4,7 @@ using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -123,6 +124,26 @@ public class TrashProjectionTests
         Assert.Null(row.Reference);
         Assert.Equal("Falke", row.Title);
         Assert.Equal("12.03.2026 – 15.03.2026 · 4 Tage · Urlaub", row.Detail);
+    }
+
+    [Fact]
+    public void Tips_show_neither_the_citizen_nor_the_text()
+    {
+        // the trash list is read by every handler, and the anonymity promise does not pause on deletion
+        var row = TrashProjection.Tip(new Hinweis
+        {
+            Id = "h1",
+            CaseNumber = "NOOSE-H-2026-0001",
+            Text = "Gesehen am Hafen, Kennzeichen 12ABC",
+            Status = TipStatus.InPruefung,
+            DeletedAt = new DateTime(2026, 3, 12, 8, 0, 0, DateTimeKind.Utc),
+        });
+
+        Assert.Equal("hinweise", row.Kind);
+        Assert.Equal("NOOSE-H-2026-0001", row.Reference);
+        Assert.Equal("Bürgerhinweis NOOSE-H-2026-0001", row.Title);
+        Assert.Equal("In Prüfung", row.Detail);
+        Assert.DoesNotContain("Hafen", row.Title + row.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

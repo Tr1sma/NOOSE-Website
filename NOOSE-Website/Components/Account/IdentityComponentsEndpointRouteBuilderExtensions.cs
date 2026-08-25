@@ -7,6 +7,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Navigation;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Components.Account;
 
@@ -55,6 +56,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] IConfiguration configuration,
             [FromServices] ILoggerFactory loggerFactory,
             [FromServices] IAgentInviteService inviteService,
+            [FromServices] IPublicModuleService publicModules,
             [FromQuery] string? returnUrl,
             [FromQuery] string? remoteError,
             [FromQuery] string? source,
@@ -99,7 +101,21 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 }
                 else if (string.Equals(source, "bewerbung", StringComparison.OrdinalIgnoreCase))
                 {
+                    // the module switch has to hold here too: hiding the button leaves this endpoint reachable
+                    if (!await publicModules.IsEnabledAsync(PublicModules.Careers))
+                    {
+                        return RedirectToLoginPage(await publicModules.OfflineTextAsync(PublicModules.Careers));
+                    }
                     agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Applicant);
+                }
+                else if (string.Equals(source, "buerger", StringComparison.OrdinalIgnoreCase))
+                {
+                    // public area: the account gets no agency rights at all, and only new sign-ups read the switch
+                    if (!await publicModules.IsEnabledAsync(PublicModules.CitizenRegistration))
+                    {
+                        return RedirectToLoginPage(await publicModules.OfflineTextAsync(PublicModules.CitizenRegistration));
+                    }
+                    agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Civilian);
                 }
                 else
                 {
@@ -140,6 +156,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 case AgentStatus.Applicant:
                     await signInManager.SignInAsync(agent, isPersistent: true);
                     return Results.LocalRedirect("/portal");
+                case AgentStatus.Civilian:
+                    await signInManager.SignInAsync(agent, isPersistent: true);
+                    return Results.LocalRedirect("/buerger");
                 case AgentStatus.Pending:
                     return Results.Redirect("/Account/Ausstehend");
                 default:

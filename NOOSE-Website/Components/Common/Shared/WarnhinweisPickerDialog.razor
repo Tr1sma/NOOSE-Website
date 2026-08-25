@@ -1,0 +1,97 @@
+@* Assigns warning chips to one public wanted notice. *@
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IWarnhinweisService Warnings
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:340px;">
+            @if (_load)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_all.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Es ist kein aktiver Warnhinweis hinterlegt.
+                </MudText>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @foreach (var hint in _all)
+                    {
+                        var selected = _selected.Contains(hint.Id);
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@WarnhinweisColours.Resolve(hint.Colour)"
+                                 Variant="@(selected ? Variant.Filled : Variant.Outlined)"
+                                 OnClick="@(() => Toggle(hint.Id))">
+                            @(selected ? "✓ " : string.Empty)@hint.Name
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+
+            @* no inline create, unlike the tag picker: this list is editorial, not learned *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Die Liste wird unter Einstellungen › Warnhinweise gepflegt.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Pre-selected warning ids.</summary>
+    [Parameter] public List<string> AlreadySet { get; set; } = new();
+
+    private bool _load = true;
+    private IReadOnlyList<WarnhinweisOption> _all = [];
+    private HashSet<string> _selected = new(StringComparer.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selected = new HashSet<string>(AlreadySet, StringComparer.Ordinal);
+        _load = true;
+        try
+        {
+            _all = await Warnings.GetActiveAsync();
+        }
+        catch (Exception)
+        {
+            /* best effort */
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void Toggle(string id)
+    {
+        if (!_selected.Remove(id))
+        {
+            _selected.Add(id);
+        }
+    }
+
+    private void Apply() => MudDialog.Close(DialogResult.Ok(_selected.ToList()));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the picker; returns the selected ids or null on cancel.</summary>
+    public static async Task<List<string>?> ShowAsync(IDialogService dialog, List<string> alreadySet)
+    {
+        var parameters = new DialogParameters<WarnhinweisPickerDialog>
+        {
+            { x => x.AlreadySet, alreadySet },
+        };
+        var reference = await dialog.ShowAsync<WarnhinweisPickerDialog>("Warnhinweise zuordnen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: List<string> ids } ? ids : null;
+    }
+}

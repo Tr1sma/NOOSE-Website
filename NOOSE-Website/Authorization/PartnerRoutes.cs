@@ -1,3 +1,5 @@
+using NOOSE_Website.Services.Public;
+
 namespace NOOSE_Website.Authorization;
 
 /// <summary>Relative routes a partner may open; everything else is blocked centrally (MainLayout/PrintLayout).</summary>
@@ -36,6 +38,19 @@ public static class PartnerRoutes
             return true;
         }
         if (IsDocumentAuthoringRoute(path))
+        {
+            return true;
+        }
+        // a public route is never blocked for a partner: he can open the same page logged out, so the refusal would
+        // claim a restriction that does not exist
+        if (PublicRoutes.IsPublic("/" + path))
+        {
+            return true;
+        }
+        // the citizen portal for the same reason, one step further in: it is open to every signed-in account
+        // (MayUseCitizenPortal), and BuergerLayout does not consult this list at all — so blocking it here would
+        // refuse a partner exactly one citizen page, the printable one, and nothing else
+        if (path == "buerger" || path.StartsWith("buerger/"))
         {
             return true;
         }

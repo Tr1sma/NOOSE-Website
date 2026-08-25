@@ -13,6 +13,7 @@ using NOOSE_Website.Services.Llm.Tools;
 using NOOSE_Website.Services.Statistics;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -33,10 +34,12 @@ public sealed class FilterRecordsToolTests
     {
         var people = new PersonService(ctx.Factory, Substitute.For<IFileStorageService>(),
             Substitute.For<IProfileSuggestionService>(), Substitute.For<ICaseNumberService>(),
-            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
+            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>(),
+            Substitute.For<IPublicWantedService>());
         var factions = new FactionService(ctx.Factory, Substitute.For<ICaseNumberService>(),
             Substitute.For<IProfileSuggestionService>(), people, Substitute.For<IFactionPhotoStorageService>(),
-            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
+            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>(),
+            Substitute.For<IPublicFactionProfileService>());
         return NooseiToolHost.Filter(
             people: people, factions: factions, laws: new LawService(ctx.Factory), settings: settings);
     }

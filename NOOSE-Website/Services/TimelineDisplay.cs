@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
@@ -118,6 +119,37 @@ public static class TimelineDisplay
         if (entityType == nameof(FinancingRequestLine))
         {
             return (TimelineCategory.Change, $"Antragsposition {Verb("aufgenommen", "entfernt")}");
+        }
+        // publish and retract both arrive here; the interceptor's Status old/new pair carries which one it was
+        if (entityType == nameof(OeffentlicheFahndung))
+        {
+            return (TimelineCategory.Change, $"Öffentliche Ausschreibung {Verb("angelegt", "gelöscht")}");
+        }
+        // publish and retract both arrive here as well; the Status old/new pair carries which one it was
+        if (entityType == nameof(OeffentlichesFraktionsprofil))
+        {
+            return (TimelineCategory.Change, $"Öffentliches Organisationsprofil {Verb("angelegt", "gelöscht")}");
+        }
+        // pledge, approval, deposit and withdrawal all arrive here; the Status old/new pair says which
+        if (entityType == nameof(FahndungKopfgeldAnteil))
+        {
+            return (TimelineCategory.Change, $"Kopfgeld-Anteil {Verb("gestiftet", "entfernt")}");
+        }
+        // the actor is stripped by TipAnonymity before this ever renders; the title must stand on its own
+        if (entityType == nameof(Hinweis))
+        {
+            return (TimelineCategory.Change, $"Bürgerhinweis {Verb("eingegangen", "gelöscht")}");
+        }
+        // no citizen and no argument in the title: an objection disputes what was published, and the file's
+        // timeline records that it happened, not who said what
+        if (entityType == nameof(FahndungEinspruch))
+        {
+            return (TimelineCategory.Change, $"Einspruch gegen die Ausschreibung {Verb("eingegangen", "gelöscht")}");
+        }
+        // no recipient in the title: the reward names a citizen, the file's timeline does not
+        if (entityType == nameof(HinweisBelohnung))
+        {
+            return (TimelineCategory.Change, "Belohnung ausgezahlt");
         }
 
         var kat = action switch

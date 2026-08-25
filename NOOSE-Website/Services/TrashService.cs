@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MudBlazor;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -24,7 +25,13 @@ public sealed class TrashService(
     IEvidenceService evidence,
     IKassenService kasse,
     IFinancingService financing,
-    IFeedbackService feedback) : ITrashService
+    IFeedbackService feedback,
+    IPublicPageService publicPages,
+    IPublicWantedService publicWanted,
+    IPublicFactionProfileService factionProfiles,
+    ITipService tips,
+    ITicketService tickets,
+    IObjectionService objections) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -81,6 +88,22 @@ public sealed class TrashService(
             financing.GetTrashAsync, TrashProjection.FinancingRequest, financing.RestoreAsync),
         Source(new TrashKind("feedback", "Feedback", Icons.Material.Filled.Feedback, "/feedback"),
             feedback.GetTrashAsync, TrashProjection.Feedback, feedback.RestoreAsync),
+        Source(new TrashKind("oeffentliche-seiten", "Öffentliche Seiten", Icons.Material.Filled.MenuBook,
+                "/einstellungen?tab=oeffentliche-seiten"),
+            publicPages.GetTrashAsync, TrashProjection.PublicPage, publicPages.RestoreAsync),
+        Source(new TrashKind("oeffentliche-fahndungen", "Öffentliche Ausschreibungen", Icons.Material.Filled.PersonSearch,
+                "/fahndung?tab=oeffentlich"),
+            publicWanted.GetTrashAsync, TrashProjection.PublicWanted, publicWanted.RestoreAsync),
+        Source(new TrashKind("oeffentliche-fraktionsprofile", "Öffentliche Organisationsprofile",
+                Icons.Material.Filled.Groups, "/fahndung?tab=organisationen"),
+            factionProfiles.GetTrashAsync, TrashProjection.PublicFactionProfile, factionProfiles.RestoreAsync),
+        Source(new TrashKind("hinweise", "Bürgerhinweise", Icons.Material.Filled.TipsAndUpdates, "/hinweise"),
+            tips.GetTrashAsync, TrashProjection.Tip, tips.RestoreAsync),
+        Source(new TrashKind("tickets", "Bürger-Tickets", Icons.Material.Filled.Forum, "/tickets"),
+            tickets.GetTrashAsync, TrashProjection.Ticket, tickets.RestoreAsync),
+        Source(new TrashKind("fahndungs-einsprueche", "Einsprüche", Icons.Material.Filled.Balance,
+                "/fahndung?tab=einsprueche"),
+            objections.GetTrashAsync, TrashProjection.Objection, objections.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

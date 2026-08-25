@@ -10,13 +10,14 @@ using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Factions;
 using NOOSE_Website.Models.People;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
 public class FactionService(
     IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
     IPersonService personService, IFactionPhotoStorageService photoStorage, IThreatScoreService threat,
-    INotificationService notifications) : IFactionService
+    INotificationService notifications, IPublicFactionProfileService publicProfiles) : IFactionService
 {
     private static string MentionScope(Faction f) => MentionNotify.Scope(f.Description, f.Targets, f.Estate);
 
@@ -204,6 +205,7 @@ public class FactionService(
         Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         var oldMentions = MentionScope(faction);
+        var wasRestricted = faction.IsRestricted;
         faction.Name = input.Name.Trim();
         faction.Kind = input.Kind.TrimToNull();
         faction.Radio = input.Radio.TrimToNull();
@@ -255,6 +257,13 @@ public class FactionService(
         await threat.NewCalculateAsync(id, cancellationToken);
         await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(faction), "einer Fraktionsakte",
             nameof(Faction), id, actor, cancellationToken);
+
+        // a file that just became a Verschlusssache must not stay outside; the read side hides it anyway, this closes
+        // the row itself so the state is honest and audited
+        if (!wasRestricted && faction.IsRestricted)
+        {
+            await publicProfiles.RetractForRecordAsync(id, "Akte als Verschlusssache eingestuft.", actor, cancellationToken);
+        }
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -267,6 +276,9 @@ public class FactionService(
         // Interceptor rewrites Remove to soft-delete.
         db.Factions.Remove(faction);
         await db.SaveChangesAsync(cancellationToken);
+
+        // a public profile of a deleted file has nothing behind it any more
+        await publicProfiles.RetractForRecordAsync(id, "Akte gelöscht.", actor, cancellationToken);
     }
 
     public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
