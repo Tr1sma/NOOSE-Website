@@ -143,7 +143,12 @@ public class ObjectionService(
         Permission.RequireObjectionRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.FahndungEinsprueche.AsNoTracking();
+        // IgnoreQueryFilters at the root, !IsDeleted written back by hand — the same shape GetOwnAsync uses and for
+        // a sharper reason: the projection dereferences the required Wanted navigation, so EF joins it INNER. With
+        // the filter in place a deleted notice drops its objection out of this list entirely, while GetCountsAsync
+        // — which touches no navigation — keeps counting it. An open objection nobody can find and a badge that
+        // insists it exists is the exact failure the publication inbox already guards against.
+        var query = db.FahndungEinsprueche.IgnoreQueryFilters().AsNoTracking().Where(e => !e.IsDeleted);
         query = onlyOpen
             ? query.Where(ObjectionRules.OpenRows)
             : query.Where(e => e.Status == ObjectionStatus.Angenommen || e.Status == ObjectionStatus.Abgelehnt);
@@ -159,7 +164,6 @@ public class ObjectionService(
                 e.Wanted.Status,
                 e.Status,
                 e.CitizenProfile!.FirstName + " " + e.CitizenProfile.LastName,
-                e.DecidedBy!.Codename,
                 e.CreatedAt,
                 e.DecidedAt,
                 e.LinkedCaseId != null))
@@ -172,8 +176,9 @@ public class ObjectionService(
         Permission.RequireObjectionRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // one grouped pass, so the tabs and their numbers cannot disagree
-        var rows = await db.FahndungEinsprueche.AsNoTracking()
+        // one grouped pass over the same set the list reads, so the tabs and their numbers cannot disagree
+        var rows = await db.FahndungEinsprueche.IgnoreQueryFilters().AsNoTracking()
+            .Where(e => !e.IsDeleted)
             .GroupBy(e => e.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
@@ -189,12 +194,12 @@ public class ObjectionService(
         Permission.RequireObjectionRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.FahndungEinsprueche.AsNoTracking()
-            .Where(e => e.Id == id)
+        // widened for the same reason as the list: a deleted notice must not make its objection unopenable
+        return await db.FahndungEinsprueche.IgnoreQueryFilters().AsNoTracking()
+            .Where(e => e.Id == id && !e.IsDeleted)
             .Select(e => new ObjectionDetail(
                 e.Id,
                 e.CaseNumber,
-                e.WantedId,
                 e.Wanted!.CaseNumber ?? string.Empty,
                 e.Wanted.DisplayName,
                 e.Wanted.Status,
@@ -340,6 +345,21 @@ public class ObjectionService(
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(e => e.Id == id && e.IsDeleted, cancellationToken)
             ?? throw new InvalidOperationException("Der Einspruch liegt nicht im Papierkorb.");
+
+        // the citizen may have filed a fresh one against the same notice while this sat in the bin. Restoring is the
+        // second door onto "one open objection per notice and account", and only the service guards that rule.
+        if (ObjectionRules.IsOpen(row.Status))
+        {
+            var open = await db.FahndungEinsprueche
+                .Where(e => e.CitizenProfileId == row.CitizenProfileId && e.WantedId == row.WantedId)
+                .Where(ObjectionRules.OpenRows)
+                .AnyAsync(cancellationToken);
+            if (open)
+            {
+                throw new InvalidOperationException(
+                    "Zu dieser Ausschreibung läuft inzwischen ein anderer Einspruch desselben Kontos.");
+            }
+        }
 
         row.IsDeleted = false;
         row.DeletedAt = null;

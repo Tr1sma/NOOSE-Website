@@ -23,6 +23,10 @@ public record CitizenObjectionRow(
 // ---- inward: the desk's view ----
 
 /// <summary>One objection in the desk list.</summary>
+/// <remarks>
+/// No decider codename here: the list is a queue, and an identity that nothing renders has no business travelling.
+/// The detail carries it, where it is actually shown.
+/// </remarks>
 public record ObjectionRow(
     string Id,
     string CaseNumber,
@@ -31,7 +35,6 @@ public record ObjectionRow(
     PublicWantedStatus WantedStatus,
     ObjectionStatus Status,
     string CitizenName,
-    string? DecidedByCodename,
     DateTime CreatedAt,
     DateTime? DecidedAt,
     bool HasCase);
@@ -40,7 +43,6 @@ public record ObjectionRow(
 public record ObjectionDetail(
     string Id,
     string CaseNumber,
-    string WantedId,
     string WantedCaseNumber,
     string WantedDisplayName,
     PublicWantedStatus WantedStatus,

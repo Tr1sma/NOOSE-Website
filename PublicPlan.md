@@ -114,7 +114,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | **fertig** |
 | 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | **fertig** |
 | 13a | Sachfahndung: gesuchte Fahrzeuge und Waffen | keine | 4 | **fertig** |
-| 13b | Einspruch gegen eine Ausschreibung | `Oeffentlich13_Einspruch` | 4, 1 | offen |
+| 13b | Einspruch gegen eine Ausschreibung | `Oeffentlich13_Einspruch` | 4, 1 | **fertig** |
 | 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Oeffentlich14_Redaktion` | 3 | offen |
 | 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14 | offen |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
@@ -1511,33 +1511,97 @@ ohne Foto.
 
 ---
 
-## Phase 13b — Einspruch gegen eine Ausschreibung
+## Phase 13b — Einspruch gegen eine Ausschreibung ✅
 
 **Ziel:** Ein Bürger kann einer Ausschreibung widersprechen, die Führung entscheidet.
 
 **Daten** (`Oeffentlich13_Einspruch`)
-- `FahndungEinspruch` → `FahndungEinsprueche`: `FahndungId`, `BuergerProfilId`, `Text`, `Status`,
-  `Entscheidungsnotiz`, `EntschiedenVonId`/`Am`, `LinkedCaseId`, `IAuditable`, `ISoftDelete`.
+- `FahndungEinspruch` → `FahndungEinsprueche`: `Aktenzeichen` (Präfix `EIN`), `FahndungId`,
+  `BuergerProfilId`, `Text`, `Status` (`ObjectionStatus`), `Entscheidungsnotiz`, `EntschiedenVonId`/`Am`,
+  `VorgangId`, `IAuditable`, `ISoftDelete`.
 
 **Code**
-- `IObjectionService`: einreichen (Bürger, Rate-Limit im Dienst, nicht in der Middleware — die Einreichung
-  läuft über SignalR), entscheiden (Führung), Vorgang anlegen; Statusanzeige in `/buerger/einspruch`,
-  Entscheidung als Abschnitt auf `/fahndung`.
+- `IObjectionService`: einreichen (Bürger, zwei Deckel), lesen (eigene Liste / Abschnitt), entscheiden
+  (Führung), Vorgang anlegen, Papierkorb.
+- `ObjectionRules` als einzige Wahrheit über Längen, Kontingent und erlaubte Statuswechsel.
+- Seiten: `/buerger/einspruch` (Bürger) und Abschnitt `/fahndung?tab=einsprueche` (Behörde).
 - `PublicModules`: `Einspruch` ⇒ `Available`.
 
-**Vorentschieden**
-- **Annehmen setzt voraus, dass die Ausschreibung schon zurückgezogen ist.** Wörtlich das Phase-9-Muster
-  („`Gefasst` ist Vorbedingung, keine Nebenwirkung"): der Mensch zieht mit echtem Grund zurück, das
-  Annehmen ist der letzte Schritt. Kann baulich keinen angenommenen Einspruch neben einer laufenden
-  Ausschreibung hinterlassen — und die Fahndungstabelle behält ihren einen Schreibpfad.
-- **`LinkedCaseId` wird vollständig gebaut.** `ObjectionService` ruft `ICaseService`, es baut keine
-  Entität selbst (Muster `TipTakeoverService`), damit Aktenzeichen-Transaktion und Sichtbarkeits-Gate dort
-  bleiben, wo sie schon stehen.
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
 
-**Tests** Einspruch nur zu veröffentlichten Einträgen · Entscheidung erzeugt Audit-Zeile an der Akte ·
-Annehmen auf laufender Ausschreibung wird abgewiesen.
-
-**Fertig, wenn** ein Bürger widersprechen kann und die Führung entscheidet.
+1. **Stattgeben setzt voraus, dass die Ausschreibung schon offline ist.** Wörtlich das Phase-9-Muster
+   („`Gefasst` ist Vorbedingung, keine Nebenwirkung"): `RequireNoticeOfflineAsync` weist ab, solange der
+   Status in `PublicWantedService.PubliclyVisible` steht — `Gefasst` eingeschlossen, denn eine gefasste
+   Ausschreibung steht weiter draußen, im Archiv. Der Mensch zieht sie also zuerst mit einem echten Grund
+   zurück, und ein Grund, den ein Mensch gewählt hat, ist besser als einer, den dieser Dienst erfunden
+   hätte. Nebeneffekt, der genauso wichtig ist: die Fahndungstabelle behält ihren **einen** Schreibpfad.
+   Die Statusmenge wird **benannt**, nicht kopiert — `PubliclyVisible` ist dafür von `private` auf
+   `internal` gehoben, Präzedenz `RequirePublishableRecordAsync`.
+2. **Der Einspruch hängt an der Ausschreibung, nicht an der Akte.** Er bestreitet, was die Behörde
+   *veröffentlicht* hat, und der Snapshot ist das Einzige, was der Bürger je gesehen hat. Zeitstrahl und
+   Chronik gehen deshalb über **zwei** Hops (Einspruch → Ausschreibung → Akte), gestaffelt wie beim
+   Kopfgeld-Anteil.
+3. **Kein Nachrichten-Thread.** Die Behörde antwortet genau einmal, in `Entscheidungsnotiz`, und der Bürger
+   liest sie zusammen mit dem Status. Alles Längere ist ein Ticket — dafür gibt es Phase 10. Eine
+   Entscheidung **ohne** Begründung wird abgewiesen: der Text ist das, was der Bürger bekommt.
+4. **Zwei Deckel, nur einer ignoriert den Soft-Delete.** `PerDay = 3` zählt mit `IgnoreQueryFilters` —
+   Löschen gibt das Tageskontingent nicht zurück; „ein offener Einspruch je Ausschreibung und Konto" zählt
+   lebende Zeilen, also gibt eine Entscheidung die Ausschreibung für einen neuen Einspruch frei. Beide im
+   Dienst, nicht in der Middleware: die Einreichung läuft über SignalR.
+5. **Die Ausschreibung wird über das Aktenzeichen aufgelöst, nie über eine Id von außen** — durch
+   `IPublicWantedService.GetByCaseNumberAsync`, also hinter dem Unterdrückungsgürtel. Ein Entwurf und eine
+   zurückgezogene Zeile lesen sich damit wortgleich als „gibt es nicht" (Präzedenz `TipService`).
+6. **Der Schalter weitet über den Soft-Delete-Filter, und zwar aus einem schärferen Grund als die Bürgerliste.**
+   Die Projektion dereferenziert die Pflicht-Navigation `Wanted`, EF joint sie deshalb **INNER** — mit
+   aktivem Filter fällt ein Einspruch, dessen Ausschreibung gelöscht wurde, komplett aus `GetListAsync`
+   heraus, während `GetCountsAsync` ihn weiterzählt, weil es keine Navigation berührt. Ergebnis wäre ein
+   offener Einspruch, den niemand findet, neben einem Reiter, der auf seiner Existenz besteht — genau die
+   Klasse, gegen die der Veröffentlichungs-Posteingang schon einen Wächter hat (nachgemessen, nicht
+   vermutet). `GetListAsync`, `GetCountsAsync` und `GetAsync` lesen deshalb dieselbe Menge:
+   `IgnoreQueryFilters()` an der Wurzel, `!IsDeleted` von Hand zurück.
+7. **`GetOwnAsync` weitet aus dem verwandten Grund** und schreibt `!IsDeleted` ebenso wieder hin:
+   `IgnoreQueryFilters` gilt kompilierungsweit und hebt den Filter damit auch von `Wanted` — hier gewollt,
+   denn der Bürger muss weiter lesen können, **wogegen** er Einspruch erhoben hat, auch nach Rückzug oder
+   Löschung. Sein eigener gelöschter Einspruch bleibt trotzdem verborgen.
+8. **Wiederherstellen prüft die Invariante nach.** „Ein offener Einspruch je Ausschreibung und Konto" ist
+   eine Dienst-Regel ohne Index dahinter, und der Papierkorb ist ihre zweite Tür: der Bürger darf nach dem
+   Löschen einen neuen einlegen, ein Zurückholen des alten ergäbe zwei offene. Geprüft wird nur für
+   **offene** Zeilen — eine entschiedene belegt nichts und gehört als Historie zurück in die Akte
+   (Präzedenz Phase 3/12: „Wiederherstellen ist der zweite Weg, die Regel zu verletzen").
+9. **Der Vorgang wird gerufen, nicht gebaut** (Muster `TipTakeoverService`): `ICaseService.CreateAsync`
+   behält Aktenzeichen-Transaktion, Einstufungs-Gate und Audit-Zeile. Die Zuordnung selbst ist ein
+   **Compare-and-swap** über `ExecuteUpdateAsync` (Muster `PayInAsync`) — zwei Tabs würden sonst zwei
+   Vorgänge anlegen und der letzte Schreiber gewinnt, einer bliebe verwaist zurück. Der Verlierer verwirft
+   seinen Vorgang. `ExecuteUpdate` umgeht den Interceptor ⇒ `ManualAudit.Row` von Hand.
+10. **Zwei Guards mit unterschiedlicher Breite.** `RequireObjectionRead` ist die Menge, die auch die
+   Ausschreibungsliste arbeitet (Rang ≥ 3 oder Aufsicht) — wer eine Ausschreibung veröffentlicht hat, muss
+   sehen können, dass ihr widersprochen wird; ein Einspruch ist Fahndungsarbeit, keine
+   Führungs-Korrespondenz. `RequireObjectionHandling` legt Schreibrecht **und** Führung darüber, in dieser
+   Reihenfolge: `RequireLeadership` allein ließe Nur-Lese-Aufsicht und Demo-Principal bis zum Prägen einer
+   Vorgangsnummer laufen.
+11. **Ein Bürger-Aktenzeichen mit einem Zweck.** `EIN` existiert, weil eine Entscheidung zitierbar sein
+   muss — wie Hinweis, Ticket und Beleg. Der Schalter adressiert über die Zeilen-Id, der Bürger über das
+   Aktenzeichen; eine rohe Id von außen wäre ein Existenz-Orakel.
+12. **Beide Benachrichtigungen sind nicht routbar.** `PublicObjectionReceived` nennt einen Bürger, der eine
+    öffentliche Anschuldigung bestreitet, `PublicObjectionDecided` ist an genau einen Bürger adressiert —
+    im öffentlichen Discord-Kanal hätte beides nichts zu suchen.
+13. **Keine Vorlage.** Phase 11 gilt „eine Art, ein Konsument": es gibt keinen Thread, in den eine
+    automatische Bestätigung geschrieben werden könnte, und der Status ist sofort sichtbar.
+14. **Die anonyme Variante der Bürgerseite ist Absicht.** `/buerger/einspruch` wird von einem öffentlichen
+    Steckbrief aus verlinkt, also landet dort ein nicht angemeldeter Besucher; eine Umleitung auf die
+    Startseite hätte ausgesehen wie ein kaputter Link. Stattdessen der Discord-Login mit `returnUrl`,
+    Muster `TipForm`.
+15. **Registriert** in `PublicVisibility` (`NeverPublic`), `SearchCatalog` (`NotSearchable`, Provider mit
+    Phase 16), `AuditEntityDisplay` (Label **und** Route), `MergedPageSections` (`Wanted` **und** `Trash`),
+    `FeedbackPageTabs`, `WatchlistRecordRollup` („not watchable" — zwei Hops, und die Map hat keine
+    Datenbank), `TrashService`/`TrashProjection` (nennt weder Bürger noch Text) und den drei
+    Zeitstrahl-/Chronik-Stellen. `GetOpenCountForNoticeAsync` wurde **wieder entfernt**, weil kein Aufrufer
+    sie brauchte, ebenso `ObjectionRow.DecidedByCodename` und `ObjectionDetail.WantedId` — was nichts
+    rendert, ist der Vorratswert, den die Hausregeln ablehnen, und eine Identität, die niemand anzeigt, hat
+    auf einer Listenzeile nichts zu suchen. `PublicSurfaceGuardTests.DeskInternals` kennt jetzt
+    `ObjectionRow`, `ObjectionDetail` und `DecidedByCodename`: die Liste ist handgepflegt, also wusste sie
+    von der neuen Phase nichts, und der Wächter existiert gerade dafür, dass keine Bürgerseite an die
+    Schalter-Projektion greift.
 
 ---
 

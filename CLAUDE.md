@@ -458,13 +458,14 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–12 und 13a aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen
+Gebaut sind Phase 1–13 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen
 Seiten, die öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
 Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
 Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
-Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten
-und die Sachfahndung (gesuchte Fahrzeuge und Waffen). Der Einspruch (13b), die Presse und die öffentlichen
-Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten,
+die Sachfahndung (gesuchte Fahrzeuge und Waffen) und der Bürger-Einspruch gegen eine Ausschreibung. Die
+Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existieren
+schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -1163,6 +1164,64 @@ Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existier
     Phase 12 auf `Kind == Fahndung`, und dieser Filter wird jetzt erst scharf.
   - Im Archiv heißt es **„Sichergestellt"**, nicht „Gefasst" — ein Fahrzeug wird nicht gefasst. Route und
     Überschrift behalten das gemeinsame Wort.
+- **Phase 13b (Einspruch) — was daran anders ist:**
+  - **Stattgeben setzt voraus, dass die Ausschreibung schon offline ist.** `RequireNoticeOfflineAsync` weist
+    ab, solange ihr Status in `PublicWantedService.PubliclyVisible` steht — `Gefasst` eingeschlossen, denn
+    eine gefasste Ausschreibung steht im Archiv weiter draußen. Wörtlich das Phase-9-Muster („`Gefasst` ist
+    Vorbedingung, keine Nebenwirkung"): der Mensch zieht zuerst mit einem echten Grund zurück, und die
+    Fahndungstabelle behält dabei ihren **einen** Schreibpfad. Die Statusmenge wird **benannt**, nicht
+    kopiert — `PubliclyVisible` ist dafür `internal`, Präzedenz `RequirePublishableRecordAsync`.
+  - **Der Einspruch hängt an der Ausschreibung, nicht an der Akte** — er bestreitet, was veröffentlicht
+    wurde, und der Snapshot ist das Einzige, was der Bürger je gesehen hat. Zeitstrahl und Chronik gehen
+    über zwei Hops (Einspruch → Ausschreibung → Akte), gestaffelt wie beim Kopfgeld-Anteil.
+  - **Kein Nachrichten-Thread.** Die Behörde antwortet genau einmal, in `Entscheidungsnotiz`; alles Längere
+    ist ein Ticket. Eine Entscheidung ohne Begründung wird abgewiesen — der Text ist das, was der Bürger
+    bekommt. Reopening räumt Notiz, Entscheider und Datum: die Felder beschreiben die *aktuelle*
+    Entscheidung, nicht ihre Geschichte.
+  - **Zwei Deckel, nur einer ignoriert den Soft-Delete.** `PerDay = 3` zählt mit `IgnoreQueryFilters`
+    (Löschen gibt das Tageskontingent nicht zurück), „ein offener Einspruch je Ausschreibung und Konto"
+    zählt lebende Zeilen. Beide im Dienst, nicht in der Middleware: die Einreichung läuft über SignalR.
+  - **Die Ausschreibung wird über das Aktenzeichen aufgelöst, nie über eine Id von außen** — über
+    `GetByCaseNumberAsync`, also hinter dem Unterdrückungsgürtel; Entwurf und zurückgezogene Zeile lesen
+    sich wortgleich als „gibt es nicht" (Präzedenz `TipService.ResolveNoticeAsync`).
+  - **Alle vier Lesepfade weiten über den Soft-Delete-Filter und schreiben `!IsDeleted` von Hand wieder
+    hin** — und der Grund ist beim Schalter schärfer als bei der Bürgerliste: die Projektion dereferenziert
+    die **Pflicht**-Navigation `Wanted`, EF joint sie deshalb **INNER**. Mit aktivem Filter fällt ein
+    Einspruch, dessen Ausschreibung gelöscht wurde, komplett aus `GetListAsync` heraus, während
+    `GetCountsAsync` ihn weiterzählt (es berührt keine Navigation) — ein offener Einspruch, den niemand
+    findet, neben einem Reiter, der auf seiner Existenz besteht. Nachgemessen. `GetListAsync`,
+    `GetCountsAsync` und `GetAsync` lesen deshalb dieselbe Menge. Bei `GetOwnAsync` ist die Weitung
+    zusätzlich inhaltlich gewollt: der Bürger muss lesen können, *wogegen* er Einspruch erhoben hat, auch
+    nach Rückzug oder Löschung.
+  - **Wiederherstellen prüft die Invariante nach.** „Ein offener Einspruch je Ausschreibung und Konto" ist
+    eine Dienst-Regel ohne Index, und der Papierkorb ist ihre zweite Tür — nach dem Löschen darf der Bürger
+    einen neuen einlegen. Geprüft wird nur für **offene** Zeilen; eine entschiedene belegt nichts.
+  - **Der Vorgang wird gerufen, nicht gebaut** (Muster `TipTakeoverService`), und die Zuordnung ist ein
+    **Compare-and-swap** über `ExecuteUpdateAsync` (Muster `PayInAsync`): zwei Tabs legten sonst zwei
+    Vorgänge an, der letzte Schreiber gewinnt und einer bleibt verwaist. Der Verlierer verwirft seinen.
+    `ExecuteUpdate` umgeht den Interceptor ⇒ `ManualAudit.Row` von Hand.
+  - **Zwei Guards mit unterschiedlicher Breite.** `RequireObjectionRead` ist die Menge, die auch die
+    Ausschreibungsliste arbeitet (Rang ≥ 3 oder Aufsicht) — ein Einspruch ist Fahndungsarbeit, keine
+    Führungs-Korrespondenz, und wer publiziert hat, muss den Widerspruch sehen. `RequireObjectionHandling`
+    legt Schreibrecht **und** Führung darüber, in dieser Reihenfolge.
+  - **Aktenzeichen-Präfix `EIN`**, weil eine Entscheidung zitierbar sein muss — wie Hinweis, Ticket und
+    Beleg. Der Schalter adressiert über die Zeilen-Id, der Bürger über das Aktenzeichen.
+  - **`PublicObjectionReceived`/`PublicObjectionDecided` sind nicht routbar**: das eine nennt einen Bürger,
+    der eine öffentliche Anschuldigung bestreitet, das andere ist an genau einen Bürger adressiert.
+  - **Keine Vorlage** (Phase-11-Regel „eine Art, ein Konsument": es gibt keinen Thread, in den eine
+    automatische Bestätigung geschrieben werden könnte) und **kein Papierkorb-Verzicht**: die Zeile ist
+    `ISoftDelete` und in `TrashService` registriert, ihre Papierkorb-Zeile nennt weder Bürger noch Text.
+  - **Was nichts rendert, existiert nicht:** `GetOpenCountForNoticeAsync`, `ObjectionRow.DecidedByCodename`
+    und `ObjectionDetail.WantedId` sind wieder entfernt — und eine Identität, die niemand anzeigt, hat auf
+    einer Listenzeile ohnehin nichts zu suchen. `PublicSurfaceGuardTests.DeskInternals` ist handgepflegt und
+    wusste von der Phase nichts; `ObjectionRow`, `ObjectionDetail` und `DecidedByCodename` stehen jetzt drin.
+    Im Panel erscheinen Reiter-Zähler nur für `_mayRead` (ein „Offen (0)" behauptet gegenüber Rang 2 eine
+    Tatsache, die er nicht lesen darf) und das Begründungsfeld nur, wenn von hier aus überhaupt eine
+    Entscheidung erreichbar ist — sonst würde ein getippter Text beim Zurücksetzen auf „In Prüfung"
+    wortlos verworfen.
+  - **`/buerger/einspruch` begrüßt einen anonymen Besucher mit dem Discord-Login**, nicht mit einer
+    Umleitung auf die Startseite: die Seite wird von einem öffentlichen Steckbrief aus verlinkt, und eine
+    Umleitung sähe aus wie ein kaputter Link. Muster `TipForm`, mit `returnUrl` zurück auf die Ausschreibung.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1192,7 +1251,7 @@ Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existier
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–12 und 13a gebaut**, 13b–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–13 gebaut**, 14–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

@@ -204,6 +204,8 @@ public class PublicSurfaceGuardTests
     [
         "AuthorAgentId", "AuthorCodename", "TicketMessageRow", "TicketRow", "TicketDetail",
         "TipMessageRow", "TipRow", "TipDetail",
+        // the objection desk: ObjectionDetail carries the citizen's block flag and the decider's codename
+        "ObjectionRow", "ObjectionDetail", "DecidedByCodename",
     ];
 
     [Fact]
