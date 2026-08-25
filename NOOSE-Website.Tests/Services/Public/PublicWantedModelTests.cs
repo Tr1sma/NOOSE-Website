@@ -40,6 +40,9 @@ public class PublicWantedModelTests
         typeof(CitizenTicketRow),
         typeof(CitizenTicketDetail),
         typeof(CitizenTicketMessage),
+        // the organisation hub and both hazard rankings render these
+        typeof(PublicFactionCard),
+        typeof(PublicFactionBoard),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -52,6 +55,10 @@ public class PublicWantedModelTests
         [typeof(PublicWantedBanner)] = "Warnbanner auf der Personenakte; rein intern.",
         [typeof(PublicWantedRequestRow)] = "Offener Veröffentlichungsantrag im Posteingang.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
+        [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
+        [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",
+        [typeof(PublicFactionProfileBanner)] = "Warnbanner auf der Fraktionsakte; rein intern.",
+        [typeof(PublicFactionProfileInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicPageEdit)] = "Zeile der Redaktionsliste mit internem Bearbeiter.",
         [typeof(PublicPageInput)] = "Formulareingabe des Seiteneditors.",
         [typeof(PublicModuleDefinition)] = "Katalogzeile aus dem Code; Konfiguration, kein Inhalt.",

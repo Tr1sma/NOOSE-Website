@@ -47,6 +47,7 @@ public static class AuditEntityDisplay
         "Ticket" => "Bürger-Ticket",
         "TicketNachricht" => "Ticket-Nachricht",
         "OeffentlicheVorlage" => "Öffentliche Vorlage",
+        "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -94,6 +95,7 @@ public static class AuditEntityDisplay
         // same as the tip message: the row has no page, so the desk it belongs to
         "TicketNachricht" => "/tickets",
         "OeffentlicheVorlage" => "/einstellungen?tab=oeffentliche-vorlagen",
+        "OeffentlichesFraktionsprofil" => "/fahndung?tab=organisationen",
         _ => null,
     };
 }

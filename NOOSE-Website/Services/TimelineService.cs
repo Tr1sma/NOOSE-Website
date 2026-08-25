@@ -337,7 +337,9 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.FactionAgents.IgnoreQueryFilters().Where(a => a.FactionId == id).Select(a => a.Id).ToListAsync(ct));
                 ids.UnionWith(await db.FactionPhotos.IgnoreQueryFilters().Where(f => f.FactionId == id).Select(f => f.Id).ToListAsync(ct));
-                types.AddRange([nameof(FactionMember), nameof(FactionAgent), nameof(FactionPhoto)]);
+                ids.UnionWith(await db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().Where(p => p.FactionId == id).Select(p => p.Id).ToListAsync(ct));
+                types.AddRange([nameof(FactionMember), nameof(FactionAgent), nameof(FactionPhoto),
+                    nameof(OeffentlichesFraktionsprofil)]);
                 break;
             case nameof(PersonGroup):
                 ids.UnionWith(await db.PersonGroupMembers.IgnoreQueryFilters().Where(m => m.PersonGroupId == id).Select(m => m.Id).ToListAsync(ct));

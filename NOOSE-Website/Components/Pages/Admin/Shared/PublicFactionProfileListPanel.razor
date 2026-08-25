@@ -1,0 +1,115 @@
+@* Every public organisation profile: state and publication. Mounted on the internal Fahndung page. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@inject IPublicFactionProfileService Profiles
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Öffentliche Organisationsprofile unter <code>/organisationen</code>. Jede Zeile ist ein Publikations-Snapshot
+    der Fraktionsakte, kein Live-Blick auf sie: was hier steht, ändert sich erst beim nächsten Veröffentlichen.
+    Angelegt wird ein Profil in der Fraktionsakte. Sichtbar sind sie nur, solange das Modul „Organisationen"
+    eingeschaltet ist.
+</MudText>
+
+@if (!_mayList)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+        Organisationsprofile sieht Senior Special Agent aufwärts und die Aufsicht.
+    </MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_rows" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Organisation</MudTh>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Einordnung</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Stufe</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Organisation">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.FactionCaseNumber ?? "—")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Einordnung">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Color="@(context.Standing == PublicFactionStanding.Verboten ? Color.Error : Color.Warning)">
+                    @PublicFactionStandingDisplay.Name(context.Standing)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(context.Status)">
+                    @PublicProfileStatusDisplay.Name(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Stufe">
+                <MudText Typo="Typo.caption">@HazardLevelLogic.Name(context.HazardLevel)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Veröffentlicht">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.PublishedAt is { } published
+                        ? $"{published.ToLocalTime():dd.MM.yyyy} · {context.PublishedByName ?? "—"}"
+                        : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @if (context.Status == PublicProfileStatus.Veroeffentlicht)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                                   Href="/organisationen" Target="_blank" aria-label="Öffentliche Seite öffnen" />
+                }
+                @* edited in the file, not here: the panel there is the one place that knows the faction context *@
+                <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small"
+                               Href="@($"/fraktionen/{context.FactionId}?tab=oeffentlich")"
+                               aria-label="Zur Fraktionsakte" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Es gibt noch kein öffentliches Organisationsprofil. Angelegt wird es im Abschnitt „Öffentliches
+                Organisationsprofil" einer Fraktionsakte.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private IReadOnlyList<PublicFactionProfileEdit> _rows = [];
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _mayList;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // mirrors Permission.RequirePublicFactionProfileRead
+        _mayList = _user.MayHighestClassification() || _user.IsOnlyReader();
+        if (_mayList)
+        {
+            try
+            {
+                _rows = await Profiles.GetAllAsync(_user);
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+        _load = false;
+    }
+
+    private static Color StatusColour(PublicProfileStatus status) => status switch
+    {
+        PublicProfileStatus.Veroeffentlicht => Color.Error,
+        PublicProfileStatus.Zurueckgezogen => Color.Default,
+        _ => Color.Info,
+    };
+}

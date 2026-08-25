@@ -101,6 +101,12 @@ public static class TrashProjection
         => new("oeffentliche-fahndungen", x.Id, x.CaseNumber, x.DisplayName,
             Join(PublicWantedKindDisplay.Name(x.Kind), PublicWantedStatusDisplay.Name(x.Status)), x.DeletedAt);
 
+    // never the description: same reason, and it may carry images
+    public static TrashItem PublicFactionProfile(OeffentlichesFraktionsprofil x)
+        => new("oeffentliche-fraktionsprofile", x.Id, null, x.DisplayName,
+            Join(PublicFactionStandingDisplay.Name(x.Standing), PublicProfileStatusDisplay.Name(x.Status)),
+            x.DeletedAt);
+
     // no citizen name and no text: the trash list is read by every handler, and the anonymity promise does not
     // pause because a row was deleted
     public static TrashItem Tip(Hinweis x)

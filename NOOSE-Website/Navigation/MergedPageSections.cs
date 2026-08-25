@@ -29,10 +29,12 @@ public static class MergedPageSections
         "vorgaenge", "operationen", "taskforces", "aufgaben",
         "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
-        "feedback", "oeffentliche-seiten", "oeffentliche-fahndungen", "hinweise", "tickets",
+        "feedback", "oeffentliche-seiten", "oeffentliche-fahndungen", "oeffentliche-fraktionsprofile",
+        "hinweise", "tickets",
     ];
 
-    public static readonly string[] Wanted = ["fahndung", "oeffentlich", "observationen", "doks"];
+    public static readonly string[] Wanted =
+        ["fahndung", "oeffentlich", "organisationen", "observationen", "doks"];
 
     public static readonly string[] Absences = ["meine", "uebersicht", "papierkorb"];
 

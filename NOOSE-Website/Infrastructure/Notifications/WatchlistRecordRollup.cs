@@ -62,6 +62,8 @@ public static class WatchlistRecordRollup
             case TagMapping tz: return One(tz.EntityType, tz.EntityId);
             // going public is the most consequential thing that can happen to a file, so followers hear about it
             case OeffentlicheFahndung of: return One(nameof(Person), of.PersonId);
+            // publishing is the most consequential thing that happens to a faction file
+            case OeffentlichesFraktionsprofil ofp: return One(nameof(Faction), ofp.FactionId);
 
             // ---- relations ----
             case Link vk: return Two((vk.SourceType, vk.SourceId), (vk.TargetType, vk.TargetId));

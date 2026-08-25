@@ -35,6 +35,7 @@ public class TrashServiceTests
         Substitute.For<IFeedbackService>(),
         Substitute.For<IPublicPageService>(),
         Substitute.For<IPublicWantedService>(),
+        Substitute.For<IPublicFactionProfileService>(),
         Substitute.For<ITipService>(),
         Substitute.For<ITicketService>());
 

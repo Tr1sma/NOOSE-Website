@@ -492,4 +492,56 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.Contains("Reihenfolge", sql, StringComparison.Ordinal);
         Assert.Contains("IstAktiv", sql, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheOrganisationSnapshot_Translates()
+    {
+        // the one shape an anonymous visitor triggers on /organisationen and on both hazard rankings
+        var sql = _db.OeffentlicheFraktionsprofile.AsNoTracking()
+            .Where(p => p.Status == PublicProfileStatus.Veroeffentlicht)
+            .OrderByDescending(p => p.PublishedAt)
+            .Select(p => new
+            {
+                p.FactionId,
+                p.DisplayName,
+                p.Standing,
+                p.PublicHazardLevel,
+                p.DescriptionHtml,
+                p.PublishedAt,
+            })
+            .ToQueryString();
+
+        Assert.Contains("Einordnung", sql, StringComparison.Ordinal);
+        Assert.Contains("OeffentlicheGefahrenstufe", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSuppressionBelt_TranslatesOverTheFactionFiles()
+    {
+        // the second query the belt is: a subquery using IgnoreQueryFilters would strip the soft-delete filter from
+        // the outer set as well, so this shape is the one that must compile
+        var ids = new List<string> { "f1" };
+        var sql = _db.Factions
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(f => ids.Contains(f.Id) && !f.IsDeleted
+                && !f.IsClassified && !f.IsTRUClassified && !f.IsHRBClassified)
+            .Select(f => f.Id)
+            .ToQueryString();
+
+        Assert.Contains("IstVerschlusssache", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheManagementProjection_TranslatesOverBothNavigations()
+    {
+        // the faction case number and the publisher's codename come through two optional navigations; on a deleted
+        // faction the join has to yield null rather than fail
+        var sql = _db.OeffentlicheFraktionsprofile.AsNoTracking()
+            .OrderByDescending(p => p.CreatedAt)
+            .Select(p => new { p.Id, Akte = p.Faction!.CaseNumber, Von = p.PublishedBy!.Codename })
+            .ToQueryString();
+
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+    }
 }

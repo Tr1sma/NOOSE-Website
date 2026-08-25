@@ -41,6 +41,7 @@ public static class FeedbackPageTabs
     [
         new("fahndung", "Fahndung"),
         new("oeffentlich", "Öffentliche Ausschreibungen"),
+        new("organisationen", "Öffentliche Organisationsprofile"),
         new("observationen", "Observationen"),
         new("doks", "Vernehmungen & Maßnahmen"),
     ];

@@ -45,6 +45,7 @@ public static class ChronikParentResolver
         [nameof(TaskforceAgent)] = nameof(Taskforce),
         [nameof(JobAssignment)] = nameof(Job),
         [nameof(OeffentlicheFahndung)] = nameof(Person),
+        [nameof(OeffentlichesFraktionsprofil)] = nameof(Faction),
         [nameof(FahndungKopfgeldAnteil)] = nameof(Person),
         [nameof(Hinweis)] = nameof(Person),
         [nameof(HinweisBelohnung)] = nameof(Person),
@@ -170,6 +171,8 @@ public static class ChronikParentResolver
         // without a person file simply resolves to nothing
         await FanInAsync(nameof(OeffentlicheFahndung), nameof(Person), i => db.OeffentlicheFahndungen.IgnoreQueryFilters()
             .Where(f => i.Contains(f.Id) && f.PersonId != null).Select(f => new Pair(f.Id, f.PersonId!)));
+        await FanInAsync(nameof(OeffentlichesFraktionsprofil), nameof(Faction), i => db.OeffentlicheFraktionsprofile.IgnoreQueryFilters()
+            .Where(p => i.Contains(p.Id)).Select(p => new Pair(p.Id, p.FactionId)));
         // two hops: share → notice → file. IgnoreQueryFilters sits at the root because it is compilation-scoped
         // anyway, and it is wanted here — a share of a deleted notice must still resolve, or its money vanishes
         // from the chronicle

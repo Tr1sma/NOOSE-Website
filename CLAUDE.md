@@ -458,12 +458,13 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–11 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
+Gebaut sind Phase 1–12 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
 öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
 Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
 Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
-Führungsebene und die Vorlagen für Bürger-Nachrichten. Presse und die öffentlichen Zahlen sind geplant,
-aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+Führungsebene, die Vorlagen für Bürger-Nachrichten und die Organisationsprofile samt beider
+Gefahrenlisten. Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre
+Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -546,6 +547,9 @@ aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen a
   - **Ein Query-Parameter einer öffentlichen Route wird als `string` gebunden, nicht als `bool`/`int`.**
     Blazor antwortet auf einen Wert, den es nicht parsen kann, mit HTTP 500 — und an eine öffentliche URL
     hängt jeder eine Query. `?vorschau=1` war genau so ein 500.
+    Und er wird als **public** Property deklariert: `[SupplyParameterFromQuery]` auf einem privaten Feld
+    bindet nicht — kein Fehler, kein Warning, der Filter tut einfach nichts (`?einordnung=` auf
+    `/organisationen` war genau das). Kein Test fängt es, weil `.razor` ohne bUnit nicht testbar ist.
   - Ein Tab je Seite gibt es nicht: `Infoseiten` hat **einen** Tab auf den Hub `/info`, damit die Nav weiter
     allein aus `PublicModules` kommt.
 - **Eine öffentliche Ausschreibung (`OeffentlicheFahndung`, `/gesucht/{Aktenzeichen}`) ist ein
@@ -1029,6 +1033,78 @@ aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen a
     `MergedPageSections.Settings`, `WatchlistRecordRollup` — **und in `FeedbackPageTabs`, der sechsten
     Registry**, die jeder neue `/einstellungen`-Abschnitt braucht (`FeedbackPageTabsTests` verlangt jeden
     `MergedPageSections`-Slug im Feedback-Picker).
+- **Phase 12 (Organisationen & Gefahrenlisten) — was daran anders ist:**
+  - **Nach außen geht die Gefahrenstufe, nie der rohe Score** — und das ist mechanisch gesichert, nicht nur
+    verabredet: `PublicPageScanTests.InternalMarkers` enthält wörtlich `"ThreatScore"`, eine öffentliche
+    Seite, die ihn nennt, macht den Build rot. Die Zahl ließe die Formel aus `AlgoPlan.md` rückwärts rechnen,
+    und die Score-Konfiguration steht in `NeverPublic` als „Anleitung zur Umgehung". Festgehalten wird die
+    Stufe beim Publizieren, nachgezogen nur auf Knopfdruck.
+  - **Zwei Statusachsen auf einer Zeile.** `Status` (`PublicProfileStatus`) entscheidet allein die
+    öffentliche Sichtbarkeit, `Einordnung` (`PublicFactionStanding`) ist das Etikett beobachtet/verboten. Ein
+    Feld für beides könnte eine Publikation nicht zurückziehen, ohne die Einordnung zu verlieren. Die
+    Einordnung wird **nie** aus `Faction.Classification` abgeleitet — die interne Einstufung nach außen zu
+    spiegeln veröffentlichte, woran die Behörde arbeitet. Erlaubt ist nur, was in
+    `PublicFactionStandingDisplay.All` steht (`RequireKnownStanding`), sonst stünde draußen eine rohe Zahl.
+  - **Keine Rang-Weiche, deshalb zwei Guards statt drei.** Alles ab `SeniorSpecialAgent(3)`:
+    `Permission.RequirePublicFactionProfileWrite` (interner Agent mit Schreibrecht — `RequireWriteAccess`
+    allein ließe ein Bürgerkonto durch) **vor** `RequireHighestClassification`, und
+    `RequirePublicFactionProfileRead` (Rang ≥ 3 oder Aufsicht). Die Antrags-Weiche der Fahndung existiert
+    dort nur, weil Rang 1–2 Entwürfe anlegen darf; hier gibt es diesen Zweig nicht, also keinen fünften
+    `RequestType`, keine Spalte auf `Antraege`, keinen Posteingang, kein Badge — und ein dritter
+    „RecordRead"-Guard hätte niemanden einzulassen.
+  - **Ein Hub, keine Detailseite.** Name, Einordnung, Stufe und Kurzbeschreibung stehen auf der Karte; eine
+    Detailseite wiederholte dieselben vier Felder. Kein Aktenzeichen-Präfix, kein `CaseNumberCounter`. Die
+    Ausschreibung verlinkt bewusst **nicht** auf die Organisation: `OeffentlicheFahndung.FraktionId` ist ein
+    interner FK, und den Fraktionsnamen beim Rendern nachzulesen wäre ein Live-Blick statt eines Snapshots.
+  - **Eigener Cache-Schlüssel, ein Speicherpfad.** `SaveAndInvalidateAsync` ist die einzige Stelle mit
+    `SaveChangesAsync` **und** `cache.Remove`; `PublicFactionProfileCacheDisciplineTests` hält das per
+    Dateiscan fest, samt „kein zweiter Produktionsdateiname kennt den Schlüssel" und „wer die Profiltabelle
+    schreibt, ist dieser eine Dienst". Eigener Schlüssel neben dem Fahndungs-Snapshot, weil es eine andere
+    Tabelle ist — das Phase-5-Argument gegen einen zweiten Schlüssel galt Board **und** Archiv aus
+    *derselben* Tabelle.
+  - **Der Unterdrückungsgürtel ist wieder eine zweite Abfrage** (`OpenFactionsAsync`), nie eine
+    Unterabfrage: `IgnoreQueryFilters()` gilt kompilierungsweit. `p.Faction` als Navigation ist ebenso
+    unbrauchbar — sie erbt den Filter und ist für eine gelöschte Akte `null`. Zusätzlich zieht
+    `RetractForRecordAsync` die Zeile offline, gerufen aus `FactionService.RefreshAsync` (sobald die Akte VS
+    wird) und `.DeleteAsync`; einen `FactionMergeService` gibt es nicht.
+  - **`/gefahr/personen` hat keinen eigenen Lesepfad**, es projiziert
+    `IPublicWantedService.GetBoardAsync().Cards` — die Stufe steht dort schon, hinter demselben Gürtel. Eine
+    zweite Abfrage müsste ihn wiederholen, genau die Phase-4-Falle. Die Ranking-Regel steht einmal, in
+    `Services/Public/HazardRanking.cs` (Stufe absteigend, Publikationsdatum als Gleichstand-Entscheider,
+    `HazardLevel.No` fällt heraus, Deckel 25) — zwei Oberflächen lesen sie, ausgeschrieben driftet sie. Der
+    **Deckel wird auf der Seite genannt**, weil ein stiller Schnitt sich wie Vollständigkeit liest. Die
+    Personenliste filtert vorher auf `PublicWantedKind.Fahndung`: eine Vermisstenmeldung und ein
+    Zeugenaufruf tragen ebenfalls eine Gefahrenstufe, und beide unter „gefährlichste Personen" zu listen
+    wäre eine Anschuldigung, die die Ausschreibung nie erhoben hat. Heute wird nur `Fahndung` ausgegeben —
+    die Zeile ist für Phase 13 da, die `Fahrzeug` und `Waffe` bringt.
+  - **Gates je Datenmenge, verschachtelt:** `/organisationen` an `Organisationen`, `/gefahr/fraktionen` an
+    `Gefahrenlisten` **und** `Organisationen`, `/gefahr/personen` an `Gefahrenlisten` **und** `Fahndung`
+    (Präzedenz `GetPublishedPhotoAsync`: „das Modul der Menge, in der es die Zeile gefunden hat").
+    `PublicModuleGate` nimmt genau ein Modul; zwei verschachtelt zeigen je den eigenen Offline-Text, was
+    genau richtig ist — die Meldung sagt, welcher Schalter es war. Zurückziehen und Löschen fragen das Modul
+    **nie**.
+  - **Kein Discord-Push.** Ein Organisationsprofil ist kein Handlungsaufruf, und ein Kanal-Post wäre eine
+    bleibende Anschuldigung gegen eine ganze Fraktion, die ein Rückzug nicht zurückruft (Präzedenz: eine
+    Senkung des Kopfgelds bleibt still). Damit kein neuer `NotificationType`.
+  - **Die Inhaltsprüfung sitzt im Publish-Rumpf** (Klartext vorhanden, keine `@{…}`-Erwähnung, kein barer
+    `{{`-Opener wie in `WarnhinweisService`) — anders als in Phase 4 gibt es nur *einen* Eingang, also
+    genügt eine Stelle. Ein **Entwurf** darf eine Erwähnung tragen, er ist intern; eine laufende Publikation
+    wird beim Speichern erneut geprüft. Der Schreibpfad prüft die **Aktensichtbarkeit immer**, nicht nur bei
+    laufender Publikation — sonst schriebe, wer die Id eines Entwurfs kennt, gegen eine Verschlusssache
+    (Präzedenz `SetHintsAsync`).
+  - **Kein Unique-Index auf `FraktionId`** — mit Soft-Delete sperrte er die Fraktion für immer
+    (Phase-3-Lektion vom Seiten-Slug). „Ein lebendes Profil je Fraktion" ist eine Dienst-Regel, und
+    **Wiederherstellen ist der zweite Weg, sie zu verletzen**: es prüft die Adresse erneut und bringt das
+    Profil als **Entwurf** zurück, damit ein Rückgängig nichts nebenbei wieder veröffentlicht.
+  - **`FeedbackPageTabs` gilt auch für einen `/fahndung`-Abschnitt**, nicht nur für `/einstellungen` — der
+    Wächter verlangt jeden `MergedPageSections`-Slug im Feedback-Picker. Und `TrashServiceTests` vergleicht
+    die Papierkorb-Slugs **der Reihenfolge nach** gegen `TrashService.Kinds`: die neue Zeile muss dort
+    stehen, wo ihre `Source` steht.
+  - **Nicht registriert, mit Grund:** `RecordsReference`/`LinkService` (das Profil ist kein
+    Verknüpfungsziel, sondern eine Eigenschaft seiner Fraktion) · `PublicRoutes`/`robots.txt` (`/gefahr`
+    steht seit Phase 2 in `ExtraPrefixes`, `/organisationen` ist eine Modul-Nav-Route und damit unabhängig
+    von `Available` schon in `Prefixes`) · `CaseNumberCounter` · kein Foto, kein Ablaufdatum, kein
+    Aufrufzähler (ein Hub ohne Detailseite hat nichts zu zählen).
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1058,7 +1134,7 @@ aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen a
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–11 gebaut**, 12–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–12 gebaut**, 13–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

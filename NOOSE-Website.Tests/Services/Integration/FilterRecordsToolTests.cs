@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Text.Json;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Personnel;
@@ -38,7 +38,8 @@ public sealed class FilterRecordsToolTests
             Substitute.For<IPublicWantedService>());
         var factions = new FactionService(ctx.Factory, Substitute.For<ICaseNumberService>(),
             Substitute.For<IProfileSuggestionService>(), people, Substitute.For<IFactionPhotoStorageService>(),
-            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
+            Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>(),
+            Substitute.For<IPublicFactionProfileService>());
         return NooseiToolHost.Filter(
             people: people, factions: factions, laws: new LawService(ctx.Factory), settings: settings);
     }

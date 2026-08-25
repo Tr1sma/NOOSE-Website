@@ -112,7 +112,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | **fertig** |
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | **fertig** |
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | **fertig** |
-| 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | offen |
+| 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | **fertig** |
 | 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Oeffentlich13_FahrzeugeEinspruch` | 4, 1 | offen |
 | 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Oeffentlich14_Redaktion` | 3 | offen |
 | 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14 | offen |
@@ -1319,7 +1319,7 @@ Eingangsbestätigung automatisch kommt.
 
 ---
 
-## Phase 12 — Organisationen & Gefahrenlisten
+## Phase 12 — Organisationen & Gefahrenlisten ✅
 
 **Ziel:** „Gefährlichste Fraktionen" und „gefährlichste Personen" — nur aus Publiziertem.
 
@@ -1340,6 +1340,96 @@ Snapshot-Isolation · Score-Zahl nur für publizierte Einträge.
 
 **Fertig, wenn** beide Gefahrenlisten gefüllt sind und eine hoch bewertete, aber unpublizierte Fraktion
 nachweislich fehlt.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Nach außen geht die Gefahrenstufe, nie der rohe Score.** Der Plantext („Score live als Zahl") stammt
+   von vor Phase 4, die das Gegenteil festgelegt hat: `PublicPageScanTests.InternalMarkers` enthält wörtlich
+   `"ThreatScore"`, eine öffentliche Seite, die ihn nennt, macht den Build rot — und die Score-Konfiguration
+   steht in `PublicVisibility.NeverPublic` als „Anleitung zur Umgehung". Die Zahl ließe die Formel aus
+   `AlgoPlan.md` rückwärts rechnen. Festgehalten wird die Stufe beim Publizieren
+   (`HazardLevelLogic.From(faction.ThreatScore)`), aktualisiert nur auf Knopfdruck („Stufe aktualisieren").
+2. **Keine Rang-Weiche, kein `Request`.** Anlegen, Bearbeiten und Publizieren ab `SeniorSpecialAgent(3)` —
+   dieselbe Schwelle, die eine Ausschreibung publiziert. Bei der Fahndung existiert die Antrags-Weiche nur,
+   weil Rang 1–2 dort Entwürfe anlegen darf und sonst nie wieder an sie herankäme; hier gibt es diesen
+   Zweig nicht, also auch keinen fünften `RequestType`, keine Spalte auf `Antraege`, keinen
+   Posteingangs-Abschnitt und kein Nav-Badge. Folge: **zwei** Guards statt drei — ein
+   `RequirePublicFactionProfileRecordRead` hätte niemanden einzulassen.
+3. **Zwei Statusachsen, nicht eine.** Der Plantext nannte ein Feld `Status` (`Beobachtet`/`Verboten`).
+   Gebaut sind `Status` (`PublicProfileStatus`: Entwurf/Veröffentlicht/Zurückgezogen) und `Einordnung`
+   (`PublicFactionStanding`: beobachtet/verboten). Ein Feld für beides könnte eine Publikation nicht
+   zurückziehen, ohne die Einordnung zu verlieren — und die Phase-4-Regel „`Status` allein entscheidet die
+   öffentliche Sichtbarkeit" wäre nicht mehr wahr.
+4. **Die Einordnung ist ein redaktionelles Etikett, nicht `Faction.Classification`.** Sie wird von Hand
+   gesetzt und niemals abgeleitet: die interne Einstufung (Prüffall/Verdachtsfall/gesichert
+   staatsgefährdend) nach außen zu spiegeln wäre eine Veröffentlichung dessen, woran die Behörde arbeitet.
+   Erlaubt ist nur, was in `PublicFactionStandingDisplay.All` steht — `RequireKnownStanding` weist alles
+   andere ab, denn ein Wert neben dem Enum stünde draußen als rohe Zahl.
+5. **Nur ein Hub, keine Detailseite.** Eine Karte trägt Name, Einordnung, Gefahrenstufe und
+   Kurzbeschreibung; eine Detailseite hätte exakt dieselben vier Felder wiederholt. Damit kein neuer
+   Aktenzeichen-Präfix, kein `CaseNumberCounter`-Eintrag, und die Ausschreibung verlinkt weiter **nicht**
+   auf die Organisation: `OeffentlicheFahndung.FraktionId` ist ein interner FK, und den Namen der Fraktion
+   beim Rendern nachzulesen wäre ein Live-Blick in die Akte statt eines Snapshots.
+6. **Eigener Cache-Schlüssel, ein Speicherpfad.** `PublicFactionProfileService.SaveAndInvalidateAsync` ist
+   die einzige Stelle mit `SaveChangesAsync` **und** `cache.Remove`; ein Dateiscan
+   (`PublicFactionProfileCacheDisciplineTests`) hält das fest, samt „kein zweiter Produktionsdateiname kennt
+   den Schlüssel" und „wer die Profiltabelle schreibt, ist dieser eine Dienst". Eigener Schlüssel neben dem
+   Fahndungs-Snapshot, weil es eine andere Tabelle ist, die von anderen Schreibpfaden ungültig wird — das
+   Phase-5-Argument gegen einen zweiten Schlüssel galt Board **und** Archiv aus *derselben* Tabelle.
+7. **Der Unterdrückungsgürtel ist wieder eine zweite Abfrage.** `IgnoreQueryFilters()` gilt
+   kompilierungsweit, nicht für den Operanden: in einer Unterabfrage benutzt entfernt es den
+   Soft-Delete-Filter auch vom äußeren Set — genau so ging in Phase 4 eine gelöschte, veröffentlichte
+   Ausschreibung anonym live. `p.Faction` als Navigation ist ebenso unbrauchbar: sie erbt den Filter und ist
+   für eine gelöschte Akte `null`, also zeigte `p.Faction == null || …` genau die Zeilen, die es verbergen
+   soll. Zusätzlich zieht `RetractForRecordAsync` die Zeile selbst offline, gerufen aus
+   `FactionService.RefreshAsync` (sobald die Akte VS wird) und `.DeleteAsync` — der Gürtel ist der Gurt, der
+   Hook der Airbag. Einen `FactionMergeService` gibt es nicht, also auch keine dritte Aufrufstelle.
+8. **`/gefahr/personen` hat keinen eigenen Lesepfad.** Die Liste projiziert
+   `IPublicWantedService.GetBoardAsync().Cards` — dort steht die Gefahrenstufe schon, hinter demselben
+   Unterdrückungsgürtel. Eine zweite Abfrage müsste den Gürtel wiederholen, und genau das ist die
+   Phase-4-Falle. Damit kein neues Datum, kein neuer Dienst, kein zweiter Cache.
+9. **Die Ranking-Regel steht einmal**, in `Services/Public/HazardRanking.cs`: Stufe absteigend,
+   Publikationsdatum als Gleichstand-Entscheider, `HazardLevel.No` fällt heraus, gedeckelt auf 25. Zwei
+   Oberflächen lesen sie (Organisationen aus dem eigenen Snapshot, Personen aus dem Fahndungs-Board);
+   ausgeschrieben würde sie driften, und eine Rangliste, die sich selbst widerspricht, ist schlechter als
+   keine. Der **Deckel wird auf der Seite genannt** („die 25 höchsten"), weil ein stiller Schnitt sich wie
+   Vollständigkeit liest.
+10. **Gates je Datenmenge, verschachtelt.** `/organisationen` hängt an `Organisationen`,
+    `/gefahr/fraktionen` an `Gefahrenlisten` **und** `Organisationen`, `/gefahr/personen` an
+    `Gefahrenlisten` **und** `Fahndung` — Präzedenz `GetPublishedPhotoAsync`, „das Modul der Menge, in der es
+    die Zeile gefunden hat". `PublicModuleGate` nimmt genau ein Modul; zwei verschachtelt zeigen je den
+    eigenen Offline-Text, was genau richtig ist: „Die öffentliche Fahndung ist derzeit nicht verfügbar." auf
+    der Personenliste sagt, welcher Schalter es war. Zurückziehen und Löschen fragen das Modul **nie**
+    (Phase-4-Regel).
+11. **Kein Discord-Push, und das ist eine Entscheidung.** Ein Organisationsprofil ist kein Handlungsaufruf,
+    und ein Kanal-Post wäre eine bleibende Anschuldigung gegen eine ganze Fraktion, die ein Rückzug nicht
+    zurückruft — Präzedenz: eine *Senkung* des Kopfgelds bleibt aus demselben Grund still. Damit auch kein
+    neuer `NotificationType`.
+12. **`PublicRoutes` und `robots.txt` brauchten nichts.** `/gefahr` steht seit Phase 2 in `ExtraPrefixes`
+    („die zweite Gefahrenliste"), `/organisationen` ist eine Modul-Nav-Route und damit schon in `Prefixes` —
+    Modul-Routen stehen dort unabhängig von `Available`. Beide Zeilen waren in `robots.txt` vorhanden.
+13. **`FeedbackPageTabs` ist auch für einen `/fahndung`-Abschnitt Pflicht.** Der Wächter verlangt jeden
+    `MergedPageSections`-Slug im Feedback-Picker, nicht nur die von `/einstellungen` — er wurde rot, bevor
+    jemand daran gedacht hatte. Ebenso ordnet `TrashServiceTests` die Papierkorb-Slugs **der Reihenfolge
+    nach** gegen `TrashService.Kinds`: die neue Zeile muss dort stehen, wo ihre `Source` steht.
+14. **Die Inhaltsprüfung sitzt im Publish-Rumpf, nicht beim Speichern.** Anders als in Phase 4 gibt es hier
+    nur *einen* Eingang (keine Genehmigung), also genügt eine Stelle: Klartext vorhanden, keine
+    `@{Typ:GUID}`-Erwähnung, kein `{{` (der **bare** Opener, wie `WarnhinweisService`). Ein Entwurf darf eine
+    Erwähnung tragen — er ist intern; er lässt sich nur nicht publizieren. Eine *laufende* Publikation wird
+    beim Speichern erneut geprüft, sonst ginge eine Erwähnung nachträglich live.
+15. **Der Schreibpfad prüft die Aktensichtbarkeit immer**, nicht nur bei laufender Publikation — sonst
+    könnte, wer die Id eines Entwurfs kennt, gegen eine Verschlusssache schreiben und eine Audit-Zeile auf
+    ihr hinterlassen (Präzedenz Phase 5, `SetHintsAsync`).
+16. **Wiederherstellen prüft, ob die Fraktion inzwischen ein anderes Profil hat.** Es gibt keinen
+    Unique-Index auf `FraktionId` — mit Soft-Delete würde er die Fraktion für immer sperren (Phase-3-Lektion
+    vom Seiten-Slug) —, also ist „ein lebendes Profil je Fraktion" eine Dienst-Regel, und
+    Wiederherstellen ist der zweite Weg, sie zu verletzen. Zurück kommt es als **Entwurf**, damit ein
+    Rückgängig nichts nebenbei wieder veröffentlicht.
+17. **Fünf Registries für den Zeitstrahl, wie gehabt** (`TimelineService.AuditSourceAsync`,
+    `TimelineDisplay.MapAudit`, `AuditEntityDisplay` mit Label **und** Route, `ChronikParentResolver` mit
+    Map **und** Fan-in) plus `WatchlistRecordRollup` (rollt auf `Faction`: Publizieren ist die
+    folgenreichste Änderung an einer Fraktionsakte). Kein zweites `ManualAudit.Row` gegen die Akte — die
+    Zeile ist `IAuditable`, und eine zusätzliche, `Faction`-getypte Zeile läse sich als „Akte geändert".
 
 ---
 

@@ -250,6 +250,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
+    public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1846,6 +1847,24 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.Text).HasColumnType("longtext");
             // the only shape the read path knows: the active templates of one kind, in order
             b.HasIndex(v => new { v.Kind, v.IsActive, v.SortOrder });
+        });
+
+        modelBuilder.Entity<OeffentlichesFraktionsprofil>(b =>
+        {
+            b.Property(p => p.DisplayName).HasMaxLength(200).IsRequired();
+            // longtext: the description may carry images, and a cap here would truncate it without a word
+            b.Property(p => p.DescriptionHtml).HasColumnType("longtext");
+            b.Property(p => p.RetractedReason).HasColumnType("longtext");
+            b.Property(p => p.FactionId).HasMaxLength(64);
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // No unique index on FraktionId: with soft delete it would block the faction forever, the same trap the
+            // page slug documents. "One live profile per faction" is enforced over the living rows in the service.
+            b.HasIndex(p => new { p.Status, p.PublishedAt });
+            b.HasIndex(p => p.FactionId);
+            b.HasOne(p => p.Faction).WithMany()
+                .HasForeignKey(p => p.FactionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(p => p.PublishedBy).WithMany()
+                .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         // global soft-delete filter

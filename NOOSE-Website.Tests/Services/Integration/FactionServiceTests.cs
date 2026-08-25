@@ -9,6 +9,7 @@ using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Factions;
 using NOOSE_Website.Models.People;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
@@ -61,7 +62,8 @@ public sealed class FactionServiceTests
             personService ?? Substitute.For<IPersonService>(),
             photo ?? PhotoStorage(),
             threat ?? Substitute.For<IThreatScoreService>(),
-            Substitute.For<INotificationService>());
+            Substitute.For<INotificationService>(),
+            Substitute.For<IPublicFactionProfileService>());
 
     // ==================== GetListAsync ====================
 

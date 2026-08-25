@@ -27,6 +27,7 @@ public sealed class TrashService(
     IFeedbackService feedback,
     IPublicPageService publicPages,
     IPublicWantedService publicWanted,
+    IPublicFactionProfileService factionProfiles,
     ITipService tips,
     ITicketService tickets) : ITrashService
 {
@@ -89,6 +90,9 @@ public sealed class TrashService(
         Source(new TrashKind("oeffentliche-fahndungen", "Öffentliche Ausschreibungen", Icons.Material.Filled.PersonSearch,
                 "/fahndung?tab=oeffentlich"),
             publicWanted.GetTrashAsync, TrashProjection.PublicWanted, publicWanted.RestoreAsync),
+        Source(new TrashKind("oeffentliche-fraktionsprofile", "Öffentliche Organisationsprofile",
+                Icons.Material.Filled.Groups, "/fahndung?tab=organisationen"),
+            factionProfiles.GetTrashAsync, TrashProjection.PublicFactionProfile, factionProfiles.RestoreAsync),
         Source(new TrashKind("hinweise", "Bürgerhinweise", Icons.Material.Filled.TipsAndUpdates, "/hinweise"),
             tips.GetTrashAsync, TrashProjection.Tip, tips.RestoreAsync),
         Source(new TrashKind("tickets", "Bürger-Tickets", Icons.Material.Filled.Forum, "/tickets"),

@@ -288,6 +288,36 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to author a public organisation profile.</summary>
+    /// <remarks>
+    /// Not <see cref="RequireWriteAccess"/>: that one only blocks the read-only supervision and partners, so a
+    /// signed-in citizen — who carries no rank claim — would pass. Publishing itself additionally needs rank ≥ 3,
+    /// checked after this one so the supervision and the demo principal cannot mint a publication date first.
+    /// </remarks>
+    public static void RequirePublicFactionProfileWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || actor.IsCitizen() || actor.IsPartner() || string.IsNullOrEmpty(actor.GetAgentId()))
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Organisationsprofile bearbeitet nur ein schreibberechtigter Agent.");
+        }
+    }
+
+    /// <summary>Require the right to read organisation profiles at all.</summary>
+    /// <remarks>
+    /// Same threshold as publishing, plus the read-only supervision as everywhere else. There is no second, wider
+    /// read guard as with the wanted notice: a rank 1-2 agent cannot own a draft here, so it would admit nobody.
+    /// Which rows the actor then sees is still decided per faction file.
+    /// </remarks>
+    public static void RequirePublicFactionProfileRead(ClaimsPrincipal actor)
+    {
+        if (!actor.MayHighestClassification() && !actor.IsOnlyReader())
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Organisationsprofile sieht Senior Special Agent aufwärts und die Aufsicht.");
+        }
+    }
+
     /// <summary>Require the right to put money on a head, whether the agency's or the actor's own.</summary>
     /// <remarks>
     /// RequireWriteAccess alone is not this guard: it blocks only the read-only supervision and partners, so a signed-in

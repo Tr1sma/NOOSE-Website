@@ -1,0 +1,99 @@
+@page "/gefahr/fraktionen"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicFactionProfileService Profiles
+
+<PageTitle>Gefährlichste Organisationen · NOOSE</PageTitle>
+
+@* two gates, nested: the page belongs to the hazard lists, the rows come from the organisation profiles — each shows
+   its own offline text, so switching either off says which one it was *@
+<PublicModuleGate Module="@PublicModules.HazardLists" Title="Gefahrenlisten">
+<PublicModuleGate Module="@PublicModules.Organisations" Title="Gefahrenlisten">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <div>
+            <MudText Typo="Typo.h4">Gefährlichste Organisationen</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                Die @HazardRanking.Limit am höchsten eingeschätzten veröffentlichten Organisationen. Grundlage ist
+                ausschließlich die beim Veröffentlichen festgehaltene Gefahrenstufe.
+            </MudText>
+        </div>
+
+        <MudStack Row="true" Spacing="1">
+            <MudChip T="string" Href="/gefahr/fraktionen" Variant="Variant.Filled" Color="Color.Primary"
+                     Size="Size.Small">Organisationen</MudChip>
+            <MudChip T="string" Href="/gefahr/personen" Variant="Variant.Outlined" Color="Color.Primary"
+                     Size="Size.Small">Personen</MudChip>
+        </MudStack>
+
+        <MudDivider />
+
+        @if (_rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit ist keine Organisation mit einer Gefahrenstufe veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th style="width:4rem;">#</th>
+                        <th>Organisation</th>
+                        <th>Einordnung</th>
+                        <th>Gefahrenstufe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < _rows.Count; i++)
+                    {
+                        var card = _rows[i];
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@card.DisplayName</td>
+                            <td>@PublicFactionStandingDisplay.Name(card.Standing)</td>
+                            <td>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                                    @HazardLevelLogic.Name(card.HazardLevel)
+                                </MudChip>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        <div>
+            <MudButton Href="/organisationen" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Groups">Alle Organisationen</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+</PublicModuleGate>
+
+@code {
+    private List<PublicFactionCard> _rows = [];
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        try
+        {
+            _rows = HazardRanking.Rank((await Profiles.GetBoardAsync()).Cards,
+                c => c.HazardLevel, c => c.PublishedAt);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

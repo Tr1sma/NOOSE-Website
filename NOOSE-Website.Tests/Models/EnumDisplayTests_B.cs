@@ -611,4 +611,45 @@ public class EnumDisplayTests_B
                 MeasureOutcome.Injection, MeasureOutcome.Shot,
             },
             MeasureOutcomeDisplay.All);
+
+    // ---------------------------------------------------------------------
+    // PublicFactionStandingDisplay / PublicProfileStatusDisplay
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(PublicFactionStanding.Beobachtet, "Beobachtet")]
+    [InlineData(PublicFactionStanding.Verboten, "Verboten")]
+    public void PublicFactionStandingName_definedValue_mapsToLabel(PublicFactionStanding standing, string expected)
+        => Assert.Equal(expected, PublicFactionStandingDisplay.Name(standing));
+
+    [Fact]
+    public void PublicFactionStandingName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicFactionStandingDisplay.Name((PublicFactionStanding)99));
+
+    [Fact]
+    public void PublicFactionStandingAll_containsAllInDeclarationOrder()
+        => Assert.Equal(
+            new[] { PublicFactionStanding.Beobachtet, PublicFactionStanding.Verboten },
+            PublicFactionStandingDisplay.All);
+
+    [Theory]
+    [InlineData(PublicProfileStatus.Entwurf, "Entwurf")]
+    [InlineData(PublicProfileStatus.Veroeffentlicht, "Veröffentlicht")]
+    [InlineData(PublicProfileStatus.Zurueckgezogen, "Zurückgezogen")]
+    public void PublicProfileStatusName_definedValue_mapsToLabel(PublicProfileStatus status, string expected)
+        => Assert.Equal(expected, PublicProfileStatusDisplay.Name(status));
+
+    [Fact]
+    public void PublicProfileStatusName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicProfileStatusDisplay.Name((PublicProfileStatus)99));
+
+    [Fact]
+    public void PublicProfileStatusAll_containsAllInDeclarationOrder()
+        => Assert.Equal(
+            new[]
+            {
+                PublicProfileStatus.Entwurf, PublicProfileStatus.Veroeffentlicht,
+                PublicProfileStatus.Zurueckgezogen,
+            },
+            PublicProfileStatusDisplay.All);
 }

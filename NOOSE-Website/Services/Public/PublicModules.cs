@@ -59,9 +59,9 @@ public static class PublicModules
         new(Bounty, "Kopfgeld", "Anzeige der ausgeschriebenen Belohnung an einem Steckbrief.",
             Icons.Material.Filled.Paid, null, PublicModuleGroup.Fahndung, 30, false, true, OffGeneric),
         new(HazardLists, "Gefahrenlisten", "Ranglisten der gefährlichsten Organisationen und Personen.",
-            Icons.Material.Filled.Warning, "/gefahr/fraktionen", PublicModuleGroup.Fahndung, 40, false, false, OffGeneric),
+            Icons.Material.Filled.Warning, "/gefahr/fraktionen", PublicModuleGroup.Fahndung, 40, false, true, OffGeneric),
         new(Organisations, "Organisationen", "Öffentliche Profile beobachteter und verbotener Organisationen.",
-            Icons.Material.Filled.Groups, "/organisationen", PublicModuleGroup.Fahndung, 50, false, false, OffGeneric),
+            Icons.Material.Filled.Groups, "/organisationen", PublicModuleGroup.Fahndung, 50, false, true, OffGeneric),
 
         new(Careers, "Karriere", "Informationen zum Auswahlverfahren und der Bewerbungs-Zugang.",
             Icons.Material.Filled.WorkOutline, "/karriere", PublicModuleGroup.Behoerde, 100, true, true,

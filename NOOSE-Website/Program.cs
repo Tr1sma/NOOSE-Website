@@ -353,6 +353,7 @@ builder.Services.AddScoped<ITipTakeoverService, TipTakeoverService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IPublicTemplateService, PublicTemplateService>();
+builder.Services.AddScoped<IPublicFactionProfileService, PublicFactionProfileService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 builder.Services.AddSingleton<TipsBroadcaster>();
 builder.Services.AddSingleton<TicketBroadcaster>();

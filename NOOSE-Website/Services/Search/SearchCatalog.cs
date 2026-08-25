@@ -455,6 +455,9 @@ public static class SearchCatalog
                 + "Führungs-Gate vorbei lesbar.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
+            ["OeffentlichesFraktionsprofil"] = "Publikations-Snapshot einer Fraktion; intern gefunden wird "
+                + "die Fraktionsakte selbst. Die öffentliche Suche über Veröffentlichtes kommt mit der "
+                + "Suchanbindung des öffentlichen Bereichs.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

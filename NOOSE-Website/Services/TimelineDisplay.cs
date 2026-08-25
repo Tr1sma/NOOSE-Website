@@ -125,6 +125,11 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.Change, $"Öffentliche Ausschreibung {Verb("angelegt", "gelöscht")}");
         }
+        // publish and retract both arrive here as well; the Status old/new pair carries which one it was
+        if (entityType == nameof(OeffentlichesFraktionsprofil))
+        {
+            return (TimelineCategory.Change, $"Öffentliches Organisationsprofil {Verb("angelegt", "gelöscht")}");
+        }
         // pledge, approval, deposit and withdrawal all arrive here; the Status old/new pair says which
         if (entityType == nameof(FahndungKopfgeldAnteil))
         {

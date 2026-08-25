@@ -43,6 +43,10 @@ public static class PublicVisibility
                 + "Aufschlüsselung verriete, welcher Agent wie viel eigenes Geld auf einen Kopf gesetzt hat.",
             ["Warnhinweis"] = "Bezeichnung und Farbe eines zugeordneten Warnhinweises, als Chip auf Board, "
                 + "Steckbrief und Poster. Reihenfolge, Aktiv-Kennzeichen und die Zeilen-Id bleiben drinnen.",
+            ["OeffentlichesFraktionsprofil"] = "Der Publikations-Snapshot einer Organisation: Anzeigename, "
+                + "Einordnung (beobachtet/verboten), die beim Publizieren festgehaltene Gefahrenstufe und die "
+                + "Kurzbeschreibung. Der Aktenbezug (FraktionId), der rohe Bedrohungs-Score, die Mitglieder und "
+                + "der Rückzugsgrund bleiben drinnen.",
         };
 
     /// <summary>Entity name → why it can never appear outside.</summary>

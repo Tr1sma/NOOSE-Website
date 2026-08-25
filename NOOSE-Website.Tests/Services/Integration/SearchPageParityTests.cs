@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
@@ -123,7 +123,8 @@ public class SearchPageParityTests
 
             case nameof(Data.Entities.Factions.Faction):
                 var factions = new FactionService(ctx.Factory, caseNo, suggest, People(ctx),
-                    Substitute.For<IFactionPhotoStorageService>(), threat, notify);
+                    Substitute.For<IFactionPhotoStorageService>(), threat, notify,
+                    Substitute.For<IPublicFactionProfileService>());
                 return (await factions.GetListAsync(scope)).Select(x => x.Id).ToList();
 
             case nameof(Data.Entities.Groups.PersonGroup):
