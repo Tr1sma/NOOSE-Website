@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using MudBlazor;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services.Public;
@@ -30,7 +30,9 @@ public sealed class TrashService(
     IPublicFactionProfileService factionProfiles,
     ITipService tips,
     ITicketService tickets,
-    IObjectionService objections) : ITrashService
+    IObjectionService objections,
+    IPressReleaseService press,
+    IPublicWarningService warnings) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -101,6 +103,12 @@ public sealed class TrashService(
         Source(new TrashKind("fahndungs-einsprueche", "Einsprüche", Icons.Material.Filled.Balance,
                 "/fahndung?tab=einsprueche"),
             objections.GetTrashAsync, TrashProjection.Objection, objections.RestoreAsync),
+        Source(new TrashKind("pressemitteilungen", "Pressemitteilungen", Icons.Material.Filled.Feed,
+                "/einstellungen?tab=presse"),
+            press.GetTrashAsync, TrashProjection.PressRelease, press.RestoreAsync),
+        Source(new TrashKind("oeffentliche-warnungen", "Öffentliche Warnungen", Icons.Material.Filled.Campaign,
+                "/einstellungen?tab=warnungen"),
+            warnings.GetTrashAsync, TrashProjection.PublicWarning, warnings.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using NOOSE_Website.Authorization;
@@ -206,6 +206,10 @@ public class PublicSurfaceGuardTests
         "TipMessageRow", "TipRow", "TipDetail",
         // the objection desk: ObjectionDetail carries the citizen's block flag and the decider's codename
         "ObjectionRow", "ObjectionDetail", "DecidedByCodename",
+        // the press desk: PressEdit names the publishing agent, and PressDraft is the unpublished body
+        "PressEdit", "PressDraft", "PublishedByName",
+        // the warning and law desks: the same shape, plus the paragraphs that stay in
+        "WarningEdit", "WarningDraft", "LawReleaseRow",
     ];
 
     [Fact]

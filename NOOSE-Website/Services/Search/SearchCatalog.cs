@@ -1,4 +1,4 @@
-using MudBlazor;
+﻿using MudBlazor;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Absences;
@@ -432,6 +432,10 @@ public static class SearchCatalog
             ["OeffentlicheFahndung"] = "Publikations-Snapshot einer Personenakte; jedes Feld stammt aus der Akte, "
                 + "die schon durchsuchbar ist. Gefunden wird sie über die Akte, gepflegt in /fahndung. Ein eigener "
                 + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["Pressemitteilung"] = "Amtliche Verlautbarung ohne Aktenbezug; gepflegt wird sie in /einstellungen. "
+                + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["OeffentlicheWarnung"] = "Amtliche Warnung ohne Aktenbezug; gepflegt wird sie in /einstellungen. "
+                + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
             ["Warnhinweis"] = "Werteliste des öffentlichen Bereichs ohne Aktenbezug; gepflegt in /einstellungen. "
                 + "Gesucht wird die Ausschreibung, die den Hinweis trägt, nicht der Hinweis selbst.",
             ["FahndungWarnhinweis"] = "Zuordnungszeile zwischen Ausschreibung und Warnhinweis; sie trägt keinen "

@@ -54,6 +54,7 @@ public sealed class PublicWantedServiceTests
         ICaseNumberService CaseNumbers,
         IDiscordWebhookService Discord,
         INotificationService Notifications,
+        IPressReleaseService Press,
         IMemoryCache Cache);
 
     /// <summary>The service with the audit interceptor attached, as in production.</summary>
@@ -80,10 +81,11 @@ public sealed class PublicWantedServiceTests
 
         var discord = Substitute.For<IDiscordWebhookService>();
         var notifications = Substitute.For<INotificationService>();
+        var press = Substitute.For<IPressReleaseService>();
 
         var service = new PublicWantedService(factory, modules, caseNumbers, peopleFiles, publicFiles,
-            notifications, new TipPriorityService(factory), discord, cache);
-        return new Host(service, modules, peopleFiles, publicFiles, caseNumbers, discord, notifications, cache);
+            notifications, new TipPriorityService(factory), discord, press, cache);
+        return new Host(service, modules, peopleFiles, publicFiles, caseNumbers, discord, notifications, press, cache);
     }
 
     /// <summary>Turns a module switch on or off and drops the 10 s module snapshot so the change is visible now.</summary>
@@ -1250,6 +1252,39 @@ public sealed class PublicWantedServiceTests
         Assert.Equal("Max Mustermann", card.DisplayName);
         // and it left the live board in the same snapshot
         Assert.Empty((await host.Service.GetBoardAsync()).Cards);
+    }
+
+    [Fact]
+    public async Task Capturing_LeavesAPressDraftBehind()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        // the card is all the draft may know: it cannot carry a PersonId, the internal case number or a score
+        await host.Press.Received(1).CreateCaptureDraftAsync(
+            Arg.Is<PublicWantedCard>(c => c.CaseNumber == "NOOSE-FA-2026-0001" && c.DisplayName == "Max Mustermann"),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AFailingPressService_DoesNotUndoTheCapture()
+    {
+        // the draft is a convenience; losing it must not leave a caught person on the live board
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        host.Press.CreateCaptureDraftAsync(Arg.Any<PublicWantedCard>(), Arg.Any<ClaimsPrincipal>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("kaputt")));
+        var id = await PublishedAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(PublicWantedStatus.Gefasst,
+            (await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).Status);
     }
 
     [Fact]

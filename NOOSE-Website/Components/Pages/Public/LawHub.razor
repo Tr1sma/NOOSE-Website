@@ -1,0 +1,75 @@
+@page "/recht"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicLawService Laws
+
+<PageTitle>Recht · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Law" Title="Recht">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Gesetzesauszüge</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Die Paragrafen, auf die sich das National Office of Security Enforcement in seiner Arbeit stützt und die
+            zur Veröffentlichung freigegeben sind. Es handelt sich um einen Auszug, nicht um das vollständige
+            Gesetzbuch.
+        </MudText>
+
+        @if (_books.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine Gesetzesauszüge veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            @foreach (var book in _books)
+            {
+                <MudDivider />
+                <MudText Typo="Typo.h5">@book.Name</MudText>
+                <MudStack Spacing="2">
+                    @foreach (var entry in book.Entries)
+                    {
+                        <MudPaper Outlined="true" Class="pa-4">
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                        @entry.Paragraph
+                                    </MudChip>
+                                    <MudText Typo="Typo.subtitle1">@entry.Title</MudText>
+                                </MudStack>
+                                @* plain text, never MarkupString: line breaks are the formatting of a statute *@
+                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@entry.Text</MudText>
+                                @if (entry.Sentence is { Length: > 0 } sentence)
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space: pre-wrap;">
+                                        <b>Strafmaß:</b> @sentence
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicLawBook> _books = Array.Empty<PublicLawBook>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _books = (await Laws.GetPublishedAsync()).Books;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

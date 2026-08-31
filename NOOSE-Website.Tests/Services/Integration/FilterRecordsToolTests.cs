@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Personnel;
@@ -41,7 +41,7 @@ public sealed class FilterRecordsToolTests
             Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>(),
             Substitute.For<IPublicFactionProfileService>());
         return NooseiToolHost.Filter(
-            people: people, factions: factions, laws: new LawService(ctx.Factory), settings: settings);
+            people: people, factions: factions, laws: new LawService(ctx.Factory, Substitute.For<IPublicLawService>()), settings: settings);
     }
 
     /// <summary>Settings that report a fixed wanted-board threshold, so auf_fahndungsliste has a rule to apply.</summary>

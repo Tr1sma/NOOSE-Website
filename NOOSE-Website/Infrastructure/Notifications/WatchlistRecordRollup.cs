@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Requests;
@@ -92,9 +92,12 @@ public static class WatchlistRecordRollup
             case FinancingRequest:
             case FinancingRequestLine:
             case FinancingItem:
-            // the public area's own tables carry no record reference anyone follows: editorial pages, module
-            // switches, a citizen's own account, and the warning value list are configuration, not casework
+            // the public area's own tables carry no record reference anyone follows: editorial pages, press
+            // releases and standing warnings are outward text, module switches, a citizen's own account and the
+            // warning value list are configuration — none of them is casework
             case OeffentlicheSeite:
+            case Pressemitteilung:
+            case OeffentlicheWarnung:
             case OeffentlichesModul:
             case BuergerProfil:
             case Warnhinweis:

@@ -54,7 +54,7 @@ public sealed class PublicWantedItemNoticeTests
         var service = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
             Substitute.For<INotificationService>(), new TipPriorityService(factory),
-            Substitute.For<IDiscordWebhookService>(), cache);
+            Substitute.For<IDiscordWebhookService>(), Substitute.For<IPressReleaseService>(), cache);
         return new Host(service, cache);
     }
 

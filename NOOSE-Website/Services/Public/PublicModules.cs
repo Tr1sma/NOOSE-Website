@@ -1,4 +1,4 @@
-using MudBlazor;
+﻿using MudBlazor;
 using NOOSE_Website.Models.Public;
 
 namespace NOOSE_Website.Services.Public;
@@ -72,13 +72,16 @@ public static class PublicModules
             Icons.Material.Filled.MenuBook, "/info", PublicModuleGroup.Behoerde, 110, false, true,
             "Die Informationsseiten sind derzeit nicht verfügbar."),
         new(Press, "Presse", "Pressemitteilungen der Behörde.",
-            Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, false, OffGeneric),
+            Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, true, OffGeneric),
+        // /berichte, not /lageberichte: that route is internal (the legacy redirect and the leadership-only print page
+        // with the classified aggregates). Because Prefixes collects the nav routes without asking Available, naming it
+        // here declared an internal page indexable
         new(SituationReports, "Lageberichte", "Freigegebene Auszüge der Monatsberichte.",
-            Icons.Material.Filled.Assessment, "/lageberichte", PublicModuleGroup.Behoerde, 130, false, false, OffGeneric),
-        new(Warnings, "Warnungen", "Öffentliche Warnhinweise mit Gültigkeitsdatum.",
-            Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, false, OffGeneric),
+            Icons.Material.Filled.Assessment, "/berichte", PublicModuleGroup.Behoerde, 130, false, false, OffGeneric),
+        new(Warnings, "Warnungen", "Amtliche Warnungen mit Gültigkeitsdatum.",
+            Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, true, OffGeneric),
         new(Law, "Recht", "Öffentlich freigegebene Gesetzesauszüge.",
-            Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, false, OffGeneric),
+            Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, true, OffGeneric),
         new(HazardLevel, "Lage", "Gefahrenlage-Ampel mit Einschätzung und Trend.",
             Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, false, OffGeneric),
         new(Statistics, "Zahlen", "Öffentliche Kennzahlen zu Ausschreibungen, Hinweisen und Belohnungen.",

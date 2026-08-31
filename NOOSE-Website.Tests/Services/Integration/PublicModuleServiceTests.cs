@@ -435,17 +435,18 @@ public sealed class PublicModuleServiceTests
     [Fact]
     public async Task NavEntries_ExcludeAModuleWhosePagesDoNotExistYet()
     {
-        // pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not. Press has a nav route and is
-        // still unbuilt — wanted, archive, organisations and the hazard lists all ship and are Available now.
+        // pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not. Taken from the catalog rather
+        // than named: every example gets built sooner or later, and First throws loudly if none is left
+        var unbuilt = PublicModules.All.First(m => !m.Available && !string.IsNullOrWhiteSpace(m.NavRoute)).Key;
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
-        await service.SaveAsync([Input(PublicModules.Press, enabled: true)], Admin());
+        await service.SaveAsync([Input(unbuilt, enabled: true)], Admin());
 
         var entries = await service.NavEntriesAsync();
-        Assert.DoesNotContain(entries, e => e.Key == PublicModules.Press);
+        Assert.DoesNotContain(entries, e => e.Key == unbuilt);
         // the choice itself is stored, so the tab appears by itself once the pages ship
-        Assert.True((await service.GetAsync()).Find(PublicModules.Press)!.IsEnabled);
+        Assert.True((await service.GetAsync()).Find(unbuilt)!.IsEnabled);
     }
 
     [Fact]

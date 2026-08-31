@@ -15,7 +15,7 @@ Allow: /gesucht
 Allow: /gefasst
 Allow: /organisationen
 Allow: /presse
-Allow: /lageberichte
+Allow: /berichte
 Allow: /warnungen
 Allow: /recht
 Allow: /lage

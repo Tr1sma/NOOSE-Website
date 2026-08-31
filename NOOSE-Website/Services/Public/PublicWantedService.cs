@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -28,6 +28,7 @@ public class PublicWantedService(
     INotificationService notifications,
     ITipPriorityService tipPriority,
     IDiscordWebhookService discord,
+    IPressReleaseService press,
     IMemoryCache cache) : IPublicWantedService
 {
     private const string CacheKey = "OeffentlicheFahndungen";
@@ -558,7 +559,7 @@ public class PublicWantedService(
         row.AliasText = CutOrNull(input.AliasText, MaxAliasText);
         row.LastArea = CutOrNull(input.LastArea, MaxLastArea);
         row.VehicleText = CutOrNull(input.VehicleText, MaxVehicleText);
-        row.ExpiresAt = ExpiryFrom(input.ExpiresAt);
+        row.ExpiresAt = PublicExpiry.From(input.ExpiresAt);
 
         // refused rather than quietly nulled: the editor offers no picker for an item notice, so a value here can
         // only come from a manipulated post — and the only photo store in the house holds the owner's mugshots
@@ -598,13 +599,6 @@ public class PublicWantedService(
     }
 
     /// <summary>A date picked in the editor is local midnight; outside it must mean "to the end of that day".</summary>
-    private static DateTime? ExpiryFrom(DateTime? picked) => picked switch
-    {
-        null => null,
-        { Kind: DateTimeKind.Utc } value => value,
-        { } value => DateTime.SpecifyKind(value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Local).ToUniversalTime(),
-    };
-
     public async Task<PublicWantedPublishOutcome> PublishAsync(string id, string? justification, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
@@ -705,7 +699,13 @@ public class PublicWantedService(
 
         row.Status = PublicWantedStatus.Gefasst;
         row.CapturedAt = DateTime.UtcNow;
+        var card = new PublicWantedCard(row.CaseNumber!, row.Kind, row.DisplayName, row.AliasText,
+            row.PhotoFileName != null, row.PublicHazardLevel, row.PublishedAt, NoHints);
         await SaveAndInvalidateAsync(db, cancellationToken);
+
+        // after the commit, and never fatal: a press draft is a convenience, and losing it must not undo the capture.
+        // The card is all the draft may know — it cannot carry a PersonId, the internal case number or a score
+        try { await press.CreateCaptureDraftAsync(card, actor, cancellationToken); } catch { /* best effort */ }
     }
 
     public async Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -931,7 +931,7 @@ public class PublicWantedService(
 
     public async Task<int> ExpireDueAsync(CancellationToken cancellationToken = default)
     {
-        // UtcNow, never Now: ExpiryFrom stores the end of the chosen local day converted to UTC, and MySQL datetime
+        // UtcNow, never Now: PublicExpiry stores the end of the chosen local day converted to UTC, and MySQL datetime
         // carries no offset that would catch the mistake
         var now = DateTime.UtcNow;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

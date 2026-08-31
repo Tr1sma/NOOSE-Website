@@ -1,0 +1,72 @@
+@page "/presse/{CaseNumber}"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPressReleaseService Press
+
+<PageTitle>@(_view?.Title ?? "Pressemitteilung") · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Press" Title="Presse">
+<MudPaper Elevation="4" Class="pa-8">
+    @if (_view is null)
+    {
+        @* /presse is indexable and this route answers for any case number someone invents; keep the misses out *@
+        <HeadContent>
+            <meta name="robots" content="noindex, nofollow" />
+        </HeadContent>
+        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6">Pressemitteilung nicht gefunden</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Diese Mitteilung ist nicht veröffentlicht oder wurde zurückgezogen.
+            </MudText>
+            <MudButton Href="/presse" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Feed">Zur Übersicht</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Spacing="4">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                    @_view.CaseNumber
+                </MudChip>
+                @if (_view.PublishedAt is { } at)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @at.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                }
+            </MudStack>
+            <MudText Typo="Typo.h4">@_view.Title</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">@_view.Teaser</MudText>
+            <MudDivider />
+            @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+            <div class="dokument-html">@((MarkupString)_view.Html)</div>
+            <MudDivider />
+            <MudButton Href="/presse" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">Alle Pressemitteilungen</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    // bound as a string, like every public query and route value: Blazor answers a value it cannot parse with a 500
+    [Parameter] public string? CaseNumber { get; set; }
+
+    private PublicPressView? _view;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _view = await Press.GetByCaseNumberAsync(CaseNumber);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

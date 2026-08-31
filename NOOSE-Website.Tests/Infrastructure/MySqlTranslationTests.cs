@@ -1,8 +1,9 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Public;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Infrastructure;
@@ -622,6 +623,98 @@ public sealed class MySqlTranslationTests : IDisposable
             .ToQueryString();
         Assert.True(Occurrences(filtered, "IstGeloescht") > Occurrences(daily, "IstGeloescht"),
             "IgnoreQueryFilters muss den Soft-Delete-Filter aus dem WHERE nehmen.");
+    }
+
+    [Fact]
+    public void ThePressHubProjection_TranslatesWithItsLimitAndNullFilter()
+    {
+        // the public hub reads a capped, ordered projection over a nullable case number; the filter is what makes
+        // the dictionary key non-null rather than an assumption about it
+        var sql = _db.Pressemitteilungen
+            .AsNoTracking()
+            .Where(x => x.Status == PressReleaseStatus.Veroeffentlicht && x.CaseNumber != null)
+            .OrderByDescending(x => x.PublishedAt)
+            .Take(50)
+            .Select(x => new { x.CaseNumber, x.ContentTitle, x.ContentTeaser, x.ContentHtml, x.PublishedAt })
+            .ToQueryString();
+
+        Assert.Contains("Aktenzeichen", sql, StringComparison.Ordinal);
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+        Assert.Contains("IS NOT NULL", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThePressPanelProjection_TranslatesTheDraftComparisonAndThePublisherName()
+    {
+        // the panel compares three snapshot columns against their working copies and reaches the publisher over an
+        // optional navigation
+        var sql = _db.Pressemitteilungen
+            .AsNoTracking()
+            .OrderByDescending(x => x.PublishedAt ?? x.CreatedAt)
+            .Select(x => new
+            {
+                x.Id,
+                Differs = (x.DraftHtml ?? string.Empty) != (x.ContentHtml ?? string.Empty)
+                    || x.Title != (x.ContentTitle ?? string.Empty)
+                    || x.Teaser != (x.ContentTeaser ?? string.Empty),
+                Publisher = x.PublishedBy!.Codename,
+            })
+            .ToQueryString();
+
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("EntwurfHtml", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheWarningHubQuery_TranslatesIncludingItsExpiryFilter()
+    {
+        var now = new DateTime(2026, 8, 31, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.OeffentlicheWarnungen
+            .AsNoTracking()
+            .Where(w => w.Status == PublicWarningStatus.Veroeffentlicht && (w.ValidUntil == null || w.ValidUntil > now))
+            .OrderByDescending(w => w.PublishedAt)
+            .Take(20)
+            .Select(w => new { Title = w.ContentTitle ?? string.Empty, Html = w.ContentHtml ?? string.Empty, w.ValidUntil, w.PublishedAt })
+            .ToQueryString();
+
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+        Assert.Contains("GueltigBis", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheWarningPanelQuery_TranslatesIncludingTheExpiredFlagAndTheOptionalPublisher()
+    {
+        var now = new DateTime(2026, 8, 31, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.OeffentlicheWarnungen
+            .AsNoTracking()
+            .OrderByDescending(w => w.PublishedAt ?? w.CreatedAt)
+            .Select(w => new
+            {
+                w.Id,
+                Differs = (w.DraftHtml ?? string.Empty) != (w.ContentHtml ?? string.Empty)
+                    || w.Title != (w.ContentTitle ?? string.Empty),
+                Expired = w.ValidUntil != null && w.ValidUntil <= now,
+                Publisher = w.PublishedBy!.Codename,
+            })
+            .ToQueryString();
+
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("EntwurfHtml", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThePublicLawQuery_TranslatesIncludingItsProjectionIntoARecord()
+    {
+        // the projection constructs a record inside the query, which is the shape the grouping read path depends on
+        var sql = _db.Laws
+            .AsNoTracking()
+            .Where(l => l.IsPublic)
+            .OrderBy(l => l.LawBook).ThenBy(l => l.Paragraph).ThenBy(l => l.Title)
+            .Select(l => new { l.LawBook, Entry = new PublicLawEntry(l.Paragraph, l.Title, l.Text, l.Sentence) })
+            .ToQueryString();
+
+        Assert.Contains("IstOeffentlich", sql, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY", sql, StringComparison.Ordinal);
     }
 
     private static int Occurrences(string text, string needle)

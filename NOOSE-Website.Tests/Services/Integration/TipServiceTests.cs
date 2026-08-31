@@ -74,7 +74,8 @@ public sealed class TipServiceTests
         var tipPriority = new TipPriorityService(factory);
         var wanted = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
-            Substitute.For<INotificationService>(), tipPriority, Substitute.For<IDiscordWebhookService>(), cache);
+            Substitute.For<INotificationService>(), tipPriority, Substitute.For<IDiscordWebhookService>(),
+            Substitute.For<IPressReleaseService>(), cache);
 
         var storage = Substitute.For<ITipAttachmentStorageService>();
         storage.IsAllowedType(Arg.Any<string>()).Returns(ci => ci.ArgAt<string>(0).StartsWith("image/"));

@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services;
+﻿namespace NOOSE_Website.Services;
 
 /// <summary>German labels and deep-links for audit entity type names (CLR type names).</summary>
 public static class AuditEntityDisplay
@@ -38,6 +38,8 @@ public static class AuditEntityDisplay
         "BuergerProfil" => "Bürgerkonto",
         "OeffentlichesModul" => "Öffentliches Modul",
         "OeffentlicheSeite" => "Öffentliche Seite",
+        "Pressemitteilung" => "Pressemitteilung",
+        "OeffentlicheWarnung" => "Öffentliche Warnung",
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "Warnhinweis" => "Warnhinweis",
         "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
@@ -83,6 +85,8 @@ public static class AuditEntityDisplay
         "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
         "PublicArea" => "/einstellungen?tab=oeffentliche-module",
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
+        "Pressemitteilung" => "/einstellungen?tab=presse",
+        "OeffentlicheWarnung" => "/einstellungen?tab=warnungen",
         "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
         "Warnhinweis" => "/einstellungen?tab=warnhinweise",
         // the share has no page of its own; it is managed at the notice, which is managed here

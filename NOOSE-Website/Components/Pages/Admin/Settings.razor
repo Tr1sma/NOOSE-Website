@@ -1,4 +1,4 @@
-@page "/einstellungen"
+﻿@page "/einstellungen"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
 @using NOOSE_Website.Navigation
 @inject NavigationManager Nav
@@ -126,6 +126,21 @@
     <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-seiten" Label="Öffentliche Seiten"
                    Icon="@Icons.Material.Filled.MenuBook">
         <PublicPagesPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="presse" Label="Pressemitteilungen"
+                   Icon="@Icons.Material.Filled.Feed">
+        <PressPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="warnungen" Label="Öffentliche Warnungen"
+                   Icon="@Icons.Material.Filled.Campaign">
+        <PublicWarningsPanel />
+    </RecordSection>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="recht" Label="Gesetzesauszüge"
+                   Icon="@Icons.Material.Filled.Gavel">
+        <PublicLawPanel />
     </RecordSection>
 
     <RecordSection Group="Öffentlicher Bereich" Slug="warnhinweise" Label="Warnhinweise"

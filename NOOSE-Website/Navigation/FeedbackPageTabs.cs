@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Navigation;
+﻿namespace NOOSE_Website.Navigation;
 
 /// <summary>One selectable tab of a merged hub page.</summary>
 public sealed record FeedbackTab(string Slug, string Label);
@@ -31,6 +31,9 @@ public static class FeedbackPageTabs
         new("partner", "Sichtbarkeit & Freigaben"),
         new("oeffentliche-module", "Module & Not-Aus"),
         new("oeffentliche-seiten", "Öffentliche Seiten"),
+        new("presse", "Pressemitteilungen"),
+        new("warnungen", "Öffentliche Warnungen"),
+        new("recht", "Gesetzesauszüge"),
         new("warnhinweise", "Warnhinweise"),
         new("oeffentliche-vorlagen", "Öffentliche Vorlagen"),
         new("buerger", "Bürgerkonten"),

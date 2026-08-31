@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Reflection;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
@@ -44,6 +44,17 @@ public class PublicWantedModelTests
         // the organisation hub and both hazard rankings render these
         typeof(PublicFactionCard),
         typeof(PublicFactionBoard),
+        // the press hub and one release
+        typeof(PublicPressCard),
+        typeof(PublicPressView),
+        typeof(PublicPressSnapshot),
+        // the warning hub renders the whole body on the card; there is no page of its own
+        typeof(PublicWarningCard),
+        typeof(PublicWarningSnapshot),
+        // the law page: the statute itself, grouped by book
+        typeof(PublicLawEntry),
+        typeof(PublicLawBook),
+        typeof(PublicLawSnapshot),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -61,6 +72,14 @@ public class PublicWantedModelTests
         [typeof(ObjectionDetail)] = "Ein Einspruch in der Bearbeitung; trägt Zeilen-Ids und den Sperrstatus des Kontos.",
         [typeof(ObjectionCounts)] = "Zähler der beiden Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
         [typeof(ObjectionInput)] = "Formulareingabe des Bürgers; wandert nach innen, nicht nach außen.",
+        [typeof(PressEdit)] = "Zeile des Presse-Panels; nennt den veröffentlichenden Agenten und den Discord-Stempel.",
+        [typeof(PressDraft)] = "Der unveröffentlichte Entwurf einer Mitteilung; anonym gibt es ihn nicht.",
+        [typeof(PressInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(WarningEdit)] = "Zeile des Warnungs-Panels; nennt den veröffentlichenden Agenten und den "
+            + "Abgelaufen-Zustand einer Zeile, die draußen gar nicht mehr steht.",
+        [typeof(WarningDraft)] = "Der unveröffentlichte Entwurf einer Warnung; anonym gibt es ihn nicht.",
+        [typeof(WarningInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(LawReleaseRow)] = "Zeile des Freigabe-Panels; sie nennt auch die Paragrafen, die drinnen bleiben.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
         [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",

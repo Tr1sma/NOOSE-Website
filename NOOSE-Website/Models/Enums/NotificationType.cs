@@ -91,6 +91,9 @@ public enum NotificationType
 
     /// <summary>The agency decided an objection. Not routable for the same reason; it is addressed to one citizen.</summary>
     PublicObjectionDecided = 28,
+
+    /// <summary>A press release went public. Routable — an official statement naming no citizen belongs in the channel.</summary>
+    PublicPressPublished = 29,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -127,6 +130,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicTicketAnswered => "Antwort zu deinem Ticket",
         NotificationType.PublicObjectionReceived => "Einspruch gegen eine Ausschreibung",
         NotificationType.PublicObjectionDecided => "Entscheidung zu deinem Einspruch",
+        NotificationType.PublicPressPublished => "Pressemitteilung",
         _ => "Benachrichtigung",
     };
 
@@ -162,6 +166,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicTicketAnswered => Icons.Material.Filled.MarkChatUnread,
         NotificationType.PublicObjectionReceived => Icons.Material.Filled.Balance,
         NotificationType.PublicObjectionDecided => Icons.Material.Filled.Gavel,
+        NotificationType.PublicPressPublished => Icons.Material.Filled.Feed,
         _ => Icons.Material.Filled.Notifications,
     };
 }

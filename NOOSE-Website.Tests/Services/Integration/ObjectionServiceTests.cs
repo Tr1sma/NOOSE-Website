@@ -73,7 +73,7 @@ public sealed class ObjectionServiceTests
             Substitute.For<NOOSE_Website.Infrastructure.Storage.IFileStorageService>(),
             Substitute.For<NOOSE_Website.Infrastructure.Storage.IPublicWantedPhotoStorageService>(),
             Substitute.For<INotificationService>(), new TipPriorityService(factory),
-            Substitute.For<IDiscordWebhookService>(), cache);
+            Substitute.For<IDiscordWebhookService>(), Substitute.For<IPressReleaseService>(), cache);
 
         var notifications = Substitute.For<INotificationService>();
         var cases = Substitute.For<ICaseService>();

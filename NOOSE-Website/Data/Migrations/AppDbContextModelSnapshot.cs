@@ -1827,6 +1827,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
 
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstOeffentlich");
+
                     b.Property<string>("LawBook")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1863,6 +1867,8 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnName("Titel");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IsPublic");
 
                     b.HasIndex("LawBook");
 
@@ -7459,6 +7465,84 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("OeffentlicheVorlagen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.OeffentlicheWarnung", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ContentHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("InhaltHtml");
+
+                    b.Property<string>("ContentTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("InhaltTitel");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("DraftHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("EntwurfHtml");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("VeroeffentlichtAm");
+
+                    b.Property<string>("PublishedById")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("VeroeffentlichtVonId");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int")
+                        .HasColumnName("Status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.Property<DateTime?>("ValidUntil")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GueltigBis");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublishedById");
+
+                    b.HasIndex("Status", "ValidUntil");
+
+                    b.ToTable("OeffentlicheWarnungen");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.OeffentlichesFraktionsprofil", b =>
                 {
                     b.Property<string>("Id")
@@ -7603,6 +7687,103 @@ namespace NOOSE_Website.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("OeffentlicheModule");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.Pressemitteilung", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CaseNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("Aktenzeichen");
+
+                    b.Property<string>("ContentHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("InhaltHtml");
+
+                    b.Property<string>("ContentTeaser")
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("InhaltTeaser");
+
+                    b.Property<string>("ContentTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("InhaltTitel");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<DateTime?>("DiscordPushedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("DiscordGepushtAm");
+
+                    b.Property<string>("DraftHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("EntwurfHtml");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("VeroeffentlichtAm");
+
+                    b.Property<string>("PublishedById")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("VeroeffentlichtVonId");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int")
+                        .HasColumnName("Status");
+
+                    b.Property<string>("Teaser")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("Teaser");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseNumber")
+                        .IsUnique();
+
+                    b.HasIndex("PublishedById");
+
+                    b.HasIndex("Status", "PublishedAt");
+
+                    b.ToTable("Pressemitteilungen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.Ticket", b =>
@@ -10035,6 +10216,16 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("PublishedBy");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.OeffentlicheWarnung", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "PublishedBy")
+                        .WithMany()
+                        .HasForeignKey("PublishedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("PublishedBy");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.OeffentlichesFraktionsprofil", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Factions.Faction", "Faction")
@@ -10049,6 +10240,16 @@ namespace NOOSE_Website.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Faction");
+
+                    b.Navigation("PublishedBy");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Public.Pressemitteilung", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "PublishedBy")
+                        .WithMany()
+                        .HasForeignKey("PublishedById")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("PublishedBy");
                 });

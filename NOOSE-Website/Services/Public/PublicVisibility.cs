@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services.Public;
+﻿namespace NOOSE_Website.Services.Public;
 
 /// <summary>The single truth about what may leave the house — the public counterpart to <see cref="Visibility"/>.</summary>
 /// <remarks>
@@ -31,6 +31,14 @@ public static class PublicVisibility
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
+            ["Pressemitteilung"] = "Öffentliches Aktenzeichen, Titel, Teaser und der veröffentlichte Inhalt einer "
+                + "amtlichen Verlautbarung. Der Entwurf, der veröffentlichende Agent und der Discord-Stempel bleiben "
+                + "drinnen; einen Aktenbezug hat die Zeile nicht.",
+            ["OeffentlicheWarnung"] = "Titel, Text und Gültigkeitsdatum einer amtlichen Warnung. Der Entwurf und "
+                + "der veröffentlichende Agent bleiben drinnen; einen Aktenbezug hat die Zeile nicht.",
+            ["Law"] = "Gesetzbuch, Paragraf, Titel, Text und Strafmaß eines ausdrücklich freigegebenen "
+                + "Paragrafen. Standardmäßig bleibt jeder Paragraf drinnen; die Freigabe ist eine eigene "
+                + "Entscheidung je Zeile, und wer sie getroffen hat, steht nicht auf der öffentlichen Seite.",
             ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
                 + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
                 + "beim Publizieren festgehaltene Gefahrenstufe, eine Kopie des Fotos und — im Archiv — das "
@@ -127,7 +135,6 @@ public static class PublicVisibility
             ["LibraryFile"] = "Anhang der Bibliothek; nach außen nie.",
             ["DocumentAccessExclusion"] = Assignment,
             ["PartnerShare"] = "Freigabe an eine Partnerbehörde; das ist ein eigener Kanal, nicht die Öffentlichkeit.",
-            ["Law"] = "Gesetzestext, standardmäßig intern; nach außen geht nur ein ausdrücklich freigegebener Auszug.",
 
             // --- personnel ---
             ["AgentRankHistory"] = Personnel,

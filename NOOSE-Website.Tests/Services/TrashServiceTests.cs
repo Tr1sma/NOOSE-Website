@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NSubstitute;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.People;
@@ -38,7 +38,9 @@ public class TrashServiceTests
         Substitute.For<IPublicFactionProfileService>(),
         Substitute.For<ITipService>(),
         Substitute.For<ITicketService>(),
-        Substitute.For<IObjectionService>());
+        Substitute.For<IObjectionService>(),
+        Substitute.For<IPressReleaseService>(),
+        Substitute.For<IPublicWarningService>());
 
     [Fact]
     public void Kind_keys_are_unique()

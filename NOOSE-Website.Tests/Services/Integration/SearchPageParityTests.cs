@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
@@ -151,7 +151,7 @@ public class SearchPageParityTests
                 return (await new DocumentService(ctx.Factory).GetListAsync(docScope)).Select(x => x.Id).ToList();
 
             case nameof(Law):
-                return (await new LawService(ctx.Factory).GetListAsync()).Select(x => x.Id).ToList();
+                return (await new LawService(ctx.Factory, Substitute.For<IPublicLawService>()).GetListAsync()).Select(x => x.Id).ToList();
 
             case nameof(LibraryFile):
                 var library = new LibraryService(ctx.Factory, Substitute.For<ILibraryStorageService>());

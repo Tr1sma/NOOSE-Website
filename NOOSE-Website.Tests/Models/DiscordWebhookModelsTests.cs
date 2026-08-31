@@ -23,6 +23,7 @@ public class DiscordWebhookModelsTests
         NotificationType.PersonnelEntry,
         NotificationType.PublicWantedPublished,
         NotificationType.PublicWantedBountyRaised,
+        NotificationType.PublicPressPublished,
     };
 
     // Enum members NOT in the routable list.
@@ -252,6 +253,7 @@ public class DiscordWebhookModelsTests
             NotificationType.MeetingReminder,
             NotificationType.PublicWantedPublished,
             NotificationType.PublicWantedBountyRaised,
+            NotificationType.PublicPressPublished,
         };
 
         Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);

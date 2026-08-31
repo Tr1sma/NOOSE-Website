@@ -321,6 +321,7 @@ public class DiscordWebhookService(
         // the one outward category: its fallback must stay outside, or a generic push would post an internal
         // destination into the public channel
         NotificationType.PublicWantedPublished => "/gesucht",
+        NotificationType.PublicPressPublished => "/presse",
         _ => "/dashboard",
     };
 
@@ -337,6 +338,7 @@ public class DiscordWebhookService(
         NotificationType.MeetingReminder => "⏰ Eine Besprechung beginnt bald.",
         NotificationType.PersonnelEntry => "📝 Neuer Personalakten-Eintrag.",
         NotificationType.PublicWantedPublished => "🔎 Neue öffentliche Fahndung.",
+        NotificationType.PublicPressPublished => "📰 Neue Pressemitteilung.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

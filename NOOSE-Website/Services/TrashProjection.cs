@@ -1,4 +1,4 @@
-using NOOSE_Website.Data.Entities.Abductions;
+﻿using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Appointments;
@@ -95,6 +95,16 @@ public static class TrashProjection
     public static TrashItem PublicPage(OeffentlicheSeite x)
         => new("oeffentliche-seiten", x.Id, null, x.Title,
             Join($"/info/{x.Slug}", PublicPageStatusDisplay.Name(x.Status)), x.DeletedAt);
+
+    // never the body: the trash page is a list, and the markup may carry images
+    public static TrashItem PressRelease(Pressemitteilung x)
+        => new("pressemitteilungen", x.Id, x.CaseNumber, x.Title,
+            PressReleaseStatusDisplay.Name(x.Status), x.DeletedAt);
+
+    // never the body: it may carry images, and the trash page is a list
+    public static TrashItem PublicWarning(OeffentlicheWarnung x)
+        => new("oeffentliche-warnungen", x.Id, null, x.Title,
+            PublicWarningStatusDisplay.Name(x.Status), x.DeletedAt);
 
     // never the accusation text: the trash page is a list, and the snapshot's markup belongs to the editor
     public static TrashItem PublicWanted(OeffentlicheFahndung x)
