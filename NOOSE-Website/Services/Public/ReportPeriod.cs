@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -10,13 +10,21 @@ namespace NOOSE_Website.Services.Public;
 /// </remarks>
 public static class ReportPeriod
 {
+    private static readonly CultureInfo German = CultureInfo.GetCultureInfo("de-DE");
+
     /// <summary>The address form: 2026-08.</summary>
     public static string Format(int year, int month) => $"{year:D4}-{month:D2}";
 
-    /// <summary>The reading form: August 2026, in the app's fixed de-DE culture.</summary>
+    /// <summary>The reading form: August 2026.</summary>
+    /// <remarks>
+    /// de-DE is pinned rather than taken from CurrentCulture, the way every other month label in the house does it
+    /// (FinancingPeriod, StatisticsService, AttendanceStatisticsService): the UI is German whatever the machine says,
+    /// and a host with another locale would otherwise render "March 2026" into a German page without anything going
+    /// red — "August" reads the same in both languages, so a test could not tell the difference either.
+    /// </remarks>
     public static string Label(int year, int month)
         => month is >= 1 and <= 12
-            ? $"{CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month)} {year}"
+            ? $"{German.DateTimeFormat.GetMonthName(month)} {year}"
             : Format(year, month);
 
     public static bool TryParse(string? value, out int year, out int month)

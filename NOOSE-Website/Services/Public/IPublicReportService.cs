@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Public;
 
@@ -6,8 +6,9 @@ namespace NOOSE_Website.Services.Public;
 
 /// <summary>The released monthly situation reports: draft, publish, retract.</summary>
 /// <remarks>
-/// The public text of a month, not its figures. <see cref="ISituationReportService"/> keeps the internal snapshot and
-/// is read here for the anchor picker only.
+/// The public text of a month, not its figures. The internal monthly snapshot stays with
+/// <c>ISituationReportService</c>; this service never takes that dependency, because the public pages inject it and
+/// would otherwise build the whole statistics stack into an anonymous visitor's object graph.
 /// </remarks>
 public interface IPublicReportService
 {

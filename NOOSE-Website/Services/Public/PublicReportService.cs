@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Authorization;
@@ -6,7 +6,6 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
-using NOOSE_Website.Services.Statistics;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -14,7 +13,6 @@ namespace NOOSE_Website.Services.Public;
 public class PublicReportService(
     IDbContextFactory<AppDbContext> dbFactory,
     IPublicModuleService modules,
-    ISituationReportService situationReports,
     IMemoryCache cache) : IPublicReportService
 {
     private const string CacheKey = "OeffentlicheLageberichte";
@@ -78,23 +76,19 @@ public class PublicReportService(
     {
         Permission.RequireClassifiedRead(actor);
 
-        // through the internal service, not db.SituationReports: this is the panel picker, not a public read path,
-        // and the archive is that service's own question to answer
-        var archive = await situationReports.GetArchiveAsync(cancellationToken);
-
+        // read straight off the table rather than through ISituationReportService, and not for convenience: the public
+        // pages inject this service, so taking that dependency would build the whole internal statistics stack
+        // (statistics, funding statistics, notifications) into an anonymous visitor's object graph. Four columns are
+        // all a picker needs, and GetArchiveAsync additionally resolves a codename per report for nobody's benefit.
+        // NewForAnchorAsync reads the same table the same way, so the two also stay consistent.
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var taken = await db.OeffentlicheLageberichte
+        return await db.SituationReports
             .AsNoTracking()
-            .Where(r => r.SituationReportId != null)
-            .Select(r => r.SituationReportId!)
+            // a month whose public text was deleted is free again, so only living rows count as taken
+            .Where(l => !db.OeffentlicheLageberichte.Any(r => r.SituationReportId == l.Id))
+            .OrderByDescending(l => l.Year).ThenByDescending(l => l.Month)
+            .Select(l => new PublicReportAnchor(l.Id, l.Year, l.Month, l.Title))
             .ToListAsync(cancellationToken);
-
-        var used = taken.ToHashSet(StringComparer.Ordinal);
-        // GeneratedBy is dropped here: the head names the agent who ran the report, and a picker has no use for that
-        return archive
-            .Where(a => !used.Contains(a.Id))
-            .Select(a => new PublicReportAnchor(a.Id, a.Year, a.Month, a.Title))
-            .ToList();
     }
 
     public async Task<PublicReportDraft?> GetDraftAsync(string id, ClaimsPrincipal actor,

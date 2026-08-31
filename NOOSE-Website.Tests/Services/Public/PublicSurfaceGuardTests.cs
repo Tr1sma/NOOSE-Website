@@ -282,6 +282,56 @@ public class PublicSurfaceGuardTests
             "Der öffentliche Pfad nutzt ausschließlich PublicTemplateRenderer: " + string.Join(", ", offenders));
     }
 
+    /// <summary>Internal stacks that must never hang off a service an anonymous page constructs.</summary>
+    /// <remarks>
+    /// Not about reading, about the object graph: a public page injects its service, so every constructor parameter of
+    /// that service is built for an anonymous visitor. PublicReportService took ISituationReportService for its anchor
+    /// picker once, which pulled statistics, funding statistics and notifications onto /berichte — and the marker list
+    /// in PublicPageScanTests, which keeps that name off the pages themselves, could not see it one layer down.
+    /// </remarks>
+    private static readonly string[] InternalStacks =
+    [
+        "ISituationReportService", "IStatisticsService", "IFinancingStatisticsService",
+    ];
+
+    [Fact]
+    public void NoServiceInjectedByAPublicPage_PullsInAnInternalStack()
+    {
+        var root = ProjectRoot();
+        var pages = Path.Combine(root, "Components", "Pages", "Public");
+        Assert.True(Directory.Exists(pages), $"Öffentliche Seiten nicht gefunden: {pages}");
+
+        // resolved by the house convention IFooService -> FooService.cs; a service the pages inject but that cannot be
+        // resolved is reported rather than skipped, so a renamed file does not quietly empty this scan
+        var injected = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .SelectMany(f => Regex.Matches(WithoutComments(File.ReadAllText(f)), @"@inject\s+(I[A-Za-z]+Service)\b")
+                .Select(m => m.Groups[1].Value))
+            .Distinct(StringComparer.Ordinal)
+            .Order()
+            .ToArray();
+        Assert.NotEmpty(injected);
+
+        var offenders = new List<string>();
+        foreach (var name in injected)
+        {
+            var file = Directory.EnumerateFiles(Path.Combine(root, "Services"), name[1..] + ".cs",
+                SearchOption.AllDirectories).FirstOrDefault();
+            if (file is null)
+            {
+                offenders.Add($"{name}: Implementierung nicht gefunden");
+                continue;
+            }
+            var code = WithoutComments(File.ReadAllText(file));
+            offenders.AddRange(InternalStacks
+                .Where(stack => Regex.IsMatch(code, $@"\b{stack}\b"))
+                .Select(stack => $"{Path.GetFileName(file)}: {stack}"));
+        }
+
+        Assert.True(offenders.Count == 0,
+            "Ein Dienst, den eine anonyme Seite injiziert, zieht keinen internen Stack in seinen Objektgraphen: "
+            + string.Join(", ", offenders.Order()));
+    }
+
     /// <summary>Strips comments: the rule is about code, and prose has to be allowed to name what it rules out.</summary>
     /// <remarks>
     /// Otherwise the next reader deletes the sentence explaining why the recruiting renderer is not reused, just to

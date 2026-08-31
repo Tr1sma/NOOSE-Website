@@ -740,6 +740,22 @@ public sealed class MySqlTranslationTests : IDisposable
     }
 
     [Fact]
+    public void TheReportAnchorQuery_TranslatesItsNotExistsSubquery()
+    {
+        // reads the internal archive minus the months that already have a public text; SQLite takes the shape, and
+        // "could not be translated" would only show up on the settings page against MySQL
+        var sql = _db.SituationReports
+            .AsNoTracking()
+            .Where(l => !_db.OeffentlicheLageberichte.Any(r => r.SituationReportId == l.Id))
+            .OrderByDescending(l => l.Year).ThenByDescending(l => l.Month)
+            .Select(l => new PublicReportAnchor(l.Id, l.Year, l.Month, l.Title))
+            .ToQueryString();
+
+        Assert.Contains("Lageberichte", sql, StringComparison.Ordinal);
+        Assert.Contains("EXISTS", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TheReportTrashQuery_TranslatesWithoutTheSoftDeleteFilter()
     {
         var sql = _db.OeffentlicheLageberichte

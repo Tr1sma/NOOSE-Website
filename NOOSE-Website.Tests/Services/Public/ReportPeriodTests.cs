@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Public;
@@ -19,9 +20,29 @@ public class ReportPeriodTests
         Assert.Equal(8, month);
     }
 
+    [Theory]
+    [InlineData(3, "März 2026")]
+    [InlineData(10, "Oktober 2026")]
+    [InlineData(12, "Dezember 2026")]
+    public void Label_IsGermanWhateverTheHostLocaleSays(int month, string expected)
+        // deliberately months whose names differ from English: "August 2026" would pass under en-US too and prove
+        // nothing about the pinned culture
+        => Assert.Equal(expected, ReportPeriod.Label(2026, month));
+
     [Fact]
-    public void Label_ReadsAsAMonth()
-        => Assert.Equal("August 2026", ReportPeriod.Label(2026, 8));
+    public void Label_StaysGerman_EvenWithAnEnglishCurrentCulture()
+    {
+        var before = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal("März 2026", ReportPeriod.Label(2026, 3));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = before;
+        }
+    }
 
     [Theory]
     [InlineData(null)]

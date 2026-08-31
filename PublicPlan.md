@@ -1905,12 +1905,17 @@ ein von der Führung geschriebener Text; die `LageberichtId` ist Anker und Herku
    Dritte Schicht: `PublicPageScanTests.InternalMarkers` bekommt `SnapshotJson`, `StatisticsReport`,
    `DashboardMetrics`, `StatisticsTopEntry`, `SituationReportDisplay` und `ISituationReportService` — dieselbe
    Mechanik, die `ThreatScore` seit Phase 12 hält.
-7. **Der Anker-Picker liest über `ISituationReportService`, und das ist kein Bruch von Leitsatz 3.** Der
-   Leitsatz verbietet einem *öffentlichen* Lesepfad, über einen internen Listendienst zu lesen; dies ist der
-   interne Picker des Panels, und das Archiv ist die Frage dieses Dienstes. Projiziert wird auf
-   `Id/Jahr/Monat/Titel` — `SituationReportHead.GeneratedBy` nennt einen Agenten und hat in einer Auswahlliste
-   nichts zu suchen. Angeboten werden nur Monate ohne lebenden Text. Kein DI-Zyklus: `SituationReportService`
-   kennt den öffentlichen Dienst nicht.
+7. **Der Anker-Picker liest die Tabelle selbst — `ISituationReportService` wäre ein Objektgraph-Leck.** Erst
+   nahm `PublicReportService` diesen Dienst für den Picker; da die öffentlichen Seiten den Dienst aber
+   *injizieren*, baute damit jeder anonyme Seitenaufruf den ganzen internen Statistik-Stack mit auf
+   (`IStatisticsService`, `IFinancingStatisticsService`, `INotificationService`). Der Marker-Scan aus Punkt 6
+   hält `ISituationReportService` von den *Seiten* fern und konnte es eine Schicht tiefer nicht sehen. Jetzt
+   liest `GetAnchorsAsync` vier Spalten direkt — wie `NewForAnchorAsync` es ohnehin tat, die beiden sind damit
+   auch konsistent —, und `GetArchiveAsync` löst nebenbei je Bericht einen Codenamen auf, den ein Picker nicht
+   braucht. Neuer Wächter: `PublicSurfaceGuardTests.NoServiceInjectedByAPublicPage_PullsInAnInternalStack`
+   leitet die Dienste aus den `@inject`-Zeilen der öffentlichen Seiten ab, löst `IFooService` → `FooService.cs`
+   auf und **streicht vorher die Kommentare** (Präzedenz `ForeignTokenSystems`: der Satz, der erklärt, warum ein
+   Stack nicht benutzt wird, muss ihn nennen dürfen). Kein DI-Zyklus mehr überhaupt.
 8. **Titel und Rumpf sind mitgeschnappt, das Publikationsdatum wird einmalig geprägt** (14a-Lektion, beide
    Teile): neben einem Publizieren-Knopf darf „Entwurf speichern" nichts ändern, was schon draußen steht,
    und eine Tippfehler-Korrektur darf einen Bericht vom März nicht auf heute umdatieren. Zurückziehen räumt
@@ -1925,12 +1930,17 @@ ein von der Führung geschriebener Text; die `LageberichtId` ist Anker und Herku
     einen strittigen Monats (Phase-3-Lektion vom Seiten-Slug).
 11. **Zurückziehen und Löschen fragen das Modul nie**, Publizieren schon — sonst machte der Not-Aus das
     Zurückziehen unmöglich. Löschen verlangt erst das Zurückziehen, Wiederherstellen kommt als Entwurf.
-12. **`Permission.RequirePublicReportWrite`** = `IsInternalAgent()` → `MayWrite()` → `IsLeadership()`, in
+12. **Der Monatsname ist auf de-DE gepinnt, nicht auf `CurrentCulture`.** So macht es jedes andere
+    Monatslabel im Haus (`FinancingPeriod`, `StatisticsService`, `AttendanceStatisticsService`), und der Grund
+    ist testbarkeitsnah: ein Host mit anderer Locale rendert sonst „March 2026“ in eine deutsche Seite, ohne
+    dass etwas rot wird. `Label`-Tests nehmen deshalb März, Oktober und Dezember — „August 2026“ liest sich in
+    beiden Sprachen gleich und beweist nichts —, plus einen Test, der `CurrentCulture` auf `en-US` stellt.
+13. **`Permission.RequirePublicReportWrite`** = `IsInternalAgent()` → `MayWrite()` → `IsLeadership()`, in
     dieser Reihenfolge und als eigener Guard mit eigener Meldung (Präzedenz `RequireWarningWrite`): ein
     Bürgerkonto trägt gar keinen Rang-Claim, und die Rangprüfung allein ließe Aufsicht und Demo-Principal
     durch. Gelesen wird mit `RequireClassifiedRead` — die Aufsicht muss sehen, was die Behörde öffentlich
     sagt, sie darf es nur nicht sagen.
-13. **Registriert:** `AppDbContext` (DbSet, Fluent, Composite-Index, zwei `Restrict`-FKs), `PublicVisibility`
+14. **Registriert:** `AppDbContext` (DbSet, Fluent, Composite-Index, zwei `Restrict`-FKs), `PublicVisibility`
     (`Publishable`), `SearchCatalog` (`NotSearchable`, Provider mit Phase 16), `AuditEntityDisplay` (Label
     **und** Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` (die Zeile
     nennt Zeitraum, Titel und Status, nie den Rumpf), `MergedPageSections` (`Settings` **und** `Trash`),
@@ -1948,8 +1958,9 @@ Korrigieren behält das Datum, Zurückziehen + erneut publizieren datiert neu ·
 abgelehnt · Wiederherstellen kommt als Entwurf und wird in einen neu belegten Monat abgewiesen · Modul aus
 verdunkelt Hub und Artikel, Zurückziehen geht weiter · gelöschter Monatsbericht: Zeile bleibt in der Liste,
 Text bleibt online · **kein Feld des gefrorenen Snapshots erreicht den öffentlichen Snapshot** · unparsbarer
-Zeitraum · Rechte-Matrix) · `ReportPeriodTests` · `PublicReportCacheDisciplineTests` ·
-`MySqlTranslationTests` +3.
+Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsbericht, ein gelöschter öffentlicher Text gibt den Monat frei) ·
+`ReportPeriodTests` (Monatsname bleibt deutsch, auch mit `en-US` als `CurrentCulture`) ·
+`PublicReportCacheDisciplineTests` · `PublicSurfaceGuardTests` +1 (Objektgraph) · `MySqlTranslationTests` +4.
 
 **Fertig, wenn** ein freigegebener Monatstext auf `/berichte` steht und `/lageberichte/{Id}` weiter intern und
 `noindex` ist. ✅

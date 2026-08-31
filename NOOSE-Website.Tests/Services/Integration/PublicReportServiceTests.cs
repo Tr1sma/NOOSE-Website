@@ -1,8 +1,7 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using NSubstitute;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Common;
@@ -11,10 +10,8 @@ using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
-using NOOSE_Website.Models.Statistics;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Public;
-using NOOSE_Website.Services.Statistics;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -61,22 +58,8 @@ public sealed class PublicReportServiceTests
         var factory = new TestDbContextFactory(options);
         var cache = new MemoryCache(new MemoryCacheOptions());
         var modules = new PublicModuleService(factory, cache);
-
-        // the archive is read live from the database, the way the real service answers it — the double exists only to
-        // keep the statistics stack out of a test about outward text
-        var situationReports = Substitute.For<ISituationReportService>();
-        situationReports.GetArchiveAsync(Arg.Any<CancellationToken>()).Returns(_ => ArchiveAsync(ctx));
-
-        return new Host(new PublicReportService(factory, modules, situationReports, cache), cache, factory);
-    }
-
-    private static async Task<List<SituationReportHead>> ArchiveAsync(SqliteTestContext ctx)
-    {
-        await using var db = ctx.NewContext();
-        return await db.SituationReports
-            .OrderByDescending(l => l.Year).ThenByDescending(l => l.Month)
-            .Select(l => new SituationReportHead(l.Id, l.Year, l.Month, l.Title, l.CreatedAt, "Falcon"))
-            .ToListAsync();
+        // no ISituationReportService: the service must not take that dependency, because the public pages inject it
+        return new Host(new PublicReportService(factory, modules, cache), cache, factory);
     }
 
     private static async Task<SqliteTestContext> SeededAsync(bool reportsOn = true)
@@ -210,6 +193,44 @@ public sealed class PublicReportServiceTests
 
         var anchor = Assert.Single(await host.Service.GetAnchorsAsync(Leader()));
         Assert.Equal("lb-juli", anchor.Id);
+    }
+
+    [Fact]
+    public async Task ThePicker_DoesNotOfferADeletedMonthlyReport()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await SoftDeleteAnchorAsync(ctx, host, "lb-august");
+
+        var anchor = Assert.Single(await host.Service.GetAnchorsAsync(Leader()));
+        Assert.Equal("lb-juli", anchor.Id);
+    }
+
+    [Fact]
+    public async Task ADeletedMonthlyReport_CannotBeAnchoredOn()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await SoftDeleteAnchorAsync(ctx, host, "lb-august");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SaveDraftAsync(Draft(), Leader()));
+    }
+
+    [Fact]
+    public async Task DeletingThePublicText_FreesTheMonthInThePicker()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await host.Service.SaveDraftAsync(Draft(), Leader());
+
+        Assert.DoesNotContain("lb-august", (await host.Service.GetAnchorsAsync(Leader())).Select(a => a.Id));
+
+        await host.Service.DeleteAsync(id, Leader());
+
+        Assert.Contains("lb-august", (await host.Service.GetAnchorsAsync(Leader())).Select(a => a.Id));
     }
 
     // ---- drafts stay inside ----
