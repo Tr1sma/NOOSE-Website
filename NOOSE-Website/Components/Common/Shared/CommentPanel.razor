@@ -40,9 +40,18 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
                             · @e.K.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
+                        @if (e.K.ModifiedAt is not null)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· bearbeitet</MudText>
+                        }
                     </MudStack>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                         <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Comment)" ChildId="@e.K.Id" />
+                        @if (_mayWrite && MayEdit(e.K) && _editingId != e.K.Id)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
+                                           OnClick="@(() => BeginEdit(e.K))" aria-label="Kommentar bearbeiten" />
+                        }
                         @if (_mayWrite && MayDelete(e.K))
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
@@ -50,9 +59,26 @@
                         }
                     </MudStack>
                 </MudStack>
-                <div class="mt-1">
-                    <MentionText Segments="e.Segments" />
-                </div>
+                @if (_editingId == e.K.Id)
+                {
+                    <div class="mt-1">
+                        <MentionInput @bind-Text="_editText" Lines="3" AutoFocus="true"
+                                      Placeholder="@PlaceholderEdit" OnSubmit="SaveEditAsync" />
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-1">
+                            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       OnClick="CancelEdit">Abbrechen</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Check" OnClick="SaveEditAsync"
+                                       Disabled="@(_editSaving || string.IsNullOrWhiteSpace(_editText))">Speichern</MudButton>
+                        </MudStack>
+                    </div>
+                }
+                else
+                {
+                    <div class="mt-1">
+                        <MentionText Segments="e.Segments" />
+                    </div>
+                }
             </MudPaper>
         }
     }
@@ -64,6 +90,7 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private const string Placeholder = "Vermerk hinzufügen … (Verlinken per @, Strg+Enter sendet)";
+    private const string PlaceholderEdit = "Vermerk bearbeiten … (Verlinken per @, Strg+Enter speichert)";
     private bool _load = true;
     private bool _saves;
     private bool _isLeadership;
@@ -72,6 +99,9 @@
     private bool _mayWrite;
     private bool _canShareChildren;
     private string _newText = string.Empty;
+    private string? _editingId;
+    private string _editText = string.Empty;
+    private bool _editSaving;
     private List<Entry> _entries = new();
 
     private sealed record Entry(Comment K, IReadOnlyList<MentionSegment> Segments);
@@ -127,6 +157,43 @@
         }
     }
 
+    private void BeginEdit(Comment comment)
+    {
+        _editingId = comment.Id; // one edit at a time
+        _editText = comment.Text;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editText = string.Empty;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editSaving || _editingId is null || string.IsNullOrWhiteSpace(_editText))
+        {
+            return;
+        }
+        _editSaving = true;
+        try
+        {
+            await CommentService.EditAsync(_editingId, _editText, User);
+            _editingId = null;
+            _editText = string.Empty;
+            Snackbar.Add("Kommentar gespeichert.", Severity.Success);
+            await LoadAsync(); // re-resolves the mentions in the new text
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _editSaving = false;
+        }
+    }
+
     private async Task DeleteAsync(Comment comment)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Kommentar löschen?",
@@ -142,4 +209,8 @@
 
     private bool MayDelete(Comment k)
         => _isLeadership || (k.CreatedById is not null && k.CreatedById == User.GetAgentId());
+
+    // author only: leadership may remove a foreign comment, never restate it
+    private bool MayEdit(Comment k)
+        => k.CreatedById is not null && k.CreatedById == User.GetAgentId();
 }

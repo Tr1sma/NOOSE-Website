@@ -3,6 +3,7 @@
 @inject ISystemSettingService SettingService
 @inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject INavPreferencesService NavPrefs
+@inject IAgentManagementService AgentService
 @inject IDialogService DialogService
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
@@ -49,7 +50,16 @@
                                 @RankRow(auth.User)
                             </MudText>
                         </MudStack>
-                        <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initial(DisplayName(auth.User))</MudAvatar>
+                        @if (_avatarUrl is not null)
+                        {
+                            <MudAvatar Size="Size.Medium">
+                                <MudImage Src="@_avatarUrl" Alt="Mein Profilbild" />
+                            </MudAvatar>
+                        }
+                        else
+                        {
+                            <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initial(DisplayName(auth.User))</MudAvatar>
+                        }
                     </MudLink>
                     <form method="post" action="/Account/Logout">
                         <AntiforgeryToken />
@@ -174,6 +184,7 @@
     private bool _isPartner;
     private bool _isDemo;
     private IReadOnlySet<string>? _allowedPartnerTypes;
+    private string? _avatarUrl;
 
     // re-evaluated each render
     private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri);
@@ -199,6 +210,9 @@
             if (!string.IsNullOrEmpty(_agentId))
             {
                 _drawerOpen = (await NavPrefs.GetAsync(_agentId)).DrawerOpen;
+                // read once per circuit; a fresh picture shows after the next reload
+                try { _avatarUrl = AgentAvatar.Url((await AgentService.FindAsync(_agentId))?.AvatarFileName); }
+                catch { /* best effort */ }
             }
         }
     }

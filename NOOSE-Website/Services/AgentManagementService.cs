@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -20,7 +21,8 @@ public class AgentManagementService(
     IDbContextFactory<AppDbContext> dbFactory,
     INotificationService notifications,
     IDiscordWebhookService discord,
-    IConfiguration configuration) : IAgentManagementService
+    IConfiguration configuration,
+    IAgentAvatarStorageService avatars) : IAgentManagementService
 {
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
@@ -223,6 +225,140 @@ public class AgentManagementService(
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde abgelehnt.", "/profil"); }
         catch { /* best effort */ }
+    }
+
+    public async Task AvatarSetAsync(string agentId, Stream content, string contentType, long sizeBytes,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        // own picture only; leadership moderates through AvatarRemoveAsync, it never uploads for someone else
+        if (agentId != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Ein Profilbild kann nur für das eigene Konto gesetzt werden.");
+        }
+        if (!avatars.IsAllowedType(contentType ?? string.Empty))
+        {
+            throw new InvalidOperationException("Nur Bilddateien (JPG, PNG, WebP, GIF) sind als Profilbild erlaubt.");
+        }
+        if (sizeBytes > avatars.MaxBytes)
+        {
+            throw new InvalidOperationException($"Das Profilbild ist zu groß (max. {avatars.MaxBytes / (1024 * 1024)} MB).");
+        }
+
+        var agent = await GetOrThrow(agentId);
+        var fileName = await avatars.SaveAsync(content, contentType!, cancellationToken);
+
+        string? obsoleteActive = null;
+        string? obsoleteStaged;
+        if (actor.IsLeadership())
+        {
+            // leadership edits its own master data instantly; the picture follows that precedent
+            obsoleteActive = agent.AvatarFileName;
+            AvatarPendingEmpty(agent, out obsoleteStaged);
+            agent.AvatarFileName = fileName;
+            agent.AvatarContentType = contentType;
+            Audit(agent, AuditAction.Modified, actor, "Profilbild gesetzt");
+        }
+        else
+        {
+            obsoleteStaged = agent.PendingAvatarFileName;
+            agent.PendingAvatarFileName = fileName;
+            agent.PendingAvatarContentType = contentType;
+            agent.AvatarRequestedAt = DateTime.UtcNow;
+            Audit(agent, AuditAction.Modified, actor, "Profilbild beantragt");
+        }
+
+        await Save(agent, newStamp: false); // no claim carries the picture, so no forced re-login
+
+        // only after the row committed, or a failed save would leave a dangling reference
+        AvatarFileDelete(obsoleteActive);
+        AvatarFileDelete(obsoleteStaged);
+    }
+
+    public async Task AvatarRemoveAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        if (agentId != actor.GetAgentId() && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException("Fremde Profilbilder darf nur die Führung entfernen.");
+        }
+
+        var agent = await GetOrThrow(agentId);
+        var active = agent.AvatarFileName;
+        agent.AvatarFileName = null;
+        agent.AvatarContentType = null;
+        AvatarPendingEmpty(agent, out var staged);
+
+        Audit(agent, AuditAction.Modified, actor, "Profilbild entfernt");
+        await Save(agent, newStamp: false);
+
+        AvatarFileDelete(active);
+        AvatarFileDelete(staged);
+    }
+
+    public async Task<List<Agent>> GetPendingAvatarsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await readDb.Users.AsNoTracking().Where(a => a.PendingAvatarFileName != null)
+            .OrderBy(a => a.AvatarRequestedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AvatarApproveAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.PendingAvatarFileName is null)
+        {
+            throw new InvalidOperationException("Für diesen Agent liegt kein Profilbild zur Freigabe vor.");
+        }
+
+        var obsolete = agent.AvatarFileName;
+        agent.AvatarFileName = agent.PendingAvatarFileName;
+        agent.AvatarContentType = agent.PendingAvatarContentType;
+        AvatarPendingEmpty(agent, out _);
+
+        Audit(agent, AuditAction.Modified, actor, "Profilbild genehmigt");
+        await Save(agent, newStamp: false);
+
+        AvatarFileDelete(obsolete);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Dein Profilbild wurde genehmigt.", "/profil"); }
+        catch { /* best effort */ }
+    }
+
+    public async Task AvatarRejectAsync(string agentId, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.PendingAvatarFileName is null)
+        {
+            throw new InvalidOperationException("Für diesen Agent liegt kein Profilbild zur Freigabe vor.");
+        }
+
+        AvatarPendingEmpty(agent, out var staged);
+
+        var hint = string.IsNullOrWhiteSpace(reason) ? "ohne Angabe" : reason.Trim();
+        Audit(agent, AuditAction.Modified, actor, $"Profilbild abgelehnt: {hint}");
+        await Save(agent, newStamp: false);
+
+        AvatarFileDelete(staged);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Dein Profilbild wurde abgelehnt.", "/profil"); }
+        catch { /* best effort */ }
+    }
+
+    public async Task<Agent?> FindByAvatarFileAsync(string fileName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+        await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await readDb.Users.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.AvatarFileName == fileName || a.PendingAvatarFileName == fileName, cancellationToken);
     }
 
     public async Task RankChangeAsync(string agentId, Rank rank, ClaimsPrincipal actor)
@@ -687,6 +823,27 @@ public class AgentManagementService(
             ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
         await db.Entry(agent).ReloadAsync();
         return agent;
+    }
+
+    /// <summary>Clear the staged picture and hand back the file that is now unreferenced.</summary>
+    private static void AvatarPendingEmpty(Agent agent, out string? obsoleteFileName)
+    {
+        obsoleteFileName = agent.PendingAvatarFileName;
+        agent.PendingAvatarFileName = null;
+        agent.PendingAvatarContentType = null;
+        agent.AvatarRequestedAt = null;
+    }
+
+    // a missing file must never fail the write that already succeeded
+    private void AvatarFileDelete(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+        try { avatars.Delete(fileName); }
+        catch (IOException) { /* ignore */ }
+        catch (InvalidOperationException) { /* ignore */ }
     }
 
     private static void PendingNameChangeEmpty(Agent agent)

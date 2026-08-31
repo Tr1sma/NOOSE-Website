@@ -38,8 +38,11 @@ public record BewerbungssperreInfo(
     string? CreatedByName);
 
 /// <summary>An applicant-facing view of an assigned test.</summary>
+/// <remarks>Deliberately carries no points, no answer key and no verdict: the applicant must not learn
+/// the outcome. CaseNumber is here only to watermark the questionnaire.</remarks>
 public record TestView(
     string AssignmentId,
+    string CaseNumber,
     string Title,
     string? Description,
     bool Completed,

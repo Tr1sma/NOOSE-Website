@@ -62,6 +62,7 @@ else
               OnRowClick="@((TableRowClickEventArgs<Agent> e) => Open(e.Item))" T="Agent">
         <HeaderContent>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Codename)">Codename</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.BadgeNumber)">Dienstnummer</MudTableSortLabel></MudTh>
             @if (_mayRealName)
             {
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RealName)">Klarname</MudTableSortLabel></MudTh>
@@ -93,6 +94,7 @@ else
                     @(string.IsNullOrWhiteSpace(context.Codename) ? "Unbenannter Agent" : context.Codename)
                 </MudLink>
             </MudTd>
+            <MudTd DataLabel="Dienstnummer"><MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.BadgeNumber ?? "—")</MudText></MudTd>
             @if (_mayRealName)
             {
                 <MudTd DataLabel="Klarname"><MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.RealName ?? "—")</MudText></MudTd>

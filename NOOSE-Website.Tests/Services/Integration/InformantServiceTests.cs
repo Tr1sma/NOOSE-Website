@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Informants;
 using NOOSE_Website.Services;
@@ -24,6 +25,7 @@ public sealed class InformantServiceTests
 
     private InformantService Svc(SqliteTestContext ctx)
     {
+        SeedHandlers(ctx);
         var caseNumbers = Substitute.For<ICaseNumberService>();
         caseNumbers.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"NOOSE-VP-2026-{++_caseNumber:0000}"));
@@ -37,6 +39,20 @@ public sealed class InformantServiceTests
 
     private async Task<string> SeedAsync(SqliteTestContext ctx, string handlerId = "handler1")
         => await Svc(ctx).CreateAsync(NewInput(handlerId), Leader());
+
+    // The write path validates handler ids against OnlySelectable(), so they have to be real accounts.
+    private static void SeedHandlers(SqliteTestContext ctx)
+    {
+        using var db = ctx.NewContext();
+        foreach (var id in new[] { "handler1", "handler2" })
+        {
+            if (!db.Users.Any(u => u.Id == id))
+            {
+                db.Users.Add(Seed.Agent(id));
+            }
+        }
+        db.SaveChanges();
+    }
 
     // Seeds a person record and returns its id.
     private static string SeedPerson(SqliteTestContext ctx, string name = "Klara Klarname", bool classified = false)
@@ -76,9 +92,45 @@ public sealed class InformantServiceTests
             db.SaveChanges();
         }
 
-        var options = await Svc(ctx).GetHandlerOptionsAsync(Leader());
+        var svc = Svc(ctx);
 
-        Assert.Equal("ok", Assert.Single(options).Id);
+        // open to every internal writer now, not just leadership
+        var options = await svc.GetHandlerOptionsAsync(Junior());
+        Assert.Contains(options, o => o.Id == "ok");
+        Assert.DoesNotContain(options, o => o.Id is "tl" or "tl-adm" or "partner" or "pending" or "gone");
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetHandlerOptionsAsync(OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetHandlerOptionsAsync(Partner()));
+    }
+
+    [Fact]
+    public async Task Create_Throws_ForAHandlerWhoIsNotSelectable()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.SaveChanges();
+        }
+
+        // the SignalR path must not reach past the picker and surface a hidden account
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Svc(ctx).CreateAsync(NewInput("tl"), Junior()));
+    }
+
+    [Fact]
+    public async Task Update_Throws_WhenReassigningToANonSelectableHandler()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx, "handler1");
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Svc(ctx).UpdateAsync(id, NewInput("tl"), Junior()));
     }
 
     // ==================== record visibility ====================
@@ -126,25 +178,48 @@ public sealed class InformantServiceTests
     }
 
     [Fact]
-    public async Task Stranger_SeesNothing()
+    public async Task EveryInternalAgent_SeesEveryInformant_WithContactData()
     {
         using var ctx = new SqliteTestContext();
         var id = await SeedAsync(ctx, "handler1");
         var svc = Svc(ctx);
 
-        Assert.Empty(await svc.GetListAsync(Stranger()));
-        Assert.Null(await svc.GetDetailAsync(id, Stranger()));
+        foreach (var actor in new[] { Stranger(), Junior(), Handler("handler2") })
+        {
+            Assert.Contains(await svc.GetListAsync(actor), i => i.Id == id);
+            var detail = await svc.GetDetailAsync(id, actor);
+            Assert.NotNull(detail);
+            Assert.Equal("Max Mustermann", detail!.Name);
+            Assert.Equal("0900-123", detail.ContactInfo);
+            Assert.Equal("Vorsicht", detail.Notes);
+            Assert.True(detail.MayEdit);
+        }
     }
 
     [Fact]
-    public async Task Handler_DoesNotSeeOtherHandlersInformant()
+    public async Task Partner_SeesNothing()
     {
         using var ctx = new SqliteTestContext();
         var id = await SeedAsync(ctx, "handler1");
         var svc = Svc(ctx);
 
-        Assert.Empty(await svc.GetListAsync(Handler("handler2")));
-        Assert.Null(await svc.GetDetailAsync(id, Handler("handler2")));
+        Assert.Empty(await svc.GetListAsync(Partner()));
+        Assert.Null(await svc.GetDetailAsync(id, Partner()));
+        Assert.Empty(await svc.GetMeetingsAsync(id, Partner()));
+    }
+
+    [Fact]
+    public async Task Partner_IsRefusedByTheCentralRecordGate()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx, "handler1");
+
+        // the gate every polymorphic child, anchor and link resolution goes through
+        await using var db = ctx.NewContext();
+        Assert.False(await Visibility.IsRecordVisibleAsync(
+            db, nameof(Informant), id, ViewerScope.From(Partner())));
+        Assert.True(await Visibility.IsRecordVisibleAsync(
+            db, nameof(Informant), id, ViewerScope.From(Junior())));
     }
 
     // ==================== name source ====================
@@ -231,20 +306,19 @@ public sealed class InformantServiceTests
     // ==================== person marker ====================
 
     [Fact]
-    public async Task PersonMarker_IsVisibleToEveryInternalAgent_ButOnlyOpenableByTheTier()
+    public async Task PersonMarker_IsVisibleToEveryInternalAgent()
     {
         using var ctx = new SqliteTestContext();
         var personId = SeedPerson(ctx);
         var svc = Svc(ctx);
         var id = await svc.CreateAsync(NewInput("handler1", realName: null, personId: personId), Leader());
 
-        var forStranger = await svc.GetPersonMarkerAsync(personId, Stranger());
-        Assert.NotNull(forStranger);
-        Assert.Equal(id, forStranger!.InformantId);
-        Assert.False(forStranger.MayOpen);
-
-        Assert.True((await svc.GetPersonMarkerAsync(personId, Handler("handler1")))!.MayOpen);
-        Assert.True((await svc.GetPersonMarkerAsync(personId, Leader()))!.MayOpen);
+        foreach (var actor in new[] { Stranger(), Junior(), Handler("handler1"), Leader(), OnlyReader() })
+        {
+            var marker = await svc.GetPersonMarkerAsync(personId, actor);
+            Assert.NotNull(marker);
+            Assert.Equal(id, marker!.InformantId);
+        }
     }
 
     [Fact]
@@ -288,11 +362,10 @@ public sealed class InformantServiceTests
         var entries = await svc.GetForFactionAsync(factionId, Leader());
         Assert.Equal(2, entries.Count);
         Assert.Equal(new[] { "Erster", "Zweiter" }, entries.Select(e => e.Name));
-        Assert.All(entries, e => Assert.True(e.MayOpen));
     }
 
     [Fact]
-    public async Task FactionRoster_StaysAnonymousWithoutRecordAccess()
+    public async Task FactionRoster_NamesTheInformant_ForEveryInternalAgent()
     {
         using var ctx = new SqliteTestContext();
         var factionId = SeedFaction(ctx);
@@ -300,9 +373,7 @@ public sealed class InformantServiceTests
         await svc.CreateAsync(NewInput("handler1", factionId: factionId), Leader());
 
         var entry = Assert.Single(await svc.GetForFactionAsync(factionId, Stranger()));
-        Assert.False(entry.MayOpen);
-        Assert.Equal(entry.CaseNumber, entry.Name);
-        Assert.DoesNotContain("Mustermann", entry.Name);
+        Assert.Equal("Max Mustermann", entry.Name);
     }
 
     [Fact]
@@ -342,24 +413,167 @@ public sealed class InformantServiceTests
     // ==================== write guards ====================
 
     [Fact]
-    public async Task Create_Throws_ForNonLeadership()
+    public async Task Create_IsAllowedForAnyInternalAgent()
     {
         using var ctx = new SqliteTestContext();
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Svc(ctx).CreateAsync(NewInput(), Junior()));
+        var svc = Svc(ctx);
+
+        var id = await svc.CreateAsync(NewInput(), Junior());
+
+        Assert.Equal("Max Mustermann", (await svc.GetDetailAsync(id, Stranger()))!.Name);
     }
 
     [Fact]
-    public async Task AddMeeting_AllowedForHandler_DeniedForStranger()
+    public async Task Create_Throws_ForSupervisionAndPartners()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Svc(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.CreateAsync(NewInput(), OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.CreateAsync(NewInput(), Partner()));
+    }
+
+    [Fact]
+    public async Task AddMeeting_AllowedForAnyInternalAgent_DeniedForSupervisionAndPartners()
     {
         using var ctx = new SqliteTestContext();
         var id = await SeedAsync(ctx, "handler1");
         var svc = Svc(ctx);
         var meeting = new InformantMeetingInput(DateTime.UtcNow, "Hafen", "Übergabe beobachtet");
 
-        await svc.AddMeetingAsync(id, meeting, Handler("handler1")); // ok
-        Assert.Single(await svc.GetMeetingsAsync(id, Handler("handler1")));
+        await svc.AddMeetingAsync(id, meeting, Junior()); // not the handler, still allowed
+        Assert.Single(await svc.GetMeetingsAsync(id, Stranger()));
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AddMeetingAsync(id, meeting, Stranger()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AddMeetingAsync(id, meeting, OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AddMeetingAsync(id, meeting, Partner()));
+    }
+
+    [Fact]
+    public async Task Update_IsAllowedForANonHandlerAgent()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx, "handler1");
+        var svc = Svc(ctx);
+
+        await svc.UpdateAsync(id, new InformantInput("Max Mustermann", null, null, "Neu bewertet",
+            InformantReliability.A, InformantStatus.Burned, "handler1", "0900-123", "Vorsicht"), Junior());
+
+        var detail = await svc.GetDetailAsync(id, Junior());
+        Assert.Equal("Neu bewertet", detail!.Description);
+        Assert.Equal(InformantStatus.Burned, detail.Status);
+    }
+
+    [Fact]
+    public async Task Update_LetsAnyInternalAgentReassignTheHandler()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx, "handler1");
+        var svc = Svc(ctx);
+
+        await svc.UpdateAsync(id, NewInput("handler2"), Junior());
+
+        Assert.Equal("handler2", (await svc.GetDetailAsync(id, Junior()))!.HandlerId);
+    }
+
+    [Fact]
+    public async Task Update_Throws_ForSupervisionAndPartners()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx, "handler1");
+        var svc = Svc(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.UpdateAsync(id, NewInput(), OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.UpdateAsync(id, NewInput(), Partner()));
+    }
+
+    // ==================== delete / trash / restore ====================
+
+    [Fact]
+    public async Task Delete_IsAllowedForAnyInternalAgent_AndHidesTheRecordEverywhere()
+    {
+        using var ctx = new SqliteTestContext();
+        var factionId = SeedFaction(ctx);
+        var svc = Svc(ctx);
+        var id = await svc.CreateAsync(NewInput(factionId: factionId), Leader());
+
+        await svc.DeleteAsync(id, Junior());
+
+        Assert.Empty(await svc.GetListAsync(Leader()));
+        Assert.Null(await svc.GetDetailAsync(id, Leader()));
+        Assert.Empty(await svc.GetForFactionAsync(factionId, Leader()));
+    }
+
+    [Fact]
+    public async Task Delete_Throws_ForSupervisionAndPartners()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx);
+        var svc = Svc(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.DeleteAsync(id, OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.DeleteAsync(id, Partner()));
+    }
+
+    // The SaveChanges interceptors are not registered in the test context, so Remove would hard-delete.
+    // Marking the row is what the interceptor does in production, and what the other trash tests do here.
+    private static void MarkDeleted(SqliteTestContext ctx, string id)
+    {
+        using var db = ctx.NewContext();
+        var inf = db.Informants.IgnoreQueryFilters().Single(i => i.Id == id);
+        inf.IsDeleted = true;
+        inf.DeletedAt = DateTime.UtcNow;
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Trash_ListsTheDeletedRecord_WithItsName()
+    {
+        using var ctx = new SqliteTestContext();
+        var personId = SeedPerson(ctx, "Klara Klarname");
+        var svc = Svc(ctx);
+        var byName = await svc.CreateAsync(NewInput(), Leader());
+        var byPerson = await svc.CreateAsync(NewInput(realName: null, personId: personId), Leader());
+        MarkDeleted(ctx, byName);
+        MarkDeleted(ctx, byPerson);
+
+        var trash = await svc.GetTrashAsync();
+
+        // the name follows the same source rule as the file itself: linked person first, then free text
+        Assert.Equal("Max Mustermann", trash.Single(t => t.Id == byName).Name);
+        Assert.Equal("Klara Klarname", trash.Single(t => t.Id == byPerson).Name);
+    }
+
+    [Fact]
+    public async Task Restore_BringsTheRecordAndItsMeetingsBack_ButOnlyForLeadership()
+    {
+        using var ctx = new SqliteTestContext();
+        var id = await SeedAsync(ctx);
+        var svc = Svc(ctx);
+        await svc.AddMeetingAsync(id, new InformantMeetingInput(DateTime.UtcNow, "Hafen", "Übergabe"), Junior());
+        MarkDeleted(ctx, id);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.RestoreAsync(id, Junior()));
+
+        await svc.RestoreAsync(id, Leader());
+
+        Assert.NotNull(await svc.GetDetailAsync(id, Junior()));
+        Assert.Single(await svc.GetMeetingsAsync(id, Junior()));
+        Assert.Empty(await svc.GetTrashAsync());
+    }
+
+    [Fact]
+    public async Task ADeletedInformant_StillBlocksItsPersonLink_UntilRestoredOrTheLinkIsFreed()
+    {
+        using var ctx = new SqliteTestContext();
+        var personId = SeedPerson(ctx);
+        var svc = Svc(ctx);
+        var id = await svc.CreateAsync(NewInput(realName: null, personId: personId), Leader());
+        MarkDeleted(ctx, id);
+
+        // the unique index counts soft-deleted rows too, so the message has to name the trash
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.CreateAsync(NewInput(realName: null, personId: personId), Leader()));
+        Assert.Contains("Papierkorb", ex.Message);
     }
 
     [Fact]

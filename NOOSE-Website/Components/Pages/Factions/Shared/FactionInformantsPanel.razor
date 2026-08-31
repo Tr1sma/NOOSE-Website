@@ -1,4 +1,4 @@
-@* Informants linked to this faction. Names only for viewers who may open the V-person file. *@
+@* Informants linked to this faction. Empty for partners, full names for every internal agent. *@
 @using NOOSE_Website.Models.Informants
 @inject IInformantService Service
 
@@ -19,10 +19,10 @@ else
         <MudStack Row="true" Spacing="1" Class="flex-wrap">
             @foreach (var e in _entries)
             {
-                <MudTooltip Text="@Tooltip(e)">
+                <MudTooltip Text="@($"{e.CaseNumber} · {InformantEnumDisplay.Status(e.Status)}")">
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@StatusColour(e.Status)"
                              Icon="@Icons.Material.Filled.VisibilityOff"
-                             Href="@(e.MayOpen ? $"/informanten/{e.InformantId}" : null)">@e.Name</MudChip>
+                             Href="@($"/informanten/{e.InformantId}")">@e.Name</MudChip>
                 </MudTooltip>
             }
         </MudStack>
@@ -48,11 +48,6 @@ else
         _entries = await Service.GetForFactionAsync(FactionId, User);
         _load = false;
     }
-
-    private static string Tooltip(InformantFactionEntry e)
-        => e.MayOpen
-            ? $"{e.CaseNumber} · {InformantEnumDisplay.Status(e.Status)}"
-            : $"{InformantEnumDisplay.Status(e.Status)} · kein Zugriff auf diese Akte";
 
     private static Color StatusColour(InformantStatus s) => s switch
     {

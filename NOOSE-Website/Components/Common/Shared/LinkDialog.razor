@@ -284,8 +284,19 @@
                     break;
             }
 
-            <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
-                          Placeholder="z. B. siehe auch / Quelle für" />
+            @if (RoleContext)
+            {
+                <MudAutocomplete T="string" @bind-Value="_label" Label="Rolle im Vorgang (optional)"
+                                 SearchFunc="@RoleSearch" Variant="Variant.Outlined"
+                                 CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                                 MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                                 Placeholder="z. B. Zeuge, Beschuldigter …" />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
+                              Placeholder="z. B. siehe auch / Quelle für" />
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -301,6 +312,8 @@
     [Parameter] public bool IsLeadership { get; set; }
     /// <summary>Person excluded from the person picker.</summary>
     [Parameter] public string? ExclusionPersonId { get; set; }
+    /// <summary>Calling record type; Case + target Person switches the label to role suggestions.</summary>
+    [Parameter] public string? SourceType { get; set; }
 
     // viewer context for search visibility
     private ClaimsPrincipal? _user;
@@ -351,6 +364,17 @@
 
     private string _targetType = nameof(Person);
     private string? _label;
+
+    // case -> person: the label becomes a role picker (free text allowed)
+    private bool RoleContext => SourceType == nameof(Case) && _targetType == nameof(Person);
+
+    private static Task<IEnumerable<string>> RoleSearch(string value, CancellationToken token)
+    {
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(value)
+            ? CasePersonRoles.Suggestions
+            : CasePersonRoles.Suggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(hit);
+    }
 
     private Person? _person;
     private Faction? _faction;
@@ -542,12 +566,13 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
-    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string exclusionPersonId)
+    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string exclusionPersonId, string? sourceType = null)
     {
         var parameters = new DialogParameters<LinkDialog>
         {
             { x => x.IsLeadership, isLeadership },
             { x => x.ExclusionPersonId, exclusionPersonId },
+            { x => x.SourceType, sourceType },
         };
         var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
         var result = await reference.Result;
@@ -555,11 +580,12 @@
     }
 
     /// <summary>Overload without person exclusion, for non-person records.</summary>
-    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership)
+    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? sourceType = null)
     {
         var parameters = new DialogParameters<LinkDialog>
         {
             { x => x.IsLeadership, isLeadership },
+            { x => x.SourceType, sourceType },
         };
         var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
         var result = await reference.Result;

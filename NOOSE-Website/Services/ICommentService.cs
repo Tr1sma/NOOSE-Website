@@ -13,5 +13,8 @@ public interface ICommentService
 
     Task<Comment> CreateAsync(string entityType, string entityId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Rewrite an own comment. Author only — leadership may delete a foreign comment but never restate it.</summary>
+    Task<Comment> EditAsync(string commentId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     Task DeleteAsync(string commentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

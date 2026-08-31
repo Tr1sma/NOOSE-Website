@@ -52,6 +52,9 @@ public class FeedbackServiceTests
     private static ClaimsPrincipal OnlyReader(string id = "tl")
         => ClaimsPrincipalBuilder.Agent(id).AsTeamLead().Build();
 
+    private static ClaimsPrincipal Partner(string id = "partner")
+        => ClaimsPrincipalBuilder.Agent(id).AsPartner(PartnerAgency.DoJ, PartnerRank.Member).Build();
+
     // read-only supervision that also carries leadership rank: passes the read gate, fails the write gate
     private static ClaimsPrincipal LeadingOnlyReader(string id = "tl-lead")
         => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.SupervisorySpecialAgent).AsTeamLead().Build();
@@ -149,7 +152,7 @@ public class FeedbackServiceTests
     // ---------- GetInboxAsync ----------
 
     [Fact]
-    public async Task GetInboxAsync_NonLeadership_Throws()
+    public async Task GetInboxAsync_Partner_Throws()
     {
         using var ctx = new SqliteTestContext();
         var (svc, _) = Build(ctx);
@@ -157,7 +160,23 @@ public class FeedbackServiceTests
         SeedFeedback(ctx, "a1");
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.GetInboxAsync(Owner("a1")));
+            () => svc.GetInboxAsync(Partner()));
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_PlainAgent_ReadsEveryReport()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedFeedback(ctx, "a1");
+        SeedFeedback(ctx, "a2");
+
+        // every internal agent reads the whole board, not just their own reports
+        var rows = await svc.GetInboxAsync(Owner("a1"));
+
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => r.AgentId == "a2");
     }
 
     [Fact]
@@ -184,7 +203,7 @@ public class FeedbackServiceTests
 
         SeedFeedback(ctx, "a1", f => f.Status = FeedbackStatus.Rejected);
 
-        // the inbox section is gated on LeadershipPage, which admits read-only supervision
+        // read-only supervision is internal, so it reads the board like everyone else
         var row = Assert.Single(await svc.GetInboxAsync(OnlyReader()));
         Assert.Equal(FeedbackStatus.Rejected, row.Status);
     }

@@ -3,9 +3,9 @@ using System.Security.Claims;
 namespace NOOSE_Website.Services.Search;
 
 /// <summary>Everything a provider needs to know about who is asking, resolved once per search.</summary>
-/// <param name="User">The principal. Carried because three canonical gates are principal-shaped —
-/// <see cref="InformantVisibility"/>, <c>MayRealNameSee</c> and <c>MayCounterIntel</c> — and a provider that
-/// re-derives them from the scope would be writing a fourth copy of a rule that already exists.</param>
+/// <param name="User">The principal. Carried because two canonical gates are principal-shaped —
+/// <c>MayRealNameSee</c> and <c>MayCounterIntel</c> — and a provider that re-derives them from the scope
+/// would be writing a third copy of a rule that already exists.</param>
 /// <param name="PartnerAllowedTypes">Rank allowlist of an external partner; null = no restriction. Resolved once
 /// here rather than per provider, and applied to search for the first time: it used to gate navigation only, so a
 /// partner could find by search what their rank was not allowed to list.</param>

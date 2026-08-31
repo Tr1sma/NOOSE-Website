@@ -517,6 +517,20 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("AvatarContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("ProfilbildTyp");
+
+                    b.Property<string>("AvatarFileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("Profilbild");
+
+                    b.Property<DateTime?>("AvatarRequestedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ProfilbildBeantragtAm");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(512)
                         .HasColumnType("varchar(512)");
@@ -617,6 +631,16 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("longtext");
+
+                    b.Property<string>("PendingAvatarContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("AusstehendesProfilbildTyp");
+
+                    b.Property<string>("PendingAvatarFileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("AusstehendesProfilbild");
 
                     b.Property<string>("PendingBadgeNumber")
                         .HasColumnType("longtext")
@@ -8557,6 +8581,10 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
+
+                    b.Property<bool>("KeepOptionOrder")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("ReihenfolgeFesthalten");
 
                     b.Property<string>("Keywords")
                         .HasColumnType("longtext")

@@ -27,9 +27,13 @@ public sealed record InformantMeetingInput(DateTime MeetingDate, string? Locatio
 /// <summary>An agent selectable as an informant handler.</summary>
 public sealed record InformantHandlerOption(string Id, string Name);
 
-/// <summary>Informant marker shown on a linked person record. MayOpen tells whether the viewer may open the V-person file.</summary>
-public sealed record InformantPersonMarker(string InformantId, string CaseNumber, InformantStatus Status, bool MayOpen);
+/// <summary>Informant marker shown on a linked person record; only ever built for viewers who may open the file.</summary>
+public sealed record InformantPersonMarker(string InformantId, string CaseNumber, InformantStatus Status);
 
-/// <summary>An informant listed on a faction record. Name falls back to the case number for viewers without record access.</summary>
+/// <summary>A deleted informant as the trash lists it.</summary>
+public sealed record InformantTrashItem(
+    string Id, string CaseNumber, string Name, string? Detail, DateTime? DeletedAt);
+
+/// <summary>An informant listed on a faction record.</summary>
 public sealed record InformantFactionEntry(
-    string InformantId, string CaseNumber, string Name, InformantStatus Status, bool MayOpen);
+    string InformantId, string CaseNumber, string Name, InformantStatus Status);

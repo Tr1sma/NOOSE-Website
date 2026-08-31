@@ -109,7 +109,7 @@ public class BewerbungTestService(
         return question;
     }
 
-    public async Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, bool keepOptionOrder, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireHrbOrLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -121,6 +121,7 @@ public class BewerbungTestService(
         question.CorrectYesNo = question.Type == TestQuestionType.YesNo ? correctYesNo : null;
         question.Keywords = question.Type == TestQuestionType.FreeText ? Trim(keywords) : null;
         question.MinKeywordHits = question.Type == TestQuestionType.FreeText && minKeywordHits is > 0 ? minKeywordHits : null;
+        question.KeepOptionOrder = question.Type == TestQuestionType.MultipleChoice && keepOptionOrder;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -321,14 +322,15 @@ public class BewerbungTestService(
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var bewerbungId = await db.Bewerbungen.AsNoTracking()
+        var own = await db.Bewerbungen.AsNoTracking()
             .Where(b => b.ApplicantUserId == userId)
             .OrderByDescending(b => b.SubmittedAt)
-            .Select(b => b.Id).FirstOrDefaultAsync(cancellationToken);
-        if (bewerbungId is null)
+            .Select(b => new { b.Id, b.CaseNumber }).FirstOrDefaultAsync(cancellationToken);
+        if (own is null)
         {
             return null;
         }
+        var bewerbungId = own.Id;
         var assignment = await db.BewerbungTestAssignments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken);
         if (assignment is null)
@@ -348,10 +350,11 @@ public class BewerbungTestService(
 
         var qViews = questions.Select(q => new TestQuestionView(
             q.Id, q.Type, q.Prompt, q.Required,
-            options.Where(o => o.QuestionId == q.Id).Select(o => new TestOptionView(o.Id, o.Label)).ToList()))
+            TestOptionOrder.For(assignment.Id, q.KeepOptionOrder, options.Where(o => o.QuestionId == q.Id))
+                .Select(o => new TestOptionView(o.Id, o.Label)).ToList()))
             .ToList();
 
-        return new TestView(assignment.Id, test.Title, test.Description, assignment.CompletedAt is not null, qViews);
+        return new TestView(assignment.Id, own.CaseNumber, test.Title, test.Description, assignment.CompletedAt is not null, qViews);
     }
 
     public async Task SubmitAnswersAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)

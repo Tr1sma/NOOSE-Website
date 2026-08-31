@@ -29,6 +29,7 @@ public class TrashServiceTests
         Substitute.For<IAgentActivityService>(),
         Substitute.For<IAbsenceService>(),
         Substitute.For<IAbductionService>(),
+        Substitute.For<IInformantService>(),
         Substitute.For<IEvidenceService>(),
         Substitute.For<IKassenService>(),
         Substitute.For<IFinancingService>(),

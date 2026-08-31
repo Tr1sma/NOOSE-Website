@@ -29,6 +29,9 @@ public class SearchVisibilityTests
     private static ClaimsPrincipal Supervision(string me = "ro")
         => ClaimsPrincipalBuilder.Agent(me).WithRank(Rank.Director).AsTeamLead().Build();
 
+    private static ClaimsPrincipal PartnerViewer(string me = "partner")
+        => ClaimsPrincipalBuilder.Agent(me).AsPartner(PartnerAgency.DoJ, PartnerRank.Chief).Build();
+
     private static SearchCriteria Text(string text) => new() { Text = text };
 
     /// <summary>Every string the result carries, so a leak cannot hide in a snippet or a case number.</summary>
@@ -244,10 +247,10 @@ public class SearchVisibilityTests
         Assert.Contains(nameof(Agent), leadership.Groups.Select(g => g.Category));
     }
 
-    // ---- informants: row-level, by handling agent ----
+    // ---- informants: every internal agent, never a partner ----
 
     [Fact]
-    public async Task An_informant_handled_by_someone_else_is_not_findable()
+    public async Task An_informant_is_findable_by_any_internal_agent_but_never_by_a_partner()
     {
         using var ctx = new SqliteTestContext();
         await using (var db = ctx.NewContext())
@@ -264,11 +267,12 @@ public class SearchVisibilityTests
         }
 
         var other = await SearchTestHost.NewService(ctx).SearchAsync(Text("Zitrone"), Plain("someone-else"));
-        var handler = await SearchTestHost.NewService(ctx).SearchAsync(Text("Zitrone"), Plain("handler"));
+        var partner = await SearchTestHost.NewService(ctx).SearchAsync(Text("Zitrone"), PartnerViewer());
 
-        Assert.DoesNotContain("Zitrone Mueller", AllText(other));
-        Assert.DoesNotContain(AllText(other), t => t.Contains("Zitrone berichtete", StringComparison.Ordinal));
-        Assert.Contains("Zitrone Mueller", AllText(handler));
+        Assert.Contains("Zitrone Mueller", AllText(other));
+        Assert.Contains(AllText(other), t => t.Contains("Zitrone berichtete", StringComparison.Ordinal));
+        Assert.DoesNotContain("Zitrone Mueller", AllText(partner));
+        Assert.DoesNotContain(AllText(partner), t => t.Contains("Zitrone berichtete", StringComparison.Ordinal));
     }
 
     // ---- taskforce chat: members only ----

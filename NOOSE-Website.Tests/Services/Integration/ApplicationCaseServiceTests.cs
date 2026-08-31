@@ -77,7 +77,7 @@ public sealed class ApplicationCaseServiceTests
         await c.Cases.Received(1).CreateAsync(
             Arg.Is<CaseInput>(i => i.Title == "Bewerbungsverfahren | Max Mustermann"
                 && i.Classification == Classification.Unknown
-                && i.SecrecyLevel == DocumentClassification.None),
+                && i.SecrecyLevel == DocumentClassification.Hrb),
             Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
 
         await c.Placeholders.Received(1).ApplyAsync("<p>{{Name}}</p>", nameof(Case), "case1",
@@ -86,7 +86,7 @@ public sealed class ApplicationCaseServiceTests
         await c.Documents.Received(1).CreateAsync(
             Arg.Is<DocumentInput>(i => i.Title == "Sicherheitsüberprüfung | Max Mustermann"
                 && i.ContentHtml == "<p>expanded</p>"
-                && i.Classification == DocumentClassification.None),
+                && i.Classification == DocumentClassification.Hrb),
             Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
 
         await c.Sources.Received(1).CreateAsync(nameof(Case), "case1",

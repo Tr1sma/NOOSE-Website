@@ -69,7 +69,8 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <AgentProfileCard Agent="_agent" MayRealName="_mayRealName" />
+                <AgentProfileCard Agent="_agent" MayRealName="_mayRealName"
+                                  MayRemove="@(_isLeadership && _user.MayWrite())" OnRemove="AvatarRemove" />
             </div>
         </MudItem>
 
@@ -211,6 +212,30 @@ else
         {
             await AgentService.TerminationRevokeAsync(_agent.Id, _user);
             Snackbar.Add("Kündigung zurückgenommen.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task AvatarRemove()
+    {
+        if (_agent is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Profilbild entfernen?",
+            "Das Bild wird gelöscht; der Agent kann ein neues beantragen.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.AvatarRemoveAsync(_agent.Id, _user);
+            Snackbar.Add("Profilbild entfernt.", Severity.Success);
             await ReloadAsync();
         }
         catch (Exception ex)

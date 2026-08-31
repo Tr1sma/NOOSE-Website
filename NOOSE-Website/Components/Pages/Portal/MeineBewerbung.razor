@@ -11,7 +11,7 @@
 @if (_blocked && _ban is not null)
 {
     <MudPaper Elevation="4" Class="pa-8">
-        <BewerbungssperreCard Ban="_ban" DecisionStatus="_lastStatus" />
+        <BewerbungssperreCard IsBlacklist="_ban.IsBlacklist" BannedUntil="_ban.BannedUntil" DecisionStatus="_lastStatus" />
     </MudPaper>
 }
 else if (_ready)

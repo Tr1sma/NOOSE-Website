@@ -37,21 +37,6 @@ public static class Permission
         }
     }
 
-    /// <summary>Require leadership or the assigned informant handler; denies read-only supervisors and partners.</summary>
-    public static void RequireInformantWrite(ClaimsPrincipal actor, string? handlerId)
-    {
-        if (actor.IsOnlyReader() || actor.IsPartner())
-        {
-            throw new UnauthorizedAccessException("Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
-        }
-        var me = actor.GetAgentId();
-        if (actor.IsLeadership() || (handlerId is not null && me is not null && me == handlerId))
-        {
-            return;
-        }
-        throw new UnauthorizedAccessException("Nur die Führung oder der zuständige Führungsagent darf diesen Informanten bearbeiten.");
-    }
-
     /// <summary>Require the actor may use NOOSEI (never partners, demo sessions or read-only supervision).</summary>
     public static void RequireLlmUse(ClaimsPrincipal actor)
     {
@@ -157,6 +142,16 @@ public static class Permission
         {
             throw new UnauthorizedAccessException(
                 "Über Hochstufungen auf „Gesichert staatsgefährdend“ entscheidet nur Senior Special Agent aufwärts oder ein Admin.");
+        }
+    }
+
+    /// <summary>Require an internal agent; twin of <c>Policies.InternalAgent</c>, denies partner agencies.</summary>
+    public static void RequireInternalAgent(ClaimsPrincipal actor)
+    {
+        if (actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException(
+                "Dieser Bereich ist internen Agenten vorbehalten.");
         }
     }
 

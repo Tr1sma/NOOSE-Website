@@ -63,7 +63,7 @@ public static class NavCatalog
             NavSection.Fahndung, NavArea.Ermittlung, BadgeKey: "tips",
             Description: "Meldungen aus der Bevölkerung: Eingang, Bearbeitung und Rückfragen"),
         new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
-            Description: "Vertrauliche Quellen (V-Personen) — Zeilen-Sichtbarkeit je Führungsagent"),
+            Description: "Vertrauliche Quellen (V-Personen) mit Treffen-Protokollen"),
         new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Entführungen von NOOSE-Agenten: Täter, Informationsabfluss und kompromittierte Akten"),
 

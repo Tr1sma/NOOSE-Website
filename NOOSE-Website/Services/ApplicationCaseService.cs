@@ -52,7 +52,8 @@ public class ApplicationCaseService(
             Title = $"Bewerbungsverfahren | {name}",
             Status = CaseStatus.Open,
             Classification = Classification.Unknown,
-            SecrecyLevel = DocumentClassification.None,
+            // recruiting files stay inside HRB
+            SecrecyLevel = DocumentClassification.Hrb,
         }, actor, cancellationToken);
 
         // claim the application atomically: a concurrent assignment (or double-click) that already
@@ -84,7 +85,7 @@ public class ApplicationCaseService(
         {
             Title = docTitle,
             ContentHtml = html,
-            Classification = DocumentClassification.None,
+            Classification = DocumentClassification.Hrb,
         }, actor, cancellationToken);
 
         // 3) file the document under the case
