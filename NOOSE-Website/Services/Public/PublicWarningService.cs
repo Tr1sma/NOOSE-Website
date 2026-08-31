@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Authorization;
@@ -140,8 +140,11 @@ public class PublicWarningService(
         row.ContentHtml = html;
         row.ContentTitle = row.Title;
         row.Status = PublicWarningStatus.Veroeffentlicht;
-        row.PublishedAt = DateTime.UtcNow;
-        row.PublishedById = actor.GetAgentId();
+        // stamped once, same reason as a press release: the hub shows and sorts by this date, so fixing a typo in a
+        // week-old warning must not claim it was issued today. Retracting clears it, so a warning that comes back
+        // after the danger returned is dated anew
+        row.PublishedAt ??= DateTime.UtcNow;
+        row.PublishedById ??= actor.GetAgentId();
 
         // no Discord push, unlike a press release: a warning expires, and the channel post would still claim danger
         // after it did. The same argument that keeps PublicWantedExpired off the routable list
@@ -158,8 +161,11 @@ public class PublicWarningService(
 
         // no module gate, here or in Delete: publishing needs a live module, depublishing never — otherwise the kill
         // switch would make retracting impossible, exactly the wrong way round.
-        // ContentHtml stays: visibility hangs on Status alone, so going back online is one click
+        // ContentHtml stays: visibility hangs on Status alone, so going back online is one click. The publication
+        // date does not: it says since when this stands outside, and after a retraction the answer is "it does not"
         row.Status = PublicWarningStatus.Entwurf;
+        row.PublishedAt = null;
+        row.PublishedById = null;
 
         await SaveAndInvalidateAsync(db, cancellationToken);
     }

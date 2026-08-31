@@ -560,29 +560,55 @@ public sealed class PressReleaseServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.Service.GetAllAsync(Citizen()));
     }
 
+    // ---- the publication date is part of the dated statement ----
+
     [Fact]
-    public async Task PROBE_CorrectingAReleaseKeepsItsDate()
+    public async Task CorrectingAReleaseKeepsItsPublicationDate()
     {
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
         var id = await PublishedAsync(host);
 
-        var first = (await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt;
+        var march = new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc);
+        await BackdateAsync(ctx, host, id, march);
 
-        // backdate as if it had gone out in March
-        await using (var db = ctx.NewContext())
-        {
-            (await db.Pressemitteilungen.SingleAsync(p => p.Id == id)).PublishedAt = new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc);
-            await db.SaveChangesAsync();
-        }
-        host.Cache.Remove("Pressemitteilungen");
-
-        // a typo fix, then publish again
-        await host.Service.SaveDraftAsync(new PressInput { Id = id, Title = "Festnahme", Teaser = "Kurzfassung", DraftHtml = "<p>Der Text, korrigiert.</p>" }, Leader());
+        // a typo fix on a release that is already out
+        await host.Service.SaveDraftAsync(
+            new PressInput { Id = id, Title = "Festnahme", Teaser = "Kurzfassung", DraftHtml = "<p>Der Text, korrigiert.</p>" },
+            Leader());
         await host.Service.PublishAsync(id, Leader());
 
-        var after = (await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt;
-        Assert.Equal(new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc), after);
-        Assert.NotEqual(first, after);
+        // otherwise the hub, which sorts by this date, would move a March release to today's top spot
+        Assert.Equal(march, (await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt);
+        var card = Assert.Single((await host.Service.GetPublishedAsync()).Cards);
+        Assert.Equal(march, card.PublishedAt);
+    }
+
+    [Fact]
+    public async Task ARetractedReleaseThatGoesOutAgain_IsDatedAnew()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await BackdateAsync(ctx, host, id, new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc));
+
+        await host.Service.RetractAsync(id, Leader());
+        Assert.Null((await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt);
+
+        await host.Service.PublishAsync(id, Leader());
+
+        // it was off the air, so "since when does this stand outside" has a new answer
+        var again = (await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt;
+        Assert.NotNull(again);
+        Assert.True(again > new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>Moves a publication into the past, which no service call can do.</summary>
+    private static async Task BackdateAsync(SqliteTestContext ctx, Host host, string id, DateTime at)
+    {
+        await using var db = ctx.NewContext();
+        (await db.Pressemitteilungen.SingleAsync(p => p.Id == id)).PublishedAt = at;
+        await db.SaveChangesAsync();
+        host.Cache.Remove("Pressemitteilungen");
     }
 }

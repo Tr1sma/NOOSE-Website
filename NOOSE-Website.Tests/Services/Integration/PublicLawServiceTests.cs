@@ -5,6 +5,8 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure;
+using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -27,14 +29,31 @@ public sealed class PublicLawServiceTests
     private static ClaimsPrincipal Citizen()
         => ClaimsPrincipalBuilder.Agent("buerger").WithStatus(AgentStatus.Civilian).Build();
 
+    private sealed class FixedUser : ICurrentUserService
+    {
+        public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
+
+        public CurrentUserInfo Get() => new("lead", "Falcon", true, false, false);
+    }
+
     private sealed record Host(PublicLawService Service, LawService Laws, IMemoryCache Cache);
 
+    /// <summary>The services with the audit interceptor attached, as in production.</summary>
+    /// <remarks>
+    /// The interceptor is what rewrites a <c>Remove</c> into a soft delete; without it a deletion test would exercise
+    /// a hard delete and never reach the row that stays behind.
+    /// </remarks>
     private static Host NewHost(SqliteTestContext ctx)
     {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(new FixedUser()))
+            .Options;
+        var factory = new TestDbContextFactory(options);
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var modules = new PublicModuleService(ctx.Factory, cache);
-        var service = new PublicLawService(ctx.Factory, modules, cache);
-        return new Host(service, new LawService(ctx.Factory, service), cache);
+        var modules = new PublicModuleService(factory, cache);
+        var service = new PublicLawService(factory, modules, cache);
+        return new Host(service, new LawService(factory, service), cache);
     }
 
     private static async Task<SqliteTestContext> SeededAsync(bool lawOn = true)
@@ -143,6 +162,22 @@ public sealed class PublicLawServiceTests
 
         var entry = (await host.Service.GetPublishedAsync()).Books.Single().Entries.Single();
         Assert.Equal("Neuer Wortlaut.", entry.Text);
+    }
+
+    [Fact]
+    public async Task ADeletedParagraph_LosesItsReleaseFlag()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await host.Service.SetPublicAsync("s1", true, Leader());
+
+        await host.Laws.DeleteAsync("s1", Leader());
+
+        // there is no restore path today; the flag is cleared so there is nothing to come back published
+        await using var db = ctx.NewContext();
+        var row = await db.Laws.IgnoreQueryFilters().SingleAsync(l => l.Id == "s1");
+        Assert.True(row.IsDeleted);
+        Assert.False(row.IsPublic);
     }
 
     // ---- module ----

@@ -259,6 +259,20 @@ public sealed class PublicWarningServiceTests
     }
 
     [Fact]
+    public async Task SavingWithoutADate_MakesTheWarningOpenEnded()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await host.Service.SaveDraftAsync(Draft(until: DateTime.UtcNow.AddDays(3)), Leader());
+
+        // the picker is clearable, so an absent date means "no expiry" rather than "leave it alone" — unlike the
+        // body, which has the null/empty split because nobody wants to resend a megabyte to change a title
+        await host.Service.SaveDraftAsync(new WarningInput { Id = id, Title = "Sperrung Innenstadt" }, Leader());
+
+        Assert.Null((await host.Service.GetDraftAsync(id, Leader()))!.ValidUntil);
+    }
+
+    [Fact]
     public async Task AnExpiryInThePast_IsRefusedRatherThanPublishedIntoNothing()
     {
         using var ctx = await SeededAsync();
@@ -280,6 +294,55 @@ public sealed class PublicWarningServiceTests
 
         // picking today must not expire the warning at midnight this morning
         Assert.Single((await host.Service.GetPublishedAsync()).Cards);
+    }
+
+    // ---- the publication date says since when this stands outside ----
+
+    [Fact]
+    public async Task CorrectingAWarningKeepsItsPublicationDate()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        var lastWeek = new DateTime(2026, 8, 24, 9, 0, 0, DateTimeKind.Utc);
+        await BackdateAsync(ctx, host, id, lastWeek);
+
+        await host.Service.SaveDraftAsync(
+            new WarningInput { Id = id, Title = "Sperrung Innenstadt", DraftHtml = "<p>Meiden Sie das Gebiet, korrigiert.</p>" },
+            Leader());
+        await host.Service.PublishAsync(id, Leader());
+
+        // fixing a typo must not claim the warning was issued today
+        Assert.Equal(lastWeek, Assert.Single((await host.Service.GetPublishedAsync()).Cards).PublishedAt);
+    }
+
+    [Fact]
+    public async Task ARetractedWarningThatComesBack_IsDatedAnew()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await BackdateAsync(ctx, host, id, new DateTime(2026, 8, 24, 9, 0, 0, DateTimeKind.Utc));
+
+        await host.Service.RetractAsync(id, Leader());
+        Assert.Null((await host.Service.GetAllAsync(Leader())).Single(r => r.Id == id).PublishedAt);
+
+        await host.Service.PublishAsync(id, Leader());
+
+        // the danger returned, so the warning is new
+        var again = Assert.Single((await host.Service.GetPublishedAsync()).Cards).PublishedAt;
+        Assert.NotNull(again);
+        Assert.True(again > new DateTime(2026, 8, 24, 9, 0, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>Moves a publication into the past, which no service call can do.</summary>
+    private static async Task BackdateAsync(SqliteTestContext ctx, Host host, string id, DateTime at)
+    {
+        await using var db = ctx.NewContext();
+        (await db.OeffentlicheWarnungen.SingleAsync(w => w.Id == id)).PublishedAt = at;
+        await db.SaveChangesAsync();
+        host.Cache.Remove("OeffentlicheWarnungen");
     }
 
     // ---- retract, delete, restore ----

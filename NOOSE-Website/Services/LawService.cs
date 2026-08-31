@@ -97,6 +97,9 @@ public class LawService(IDbContextFactory<AppDbContext> dbFactory, IPublicLawSer
         var law = await db.Laws.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Paragraf nicht gefunden.");
 
+        // withdrawn from the public page on the way out: there is no restore path for a paragraph today, but a
+        // deleted row that keeps its release flag would come back published the day somebody builds one
+        law.IsPublic = false;
         // soft-delete (interceptor rewrites Remove)
         db.Laws.Remove(law);
         await db.SaveChangesAsync(cancellationToken);

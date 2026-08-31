@@ -56,7 +56,7 @@ else
             <MudTh>Titel</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Gültig bis</MudTh>
-            <MudTh>Zuletzt veröffentlicht</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -92,7 +92,7 @@ else
                     @(context.ValidUntil is { } until ? until.ToLocalTime().ToString("dd.MM.yyyy") : "unbefristet")
                 </MudText>
             </MudTd>
-            <MudTd DataLabel="Zuletzt veröffentlicht">
+            <MudTd DataLabel="Veröffentlicht">
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     @* a draft has no publication date; without the fallback its only timestamp would be invisible *@
                     @(context.PublishedAt is { } at

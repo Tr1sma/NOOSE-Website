@@ -1709,6 +1709,13 @@ ohne Foto.
 14. **`PublicModuleServiceTests.NavEntries_ExcludeAModuleWhosePagesDoNotExistYet` nimmt sein Beispiel jetzt
     aus dem Katalog** statt es zu nennen. Der Test hing an `Presse` als „noch nicht gebaut" — jedes benannte
     Beispiel wird irgendwann gebaut, und `First` wird laut rot, wenn keins mehr übrig ist.
+15. **Das Veröffentlichungsdatum wird einmal geprägt, wie das Aktenzeichen** (nachgetragen bei der Prüfung
+    von 14b, mit einem zuerst fehlschlagenden Test). Punkt 2 hat Titel und Teaser mitgeschnappt und das
+    **Datum** übersehen: `PublishAsync` stempelte bei jedem Aufruf neu, also trug eine im März
+    veröffentlichte Mitteilung nach einer Tippfehler-Korrektur den heutigen Tag — und `/presse` sortiert
+    nach genau diesem Feld, schob sie also an die Spitze. Jetzt `PublishedAt ??=` und `PublishedById ??=`;
+    **`RetractAsync` räumt beide**, damit eine Mitteilung, die vom Netz war und wieder rausgeht, ehrlich
+    neu datiert ist. Die Panel-Spalte heißt deshalb „Veröffentlicht", nicht „Zuletzt veröffentlicht".
 
 ---
 
@@ -1797,7 +1804,22 @@ ohne Foto.
     Reihenfolge (ein Bürgerkonto trägt gar keinen Rang-Claim, und die Rangprüfung allein ließe Aufsicht
     und Demo-Principal durch). Getrennt, weil die Meldung den Bereich nennt und zwei Bereiche, die
     heute dieselben Leute einlassen, es morgen nicht müssen. Gelesen wird mit `RequireClassifiedRead`.
-15. **Registriert:** `AppDbContext` (DbSet, Fluent, `IstOeffentlich`-Index), `PublicVisibility` — dort
+15. **Das Veröffentlichungsdatum wird einmal geprägt und beim Zurückziehen geräumt** — dieselbe Regel wie
+    bei der Presse (siehe 14a Punkt 15), aus demselben Grund: `/warnungen` zeigt und sortiert nach diesem
+    Feld. Eine Korrektur an einer eine Woche alten Warnung darf nicht behaupten, sie sei heute ergangen;
+    eine nach einem Rückzug wieder herausgegebene Warnung schon.
+16. **Löschen räumt `IstOeffentlich`.** Für einen Paragrafen gibt es heute keinen Papierkorb-Weg zurück —
+    aber eine soft-gelöschte Zeile, die ihr Freigabe-Kennzeichen behält, käme an dem Tag veröffentlicht
+    zurück, an dem jemand einen baut. Präzedenz: „Wiederherstellen kommt als Entwurf zurück".
+17. **Nebenbefund, mitbehoben: `RecruitingTestVisibilityTests` bewachte den falschen Ordner.** Der
+    Bewerber-Wächter scannte `Components/Pages/Portal` **vollständig** — dort liegen seit Phase 7/9/10/13b
+    aber auch die Bürgerseiten. Er meldete deshalb die `Entscheidungsnotiz` eines Einspruchs als geleaktes
+    Testurteil und `PrintFrame`/`DialogContent` als unentschiedene Komponenten. Gescannt wird jetzt, was
+    `@layout ApplicantPortalLayout` trägt: eine neue Bewerberseite kommt von allein dazu, eine neue
+    Bürgerseite nicht. Ein zweiter Test hält den Wächter selbst fest (die drei Bewerberseiten sind drin,
+    Einspruch und Tickets nicht) — eine Verengung ist nur so lange sicher, wie sie nachweislich noch etwas
+    abdeckt.
+18. **Registriert:** `AppDbContext` (DbSet, Fluent, `IstOeffentlich`-Index), `PublicVisibility` — dort
     wandert **`Law` von `NeverPublic` nach `Publishable`**, was die eigentliche Aussage der Phase ist —,
     `SearchCatalog` (`NotSearchable`, Provider mit Phase 16), `AuditEntityDisplay` (Label **und**
     Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` (die Zeile nennt

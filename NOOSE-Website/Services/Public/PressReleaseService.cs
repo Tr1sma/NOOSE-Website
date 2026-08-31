@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Caching.Memory;
@@ -149,8 +149,12 @@ public class PressReleaseService(
         row.ContentTitle = row.Title;
         row.ContentTeaser = row.Teaser;
         row.Status = PressReleaseStatus.Veroeffentlicht;
-        row.PublishedAt = DateTime.UtcNow;
-        row.PublishedById = actor.GetAgentId();
+        // minted once, like the case number, and for the same reason: the date is part of the dated statement the
+        // outside world reads, and the hub sorts by it. Stamping it again would move a March release to today's top
+        // spot because somebody fixed a typo in it. Retracting clears both, so a release that was off the air and
+        // goes out again is honestly dated anew
+        row.PublishedAt ??= DateTime.UtcNow;
+        row.PublishedById ??= actor.GetAgentId();
 
         // stamped before the push, so the guarantee is at-most-once: a dead webhook loses one announcement, while
         // stamping afterwards would post twice whenever the process died in between. A message cannot be recalled,
@@ -183,8 +187,11 @@ public class PressReleaseService(
         // no module gate, here or in Delete: publishing needs a live module, depublishing never — otherwise the kill
         // switch would make retracting impossible, exactly the wrong way round.
         // ContentHtml and the case number stay: visibility hangs on Status alone, so going back online is one click on
-        // the same address, and a counter number is never reused anyway
+        // the same address, and a counter number is never reused anyway. The publication date does not: it says since
+        // when this stands outside, and after a retraction the answer is "it does not"
         row.Status = PressReleaseStatus.Entwurf;
+        row.PublishedAt = null;
+        row.PublishedById = null;
 
         await SaveAndInvalidateAsync(db, cancellationToken);
     }

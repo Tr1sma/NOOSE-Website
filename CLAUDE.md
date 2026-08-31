@@ -1277,6 +1277,13 @@ stehen auf „aus".
     Demo-Principal bis zum Prägen einer Nummer laufen. Gelesen wird mit `RequireClassifiedRead` (Vorbild
     `RequirePublicPageWrite`). Rang 3 publiziert Ausschreibungen, aber die Stimme der Behörde bleibt bei
     der Führung — deshalb gibt es hier **keine** Antrags-Weiche wie in Phase 4.
+  - **Das Veröffentlichungsdatum wird einmal geprägt, wie das Aktenzeichen, und beim Zurückziehen geräumt.**
+    `PublishAsync` stempelte anfangs bei jedem Aufruf neu — eine im März veröffentlichte Mitteilung trug nach
+    einer Tippfehler-Korrektur den heutigen Tag, und weil `/presse` nach genau diesem Feld sortiert, stand sie
+    danach oben. Also `PublishedAt ??=` und `PublishedById ??=`, und `RetractAsync` setzt beide auf `null`:
+    eine Mitteilung, die vom Netz war und wieder rausgeht, ist ehrlich neu datiert. Panel-Spalte deshalb
+    „Veröffentlicht", nicht „Zuletzt veröffentlicht". Gleiches gilt für die Warnung aus 14b; bei Fahndung und
+    redaktioneller Seite bleibt das Stempeln, weil dort kein Datum nach außen geht.
   - **Nebenbefund, mitbehoben: `/lageberichte` war als indexierbar deklariert.** Intern liegen dort
     `LegacyRouteRedirect` und die führungs-only Druckseite `/lageberichte/{Id}` mit den eingestuften
     Aggregaten; gleichzeitig nannte `PublicModules.SituationReports` die Route als `NavRoute`, und
@@ -1353,6 +1360,10 @@ stehen auf „aus".
     Reihenfolge. Getrennt, weil die Meldung den Bereich nennt und zwei Bereiche, die heute dieselben
     Leute einlassen, es morgen nicht müssen. Gelesen wird mit `RequireClassifiedRead`. Freigeben und
     Publizieren brauchen ein lebendes Modul, Zurückziehen und Zurücknehmen **nie**.
+  - **`LawService.DeleteAsync` räumt `IstOeffentlich`.** Für einen Paragrafen gibt es heute keinen Weg aus
+    dem Papierkorb zurück — aber eine soft-gelöschte Zeile, die ihr Freigabe-Kennzeichen behält, käme an dem
+    Tag veröffentlicht zurück, an dem jemand einen baut (Präzedenz: „Wiederherstellen kommt als Entwurf
+    zurück"). Das Publikationsdatum von Warnung und Mitteilung folgt derselben Linie, siehe 14a.
   - **`Law` wandert in `PublicVisibility` von `NeverPublic` nach `Publishable`** — das ist die
     eigentliche Aussage der Phase. **Nicht** registriert, mit Grund: die vier Zeitstrahl-/Chronik-Stellen
     sowie `RecordsReference`/`LinkService` — eine Warnung hängt an keiner Akte (Präzedenz `Ticket`,
