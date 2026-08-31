@@ -703,6 +703,56 @@ public sealed class MySqlTranslationTests : IDisposable
     }
 
     [Fact]
+    public void TheReportHubQuery_TranslatesIncludingItsPeriodOrdering()
+    {
+        var sql = _db.OeffentlicheLageberichte
+            .AsNoTracking()
+            .Where(r => r.Status == PublicReportStatus.Veroeffentlicht)
+            .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month)
+            .Take(24)
+            .Select(r => new PublicReportView(r.Year, r.Month, r.ContentTitle ?? string.Empty,
+                r.ContentHtml ?? string.Empty, r.PublishedAt))
+            .ToQueryString();
+
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+        Assert.Contains("Jahr", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheReportPanelQuery_TranslatesBothOptionalNavigationsAsLeftJoins()
+    {
+        var sql = _db.OeffentlicheLageberichte
+            .AsNoTracking()
+            .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month)
+            .Select(r => new
+            {
+                r.Id,
+                Differs = (r.DraftHtml ?? string.Empty) != (r.ContentHtml ?? string.Empty)
+                    || r.Title != (r.ContentTitle ?? string.Empty),
+                Publisher = r.PublishedBy!.Codename,
+                HasAnchor = r.SituationReport != null,
+            })
+            .ToQueryString();
+
+        // the anchor is optional so the row survives a deleted monthly report; a required navigation would be INNER
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("EntwurfHtml", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheReportTrashQuery_TranslatesWithoutTheSoftDeleteFilter()
+    {
+        var sql = _db.OeffentlicheLageberichte
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(r => r.IsDeleted)
+            .OrderByDescending(r => r.DeletedAt)
+            .ToQueryString();
+
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThePublicLawQuery_TranslatesIncludingItsProjectionIntoARecord()
     {
         // the projection constructs a record inside the query, which is the shape the grouping read path depends on

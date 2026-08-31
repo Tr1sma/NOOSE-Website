@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace NOOSE_Website.Tests.Services.Public;
@@ -27,6 +27,10 @@ public partial class PublicPageScanTests
         "IDbContextFactory", "AppDbContext",
         // PrintFrame prints through JS interop (dead without a circuit) and renders "von {PrintedBy}"
         "PrintFrame",
+        // the frozen monthly snapshot: it counts classified records and names people with their internal file
+        // numbers, so a released report is written text and never a projection of these
+        "SnapshotJson", "StatisticsReport", "DashboardMetrics", "StatisticsTopEntry",
+        "SituationReportDisplay", "ISituationReportService",
     ];
 
     /// <summary>Pages that legitimately sit in another shell — the exemption covers the layout line only.</summary>

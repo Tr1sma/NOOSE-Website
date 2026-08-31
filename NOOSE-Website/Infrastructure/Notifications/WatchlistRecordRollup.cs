@@ -93,11 +93,12 @@ public static class WatchlistRecordRollup
             case FinancingRequestLine:
             case FinancingItem:
             // the public area's own tables carry no record reference anyone follows: editorial pages, press
-            // releases and standing warnings are outward text, module switches, a citizen's own account and the
-            // warning value list are configuration — none of them is casework
+            // releases, standing warnings and released monthly texts are outward text, while module switches, a
+            // citizen's own account and the warning value list are configuration — none of them is casework
             case OeffentlicheSeite:
             case Pressemitteilung:
             case OeffentlicheWarnung:
+            case OeffentlicherLagebericht:
             case OeffentlichesModul:
             case BuergerProfil:
             case Warnhinweis:

@@ -33,6 +33,7 @@ public static class FeedbackPageTabs
         new("oeffentliche-seiten", "Öffentliche Seiten"),
         new("presse", "Pressemitteilungen"),
         new("warnungen", "Öffentliche Warnungen"),
+        new("berichte", "Öffentliche Lageberichte"),
         new("recht", "Gesetzesauszüge"),
         new("warnhinweise", "Warnhinweise"),
         new("oeffentliche-vorlagen", "Öffentliche Vorlagen"),

@@ -51,6 +51,10 @@ public class PublicWantedModelTests
         // the warning hub renders the whole body on the card; there is no page of its own
         typeof(PublicWarningCard),
         typeof(PublicWarningSnapshot),
+        // the report hub and one released month
+        typeof(PublicReportCard),
+        typeof(PublicReportView),
+        typeof(PublicReportSnapshot),
         // the law page: the statute itself, grouped by book
         typeof(PublicLawEntry),
         typeof(PublicLawBook),
@@ -80,6 +84,11 @@ public class PublicWantedModelTests
         [typeof(WarningDraft)] = "Der unveröffentlichte Entwurf einer Warnung; anonym gibt es ihn nicht.",
         [typeof(WarningInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
         [typeof(LawReleaseRow)] = "Zeile des Freigabe-Panels; sie nennt auch die Paragrafen, die drinnen bleiben.",
+        [typeof(PublicReportEdit)] = "Zeile des Lageberichts-Panels; nennt den veröffentlichenden Agenten und den "
+            + "internen Monatsbericht als Anker.",
+        [typeof(PublicReportDraft)] = "Der unveröffentlichte Entwurf eines Monatstexts; anonym gibt es ihn nicht.",
+        [typeof(PublicReportAnchor)] = "Ein archivierter Monatsbericht zur Auswahl im Panel; er trägt dessen interne Id.",
+        [typeof(PublicReportInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
         [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",

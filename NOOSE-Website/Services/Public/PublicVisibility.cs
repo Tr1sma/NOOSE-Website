@@ -36,6 +36,9 @@ public static class PublicVisibility
                 + "drinnen; einen Aktenbezug hat die Zeile nicht.",
             ["OeffentlicheWarnung"] = "Titel, Text und Gültigkeitsdatum einer amtlichen Warnung. Der Entwurf und "
                 + "der veröffentlichende Agent bleiben drinnen; einen Aktenbezug hat die Zeile nicht.",
+            ["OeffentlicherLagebericht"] = "Zeitraum, Titel und der freigegebene Text eines Monatsberichts — ein "
+                + "von der Führung geschriebener Text, kein Auszug des internen Zahlen-Snapshots. Entwurf, Anker "
+                + "und veröffentlichender Agent bleiben drinnen.",
             ["Law"] = "Gesetzbuch, Paragraf, Titel, Text und Strafmaß eines ausdrücklich freigegebenen "
                 + "Paragrafen. Standardmäßig bleibt jeder Paragraf drinnen; die Freigabe ist eine eigene "
                 + "Entscheidung je Zeile, und wer sie getroffen hat, steht nicht auf der öffentlichen Seite.",
@@ -164,7 +167,9 @@ public static class PublicVisibility
             ["Announcement"] = "Mitteilung an die Belegschaft; nach außen geht stattdessen eine Pressemitteilung.",
             ["AnnouncementAcknowledgment"] = Assignment,
             ["Feedback"] = "Rückmeldung eines Agenten zur Anwendung; nach außen nie.",
-            ["SituationReport"] = "Monats-Lagebericht; nach außen geht nur ein ausdrücklich freigegebener Auszug.",
+            ["SituationReport"] = "Gefrorener Statistik-Snapshot eines Monats — er zählt Verschlusssachen und nennt "
+                + "Personen mit ihrem internen Aktenzeichen. Nach außen geht kein Auszug daraus, sondern ein "
+                + "von der Führung geschriebener Text (siehe OeffentlicherLagebericht).",
             ["DossierSummary"] = "Maschineller Kurzbrief zu einer Akte; nach außen nie.",
 
             // --- money ---

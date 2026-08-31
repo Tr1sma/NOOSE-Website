@@ -40,6 +40,7 @@ public static class AuditEntityDisplay
         "OeffentlicheSeite" => "Öffentliche Seite",
         "Pressemitteilung" => "Pressemitteilung",
         "OeffentlicheWarnung" => "Öffentliche Warnung",
+        "OeffentlicherLagebericht" => "Öffentlicher Lagebericht",
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "Warnhinweis" => "Warnhinweis",
         "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
@@ -87,6 +88,7 @@ public static class AuditEntityDisplay
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
         "Pressemitteilung" => "/einstellungen?tab=presse",
         "OeffentlicheWarnung" => "/einstellungen?tab=warnungen",
+        "OeffentlicherLagebericht" => "/einstellungen?tab=berichte",
         "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
         "Warnhinweis" => "/einstellungen?tab=warnhinweise",
         // the share has no page of its own; it is managed at the notice, which is managed here

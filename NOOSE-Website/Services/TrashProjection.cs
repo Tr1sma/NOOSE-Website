@@ -19,6 +19,7 @@ using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Informants;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
 namespace NOOSE_Website.Services;
@@ -109,6 +110,11 @@ public static class TrashProjection
     public static TrashItem PublicWarning(OeffentlicheWarnung x)
         => new("oeffentliche-warnungen", x.Id, null, x.Title,
             PublicWarningStatusDisplay.Name(x.Status), x.DeletedAt);
+
+    // never the body: it may carry images, and the period plus the state is what identifies the row
+    public static TrashItem PublicReport(OeffentlicherLagebericht x)
+        => new("oeffentliche-lageberichte", x.Id, null, x.Title,
+            Join(ReportPeriod.Label(x.Year, x.Month), PublicReportStatusDisplay.Name(x.Status)), x.DeletedAt);
 
     // never the accusation text: the trash page is a list, and the snapshot's markup belongs to the editor
     public static TrashItem PublicWanted(OeffentlicheFahndung x)

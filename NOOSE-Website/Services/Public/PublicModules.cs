@@ -76,8 +76,8 @@ public static class PublicModules
         // /berichte, not /lageberichte: that route is internal (the legacy redirect and the leadership-only print page
         // with the classified aggregates). Because Prefixes collects the nav routes without asking Available, naming it
         // here declared an internal page indexable
-        new(SituationReports, "Lageberichte", "Freigegebene Auszüge der Monatsberichte.",
-            Icons.Material.Filled.Assessment, "/berichte", PublicModuleGroup.Behoerde, 130, false, false, OffGeneric),
+        new(SituationReports, "Lageberichte", "Von der Führung freigegebene Monatstexte.",
+            Icons.Material.Filled.Assessment, "/berichte", PublicModuleGroup.Behoerde, 130, false, true, OffGeneric),
         new(Warnings, "Warnungen", "Amtliche Warnungen mit Gültigkeitsdatum.",
             Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, true, OffGeneric),
         new(Law, "Recht", "Öffentlich freigegebene Gesetzesauszüge.",

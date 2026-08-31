@@ -117,7 +117,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 13b | Einspruch gegen eine Ausschreibung | `Oeffentlich13_Einspruch` | 4, 1 | **fertig** |
 | 14a | Presse: Mitteilungen, Discord-Push, Auto-Entwurf bei „gefasst" | `Oeffentlich14_Presse` | 3 | **fertig** |
 | 14b | Warnungen und öffentliche Gesetzesauszüge | `Oeffentlich14_Warnungen` | 3 | **fertig** |
-| 14c | Öffentliche Lageberichte | `Oeffentlich14_Lageberichte` | 3 | offen |
+| 14c | Öffentliche Lageberichte | `Oeffentlich14_Lageberichte` | 3 | **fertig** |
 | 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14a | offen |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
 
@@ -1842,17 +1842,20 @@ zeigt. ✅
 
 ---
 
-## Phase 14c — Öffentliche Lageberichte
+## Phase 14c — Öffentliche Lageberichte ✅
 
 **Ziel:** Ein Monat in Worten, freigegeben von der Führung.
 
 **Daten** (`Oeffentlich14_Lageberichte`)
-- `OeffentlicherLagebericht` → `OeffentlicheLageberichte`: `SituationReportId`, `FreigegebenHtml`
-  (`longtext`), `Status`, `VeroeffentlichtAm`/`VonId`, `IAuditable`, `ISoftDelete`.
+- `OeffentlicherLagebericht` → `OeffentlicheLageberichte`: `LageberichtId` (nullable FK), `Jahr`, `Monat`,
+  `Titel`, `EntwurfHtml`/`InhaltTitel`/`InhaltHtml` (`longtext`), `Status`, `VeroeffentlichtAm`/`VonId`,
+  `IAuditable`, `ISoftDelete`.
 
 **Code**
-- `IPublicSituationReportService`; Seite **`/berichte`** (nicht `/lageberichte`, siehe 14a Punkt 11);
-  `PublicSituationReportPanel` in `/einstellungen`.
+- `IPublicReportService` nach dem Vorbild `PressReleaseService`: zwei Spalten mit je einer Bedeutung, ein
+  Speicherpfad, ein Cache-Schlüssel.
+- `Services/Public/ReportPeriod.cs` — der Zeitraum als Adresse; `ReportRules.cs` — Titellänge und Deckel.
+- Seiten `/berichte` und `/berichte/{Zeitraum}`, `PublicReportsPanel` in `/einstellungen?tab=berichte`.
 - `PublicModules`: `Lageberichte` ⇒ `Available`.
 
 **Entschieden: der Bericht gibt Text frei, keine Zahlen.** „Abschnitte des Monatsberichts einzeln freigeben"
@@ -1861,14 +1864,95 @@ JSON-Statistik-Snapshot**: `DashboardMetrics` trägt eine `Classified`-Zahl (wie
 gibt), `StatisticsTopEntry` trägt Name + internes Aktenzeichen + `/personen/{id}`-Href, und alle
 Verteilungen sind über den **ganzen** Bestand gerechnet (`GetReportAsync(isLeadership: true)`). Ein
 Abschnitt daraus mechanisch nach außen zu geben wäre genau die Zahl, die Phase 15 mit ihrer Regel
-„ausschließlich aus öffentlichen Tabellen und publizierten Einträgen" verbietet. `FreigegebenHtml` ist
-deshalb ein von der Führung geschriebener Text; die `SituationReportId` ist Anker und Datum, nie Datenquelle.
+„ausschließlich aus öffentlichen Tabellen und publizierten Einträgen" verbietet. `InhaltHtml` ist deshalb
+ein von der Führung geschriebener Text; die `LageberichtId` ist Anker und Herkunftsnachweis, nie Datenquelle.
 
-**Tests** Entwurf anonym nicht erreichbar · kein Feld des JSON-Snapshots erreicht eine öffentliche
-Projektion (Dateiscan-Muster `PublicPageScanTests.InternalMarkers`, das `ThreatScore` schon so hält).
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Der Zeitraum ist die Adresse, nicht ein Aktenzeichen.** `/berichte/2026-08` ist zitierbar, wird nie
+   wiederverwendet und ist nicht fälschbar, weil `Jahr`/`Monat` beim Anlegen **aus dem Anker** übernommen
+   werden und danach unveränderlich sind — die Eingabe des Panels trägt sie nicht. Damit kein `PM`-artiger
+   Präfix, kein `CaseNumberCounter`, keine Transaktion. **Kein Unique-Index** darauf (Phase-3-Lektion vom
+   Seiten-Slug: mit Soft-Delete sperrte er den Monat für immer); „ein lebender Bericht je Monat" ist eine
+   Dienst-Regel über die lebenden Zeilen, und **`RestoreAsync` prüft sie erneut** — der Papierkorb ist ihre
+   zweite Tür, denn nach dem Löschen darf jemand einen neuen Text für denselben Monat schreiben.
+2. **Die Adresse wird geparst, bevor sie nachgeschlagen wird.** `GetByPeriodAsync` geht über
+   `ReportPeriod.TryParse` und baut den Wörterbuch-Schlüssel selbst neu. Ohne das läse `2026-8` als zweite
+   Schreibweise derselben Seite — zwei Adressen für einen Inhalt. Strikt heißt strikt: `2026-13`, `abc`,
+   ` 2026-08` und `+026-08` fallen alle auf „nicht gefunden", wortgleich mit einem unbekannten Monat.
+   Der Route-Parameter ist ein **`string`** (Blazor antwortet auf einen unparsbaren Wert mit HTTP 500).
+3. **Der Anker ist nullable, obwohl er beim Anlegen Pflicht ist** — die 13b-Lektion, nicht Bequemlichkeit:
+   eine **Pflicht**-Navigation wird von EF **INNER** gejoint, also fiele eine Zeile, deren interner Bericht
+   inzwischen gelöscht wurde, lautlos aus `GetAllAsync` heraus, während eine Zählung ohne Navigation sie
+   weiterzählt. Nullable ⇒ LEFT JOIN ⇒ die Zeile bleibt sichtbar, das Panel schreibt „Monatsbericht
+   gelöscht" daneben, und `MySqlTranslationTests` hält das `LEFT JOIN` fest.
+4. **Kein Löschriegel und kein Rückzugs-Hook auf `SituationReportService.DeleteAsync`.** Der öffentliche
+   Text trägt kein einziges Feld des Snapshots, also macht das Aufräumen des internen Archivs ihn nicht
+   falsch. Präzedenz 14a: eine Pressemitteilung über eine Festnahme überlebt das Löschen der Ausschreibung,
+   weil sie eine eigene, datierte Aussage ist. Ein Hook nach dem Muster `RetractForRecordAsync` wäre hier
+   sogar die **schlechtere** Wahl — Archiv-Aufräumen würde damit zur stillen Depublikation ohne Grund auf
+   der Zeile, genau das, was der öffentliche Bereich überall verbietet. Mit Test.
+5. **Kein Unterdrückungsgürtel, weil es nichts zu unterdrücken gibt.** Der Lesepfad dereferenziert den
+   Anker **nie** (Titel und Zeitraum sind Snapshot-Felder auf der Zeile), also ist die
+   `IgnoreQueryFilters`-Falle aus Phase 4/12 hier baulich nicht erreichbar. Das ist dieselbe Entscheidung
+   wie in Punkt 4, von der anderen Seite.
+6. **Der Beweis der Phase ist ein Verhaltenstest, nicht ein Namensscan.** Ein interner Monatsbericht wird
+   mit einer erkennbaren Zahl (`Classified = 4711`), einem Personennamen, einem `NOOSE-P-`-Aktenzeichen und
+   einem `/personen/{id}`-Href geseedet; danach wird der **ganze** öffentliche Snapshot serialisiert und darf
+   keines davon enthalten — auch nicht die Anker-Id und nicht den Codenamen des Veröffentlichenden. Ein
+   Leck durch *irgendein* Feld fällt damit auf, nicht nur durch das eine, das eine gezielte Prüfung ansieht.
+   Zweite Schicht ist die Struktur: `PublicReportCard`/`PublicReportView` können diese Werte nicht tragen.
+   Dritte Schicht: `PublicPageScanTests.InternalMarkers` bekommt `SnapshotJson`, `StatisticsReport`,
+   `DashboardMetrics`, `StatisticsTopEntry`, `SituationReportDisplay` und `ISituationReportService` — dieselbe
+   Mechanik, die `ThreatScore` seit Phase 12 hält.
+7. **Der Anker-Picker liest über `ISituationReportService`, und das ist kein Bruch von Leitsatz 3.** Der
+   Leitsatz verbietet einem *öffentlichen* Lesepfad, über einen internen Listendienst zu lesen; dies ist der
+   interne Picker des Panels, und das Archiv ist die Frage dieses Dienstes. Projiziert wird auf
+   `Id/Jahr/Monat/Titel` — `SituationReportHead.GeneratedBy` nennt einen Agenten und hat in einer Auswahlliste
+   nichts zu suchen. Angeboten werden nur Monate ohne lebenden Text. Kein DI-Zyklus: `SituationReportService`
+   kennt den öffentlichen Dienst nicht.
+8. **Titel und Rumpf sind mitgeschnappt, das Publikationsdatum wird einmalig geprägt** (14a-Lektion, beide
+   Teile): neben einem Publizieren-Knopf darf „Entwurf speichern" nichts ändern, was schon draußen steht,
+   und eine Tippfehler-Korrektur darf einen Bericht vom März nicht auf heute umdatieren. Zurückziehen räumt
+   `VeroeffentlichtAm`/`VonId`, damit ein Bericht, der wieder rausgeht, ehrlich neu datiert ist.
+9. **Kein Discord-Push.** Ein Monatsbericht ist keine Eilmeldung; die Nav zeigt ihn ohnehin. Damit kein
+   neuer `NotificationType`. (Bei 14a war der Push richtig, weil eine Mitteilung ein Ereignis ist; bei 14b
+   falsch, weil eine Warnung abläuft — hier fehlt schlicht der Anlass.)
+10. **Deckel 24 statt 50**, und der Deckel wird auf der Seite genannt: zwei Jahre Monatsberichte sind so weit,
+    wie ein Leser plausibel zurückscrollt, und ein stiller Schnitt liest sich wie Vollständigkeit.
+    `ByPeriod` wird über `GroupBy` gebaut, nicht `ToDictionary` — die Eindeutigkeit des Monats hängt an einer
+    Dienst-Regel, nicht an einem Index, und ein werfender Snapshot versteckte **jeden** Bericht statt des
+    einen strittigen Monats (Phase-3-Lektion vom Seiten-Slug).
+11. **Zurückziehen und Löschen fragen das Modul nie**, Publizieren schon — sonst machte der Not-Aus das
+    Zurückziehen unmöglich. Löschen verlangt erst das Zurückziehen, Wiederherstellen kommt als Entwurf.
+12. **`Permission.RequirePublicReportWrite`** = `IsInternalAgent()` → `MayWrite()` → `IsLeadership()`, in
+    dieser Reihenfolge und als eigener Guard mit eigener Meldung (Präzedenz `RequireWarningWrite`): ein
+    Bürgerkonto trägt gar keinen Rang-Claim, und die Rangprüfung allein ließe Aufsicht und Demo-Principal
+    durch. Gelesen wird mit `RequireClassifiedRead` — die Aufsicht muss sehen, was die Behörde öffentlich
+    sagt, sie darf es nur nicht sagen.
+13. **Registriert:** `AppDbContext` (DbSet, Fluent, Composite-Index, zwei `Restrict`-FKs), `PublicVisibility`
+    (`Publishable`), `SearchCatalog` (`NotSearchable`, Provider mit Phase 16), `AuditEntityDisplay` (Label
+    **und** Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` (die Zeile
+    nennt Zeitraum, Titel und Status, nie den Rumpf), `MergedPageSections` (`Settings` **und** `Trash`),
+    `FeedbackPageTabs`, `Program.cs`, `Settings.razor`. **Nicht** registriert und mit Grund: die vier
+    Zeitstrahl-/Chronik-Stellen sowie `RecordsReference`/`LinkService` — ein Lagebericht hängt an keiner Akte
+    (Präzedenz `Ticket`, `Pressemitteilung`, `OeffentlicheWarnung`); `PublicRoutes`/`robots.txt` — `/berichte`
+    kommt seit 14a aus der Modul-`NavRoute`, und damit auch `DemoModeMiddleware` und `PartnerRoutes.IsAllowed`;
+    `NotificationType` — siehe Punkt 9.
+
+**Tests** (+52) — `PublicReportServiceTests` (Zeitraum kommt aus dem Anker · ohne Anker und mit unbekanntem
+Anker abgewiesen · zweiter Text für denselben Monat abgewiesen · Bearbeiten lässt Anker und Zeitraum in Ruhe ·
+Picker bietet nur freie Monate · Entwurf anonym unerreichbar · Speichern lässt die Publikation in Ruhe ·
+`HtmlCleanup` beim Speichern **und** beim Publizieren · leerer Entwurf abgelehnt, Nur-Bild akzeptiert ·
+Korrigieren behält das Datum, Zurückziehen + erneut publizieren datiert neu · Löschen vor dem Zurückziehen
+abgelehnt · Wiederherstellen kommt als Entwurf und wird in einen neu belegten Monat abgewiesen · Modul aus
+verdunkelt Hub und Artikel, Zurückziehen geht weiter · gelöschter Monatsbericht: Zeile bleibt in der Liste,
+Text bleibt online · **kein Feld des gefrorenen Snapshots erreicht den öffentlichen Snapshot** · unparsbarer
+Zeitraum · Rechte-Matrix) · `ReportPeriodTests` · `PublicReportCacheDisciplineTests` ·
+`MySqlTranslationTests` +3.
 
 **Fertig, wenn** ein freigegebener Monatstext auf `/berichte` steht und `/lageberichte/{Id}` weiter intern und
-`noindex` ist.
+`noindex` ist. ✅
 
 ---
 

@@ -1,0 +1,78 @@
+@page "/berichte"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicReportService Reports
+
+<PageTitle>Lageberichte · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.SituationReports" Title="Lageberichte">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Lageberichte</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Freigegebene Monatsberichte des National Office of Security Enforcement.
+        </MudText>
+
+        @if (_cards.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit ist kein Lagebericht veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                @foreach (var card in _cards)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    @ReportPeriod.Label(card.Year, card.Month)
+                                </MudChip>
+                                @if (card.PublishedAt is { } at)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @at.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudText>
+                                }
+                            </MudStack>
+                            <MudLink Href="@($"/berichte/{ReportPeriod.Format(card.Year, card.Month)}")"
+                                     Typo="Typo.h6" Underline="Underline.None">
+                                @card.Title
+                            </MudLink>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            @* a silent cut reads like completeness *@
+            @if (_cards.Count >= ReportRules.HubLimit)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Gezeigt werden die @ReportRules.HubLimit jüngsten Berichte.
+                </MudText>
+            }
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicReportCard> _cards = Array.Empty<PublicReportCard>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _cards = (await Reports.GetPublishedAsync()).Cards;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

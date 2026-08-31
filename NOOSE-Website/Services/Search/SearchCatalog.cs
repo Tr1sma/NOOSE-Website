@@ -436,6 +436,8 @@ public static class SearchCatalog
                 + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
             ["OeffentlicheWarnung"] = "Amtliche Warnung ohne Aktenbezug; gepflegt wird sie in /einstellungen. "
                 + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["OeffentlicherLagebericht"] = "Freigegebener Monatstext ohne Aktenbezug; gepflegt wird er in "
+                + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
             ["Warnhinweis"] = "Werteliste des öffentlichen Bereichs ohne Aktenbezug; gepflegt in /einstellungen. "
                 + "Gesucht wird die Ausschreibung, die den Hinweis trägt, nicht der Hinweis selbst.",
             ["FahndungWarnhinweis"] = "Zuordnungszeile zwischen Ausschreibung und Warnhinweis; sie trägt keinen "

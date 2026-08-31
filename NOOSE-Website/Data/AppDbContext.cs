@@ -254,6 +254,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
     public DbSet<Pressemitteilung> Pressemitteilungen => Set<Pressemitteilung>();
     public DbSet<OeffentlicheWarnung> OeffentlicheWarnungen => Set<OeffentlicheWarnung>();
+    public DbSet<OeffentlicherLagebericht> OeffentlicheLageberichte => Set<OeffentlicherLagebericht>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1710,6 +1711,24 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(w => new { w.Status, w.ValidUntil });
             b.HasOne(w => w.PublishedBy).WithMany()
                 .HasForeignKey(w => w.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicherLagebericht>(b =>
+        {
+            b.Property(r => r.Title).HasMaxLength(200).IsRequired();
+            b.Property(r => r.ContentTitle).HasMaxLength(200);
+            b.Property(r => r.ContentHtml).HasColumnType("longtext");
+            b.Property(r => r.DraftHtml).HasColumnType("longtext");
+            b.Property(r => r.SituationReportId).HasMaxLength(64);
+            b.Property(r => r.PublishedById).HasMaxLength(64);
+            // the hub filters on the status and orders by the period
+            b.HasIndex(r => new { r.Status, r.Year, r.Month });
+            // optional on purpose: a required navigation is INNER joined, so a report whose anchor was deleted would
+            // drop out of the panel projection while a count that touches no navigation kept counting it
+            b.HasOne(r => r.SituationReport).WithMany()
+                .HasForeignKey(r => r.SituationReportId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(r => r.PublishedBy).WithMany()
+                .HasForeignKey(r => r.PublishedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OeffentlicheFahndung>(b =>

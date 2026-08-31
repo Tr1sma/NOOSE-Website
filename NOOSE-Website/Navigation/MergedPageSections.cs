@@ -12,7 +12,7 @@ public static class MergedPageSections
         "finanzierung",
         "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
-        "oeffentliche-module", "oeffentliche-seiten", "presse", "warnungen", "recht", "warnhinweise",
+        "oeffentliche-module", "oeffentliche-seiten", "presse", "warnungen", "berichte", "recht", "warnhinweise",
         "oeffentliche-vorlagen", "buerger",
         "basisdaten",
     ];
@@ -32,7 +32,7 @@ public static class MergedPageSections
         "informanten",
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
         "feedback", "oeffentliche-seiten", "oeffentliche-fahndungen", "oeffentliche-fraktionsprofile",
-        "hinweise", "tickets", "fahndungs-einsprueche", "pressemitteilungen", "oeffentliche-warnungen",
+        "hinweise", "tickets", "fahndungs-einsprueche", "pressemitteilungen", "oeffentliche-warnungen", "oeffentliche-lageberichte",
     ];
 
     public static readonly string[] Wanted =

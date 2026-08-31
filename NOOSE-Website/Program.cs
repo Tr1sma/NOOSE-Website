@@ -347,6 +347,7 @@ builder.Services.AddScoped<IPublicPageService, PublicPageService>();
 builder.Services.AddScoped<IPressReleaseService, PressReleaseService>();
 builder.Services.AddScoped<IPublicWarningService, PublicWarningService>();
 builder.Services.AddScoped<IPublicLawService, PublicLawService>();
+builder.Services.AddScoped<IPublicReportService, PublicReportService>();
 builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();

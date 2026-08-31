@@ -458,15 +458,15 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–13, 14a und 14b aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die
+Gebaut sind Phase 1–13 und 14a–14c aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die
 redaktionellen Seiten, die öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf,
 Aufrufzähler, Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung,
 Triage, Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
 Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten,
 die Sachfahndung (gesuchte Fahrzeuge und Waffen), der Bürger-Einspruch gegen eine Ausschreibung, die
-Pressemitteilungen sowie die amtlichen Warnungen und die freigegebenen Gesetzesauszüge. Lageberichte und
-die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und
-stehen auf „aus".
+Pressemitteilungen, die amtlichen Warnungen und die freigegebenen Gesetzesauszüge sowie die freigegebenen
+Monatstexte. Die öffentlichen Zahlen und die Gefahrenlage-Ampel sind geplant, aber **nicht** vorhanden —
+ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -1369,6 +1369,56 @@ stehen auf „aus".
     sowie `RecordsReference`/`LinkService` — eine Warnung hängt an keiner Akte (Präzedenz `Ticket`,
     `Pressemitteilung`); `PublicRoutes`/`robots.txt` — `/warnungen` und `/recht` kommen seit Phase 2 aus
     der Modul-`NavRoute`, und damit auch `DemoModeMiddleware` und `PartnerRoutes.IsAllowed`.
+- **Phase 14c (Lageberichte) — was daran anders ist:**
+  - **Der Zeitraum ist die Adresse, nicht ein Aktenzeichen.** `/berichte/2026-08` ist zitierbar, wird nie
+    wiederverwendet und ist nicht fälschbar: `Jahr`/`Monat` kommen beim Anlegen **aus dem Anker** und sind
+    danach unveränderlich — die Panel-Eingabe trägt sie nicht. Damit kein Präfix, kein `CaseNumberCounter`,
+    keine Transaktion. **Kein Unique-Index** darauf (Phase-3-Lektion vom Seiten-Slug: mit Soft-Delete
+    sperrte er den Monat für immer); „ein lebender Bericht je Monat" ist eine Dienst-Regel über die
+    lebenden Zeilen, und **`RestoreAsync` prüft sie erneut** — nach dem Löschen darf jemand einen neuen
+    Text für denselben Monat schreiben, der Papierkorb ist die zweite Tür.
+  - **Die Adresse wird geparst, bevor sie nachgeschlagen wird.** `GetByPeriodAsync` geht über
+    `ReportPeriod.TryParse` und baut den Schlüssel neu; ohne das läse `2026-8` als zweite Schreibweise
+    derselben Seite. `Services/Public/ReportPeriod.cs` ist die einzige Wahrheit von Format, Label und
+    Parser (Muster `PublicExpiry`). Der Route-Parameter ist ein **`string`** — Blazor antwortet auf einen
+    unparsbaren Wert mit HTTP 500, und an eine öffentliche URL hängt jeder alles.
+  - **Der Anker ist nullable, obwohl er beim Anlegen Pflicht ist** — die 13b-Lektion: eine
+    **Pflicht**-Navigation wird **INNER** gejoint, also fiele eine Zeile, deren interner Monatsbericht
+    gelöscht wurde, lautlos aus `GetAllAsync`, während eine Zählung ohne Navigation sie weiterzählt.
+    Nullable ⇒ LEFT JOIN, das Panel schreibt „Monatsbericht gelöscht" daneben, `MySqlTranslationTests`
+    hält das `LEFT JOIN` fest.
+  - **Kein Löschriegel und kein Rückzugs-Hook auf `SituationReportService.DeleteAsync`.** Der öffentliche
+    Text trägt kein einziges Feld des Snapshots, also macht Archiv-Aufräumen ihn nicht falsch (Präzedenz
+    14a: eine Pressemitteilung überlebt das Löschen der Ausschreibung, weil sie eine eigene datierte
+    Aussage ist). Ein Hook nach dem Muster `RetractForRecordAsync` wäre hier die **schlechtere** Wahl —
+    er machte Aufräumen zur stillen Depublikation ohne Grund auf der Zeile. Aus demselben Grund gibt es
+    **keinen Unterdrückungsgürtel**: der Lesepfad dereferenziert den Anker nie, also ist die
+    `IgnoreQueryFilters`-Falle aus Phase 4/12 baulich nicht erreichbar.
+  - **Text, keine Zahlen — und das ist ein Verhaltenstest, kein Namensscan.** Ein interner Monatsbericht
+    wird mit `Classified = 4711`, einem Personennamen, einem `NOOSE-P-`-Aktenzeichen und einem
+    `/personen/{id}`-Href geseedet; danach wird der **ganze** öffentliche Snapshot serialisiert und darf
+    keines davon enthalten, auch nicht die Anker-Id und nicht den Codenamen. Zweite Schicht ist die
+    Struktur (`PublicReportCard`/`PublicReportView` können diese Werte nicht tragen), dritte
+    `PublicPageScanTests.InternalMarkers` mit `SnapshotJson`, `StatisticsReport`, `DashboardMetrics`,
+    `StatisticsTopEntry`, `SituationReportDisplay`, `ISituationReportService` — dieselbe Mechanik, die
+    `ThreatScore` seit Phase 12 hält.
+  - **Der Anker-Picker liest über `ISituationReportService`, und das ist kein Bruch von Leitsatz 3.** Der
+    verbietet einem *öffentlichen* Lesepfad, über einen internen Listendienst zu lesen; dies ist der
+    interne Picker des Panels. Projiziert wird auf `Id/Jahr/Monat/Titel` — `SituationReportHead.GeneratedBy`
+    nennt einen Agenten. Angeboten werden nur Monate ohne lebenden Text; kein DI-Zyklus.
+  - **Kein Discord-Push**, anders als bei der Presse: ein Monatsbericht ist keine Eilmeldung, die Nav zeigt
+    ihn ohnehin. Damit kein neuer `NotificationType`. Deckel **24** (zwei Jahre) und **auf der Seite
+    genannt**; `ByPeriod` über `GroupBy`, nicht `ToDictionary` — die Eindeutigkeit hängt an einer
+    Dienst-Regel, nicht an einem Index, und ein werfender Snapshot versteckte **jeden** Bericht.
+  - **`Permission.RequirePublicReportWrite`** = `IsInternalAgent()` → `MayWrite()` → `IsLeadership()`, in
+    dieser Reihenfolge und als eigener Guard mit eigener Meldung (Präzedenz `RequireWarningWrite`).
+    Gelesen wird mit `RequireClassifiedRead`. Titel und Rumpf sind mitgeschnappt, das Publikationsdatum
+    einmalig geprägt und beim Zurückziehen geräumt (14a, beide Teile). Publizieren braucht ein lebendes
+    Modul, Zurückziehen und Löschen **nie**.
+  - **Nicht** registriert, mit Grund: die vier Zeitstrahl-/Chronik-Stellen sowie
+    `RecordsReference`/`LinkService` — ein Lagebericht hängt an keiner Akte (Präzedenz `Ticket`,
+    `Pressemitteilung`, `OeffentlicheWarnung`); `PublicRoutes`/`robots.txt` — `/berichte` kommt seit 14a
+    aus der Modul-`NavRoute`, und damit auch `DemoModeMiddleware` und `PartnerRoutes.IsAllowed`.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1398,7 +1448,7 @@ stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–13, 14a und 14b gebaut**, 14c–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–13 und 14a–14c gebaut**, 15–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

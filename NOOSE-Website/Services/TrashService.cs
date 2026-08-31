@@ -33,7 +33,8 @@ public sealed class TrashService(
     ITicketService tickets,
     IObjectionService objections,
     IPressReleaseService press,
-    IPublicWarningService warnings) : ITrashService
+    IPublicWarningService warnings,
+    IPublicReportService publicReports) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -112,6 +113,9 @@ public sealed class TrashService(
         Source(new TrashKind("oeffentliche-warnungen", "Öffentliche Warnungen", Icons.Material.Filled.Campaign,
                 "/einstellungen?tab=warnungen"),
             warnings.GetTrashAsync, TrashProjection.PublicWarning, warnings.RestoreAsync),
+        Source(new TrashKind("oeffentliche-lageberichte", "Öffentliche Lageberichte",
+                Icons.Material.Filled.Assessment, "/einstellungen?tab=berichte"),
+            publicReports.GetTrashAsync, TrashProjection.PublicReport, publicReports.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

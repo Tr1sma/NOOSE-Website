@@ -210,6 +210,8 @@ public class PublicSurfaceGuardTests
         "PressEdit", "PressDraft", "PublishedByName",
         // the warning and law desks: the same shape, plus the paragraphs that stay in
         "WarningEdit", "WarningDraft", "LawReleaseRow",
+        // the report desk: the edit row names the publishing agent and the internal anchor
+        "PublicReportEdit", "PublicReportDraft", "PublicReportAnchor",
     ];
 
     [Fact]
