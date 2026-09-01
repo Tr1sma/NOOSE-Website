@@ -15,9 +15,10 @@ namespace NOOSE_Website.Services;
 public interface IGamificationService
 {
     Task<AgentStats> GetStatsAsync(string agentId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(GamificationPeriod period, int topN = 25, CancellationToken cancellationToken = default);
-    /// <summary>Leaderboard over the last <paramref name="windowDays"/> days (0 or less = all time).</summary>
-    Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int windowDays, int topN = 25, CancellationToken cancellationToken = default);
+    /// <summary>Leaderboard for <paramref name="period"/>; topN caps each slice on its own.</summary>
+    Task<LeaderboardView> GetLeaderboardAsync(GamificationPeriod period, int topN = 25, CancellationToken cancellationToken = default);
+    /// <summary>Leaderboard over the last <paramref name="windowDays"/> days (0 or less = all time); topN caps each slice on its own.</summary>
+    Task<LeaderboardView> GetLeaderboardAsync(int windowDays, int topN = 25, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BadgeView>> GetBadgesAsync(string agentId, CancellationToken cancellationToken = default);
     /// <summary>Award any newly-earned badges across all agents; returns how many were granted. Idempotent.</summary>
     Task<int> SweepAsync(CancellationToken cancellationToken = default);
@@ -26,6 +27,13 @@ public interface IGamificationService
 /// <inheritdoc cref="IGamificationService" />
 public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactory) : IGamificationService
 {
+    // out of the running from Supervisory Special Agent up; rank only, so an admin with a low rank keeps
+    // competing - deliberately narrower than AgentPrincipalExtensions.IsLeadership()
+    private const Rank LeadershipFloor = Rank.SupervisorySpecialAgent;
+
+    // one predicate, negated for the other slice: Rank is nullable and a >=/< pair is false on BOTH sides for null
+    private static bool OutOfCompetition(Rank? rank) => rank >= LeadershipFloor;
+
     public async Task<AgentStats> GetStatsAsync(string agentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(agentId))
@@ -38,37 +46,43 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
         return acc.ToStats(badges);
     }
 
-    public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(
+    public Task<LeaderboardView> GetLeaderboardAsync(
         GamificationPeriod period, int topN = 25, CancellationToken cancellationToken = default)
         => BuildLeaderboardAsync(Cutoff(period), topN, cancellationToken);
 
-    public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(
+    public Task<LeaderboardView> GetLeaderboardAsync(
         int windowDays, int topN = 25, CancellationToken cancellationToken = default)
         => BuildLeaderboardAsync(windowDays > 0 ? DateTime.UtcNow.AddDays(-windowDays) : null, topN, cancellationToken);
 
-    private async Task<IReadOnlyList<LeaderboardEntry>> BuildLeaderboardAsync(
+    private async Task<LeaderboardView> BuildLeaderboardAsync(
         DateTime? since, int topN, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var all = await ComputeAllAsync(db, since, cancellationToken);
 
-        // ranking is over internal, active agents only; team leads are RP-invisible and never ranked
+        // ranking is over internal, active agents only; team leads are RP-invisible and never listed
         var agents = await db.Users.OnlySelectable()
-            .Select(u => new { u.Id, u.Codename })
+            .Select(u => new { u.Id, u.Codename, u.Rank })
             .ToListAsync(cancellationToken);
 
-        return agents
-            .Select(a => (a.Id, a.Codename, Acc: all.GetValueOrDefault(a.Id) ?? new StatAcc()))
-            .Select(x => (x.Id, x.Codename, x.Acc, Stats: x.Acc.ToStats(0)))
-            .Where(x => x.Stats.Points > 0)
-            .OrderByDescending(x => x.Stats.Points).ThenBy(x => x.Codename, StringComparer.OrdinalIgnoreCase)
-            .Take(topN)
-            .Select((x, i) => new LeaderboardEntry(
-                i + 1, x.Id, string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannt)" : x.Codename,
-                x.Stats.Points, x.Acc.Records, x.Acc.Docs, x.Acc.Links,
-                x.Acc.Classifications, x.Acc.Observations, x.Acc.SolvedCases))
+        // score and order once, then split; topN caps each slice so leadership never displaces a placed agent
+        var scored = agents
+            .Select(a => new { a.Id, a.Codename, a.Rank, Acc = all.GetValueOrDefault(a.Id) ?? new StatAcc() })
+            .Select(x => new { x.Id, x.Codename, x.Rank, x.Acc, Points = x.Acc.ToStats(0).Points })
+            .Where(x => x.Points > 0)
+            .OrderByDescending(x => x.Points).ThenBy(x => x.Codename, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        return new LeaderboardView(
+            scored.Where(x => !OutOfCompetition(x.Rank)).Take(topN)
+                .Select((x, i) => Row(x.Id, x.Codename, x.Acc, x.Points, i + 1)).ToList(),
+            scored.Where(x => OutOfCompetition(x.Rank)).Take(topN)
+                .Select(x => Row(x.Id, x.Codename, x.Acc, x.Points, 0)).ToList());
     }
+
+    private static LeaderboardEntry Row(string id, string codename, StatAcc acc, int points, int position)
+        => new(position, id, string.IsNullOrWhiteSpace(codename) ? "(unbenannt)" : codename, points,
+            acc.Records, acc.Docs, acc.Links, acc.Classifications, acc.Observations, acc.SolvedCases);
 
     public async Task<IReadOnlyList<BadgeView>> GetBadgesAsync(string agentId, CancellationToken cancellationToken = default)
     {

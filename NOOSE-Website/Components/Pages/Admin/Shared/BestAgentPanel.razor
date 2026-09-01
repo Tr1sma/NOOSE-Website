@@ -1,11 +1,13 @@
-@* "Bester Agent der Woche": periodic top-3 Discord announcement + optional personnel entries. Leadership-managed. *@
+@* "Bester Agent": periodic top-3 Discord announcement + optional personnel entries. Leadership-managed. *@
 @inject ITopAgentAwardService Awards
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     In einstellbarem Takt werden die drei Agenten mit den meisten Gamification-Punkten des Zeitraums in den
-    Ankündigungs-Discord-Channel gepostet (mit @@NOOSE-Ping). Optional erhält jeder der drei einen positiven
-    Personalakten-Vermerk „Bester Agent der Woche KW[aktuelle KW]". Der Discord-Post nutzt denselben Webhook +
+    Ankündigungs-Discord-Channel gepostet (mit @@NOOSE-Ping). Die Überschrift folgt dem Intervall
+    („der Woche (KW 36)", „des Monats", …). Die Führungsebene wird darunter außer Wertung mitgepostet: sie
+    belegt keinen der drei Plätze und erhält keinen Vermerk. Optional erhält jeder der drei Platzierten einen
+    positiven Personalakten-Vermerk mit demselben Zeitraum. Der Discord-Post nutzt denselben Webhook +
     dieselbe Rolle wie die Kategorie <b>Ankündigung</b> (siehe Discord-Benachrichtigungen).
 </MudText>
 
@@ -18,8 +20,9 @@ else
     <MudStack Spacing="3" Style="max-width:520px;">
         <MudSwitch T="bool" @bind-Value="_enabled" Color="Color.Primary" Label="Automatische Ankündigung aktiv" />
 
-        <MudNumericField T="int" @bind-Value="_intervalDays" Label="Intervall (Tage)" Min="1" Max="365"
-                         Variant="Variant.Outlined" HelperText="Alle wie viele Tage die Top 3 gepostet werden (7 = wöchentlich)." />
+        <MudNumericField T="int" @bind-Value="_intervalDays" Label="Intervall (Tage)" Min="1" Max="366"
+                         Variant="Variant.Outlined"
+                         HelperText="Alle wie viele Tage die Top 3 gepostet werden. Die Überschrift folgt: 1 = Tag, 7 = Woche (mit KW), 28–31 = Monat, 90–92 = Quartal, 365 = Jahr, sonst „letzte N Tage“." />
 
         <MudSwitch T="bool" @bind-Value="_createNote" Color="Color.Primary"
                    Label="Positiven Personalakten-Vermerk für die Top 3 anlegen" />
@@ -86,11 +89,13 @@ else
         _running = true;
         try
         {
-            var count = await Awards.RunNowAsync(_user);
-            _lastRun = DateTime.UtcNow;
-            Snackbar.Add(count > 0
-                ? $"Ankündigung gesendet ({count} Agenten)."
-                : "Keine Agenten mit Punkten im Zeitraum — nichts gesendet.", Severity.Success);
+            var result = await Awards.RunNowAsync(_user);
+            if (result.Announced)
+            {
+                _lastRun = DateTime.UtcNow;
+            }
+            var (message, severity) = Outcome(result);
+            Snackbar.Add(message, severity);
         }
         catch (Exception ex)
         {
@@ -101,4 +106,19 @@ else
             _running = false;
         }
     }
+
+    // "nothing sent" has four different reasons; reporting them as one hides a broken webhook
+    private static (string Message, Severity Severity) Outcome(TopAgentRunResult result) => result switch
+    {
+        { Ranked: 0, OutOfCompetition: 0 } =>
+            ("Keine Agenten mit Punkten im Zeitraum — nichts gesendet.", Severity.Info),
+        { Ranked: 0 } =>
+            ("Nur die Führungsebene hat Punkte gesammelt — sie steht außer Wertung, es wurde nichts gesendet.", Severity.Info),
+        { Posted: false, Announced: true } =>
+            ("Discord-Ankündigungen sind deaktiviert — es wurde nichts gepostet.", Severity.Info),
+        { Posted: false } =>
+            ($"Top {result.Ranked} ermittelt, aber Discord hat den Post nicht angenommen.", Severity.Warning),
+        _ =>
+            ($"Ankündigung gesendet ({result.Ranked} gewertete Agenten).", Severity.Success),
+    };
 }

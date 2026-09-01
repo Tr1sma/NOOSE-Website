@@ -41,7 +41,7 @@ public static class SystemSettingKeys
     /// <summary>Whether role-ping Discord posts include the record header/title (Announcement, Recruiting). Default on.</summary>
     public const string DiscordIncludeHeadline = "DiscordHeaderInhalt";
 
-    // "Bester Agent der Woche" periodic top-3 announcement
+    // periodic top-3 agent announcement; the interval also drives its wording
     public const string BestAgentEnabled = "BesterAgentAktiv";
     public const string BestAgentIntervalDays = "BesterAgentIntervallTage";
     public const string BestAgentCreateNote = "BesterAgentVermerkAktiv";

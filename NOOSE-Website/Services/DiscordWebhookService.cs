@@ -94,7 +94,7 @@ public class DiscordWebhookService(
         }
     }
 
-    // app-authored broadcast (e.g. weekly top-agent post): custom content + the category's ping + optional link
+    // app-authored broadcast (e.g. the top-agent post): custom content + the category ping + optional link
     public async Task<bool> PushCustomAsync(NotificationType type, string content, string? href = null, CancellationToken cancellationToken = default)
     {
         try
