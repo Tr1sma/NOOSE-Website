@@ -141,10 +141,10 @@ public sealed class GamificationServiceTests
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent("a1"));
-            db.Users.Add(Seed.Agent("a2"));
-            db.Users.Add(Seed.Agent("a3", status: AgentStatus.Pending)); // inactive -> excluded
-            db.Users.Add(Seed.Agent("a4"));                              // active but no activity -> excluded
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
+            db.Users.Add(Seed.Agent("a2", rank: Rank.SpecialAgent));
+            db.Users.Add(Seed.Agent("a3", rank: Rank.SpecialAgent, status: AgentStatus.Pending)); // inactive -> excluded
+            db.Users.Add(Seed.Agent("a4", rank: Rank.SpecialAgent));                              // active but no activity -> excluded
             db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
             db.Cases.Add(Seed.Case(id: "c2", configure: c => c.CreatedById = "a1"));
             db.People.Add(Seed.Person(id: "p1", configure: p => p.CreatedById = "a2"));
@@ -152,7 +152,7 @@ public sealed class GamificationServiceTests
             db.SaveChanges();
         }
 
-        var rows = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+        var rows = (await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime)).Ranked;
 
         Assert.Equal(2, rows.Count);
         Assert.Equal("a1", rows[0].AgentId);
@@ -168,7 +168,7 @@ public sealed class GamificationServiceTests
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent("a1"));
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
             db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
             db.Users.Add(Seed.Agent("tl-adm", configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }));
             db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
@@ -180,9 +180,11 @@ public sealed class GamificationServiceTests
             db.SaveChanges();
         }
 
-        var rows = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
 
-        Assert.Equal("a1", Assert.Single(rows).AgentId);
+        Assert.Equal("a1", Assert.Single(board.Ranked).AgentId);
+        // the leadership slice must not become a back door: those three are leadership-ranked by default
+        Assert.Empty(board.OutOfCompetition);
     }
 
     [Fact]
@@ -191,7 +193,7 @@ public sealed class GamificationServiceTests
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent("a1"));
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
             db.People.Add(Seed.Person(id: "old", configure: p => { p.CreatedById = "a1"; p.CreatedAt = DateTime.UtcNow.AddDays(-60); }));
             db.People.Add(Seed.Person(id: "new", configure: p => { p.CreatedById = "a1"; p.CreatedAt = DateTime.UtcNow.AddDays(-3); }));
             db.SaveChanges();
@@ -201,8 +203,8 @@ public sealed class GamificationServiceTests
         var week = await svc.GetLeaderboardAsync(GamificationPeriod.Week);
         var all = await svc.GetLeaderboardAsync(GamificationPeriod.AllTime);
 
-        Assert.Equal(1, week[0].Records);
-        Assert.Equal(2, all[0].Records);
+        Assert.Equal(1, week.Ranked[0].Records);
+        Assert.Equal(2, all.Ranked[0].Records);
     }
 
     [Fact]
@@ -211,7 +213,7 @@ public sealed class GamificationServiceTests
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent("a1"));
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
             db.Observations.Add(new Observation { PersonId = "p1", ObservingAgentId = "a1", Start = DateTime.UtcNow, CreatedById = "a1" });
             db.ClassificationHistory.Add(new ClassificationHistory
             {
@@ -220,11 +222,176 @@ public sealed class GamificationServiceTests
             db.SaveChanges();
         }
 
-        var rows = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+        var rows = (await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime)).Ranked;
 
         var a1 = Assert.Single(rows);
         Assert.Equal(1, a1.Classifications);
         Assert.Equal(1, a1.Observations);
         Assert.Equal(3, a1.Points); // Classifications*2 + Observations*1, so the score reconciles with the shown columns
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_Leadership_IsListedButHoldsNoPlace()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", rank: Rank.Director));
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
+            // the top scorer is leadership, so the medal has to go to the weaker agent
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "boss"));
+            db.Cases.Add(Seed.Case(id: "c2", configure: c => c.CreatedById = "boss"));
+            db.Cases.Add(Seed.Case(id: "c3", configure: c => c.CreatedById = "a1"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal("a1", Assert.Single(board.Ranked).AgentId);
+        Assert.Equal(1, board.Ranked[0].Position);
+        var boss = Assert.Single(board.OutOfCompetition);
+        Assert.Equal("boss", boss.AgentId);
+        Assert.Equal(0, boss.Position);
+        Assert.True(boss.Points > board.Ranked[0].Points);
+    }
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, false)]
+    [InlineData(Rank.SupervisorySpecialAgent, true)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public async Task GetLeaderboard_FloorStartsAtSupervisorySpecialAgent(Rank rank, bool outOfCompetition)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", rank: rank));
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal(outOfCompetition ? 0 : 1, board.Ranked.Count);
+        Assert.Equal(outOfCompetition ? 1 : 0, board.OutOfCompetition.Count);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_AdminBelowTheFloor_StillCompetes()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            // the floor is rank-only on purpose; the admin flag is out-of-character and benches nobody
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent, configure: a => a.IsAdmin = true));
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal("a1", Assert.Single(board.Ranked).AgentId);
+        Assert.Empty(board.OutOfCompetition);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_RanklessAgent_CompetesAndAppearsOnce()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            // a null rank compares false against the floor either way, so it must not fall out of both slices
+            db.Users.Add(Seed.Agent("a1", configure: a => a.Rank = null));
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal("a1", Assert.Single(board.Ranked).AgentId);
+        Assert.Empty(board.OutOfCompetition);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_TopN_CapsEachSliceOnItsOwn()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                db.Users.Add(Seed.Agent($"a{i}", rank: Rank.SpecialAgent));
+                db.Users.Add(Seed.Agent($"l{i}", rank: Rank.Director));
+                db.Cases.Add(Seed.Case(id: $"ca{i}", configure: c => c.CreatedById = $"a{i}"));
+                db.Cases.Add(Seed.Case(id: $"cl{i}", configure: c => c.CreatedById = $"l{i}"));
+            }
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime, topN: 2);
+
+        Assert.Equal(2, board.Ranked.Count);
+        Assert.Equal(2, board.OutOfCompetition.Count);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_ZeroPoints_IsInNeitherSlice()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            // the points filter runs before the split, or the post grows a leadership block of zero-point names
+            db.Users.Add(Seed.Agent("boss", rank: Rank.Director));
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal("a1", Assert.Single(board.Ranked).AgentId);
+        Assert.Empty(board.OutOfCompetition);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_OutOfCompetition_IsOrderedByPoints()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
+            db.Users.Add(Seed.Agent("low", rank: Rank.Director));
+            db.Users.Add(Seed.Agent("high", rank: Rank.DeputyDirector));
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.Cases.Add(Seed.Case(id: "c2", configure: c => c.CreatedById = "low"));
+            db.Cases.Add(Seed.Case(id: "c3", configure: c => c.CreatedById = "high"));
+            db.Cases.Add(Seed.Case(id: "c4", configure: c => c.CreatedById = "high"));
+            db.SaveChanges();
+        }
+
+        var board = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal(new[] { "high", "low" }, board.OutOfCompetition.Select(r => r.AgentId));
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_WindowDays_HonoursTheDayCount()
+    {
+        // the day-count overload is the one the announcement calls; a sign flip here would be invisible otherwise
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", rank: Rank.SpecialAgent));
+            db.People.Add(Seed.Person(id: "old", configure: p => { p.CreatedById = "a1"; p.CreatedAt = DateTime.UtcNow.AddDays(-60); }));
+            db.People.Add(Seed.Person(id: "new", configure: p => { p.CreatedById = "a1"; p.CreatedAt = DateTime.UtcNow.AddDays(-3); }));
+            db.SaveChanges();
+        }
+        var svc = Svc(ctx);
+
+        Assert.Equal(1, (await svc.GetLeaderboardAsync(7)).Ranked[0].Records);
+        Assert.Equal(2, (await svc.GetLeaderboardAsync(90)).Ranked[0].Records);
+        Assert.Equal(2, (await svc.GetLeaderboardAsync(0)).Ranked[0].Records); // 0 or less means all time
     }
 }
