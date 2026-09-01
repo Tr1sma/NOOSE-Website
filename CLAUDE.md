@@ -124,6 +124,28 @@ Schichten innerhalb von `NOOSE-Website/`:
   Empfängerliste, kein Roster — Partner müssen Freigabe-/Chat-Benachrichtigungen weiter erhalten) ·
   `AnnouncementService` Bestätigungs-Zähler (ohne Status-Klausel, sonst fällt die Zeile eines gekündigten
   Agenten aus `TotalCount`) · `CounterIntelEventLoader` (braucht jeden User, er *erkennt* TL-Zugriffe).
+- **Bestenliste: der Rang-Boden liegt NICHT in `AgentSelection`.** `GamificationService` teilt das Ergebnis in
+  zwei Slices (`LeaderboardView.Ranked` / `.OutOfCompetition`): ab `Rank.SupervisorySpecialAgent` wird ein Agent
+  **gelistet, aber nicht gewertet** (`Position = 0`), weil das Ranking für die Führung bedeutungslos ist. Der Boden
+  (`GamificationService.LeadershipFloor`, Vorbild `DocumentAccessService.cs`) partitioniert eine *schon
+  autorisierte* Menge auf einer zweiten Achse — `OnlySelectable()` bleibt die einzige Autorität darüber, wer
+  überhaupt **gelistet** wird. Ihn nach `AgentSelection` zu ziehen färbt `AgentSelectionTests` rot und leert jeden
+  Picker. Drei Details, die aussehen wie Schlampigkeit und keine sind: der Boden ist **rang-only** und lässt
+  `IsAdmin` weg (ein Admin mit Rang 2 spielt weiter mit) — bewusst enger als `IsLeadership()`; **ein** Prädikat,
+  negiert für die andere Slice, weil `Agent.Rank` nullable ist und ein `>=`/`<`-Paar bei `null` auf **beiden**
+  Seiten `false` ist; und `topN` deckelt **jede Slice für sich**, sonst verdrängen drei Führungszeilen das Podium.
+- **Wortwahl der Bestenlisten-Ankündigung folgt dem Intervall** (`TopAgentPeriodDisplay.For`): 7 Tage →
+  „der Woche (KW nn)", 28–31 → „des Monats" (**ohne Monatsnamen** — das Fenster ist rollierend, kein Kalendermonat),
+  sonst Tag/Quartal/Jahr/„letzte N Tage". Der `Marker` derselben Zeile ist der Dedupe-Schlüssel der
+  Personalakten-Vermerke (`Text.Contains`), deshalb: **das 7-Tage-Band ist byte-eingefroren** (`KW 36/2026`,
+  **ungepolstert** — `IsoWeekPeriod.Label` polstert und darf hier nicht wiederverwendet werden), jeder Marker ist
+  Teilstring seiner `NotePhrase`, beginnt nie mit einer Ziffer (`4 Tage …` steckt in `14 Tage …`) und trägt außer
+  beim Wochen-Band den **Lauftag** — ein Kalenderlabel kollidiert, weil zwei Läufe dasselbe Intervall passieren
+  können. `FileNotesAsync` sieht ausschließlich **eigene** Vermerke (Text-Präfix) und prüft neben dem Marker einen
+  `EntryDate`-Boden: Vermerke entstehen **vor** dem Post, und ein
+  fehlgeschlagener Post lässt `LastRun` absichtlich stehen — ohne den Boden legt ein kaputter Webhook pro Tag einen
+  neuen Vermerk an. `GamificationPeriodDisplay` („7 Tage"/„30 Tage") ist ein **Filter**-Label und wird mit diesem
+  Auszeichnungs-Vokabular **nicht** zu einem Helfer verschmolzen.
 - **Ein Picker, der eine gespeicherte Agenten-ID auflöst, muss auf `FindAsync` zurückfallen**, wenn die ID
   nicht mehr auswählbar ist (`FollowupDialog`, `ObservationDialog`). Sonst bleibt das Objekt `null` und der
   Speichern-Pfad *löscht die Zuordnung still* bzw. schreibt sie auf den Bearbeiter um. Auflösen **außerhalb**
