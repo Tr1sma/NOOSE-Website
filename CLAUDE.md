@@ -1440,10 +1440,17 @@ aber **nicht** vorhanden — der Modul-Schlüssel `Statistik` existiert schon un
     `Faction.Classification` abgeleitet. `NeverPublic["ThreatScoreHistory"]` versprach den geplanten
     Trend und nennt jetzt den Grund.
   - **Vier `SystemSettings`-Zeilen statt einer Tabelle** (`GefahrenlageStufe`/`…Einschaetzung`/`…Seit`/
-    `…Zuvor`, Präzedenz Not-Aus): es gibt genau eine Gefahrenlage. Gespeichert wird der **Name** der Stufe,
-    nicht die Zahl — eine „2" sagt weder in der Einstellungstabelle noch in der Audit-Zeile etwas.
+    `…Zuvor`, Präzedenz Not-Aus): es gibt genau eine Gefahrenlage. Gespeichert wird ein **Schlüssel**, nicht
+    die Zahl — eine „2" sagt weder in der Einstellungstabelle noch in der Audit-Zeile etwas — und dieser
+    Schlüssel ist **nicht** die deutsche Beschriftung, sondern ein eigener ASCII-String
+    (`PublicSituationLevelDisplay.Key` neben `.Name`, Präzedenz `WarnhinweisColourChoice` mit „Error"/„Rot"
+    und `PublicIconChoice`). Sonst wäre eine Umformulierung von „Erhöht" eine stille Datenmigration: jede
+    gespeicherte Zeile hörte auf zu parsen, `/lage` ginge dunkel, und kein Test würde rot — ein Round-Trip
+    über `Parse(Name(x))` überlebt jede Umbenennung. `PublicSituationLevelTests` pinnt die vier Schlüssel
+    als Literale und prüft die Trennung als *Beziehung*, nie am Wortlaut des Labels.
     Protokolliert wird zweimal, wie beim Not-Aus: die rohen `SystemSetting`-Zeilen über den Interceptor,
-    dazu eine `ManualAudit.Row` mit eigenem Typ `"PublicSituation"`, die die Aktion benennt.
+    dazu eine `ManualAudit.Row` mit eigenem Typ `"PublicSituation"`, die die Aktion benennt — die trägt
+    bewusst die **Beschriftung**, weil sie ein Mensch auf `/nachweis` liest.
   - **`Seit` bewegt sich nur bei einem Stufenwechsel** (14a-Lektion `PublishedAt ??=` in ihrer schärfsten
     Form: die Seite zeigt genau dieses Datum als „seit"). `Zuvor` wird nur dort gesetzt, und ein zweites
     Speichern ohne Unterschied schreibt gar nichts — auch keine Protokollzeile.
@@ -1451,9 +1458,12 @@ aber **nicht** vorhanden — der Modul-Schlüssel `Statistik` existiert schon un
     Modul aus, nie gesetzt und unerreichbarer Datenbank; eine Standardstufe wäre in allen dreien die
     Behauptung „keine Gefahr". Bewusste Abweichung von den anderen öffentlichen Diensten, die eine leere
     Liste zurückgeben — die ist ehrlich „nichts veröffentlicht".
-  - **`SetAsync` ist der einzige Publish-Pfad ohne Modul-Gate.** Es gibt keinen Entwurf/Publiziert-Schnitt,
-    also zwänge ein Gate die allererste Stufe live zu gehen, bevor jemand sie schreiben kann — und weil
-    das Ausschalten des Moduls hier das Zurückziehen **ist**, machte es das unumkehrbar.
+  - **`SetAsync` hat bewusst kein `RequireEnabledAsync`.** Es gibt keinen Entwurf/Publiziert-Schnitt, also
+    zwänge ein Gate die allererste Stufe live zu gehen, bevor jemand sie schreiben kann — und weil das
+    Ausschalten des Moduls hier das Zurückziehen **ist**, machte es das unumkehrbar. (Kein „einziger
+    Publish-Pfad ohne Gate": `PublicPageService.PublishAsync` hat auch keins. Dort ist es allerdings eine
+    Auslassung und keine Entscheidung — folgenlos, weil der Lesepfad bei ausgeschaltetem Modul ohnehin
+    `PublicPageSnapshot.Empty` liefert. Nicht in dieser Phase angefasst, weil es Phase-3-Verhalten ändert.)
   - **Eigenes Enum, Allowlist beim Lesen.** `PublicSituationLevel` ist bewusst nicht `HazardLevel` (das ist
     `HazardLevelLogic.From(score)`, die Stufe *einer Akte*); ein geteiltes Enum wäre die Einladung, das eine
     aus dem anderen zu rechnen. `PublicSituationLevelDisplay.Parse` ist eine Allowlist, **nie**

@@ -47,12 +47,38 @@ public class PublicSituationLevelTests
     }
 
     [Fact]
-    public void ParseRoundTripsEveryLabel()
+    public void ParseRoundTripsEveryStoredKey()
     {
         foreach (var level in Values)
         {
-            Assert.Equal(level, PublicSituationLevelDisplay.Parse(PublicSituationLevelDisplay.Name(level)));
+            Assert.Equal(level, PublicSituationLevelDisplay.Parse(PublicSituationLevelDisplay.Key(level)));
         }
+    }
+
+    [Theory]
+    [InlineData(PublicSituationLevel.Niedrig, "Niedrig")]
+    [InlineData(PublicSituationLevel.Erhoeht, "Erhoeht")]
+    [InlineData(PublicSituationLevel.Hoch, "Hoch")]
+    [InlineData(PublicSituationLevel.Kritisch, "Kritisch")]
+    public void TheStoredKeysArePinned(PublicSituationLevel level, string key)
+        // These four strings sit in the SystemSettings rows of every installation. A round-trip test cannot protect
+        // them: rename one and Parse(Key(x)) still succeeds while every stored row stops parsing, /lage goes silent
+        // and nothing turns red. Changing one of these is a data migration, not a rename.
+        => Assert.Equal(key, PublicSituationLevelDisplay.Key(level));
+
+    [Fact]
+    public void TheGermanLabelIsNotTheStoredKey()
+    {
+        // The separation only means something if the label cannot be stored by accident, the way
+        // WarnhinweisColourChoice keeps "Error" apart from "Rot". Erhoeht is the one pair where they differ, so it
+        // is the only value that can show it. Deliberately asserted as a relationship and never as the label text:
+        // pinning the wording here would re-create exactly the coupling the split removes, and the label is UI
+        // copy that is meant to stay editable.
+        var label = PublicSituationLevelDisplay.Name(PublicSituationLevel.Erhoeht);
+        var key = PublicSituationLevelDisplay.Key(PublicSituationLevel.Erhoeht);
+
+        Assert.NotEqual(label, key);
+        Assert.Null(PublicSituationLevelDisplay.Parse(label));
     }
 
     [Theory]
@@ -64,7 +90,7 @@ public class PublicSituationLevelTests
     [InlineData("Kritisch ")]
     [InlineData("kritisch")]
     [InlineData("Erhoht")]
-    [InlineData("Erhoeht")]
+    [InlineData("Erhöht")]
     [InlineData("Panisch")]
     public void AnythingElseIsUnknown(string? stored)
         => Assert.Null(PublicSituationLevelDisplay.Parse(stored));

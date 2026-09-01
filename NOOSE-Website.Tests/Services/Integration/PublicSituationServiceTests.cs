@@ -288,15 +288,30 @@ public sealed class PublicSituationServiceTests
     // --- storage shape and bookkeeping ---------------------------------------------------------------------------
 
     [Fact]
-    public async Task TheLevel_IsStoredByName()
+    public async Task TheLevel_IsStoredByItsKeyAndNotByItsGermanLabel()
     {
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
 
-        await host.Service.SetAsync(new PublicSituationInput { Level = PublicSituationLevel.Kritisch }, Leader());
+        // Erhoeht on purpose: it is the level whose stored key and German label differ, so this is the only value
+        // that can tell the two apart. A bare "1" would say nothing to whoever reads the settings table.
+        await host.Service.SetAsync(new PublicSituationInput { Level = PublicSituationLevel.Erhoeht }, Leader());
 
-        // a bare "3" would say nothing to whoever reads the settings table or the audit row
-        Assert.Equal("Kritisch", await ReadAsync(ctx, SystemSettingKeys.PublicSituationLevel));
+        Assert.Equal("Erhoeht", await ReadAsync(ctx, SystemSettingKeys.PublicSituationLevel));
+    }
+
+    [Fact]
+    public async Task ThePredecessor_IsStoredByItsKeyToo()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await host.Service.SetAsync(new PublicSituationInput { Level = PublicSituationLevel.Erhoeht }, Leader());
+
+        await host.Service.SetAsync(new PublicSituationInput { Level = PublicSituationLevel.Hoch }, Leader());
+
+        // written by one branch and read back by another; a label here would parse as unknown and lose the trend
+        Assert.Equal("Erhoeht", await ReadAsync(ctx, SystemSettingKeys.PublicSituationPrevious));
+        Assert.Equal(PublicSituationLevel.Erhoeht, (await host.Service.GetPublishedAsync())!.Previous);
     }
 
     [Fact]
@@ -317,7 +332,8 @@ public sealed class PublicSituationServiceTests
         var changes = JsonSerializer.Deserialize<Dictionary<string, string?[]>>(row.ChangesJson!)!;
         var level = changes["Gefahrenlage"];
         Assert.Null(level[0]);
-        Assert.Equal("Hoch", level[1]);
+        // the wiring, not the wording: the audit row carries the German label, which is free to be reworded
+        Assert.Equal(PublicSituationLevelDisplay.Name(PublicSituationLevel.Hoch), level[1]);
         var note = changes["Einschätzung"];
         Assert.Equal(string.Empty, note[0]);
         Assert.Equal("Grund.", note[1]);

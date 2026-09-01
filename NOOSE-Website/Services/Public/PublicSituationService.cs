@@ -57,9 +57,9 @@ public class PublicSituationService(
     {
         Permission.RequirePublicSituationWrite(actor);
 
-        // deliberately no RequireEnabledAsync, unlike every other publish path. There is no draft here, so gating the
-        // write on the module would force the first level ever set to go live before anyone can write it — and
-        // switching the module off is how a level is taken back, which the gate would then make impossible.
+        // deliberately no RequireEnabledAsync. There is no draft here, so gating the write on the module would force
+        // the first level ever set to go live before anyone can write it — and switching the module off is how a
+        // level is taken back, which the gate would then make impossible.
         var note = (input.Note ?? string.Empty).Trim();
         if (note.Length > SituationRules.MaxNote)
         {
@@ -82,7 +82,7 @@ public class PublicSituationService(
             return;
         }
 
-        Set(db, rows, SystemSettingKeys.PublicSituationLevel, PublicSituationLevelDisplay.Name(input.Level));
+        Set(db, rows, SystemSettingKeys.PublicSituationLevel, PublicSituationLevelDisplay.Key(input.Level));
         Set(db, rows, SystemSettingKeys.PublicSituationNote, note);
 
         var changes = new Dictionary<string, object?[]>(StringComparer.Ordinal);
@@ -92,14 +92,16 @@ public class PublicSituationService(
         }
         if (levelChanged)
         {
-            var previousName = storedLevel is { } previous ? PublicSituationLevelDisplay.Name(previous) : null;
-            changes["Gefahrenlage"] = [previousName, PublicSituationLevelDisplay.Name(input.Level)];
+            // the audit row is read by people, so it carries the German label; the stored rows carry the key
+            var previousLabel = storedLevel is { } previous ? PublicSituationLevelDisplay.Name(previous) : null;
+            changes["Gefahrenlage"] = [previousLabel, PublicSituationLevelDisplay.Name(input.Level)];
 
             // only a change of level moves the date and records the predecessor. The page shows this date as "seit",
             // so correcting a typo in the assessment must not claim the situation changed today.
             Set(db, rows, SystemSettingKeys.PublicSituationSince,
                 DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
-            Set(db, rows, SystemSettingKeys.PublicSituationPrevious, previousName);
+            Set(db, rows, SystemSettingKeys.PublicSituationPrevious,
+                storedLevel is { } predecessor ? PublicSituationLevelDisplay.Key(predecessor) : null);
         }
 
         // SystemSetting is IAuditable, so the interceptor already logs the raw key/value rows. This one names the

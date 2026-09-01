@@ -21,11 +21,24 @@ public enum PublicSituationLevel
 /// <summary>Labels, colours and the allowlist that turns a stored name back into a level.</summary>
 public static class PublicSituationLevelDisplay
 {
-    /// <summary>What a level is called outside; also the value stored in the settings row.</summary>
+    /// <summary>The value written to the settings row. A stable key, never the German label.</summary>
     /// <remarks>
-    /// The name is stored rather than the number: a bare "2" in the settings table says nothing to whoever reads it
-    /// there, and the audit row on /nachweis shows exactly that value.
+    /// A name rather than the number, because a bare "2" says nothing to whoever reads the settings table. But
+    /// deliberately its own string, the way <c>WarnhinweisColourChoice</c> and <c>PublicIconChoice</c> separate their
+    /// stored Name from their German Label: the label is UI text somebody will reword one day, and if the stored
+    /// value followed it, every existing row would stop parsing and /lage would go dark without a single test
+    /// failing. <c>PublicSituationLevelTests</c> pins these four strings for that reason.
     /// </remarks>
+    public static string Key(PublicSituationLevel level) => level switch
+    {
+        PublicSituationLevel.Niedrig => "Niedrig",
+        PublicSituationLevel.Erhoeht => "Erhoeht",
+        PublicSituationLevel.Hoch => "Hoch",
+        PublicSituationLevel.Kritisch => "Kritisch",
+        _ => string.Empty,
+    };
+
+    /// <summary>What a level is called in the UI and on the public page; free to be reworded.</summary>
     public static string Name(PublicSituationLevel level) => level switch
     {
         PublicSituationLevel.Niedrig => "Niedrig",
@@ -63,17 +76,18 @@ public static class PublicSituationLevelDisplay
         PublicSituationLevel.Kritisch,
     };
 
-    /// <summary>The stored name as a level, or null for anything unknown.</summary>
+    /// <summary>The stored key as a level, or null for anything unknown.</summary>
     /// <remarks>
     /// An allowlist rather than <c>Enum.Parse</c>: the value comes out of a hand-editable key/value row, and a stray
     /// entry would otherwise throw on an [AllowAnonymous] page — the same failure class as an unparsable query value.
-    /// Null means "nothing said", which the read path keeps as silence instead of turning into a level.
+    /// Null means "nothing said", which the read path keeps as silence instead of turning into a level. Matches the
+    /// stored key only, never the label — that separation is the whole point of having both.
     /// </remarks>
-    public static PublicSituationLevel? Parse(string? name)
+    public static PublicSituationLevel? Parse(string? key)
     {
         foreach (var level in All)
         {
-            if (string.Equals(Name(level), name, StringComparison.Ordinal))
+            if (string.Equals(Key(level), key, StringComparison.Ordinal))
             {
                 return level;
             }

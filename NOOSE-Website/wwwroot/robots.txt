@@ -1,6 +1,6 @@
 # NOOSE — only the public area may be indexed. Everything else is an internal records database.
 # Second layer: an X-Robots-Tag: noindex header on every non-public route (PublicIndexingMiddleware).
-# Kept in sync with Services/Public/PublicRoutes.cs by RobotsTests.
+# Kept in sync with Services/Public/PublicRoutes.cs by PublicRoutesTests.
 
 User-agent: *
 Disallow: /

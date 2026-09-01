@@ -1989,8 +1989,17 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
   und mehr trägt eine Ampel auch nicht. `NeverPublic["ThreatScoreHistory"]` versprach den geplanten Trend
   und nennt jetzt den Grund.
 - **Vier Einstellungszeilen statt einer Tabelle** (Präzedenz Not-Aus): es gibt genau eine Gefahrenlage,
-  ewig. Gespeichert wird der **Name** der Stufe, nicht die Zahl — eine „2" sagt weder in der
-  Einstellungstabelle noch in der Audit-Zeile auf `/nachweis` etwas.
+  ewig. Gespeichert wird ein **Schlüssel**, nicht die Zahl — eine „2" sagt weder in der Einstellungstabelle
+  noch in der Audit-Zeile auf `/nachweis` etwas.
+- **Der Schlüssel ist nicht die Beschriftung.** `PublicSituationLevelDisplay.Key` (ASCII, stabil) steht
+  neben `.Name` (deutsch, jederzeit umformulierbar), Vorbild `WarnhinweisColourChoice` („Error" vs. „Rot")
+  und `PublicIconChoice`. Der erste Wurf hatte nur `Name` und benutzte ihn für beides — dann wäre eine
+  Umformulierung von „Erhöht" eine stille Datenmigration gewesen: jede gespeicherte Zeile hört auf zu
+  parsen, `/lage` geht dunkel, und **kein Test wird rot**, weil ein Round-Trip `Parse(Name(x))` jede
+  Umbenennung überlebt. Deshalb pinnt `PublicSituationLevelTests` die vier Schlüssel als Literale, und die
+  Trennung wird als *Beziehung* geprüft (`Name != Key`, `Parse(Name)` ist `null`) statt am Wortlaut — ein
+  Test, der das Label festnagelt, stellt genau die Kopplung wieder her, die der Split auflöst. Beides
+  gegengeprüft: Schlüssel umbenennen ⇒ rot, Label umformulieren ⇒ grün.
 - **`Seit` bewegt sich nur bei einer Stufenänderung.** Die 14a-Lektion (`PublishedAt ??=`) in ihrer
   schärfsten Form: die Seite zeigt genau dieses Datum als „seit", also darf eine korrigierte Einschätzung
   die Lage nicht auf heute umdatieren. Gleiche Sitzung, gleiche Regel: `Zuvor` wird nur dort gesetzt, und
@@ -1999,10 +2008,14 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
   drei Fälle: Modul aus, nie gesetzt, Datenbank unerreichbar. Eine Standardstufe wäre in allen dreien die
   Behauptung „keine Gefahr". Das ist die bewusste Abweichung von den anderen öffentlichen Diensten, die
   eine leere Liste zurückgeben — eine leere Liste ist ehrlich „nichts veröffentlicht".
-- **`SetAsync` hat als einziger Publish-Pfad kein Modul-Gate**, und das ist kein Versehen: es gibt keinen
+- **`SetAsync` hat bewusst kein Modul-Gate**, und das ist kein Versehen: es gibt keinen
   Entwurf/Publiziert-Schnitt, also zwänge ein Gate die allererste Stufe live zu gehen, bevor jemand sie
   schreiben kann — und weil das Ausschalten des Moduls hier das Zurückziehen **ist**, machte das Gate es
   unumkehrbar. Der Modul-Schalter ist der Publizieren-Schalter.
+  **Nicht** „der einzige Publish-Pfad ohne Gate", wie hier zuerst stand: `PublicPageService.PublishAsync`
+  hat ebenfalls keins. Dort ist es eine Auslassung statt einer Entscheidung, aber folgenlos — der Lesepfad
+  liefert bei ausgeschaltetem Modul `PublicPageSnapshot.Empty`, die Seite ist also nicht draußen. Bewusst
+  nicht in dieser Phase behoben: das änderte Phase-3-Verhalten.
 - **Eigenes Enum, Allowlist beim Lesen.** `PublicSituationLevel` ist bewusst nicht `HazardLevel` — das ist
   `HazardLevelLogic.From(score)`, die Stufe *einer Akte*; ein geteiltes Enum wäre die stehende Einladung,
   das eine aus dem anderen zu rechnen (Präzedenz `PublicReportStatus` neben `PressReleaseStatus`).
