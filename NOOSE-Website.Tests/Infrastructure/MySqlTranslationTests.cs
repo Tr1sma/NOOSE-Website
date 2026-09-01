@@ -805,6 +805,44 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.Contains("ORDER BY", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheCapturedCountQuery_TranslatesAndStaysUncapped()
+    {
+        var sql = _db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.Status == PublicWantedStatus.Gefasst && f.CaseNumber != null && f.CapturedAt != null)
+            .Select(f => new { CaseNumber = f.CaseNumber!, f.PersonId, f.Kind })
+            .ToQueryString();
+
+        Assert.Contains("Aktenzeichen", sql, StringComparison.Ordinal);
+        // the point of counting apart from the archive list: this one carries no display limit
+        Assert.DoesNotContain("LIMIT", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThePublicTipCounts_TranslateTheirSharedPredicates()
+    {
+        // CountAsync(predicate) compiles to this shape; the predicates come from TipRules rather than being written
+        // again in the statistics service, so it is those that have to translate
+        var confirmed = _db.Hinweise.AsNoTracking().Where(TipRules.ConfirmedRows).ToQueryString();
+        var captures = _db.Hinweise.AsNoTracking().Where(TipRules.CaptureRows).ToQueryString();
+
+        Assert.Contains("Status", confirmed, StringComparison.Ordinal);
+        Assert.Contains("Status", captures, StringComparison.Ordinal);
+        // confirmed is the wider set, so its WHERE cannot be the narrower one
+        Assert.NotEqual(confirmed, captures);
+    }
+
+    [Fact]
+    public void ThePaidRewardSum_TranslatesWithoutASoftDeleteFilter()
+    {
+        var sql = _db.HinweisBelohnungen.AsNoTracking().Select(r => r.Amount).ToQueryString();
+
+        Assert.Contains("Betrag", sql, StringComparison.Ordinal);
+        // money history is append-only, so there is no filter here that a later change could weaken
+        Assert.DoesNotContain("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
     private static int Occurrences(string text, string needle)
     {
         var count = 0;

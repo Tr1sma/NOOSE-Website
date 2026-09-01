@@ -163,6 +163,43 @@ public class PublicSurfaceGuardTests
             "Eine öffentliche Route ist für einen Partner nie gesperrt: " + string.Join(", ", offenders));
     }
 
+    [Fact]
+    public void TheStatisticsService_NeverWrites()
+    {
+        // It is the one public service without an invalidation path, and that is only sound because it has no write
+        // path either: the figures simply expire and are counted again. A write here would need a drop site, and the
+        // sentence in the interface that says there is none would quietly become false.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicStatisticsService.cs");
+        Assert.True(File.Exists(file), $"Zahlen-Dienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] writes = ["SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove"];
+        var offenders = writes.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Zahlen-Dienst liest nur: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void NoPublicPage_RendersAClickableStatTile()
+    {
+        // StatTile navigates from an @onclick handler. Public pages render statically, so the handler never runs and
+        // an Href would only give the tile a pointer cursor and a link role that lead nowhere — the same class of
+        // silently dead affordance as PrintFrame on the wanted poster.
+        var pages = Path.Combine(ProjectRoot(), "Components", "Pages", "Public");
+        Assert.True(Directory.Exists(pages), $"Öffentliche Seiten nicht gefunden: {pages}");
+
+        var offenders = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .Where(f => Regex.IsMatch(WithoutComments(File.ReadAllText(f)),
+                @"<StatTile\b[^>]*\bHref\s*=", RegexOptions.Singleline))
+            .Select(Path.GetFileName)
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Eine statisch gerenderte Seite hat keine klickbare Kachel: " + string.Join(", ", offenders));
+    }
+
     private static string ProjectRoot([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website"));
 

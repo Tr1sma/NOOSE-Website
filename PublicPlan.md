@@ -119,7 +119,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 14b | Warnungen und öffentliche Gesetzesauszüge | `Oeffentlich14_Warnungen` | 3 | **fertig** |
 | 14c | Öffentliche Lageberichte | `Oeffentlich14_Lageberichte` | 3 | **fertig** |
 | 15a | Gefahrenlage-Ampel und `/lage` | keine | 2 | **fertig** |
-| 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 7, 14a, 15a | offen |
+| 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 7, 14a, 15a | **fertig** |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
 
 > **Migrations-Präfix `Oeffentlich<Phase>_`.** Die interne Phasen-Zählung des Projekts steht schon bei
@@ -2090,7 +2090,69 @@ ist genau dafür da.
 der DB, die in keiner Zahl auftauchen dürfen) · Cache-Verhalten.
 
 **Fertig, wenn** die neue Startseite steht und ein Test beweist, dass unpublizierte Akten in keiner
-öffentlichen Zahl stecken.
+öffentlichen Zahl stecken. ✅
+
+### Gebaut — was daran anders ist
+
+- **`null` heißt „wird nicht veröffentlicht", `0` ist eine Aussage.** Alle sechs Kennzahlen sind nullable,
+  und jede hängt zusätzlich an dem Modul, dem die gezählten Zeilen gehören: `Fahndung`, `FahndungArchiv`,
+  `Hinweise`, `Belohnung`. Ein ausgeschaltetes Modul liefert `null`, nicht `0` — „0 laufende Fahndungen"
+  wäre eine Behauptung, die die Behörde gar nicht aufgestellt hat. Dieselbe Entscheidung wie bei der
+  Gefahrenlage aus 15a, hier sechsmal. Das Modul wird **außerhalb** des Zahlen-Caches gelesen, sonst bliebe
+  die Startseite ein volles Fenster stumm, nachdem jemand einschaltet.
+- **Die Fahndungszahlen kommen aus dem Board-Snapshot, nicht aus einer zweiten Abfrage.** Eine eigene
+  Abfrage müsste den Unterdrückungsgürtel wiederholen — genau die Phase-4-Falle, aus demselben Grund, aus dem
+  `/gefahr/personen` seit Phase 12 die Karten des Boards projiziert statt selbst zu lesen. Der Gürtel bleibt
+  an einer Stelle.
+- **Der Gefasst-Zähler steht auf dem Snapshot, nicht in der Archivliste — und das ist ein Fund.** Die
+  Archivkarten sind seit Phase 5 auf die 100 jüngsten gedeckelt; `Archive.Count` als Kennzahl wäre bei 100
+  stehengeblieben und hätte sich als Vollständigkeit gelesen. Also zählt `LoadAsync` die Gefassten in einer
+  eigenen, ungedeckelten Abfrage über drei Spalten, hinter demselben Gürtel, und legt sie **je Art** auf
+  `PublicWantedBoard.CapturedTotals` ab. Je Art, damit `WithoutItems()` den Sach-Anteil abziehen kann — eine
+  skalare Summe ließe sich dort nicht reduzieren, ohne ein zweites Mal zu zählen. Im selben Zug **benennt
+  `/gefasst` seinen Deckel jetzt** („die 100 jüngsten von insgesamt N"), wie es Presse, Warnungen, Berichte
+  und die Gefahrenliste längst tun.
+- **Ein Dienst ohne Schreibpfad braucht keinen Cache-Wächter der bekannten Form, sondern den umgekehrten.**
+  Die vier Geschwister (`PublicWantedService`, `PublicFactionProfileService`, `PressReleaseService`,
+  `PublicLawService`) werden auf „ein `SaveChangesAsync`, ein `cache.Remove`" geprüft. `PublicStatisticsService`
+  hat **keins von beidem**: die Zahlen laufen ab und werden neu gezählt, es gibt also gar keine
+  Invalidierungsstelle, die falsch sein könnte. Der Wächter hält genau das fest
+  (`PublicSurfaceGuardTests.TheStatisticsService_NeverWrites`) — der Tag, an dem jemand dort schreibt, ist der
+  Tag, an dem der Satz im Interface unwahr wird.
+- **`StatTile` wird wiederverwendet, aber ohne `Href` — und dafür gibt es jetzt einen Wächter.** Die Kachel
+  navigiert aus einem `@onclick`-Handler; auf einer `[ExcludeFromInteractiveRouting]`-Seite läuft der nie.
+  Mit `Href` bekäme sie Zeigerkursor und `role="link"` und täte nichts — dieselbe Klasse stumm toter Bedienung
+  wie `PrintFrame` auf dem Fahndungsposter (Phase 5). `NoPublicPage_RendersAClickableStatTile` scannt darauf.
+- **Zwei Ausfallarten, zwei Antworten, und die Asymmetrie ist Absicht.** Die Hinweis- und Belohnungszahlen
+  antworten bei unerreichbarer Datenbank mit `null` (Vorbild 15a: wenn wir es nicht sagen können, sagen wir
+  nichts). Die Fahndungszahlen bleiben bei dem, was der Board-Snapshot hergibt — sie beschreiben, **was das
+  Board zeigt**, nicht was die Datenbank hält, und ein leeres Board mit „0 laufende Fahndungen" daneben ist die
+  wahrheitsgemäße Beschreibung der öffentlichen Oberfläche. Ein Fehlschlag wird nie gecacht.
+- **`Hinweis` und `HinweisBelohnung` wandern von `NeverPublic` nach `Publishable`** — Handänderung wie
+  `SystemSetting` in 15a und `Law` in 14b, mit Texten, die genau benennen, was rausgeht: drei Anzahlen über
+  den **gesamten** Bestand und eine Summe. **Eine Anzahl je Ausschreibung geht ausdrücklich nicht**: die wäre
+  ein öffentliches Verzeichnis darüber, wer wie viel Aufmerksamkeit auf sich zieht, und über kleine Zahlen
+  wieder einer Person zuzuordnen. Ein Aggregat ist nur so lange harmlos, wie es sich nicht zuordnen lässt.
+- **Die Zählprädikate werden benannt, nicht geschrieben.** `TipRules.ConfirmedRows` sagt seit Phase 8a, was
+  „bestätigt" heißt; die neue `CaptureRows` steht daneben. Deshalb vier `CountAsync`/`SumAsync` statt einer
+  gruppierten Projektion — ein `GroupBy` mit bedingten Zählern könnte die geteilten Ausdrücke nicht einsetzen
+  und hätte die Definition ein zweites Mal in den Zahlen-Dienst kopiert.
+- **Kein eigener Nav-Tab und keine eigene Route.** Die Zahlen sind ein Band auf der Startseite; ein Tab auf
+  `/zahlen` wäre eine zweite Wahrheit über denselben Inhalt (Muster `Kopfgeld`, `FahndungDruck`). Damit auch
+  kein `PublicRoutes`-Eintrag, keine `robots.txt`-Zeile und kein neuer Präfix, der mit einer internen Route
+  kollidieren könnte.
+- **Die Startseite liest je Quelle einzeln.** Fünf Dienste, fünf Fänger: ein einzelner `try` um alles hätte
+  wegen der ersten kaputten Quelle jeden Abschnitt geleert. Der Schalterstand fällt bei Ausfall auf „alles
+  aus" zurück — dieselbe Richtung wie vorher, nur jetzt ausgeschrieben statt als Nebenwirkung eines leeren
+  `catch`.
+- **Nicht** registriert, mit Grund: keine neue Entität ⇒ kein `SearchCatalog`, kein `WatchlistRecordRollup`,
+  kein Papierkorb, keine der vier Zeitstrahl-/Chronik-Stellen, kein `RecordsReference`/`LinkService`, kein
+  `AuditEntityDisplay`, keine `MergedPageSections`/`FeedbackPageTabs` (es gibt nichts zu konfigurieren außer
+  dem Modulschalter), kein `NotificationType`, kein Discord-Push, kein Aktenzeichen-Präfix, keine Migration.
+
+**Neue Tests** `PublicStatisticsServiceTests` (17) · `PublicWantedBoardTests` +2 (der Zähler ist nicht die
+Länge der Archivliste; `WithoutItems` reduziert ihn) · `MySqlTranslationTests` +3 · `PublicSurfaceGuardTests`
++2 · `PublicWantedModelTests` +1 Zeile.
 
 ---
 
