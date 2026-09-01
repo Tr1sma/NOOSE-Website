@@ -52,11 +52,24 @@ public static class PublicVisibility
                 + "Gefasst-Datum, dazu die Kopfgeld-Obergrenze als \"bis X\". Bei einer Fahrzeug- oder "
                 + "Waffen-Ausschreibung ist der Anzeigename das Kennzeichen bzw. die Bezeichnung, und ein Foto gibt "
                 + "es dort nicht. Der Aktenbezug (PersonId/FraktionId), die Steckbrief-Zeile, aus der vorbefüllt "
-                + "wurde, der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund bleiben drinnen.",
+                + "wurde, der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund bleiben drinnen. "
+                + "Aus dem Bestand geht zusätzlich je eine Anzahl nach außen: wie viele Ausschreibungen laufen und "
+                + "wie viele abgeschlossen sind — beide hinter demselben Unterdrückungsgürtel gezählt.",
             ["FahndungKopfgeldAnteil"] = "Ausschließlich die Summe aller zugesagten und gesicherten Anteile "
                 + "einer laufenden Ausschreibung, als eine Zahl. Herkunft, Stifter, der Betrag eines einzelnen "
                 + "Anteils, ihre Anzahl, das Konto, die Kassenbuchung und der Status bleiben drinnen — eine "
                 + "Aufschlüsselung verriete, welcher Agent wie viel eigenes Geld auf einen Kopf gesetzt hat.",
+            ["Hinweis"] = "Ausschließlich Anzahlen über den gesamten Bestand: wie viele Hinweise eingegangen "
+                + "sind, wie viele davon bestätigt wurden und wie viele zur Ergreifung führten. Text, Anhang, "
+                + "Bezug, Status und Hinweisgeber einer einzelnen Zeile bleiben drinnen, und eine Anzahl je "
+                + "Ausschreibung ebenfalls — die wäre ein öffentliches Verzeichnis darüber, wer wie viel "
+                + "Aufmerksamkeit auf sich zieht, und über kleine Zahlen wieder einer Person zuzuordnen. Den "
+                + "eigenen Hinweis liest der Hinweisgeber angemeldet im Bürgerbereich; das ist sein Konto, nicht "
+                + "die Öffentlichkeit.",
+            ["HinweisBelohnung"] = "Ausschließlich die Summe aller ausgezahlten Belohnungen, als eine Zahl. Der "
+                + "Betrag einer einzelnen Auszahlung, der Anteil, die Kassenbuchung, die Belegnummer und der "
+                + "Empfänger bleiben drinnen; darüber hinaus geht nach draußen nur der eigene Beleg eines Bürgers, "
+                + "angemeldet im Bürgerbereich.",
             ["Warnhinweis"] = "Bezeichnung und Farbe eines zugeordneten Warnhinweises, als Chip auf Board, "
                 + "Steckbrief und Poster. Reihenfolge, Aktiv-Kennzeichen und die Zeilen-Id bleiben drinnen.",
             ["OeffentlichesFraktionsprofil"] = "Der Publikations-Snapshot einer Organisation: Anzeigename, "
@@ -222,12 +235,8 @@ public static class PublicVisibility
             // --- public area's own tables ---
             ["BuergerProfil"] = "Konto eines Bürgers; sein Name gehört ihm, nicht der Website. Nach außen sieht ihn nur er selbst.",
             ["FahndungWarnhinweis"] = Assignment,
-            ["Hinweis"] = "Bürgereinreichung; sie ist Aktenmaterial. Der Hinweisgeber liest seinen eigenen "
-                + "Hinweis angemeldet im Bürgerbereich — das ist sein Konto, nicht die Öffentlichkeit.",
             ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; er gehört den beiden Beteiligten. "
                 + "Die interne Zielgruppe verlässt das Haus nie.",
-            ["HinweisBelohnung"] = "Ausgezahltes Geld: Betrag, Anteil, Kassenbuchung und Empfänger. Nach draußen "
-                + "geht ausschließlich der eigene Beleg eines Bürgers, angemeldet im Bürgerbereich.",
             ["Ticket"] = "Anliegen eines namentlich bekannten Bürgers an die Führungsebene. Nach draußen "
                 + "geht nur der eigene Faden, angemeldet im Bürgerbereich — das ist sein Konto, nicht die "
                 + "Öffentlichkeit.",

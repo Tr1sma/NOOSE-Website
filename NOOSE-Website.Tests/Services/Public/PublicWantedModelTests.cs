@@ -57,6 +57,8 @@ public class PublicWantedModelTests
         typeof(PublicReportSnapshot),
         // the situation level: what the agency says, and the level that stood before it
         typeof(PublicSituationState),
+        // the figures band on the start page: counts and one sum, and structurally nothing they could be about
+        typeof(PublicStatistics),
         // the law page: the statute itself, grouped by book
         typeof(PublicLawEntry),
         typeof(PublicLawBook),

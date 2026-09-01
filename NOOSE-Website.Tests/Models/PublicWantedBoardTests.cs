@@ -38,6 +38,11 @@ public class PublicWantedBoardTests
             new Dictionary<string, PublicBounty>(StringComparer.OrdinalIgnoreCase)
             {
                 ["FA-1"] = new(5000m, false), ["FA-2"] = new(1000m, false),
+            },
+            // more captures than the archive list carries: the counter is not the length of that list
+            new Dictionary<PublicWantedKind, int>
+            {
+                [PublicWantedKind.Fahndung] = 7, [PublicWantedKind.Fahrzeug] = 3,
             });
     }
 
@@ -50,6 +55,25 @@ public class PublicWantedBoardTests
         Assert.Equal(["FA-1"], board.ByCaseNumber.Keys.Order());
         Assert.Equal(["FA-4"], board.Archive.Select(a => a.CaseNumber));
         Assert.Equal(["FA-4"], board.CapturedByCaseNumber.Keys.Order());
+    }
+
+    [Fact]
+    public void WithoutItems_TakesTheItemCapturesOutOfTheCounter()
+    {
+        // the figure has to move with the list it heads; a scalar total could not be reduced here at all
+        Assert.Equal(10, Mixed().CapturedTotal);
+        Assert.Equal(7, Mixed().WithoutItems().CapturedTotal);
+    }
+
+    [Fact]
+    public void TheCapturedCounter_IsNotTheLengthOfTheArchiveList()
+    {
+        // the archive is capped at the newest hundred for page weight; a counter that stopped there would read as
+        // completeness
+        var board = Mixed();
+
+        Assert.Equal(2, board.Archive.Count);
+        Assert.Equal(10, board.CapturedTotal);
     }
 
     [Fact]
@@ -69,7 +93,7 @@ public class PublicWantedBoardTests
         var board = new PublicWantedBoard([Card(person)],
             new Dictionary<string, PublicWantedDetail>(StringComparer.OrdinalIgnoreCase) { ["FA-1"] = person },
             [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase),
-            PublicWantedBoard.NoBounties);
+            PublicWantedBoard.NoBounties, PublicWantedBoard.NoCaptures);
 
         Assert.Single(board.WithoutItems().Cards);
     }

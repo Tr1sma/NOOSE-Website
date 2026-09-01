@@ -125,6 +125,21 @@ public class PublicWantedService(
         return board.Archive;
     }
 
+    public async Task<int> GetCapturedTotalAsync(CancellationToken cancellationToken = default)
+    {
+        // same two switches as the archive list it heads, read outside the content cache for the same reason
+        if (!await modules.IsEnabledAsync(PublicModules.WantedArchive, cancellationToken))
+        {
+            return 0;
+        }
+        var board = await LoadAsync(cancellationToken);
+        if (!await modules.IsEnabledAsync(PublicModules.WantedVehicles, cancellationToken))
+        {
+            board = board.WithoutItems();
+        }
+        return board.CapturedTotal;
+    }
+
     public async Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(caseNumber))
@@ -1390,12 +1405,21 @@ public class PublicWantedService(
                 })
                 .ToListAsync(cancellationToken);
 
+            // Counted apart from the cards above, which are capped for page weight: a figure that silently stops at
+            // the display limit reads as completeness. Three columns, because that is all the belt and the item
+            // switch need to decide what may be counted.
+            var capturedAll = await db.OeffentlicheFahndungen
+                .AsNoTracking()
+                .Where(f => f.Status == PublicWantedStatus.Gefasst && f.CaseNumber != null && f.CapturedAt != null)
+                .Select(f => new { CaseNumber = f.CaseNumber!, f.PersonId, f.Kind })
+                .ToListAsync(cancellationToken);
+
             // The suppression belt, as a second query rather than a subquery: IgnoreQueryFilters is compilation-scoped,
             // so a subquery using it strips !IsDeleted from the OUTER set as well and a deleted notice goes live —
-            // measured, not assumed. Standalone it can only do what it says. One call over both lists, because the
-            // archive answers to the same belt as the board.
+            // measured, not assumed. Standalone it can only do what it says. One call over all three lists, because
+            // the archive and its counter answer to the same belt as the board.
             var open = await OpenRecordsAsync(db,
-                rows.Select(r => r.PersonId).Concat(captured.Select(r => r.PersonId)), cancellationToken);
+                rows.Select(r => r.PersonId).Concat(capturedAll.Select(r => r.PersonId)), cancellationToken);
 
             var visible = rows.Where(r => r.PersonId is null || open.Contains(r.PersonId)).ToList();
             // after the belt, so a suppressed notice does not even get its chips queried
@@ -1437,7 +1461,17 @@ public class PublicWantedService(
                 .ToDictionary(r => r.CaseNumber, r => new PublicBounty(bounties[r.Id], r.BountyIsCap),
                     StringComparer.OrdinalIgnoreCase);
 
-            board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber, bountyByCaseNumber);
+            // deduplicated by case number first, like the archive itself: the unique index makes that defensive,
+            // and a counter that disagreed with the list it heads would be worse than either
+            var capturedTotals = capturedAll
+                .Where(r => r.PersonId is null || open.Contains(r.PersonId))
+                .GroupBy(r => r.CaseNumber, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .GroupBy(r => r.Kind)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber, bountyByCaseNumber,
+                capturedTotals);
         }
         catch (Exception)
         {

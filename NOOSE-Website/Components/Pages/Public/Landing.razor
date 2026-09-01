@@ -2,24 +2,202 @@
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
 @inject IPublicModuleService ModuleService
+@inject IPublicSituationService Situation
+@inject IPublicStatisticsService Statistics
+@inject IPublicWantedService Wanted
+@inject IPressReleaseService Press
 
 <PageTitle>NOOSE · National Office of Security Enforcement</PageTitle>
 
-<MudPaper Elevation="4" Class="pa-8">
-    <MudStack Spacing="5">
-        <MudStack Spacing="2">
-            <MudText Typo="Typo.overline" Color="Color.Primary">National Office of Security Enforcement</MudText>
-            <MudText Typo="Typo.h3" Style="font-weight:700;line-height:1.15;">Defending Our Nation. Securing the Future.</MudText>
-            <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:640px;">
-                Das NOOSE bündelt die staatliche Gefahrenabwehr und Aufklärung an einer Stelle. Diese Seite ist der
-                öffentliche Zugang zur Behörde – mit Informationen für Interessierte und Bewerber. Der interne
-                Aktenbestand bleibt den Agenten vorbehalten.
-            </MudText>
+<MudStack Spacing="4">
+
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="5">
+            <MudStack Row="true" Spacing="5" Wrap="Wrap.Wrap" AlignItems="AlignItems.Start">
+                <MudStack Spacing="2" Style="flex:2 1 420px;">
+                    <MudText Typo="Typo.overline" Color="Color.Primary">National Office of Security Enforcement</MudText>
+                    <MudText Typo="Typo.h3" Style="font-weight:700;line-height:1.15;">Defending Our Nation. Securing the Future.</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:640px;">
+                        Das NOOSE bündelt die staatliche Gefahrenabwehr und Aufklärung an einer Stelle. Diese Seite ist der
+                        öffentliche Zugang zur Behörde – mit Informationen für Interessierte und Bewerber. Der interne
+                        Aktenbestand bleibt den Agenten vorbehalten.
+                    </MudText>
+                </MudStack>
+
+                @if (_situation is not null)
+                {
+                    <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Gefahrenlage</MudText>
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Speed" Color="@_situationColour" Size="Size.Large" />
+                                <MudText Typo="Typo.h5" Color="@_situationColour" Style="font-weight:700;">
+                                    @PublicSituationLevelDisplay.Name(_situation.Level)
+                                </MudText>
+                            </MudStack>
+                            @if (_situation.Since is { } since)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    seit @since.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudText>
+                            }
+                            <MudButton Href="/lage" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.ArrowForward">Zur Einschätzung</MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            @if (_numbers.HasAny)
+            {
+                <MudDivider />
+
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Zahlen der Behörde</MudText>
+                    @* StatTile deliberately without Href: this page renders statically, so the tile's click handler
+                       never runs and a tile that looks like a link would be a dead affordance *@
+                    <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                        @if (_numbers.OpenNotices is { } openNotices)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.PersonSearch" Colour="Color.Primary"
+                                          Label="Laufende Fahndungen" Value="@openNotices.ToString("N0")"
+                                          Hint="Derzeit öffentlich ausgeschrieben." />
+                            </div>
+                        }
+                        @if (_numbers.CapturedNotices is { } captured)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.Inventory2" Colour="Color.Success"
+                                          Label="Abgeschlossen" Value="@captured.ToString("N0")"
+                                          Hint="Abgeschlossene Ausschreibungen seit Beginn." />
+                            </div>
+                        }
+                        @if (_numbers.TipsReceived is { } tips)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.TipsAndUpdates" Colour="Color.Info"
+                                          Label="Hinweise" Value="@tips.ToString("N0")"
+                                          Hint="Über diese Seite eingegangene Bürgerhinweise." />
+                            </div>
+                        }
+                        @if (_numbers.TipsConfirmed is { } confirmed)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.CheckCircle" Colour="Color.Info"
+                                          Label="davon bestätigt" Value="@confirmed.ToString("N0")"
+                                          Hint="Hinweise, die sich als zutreffend erwiesen haben." />
+                            </div>
+                        }
+                        @if (_numbers.TipsLedToCapture is { } led)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.Gavel" Colour="Color.Success"
+                                          Label="davon zur Ergreifung" Value="@led.ToString("N0")"
+                                          Hint="Hinweise, die zu einer Festnahme geführt haben." />
+                            </div>
+                        }
+                        @if (_numbers.RewardsPaid is { } paid)
+                        {
+                            <div style="flex:1 1 190px;">
+                                <StatTile Icon="@Icons.Material.Filled.Paid" Colour="Color.Warning"
+                                          Label="Belohnungen" Value="@($"{paid.ToString("N0")} $")"
+                                          Hint="Insgesamt an Hinweisgeber ausgezahlt." />
+                            </div>
+                        }
+                    </MudStack>
+                </MudStack>
+            }
         </MudStack>
+    </MudPaper>
 
-        <MudDivider />
+    @if (_wanted.Count > 0)
+    {
+        <MudPaper Elevation="4" Class="pa-8">
+            <MudStack Spacing="4">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.h5">Zuletzt ausgeschrieben</MudText>
+                    <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.PersonSearch">Alle Fahndungen</MudButton>
+                </MudStack>
 
+                <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
+                    @foreach (var card in _wanted)
+                    {
+                        <MudPaper Outlined="true" Class="pa-0" Style="flex:1 1 240px;">
+                            <MudLink Href="@($"/gesucht/{card.CaseNumber}")" Underline="Underline.None" Color="Color.Inherit">
+                                @if (card.HasPhoto)
+                                {
+                                    <MudImage Src="@($"/gesucht/{card.CaseNumber}/foto")" Alt="@card.DisplayName"
+                                              ObjectFit="ObjectFit.Cover" Width="100" Height="160" Fluid="true"
+                                              Class="rounded-t" Style="width:100%;object-position:center 25%;" />
+                                }
+                                <MudStack Spacing="1" Class="pa-4">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                        @PublicWantedKindDisplay.Name(card.Kind)
+                                    </MudChip>
+                                    <MudText Typo="Typo.h6" Style="@NameStyle(card.Kind)">@card.DisplayName</MudText>
+                                    @if (_bounties.TryGetValue(card.CaseNumber, out var bounty))
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Warning">
+                                            @(bounty.IsCap ? "bis " : string.Empty)@bounty.Total.ToString("N0") $
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            </MudLink>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (_press is not null || _tipsEnabled)
+    {
+        <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
+            @if (_press is not null)
+            {
+                <MudPaper Elevation="4" Class="pa-6" Style="flex:2 1 380px;">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aktuelle Pressemitteilung</MudText>
+                        <MudText Typo="Typo.h6">@_press.Title</MudText>
+                        @if (_press.PublishedAt is { } pressDate)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @pressDate.ToLocalTime().ToString("dd.MM.yyyy")
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_press.Teaser</MudText>
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="mt-2">
+                            <MudButton Href="@($"/presse/{_press.CaseNumber}")" Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Feed">Mitteilung lesen</MudButton>
+                            <MudButton Href="/presse" Variant="Variant.Text" Color="Color.Default">Alle Mitteilungen</MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (_tipsEnabled)
+            {
+                <MudPaper Elevation="4" Class="pa-6" Style="flex:1 1 300px;">
+                    <MudStack Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.TipsAndUpdates" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h6">Etwas beobachtet?</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Jeder Hinweis wird geprüft. Auf Wunsch bleibst du dabei anonym – für eine ausgesetzte
+                            Belohnung ist allerdings ein Name nötig.
+                        </MudText>
+                        <MudButton Href="/hinweis" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-2">Hinweis geben</MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+
+    <MudPaper Elevation="4" Class="pa-8">
         <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
             @if (_careersEnabled)
             {
@@ -104,29 +282,74 @@
                 </MudStack>
             </MudPaper>
         </MudStack>
-    </MudStack>
-</MudPaper>
+    </MudPaper>
+
+</MudStack>
 
 @code {
+    /// <summary>How many notices the start page shows before pointing at the board.</summary>
+    private const int WantedPreview = 3;
+
     private bool _careersEnabled;
     private bool _registrationEnabled;
-    private string _registrationOfflineText = string.Empty;
+    private bool _tipsEnabled;
+    private string _registrationOfflineText = "Neue Bürgerkonten können derzeit nicht angelegt werden.";
+
+    private PublicSituationState? _situation;
+    private Color _situationColour = Color.Default;
+    private PublicStatistics _numbers = PublicStatistics.Empty;
+    private IReadOnlyList<PublicWantedCard> _wanted = [];
+    private IReadOnlyDictionary<string, PublicBounty> _bounties = PublicWantedBoard.NoBounties;
+    private PublicPressCard? _press;
 
     protected override async Task OnInitializedAsync()
     {
+        // read per source rather than in one block: the start page has to come up when one of them is down, and a
+        // single catch would blank every section because of the first failure
+        // an unreadable switch board reads as "everything off", which is the safe direction and what the page did
+        // before: nothing announces itself while the agency cannot say whether it is on
+        var snapshot = await SafeAsync(() => ModuleService.GetAsync(), new PublicModuleSnapshot(false, []));
+        _careersEnabled = snapshot.IsEnabled(PublicModules.Careers);
+        _registrationEnabled = snapshot.IsEnabled(PublicModules.CitizenRegistration);
+        _tipsEnabled = snapshot.IsEnabled(PublicModules.Tips);
+        // an existing citizen keeps their access, so only the sign-up path reads the switch
+        var offline = snapshot.Find(PublicModules.CitizenRegistration)?.OfflineText;
+        if (!string.IsNullOrWhiteSpace(offline))
+        {
+            _registrationOfflineText = offline;
+        }
+
+        _situation = await SafeAsync<PublicSituationState?>(() => Situation.GetPublishedAsync(), null);
+        if (_situation is not null)
+        {
+            _situationColour = PublicSituationLevelDisplay.Colour(_situation.Level);
+        }
+
+        _numbers = await SafeAsync(() => Statistics.GetPublishedAsync(), PublicStatistics.Empty);
+
+        var board = await SafeAsync(() => Wanted.GetBoardAsync(), PublicWantedBoard.Empty);
+        // already newest first, and the module switches are folded into the snapshot
+        _wanted = board.Cards.Take(WantedPreview).ToList();
+        _bounties = board.BountyByCaseNumber;
+
+        var press = await SafeAsync(() => Press.GetPublishedAsync(), PublicPressSnapshot.Empty);
+        _press = press.Cards.FirstOrDefault();
+    }
+
+    private static async Task<T> SafeAsync<T>(Func<Task<T>> read, T fallback)
+    {
         try
         {
-            var snapshot = await ModuleService.GetAsync();
-            _careersEnabled = snapshot.IsEnabled(PublicModules.Careers);
-            _registrationEnabled = snapshot.IsEnabled(PublicModules.CitizenRegistration);
-            // an existing citizen keeps their access, so only the sign-up path reads the switch
-            _registrationOfflineText = snapshot.Find(PublicModules.CitizenRegistration)?.OfflineText
-                ?? "Neue Bürgerkonten können derzeit nicht angelegt werden.";
+            return await read();
         }
         catch
         {
             /* best effort */
-            _registrationOfflineText = "Neue Bürgerkonten können derzeit nicht angelegt werden.";
+            return fallback;
         }
     }
+
+    /// <summary>A licence plate reads as a plate, not as a name.</summary>
+    private static string? NameStyle(PublicWantedKind kind)
+        => WantedKinds.IsItem(kind) ? "font-family:monospace;letter-spacing:.08em;" : null;
 }

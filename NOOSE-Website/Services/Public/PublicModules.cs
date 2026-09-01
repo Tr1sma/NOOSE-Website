@@ -84,8 +84,10 @@ public static class PublicModules
             Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, true, OffGeneric),
         new(HazardLevel, "Lage", "Gefahrenlage-Stufe mit Einschätzung; die Stufe davor ist der Trend.",
             Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, true, OffGeneric),
+        // no nav route: the figures are a band on the start page, not a page of their own — a tab would be a second
+        // truth about the same content, the same reason Kopfgeld has none
         new(Statistics, "Zahlen", "Öffentliche Kennzahlen zu Ausschreibungen, Hinweisen und Belohnungen.",
-            Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, false, OffGeneric),
+            Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, true, OffGeneric),
 
         new(Tips, "Hinweis geben", "Formular zur Übermittlung von Hinweisen.",
             Icons.Material.Filled.TipsAndUpdates, "/hinweis", PublicModuleGroup.Service, 200, false, true,
