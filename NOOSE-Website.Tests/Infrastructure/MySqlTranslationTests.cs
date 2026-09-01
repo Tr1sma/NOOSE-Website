@@ -2,6 +2,7 @@
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Requests;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 using NOOSE_Website.Services.Public;
@@ -753,6 +754,27 @@ public sealed class MySqlTranslationTests : IDisposable
 
         Assert.Contains("Lageberichte", sql, StringComparison.Ordinal);
         Assert.Contains("EXISTS", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheSituationQuery_TranslatesItsKeySetLookup()
+    {
+        // four rows out of the shared settings table; an IN list is trivial until it is not, and this one hangs
+        // behind an anonymous page
+        string[] keys =
+        [
+            SystemSettingKeys.PublicSituationLevel, SystemSettingKeys.PublicSituationNote,
+            SystemSettingKeys.PublicSituationSince, SystemSettingKeys.PublicSituationPrevious,
+        ];
+
+        var sql = _db.SystemSettings
+            .AsNoTracking()
+            .Where(s => keys.Contains(s.Key))
+            .Select(s => new { s.Key, s.Value })
+            .ToQueryString();
+
+        Assert.Contains("Schluessel", sql, StringComparison.Ordinal);
+        Assert.Contains("GefahrenlageStufe", sql, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -53,6 +53,7 @@ public static class AuditEntityDisplay
         "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
         "FahndungEinspruch" => "Einspruch gegen eine Ausschreibung",
         "PublicArea" => "Öffentlicher Bereich",
+        "PublicSituation" => "Gefahrenlage",
         _ => type,
     };
 
@@ -85,6 +86,7 @@ public static class AuditEntityDisplay
         "BuergerProfil" => "/einstellungen?tab=buerger",
         "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
         "PublicArea" => "/einstellungen?tab=oeffentliche-module",
+        "PublicSituation" => "/einstellungen?tab=lage",
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
         "Pressemitteilung" => "/einstellungen?tab=presse",
         "OeffentlicheWarnung" => "/einstellungen?tab=warnungen",

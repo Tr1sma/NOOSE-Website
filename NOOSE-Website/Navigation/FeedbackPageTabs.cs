@@ -32,6 +32,7 @@ public static class FeedbackPageTabs
         new("oeffentliche-module", "Module & Not-Aus"),
         new("oeffentliche-seiten", "Öffentliche Seiten"),
         new("presse", "Pressemitteilungen"),
+        new("lage", "Gefahrenlage"),
         new("warnungen", "Öffentliche Warnungen"),
         new("berichte", "Öffentliche Lageberichte"),
         new("recht", "Gesetzesauszüge"),

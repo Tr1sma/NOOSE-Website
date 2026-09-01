@@ -82,8 +82,8 @@ public static class PublicModules
             Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, true, OffGeneric),
         new(Law, "Recht", "Öffentlich freigegebene Gesetzesauszüge.",
             Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, true, OffGeneric),
-        new(HazardLevel, "Lage", "Gefahrenlage-Ampel mit Einschätzung und Trend.",
-            Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, false, OffGeneric),
+        new(HazardLevel, "Lage", "Gefahrenlage-Stufe mit Einschätzung; die Stufe davor ist der Trend.",
+            Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, true, OffGeneric),
         new(Statistics, "Zahlen", "Öffentliche Kennzahlen zu Ausschreibungen, Hinweisen und Belohnungen.",
             Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, false, OffGeneric),
 

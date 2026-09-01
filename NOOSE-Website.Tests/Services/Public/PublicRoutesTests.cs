@@ -113,6 +113,65 @@ public class PublicRoutesTests
             "In robots.txt erlaubt, gilt aber als intern: " + string.Join(", ", wrong));
     }
 
+    [Fact]
+    public void EveryInternalRouteBehindAPublicPrefix_IsDisallowedExplicitly()
+    {
+        // A robots.txt rule matches by string prefix; PublicRoutes.Matches stops at the segment boundary. That gap is
+        // real: "Allow: /lage" also permits /lageberichte, "Allow: /hinweis" the internal tip desk. The noindex header
+        // is right either way, but the two layers must not contradict each other — phase 14a renamed a public route
+        // for exactly this reason and missed the collision coming from the other side.
+        var allow = AllowLines().Where(l => l != "/$").ToArray();
+        var disallow = DisallowLines().Where(l => l != "/").ToArray();
+
+        var offenders = InternalRoutes()
+            .Select(route => (Route: route, Allow: Longest(allow, route)))
+            .Where(x => x.Allow is not null)
+            // the longest matching rule wins, and Allow wins a tie, so the Disallow has to be strictly longer
+            .Where(x => (Longest(disallow, x.Route)?.Length ?? 0) <= x.Allow!.Length)
+            .Select(x => $"{x.Route} (durch Allow: {x.Allow})")
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Intern, aber von einer Allow-Zeile mitgedeckt: " + string.Join(", ", offenders));
+    }
+
+    private static string? Longest(IEnumerable<string> rules, string path)
+        => rules.Where(r => path.StartsWith(r, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(r => r.Length)
+            .FirstOrDefault();
+
+    /// <summary>Every @page route of the app that PublicRoutes does not consider public.</summary>
+    private static string[] InternalRoutes([CallerFilePath] string here = "")
+    {
+        var root = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website", "Components"));
+        Assert.True(Directory.Exists(root), $"Komponentenordner nicht gefunden: {root}");
+
+        var routes = Directory.EnumerateFiles(root, "*.razor", SearchOption.AllDirectories)
+            .SelectMany(f => System.Text.RegularExpressions.Regex
+                .Matches(File.ReadAllText(f), "@page\\s+\"([^\"]+)\"")
+                .Select(m => m.Groups[1].Value))
+            // the parameter part says nothing about the prefix; /hinweise/{Id} collides exactly like /hinweise
+            .Select(r => r.Split('{')[0].TrimEnd('/'))
+            .Where(r => r.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(r => !PublicRoutes.IsPublic(r))
+            .Order()
+            .ToArray();
+
+        // a wrong path would otherwise leave the fact above green forever
+        Assert.NotEmpty(routes);
+        return routes;
+    }
+
+    private static IReadOnlyList<string> DisallowLines()
+        => File.ReadAllLines(RobotsPath())
+            .Select(l => l.Trim())
+            .Where(l => l.StartsWith("Disallow:", StringComparison.OrdinalIgnoreCase))
+            .Select(l => l["Disallow:".Length..].Trim())
+            .ToList();
+
     private static IReadOnlyList<string> AllowLines()
         => File.ReadAllLines(RobotsPath())
             .Select(l => l.Trim())

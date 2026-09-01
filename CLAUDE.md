@@ -458,15 +458,15 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–13 und 14a–14c aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die
+Gebaut sind Phase 1–13, 14a–14c und 15a aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die
 redaktionellen Seiten, die öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf,
 Aufrufzähler, Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung,
 Triage, Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
 Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten,
 die Sachfahndung (gesuchte Fahrzeuge und Waffen), der Bürger-Einspruch gegen eine Ausschreibung, die
 Pressemitteilungen, die amtlichen Warnungen und die freigegebenen Gesetzesauszüge sowie die freigegebenen
-Monatstexte. Die öffentlichen Zahlen und die Gefahrenlage-Ampel sind geplant, aber **nicht** vorhanden —
-ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+Monatstexte und die Gefahrenlage-Ampel. Die öffentlichen Zahlen und der Startseiten-Umbau sind geplant,
+aber **nicht** vorhanden — der Modul-Schlüssel `Statistik` existiert schon und steht auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -1402,10 +1402,21 @@ ihre Modul-Schlüssel existieren schon und stehen auf „aus".
     `PublicPageScanTests.InternalMarkers` mit `SnapshotJson`, `StatisticsReport`, `DashboardMetrics`,
     `StatisticsTopEntry`, `SituationReportDisplay`, `ISituationReportService` — dieselbe Mechanik, die
     `ThreatScore` seit Phase 12 hält.
-  - **Der Anker-Picker liest über `ISituationReportService`, und das ist kein Bruch von Leitsatz 3.** Der
-    verbietet einem *öffentlichen* Lesepfad, über einen internen Listendienst zu lesen; dies ist der
-    interne Picker des Panels. Projiziert wird auf `Id/Jahr/Monat/Titel` — `SituationReportHead.GeneratedBy`
-    nennt einen Agenten. Angeboten werden nur Monate ohne lebenden Text; kein DI-Zyklus.
+  - **Der Anker-Picker liest die Tabelle selbst — `ISituationReportService` wäre ein Objektgraph-Leck.**
+    Die öffentlichen Seiten *injizieren* `IPublicReportService`, also baut jeder anonyme Aufruf jeden
+    Konstruktor-Parameter dieses Dienstes mit auf; mit dem Statistik-Dienst hängen `IStatisticsService`,
+    `IFinancingStatisticsService` und `INotificationService` an `/berichte`. Der Marker-Scan hält
+    `ISituationReportService` von den *Seiten* fern und sieht es eine Schicht tiefer nicht. `GetAnchorsAsync`
+    liest deshalb vier Spalten direkt — wie `NewForAnchorAsync` ohnehin —, und `GetArchiveAsync` löst je
+    Bericht einen Codenamen auf, den ein Picker nicht braucht. **Neue Regel mit Wächter:**
+    `PublicSurfaceGuardTests.NoServiceInjectedByAPublicPage_PullsInAnInternalStack` leitet die Dienste aus den
+    `@inject`-Zeilen von `Components/Pages/Public/` ab, löst `IFooService` → `FooService.cs` auf und
+    **streicht vorher die Kommentare** (Präzedenz `ForeignTokenSystems`). Er meldet einen nicht auflösbaren
+    Dienst, statt ihn zu überspringen — sonst leert eine Umbenennung den Scan lautlos.
+  - **Der Monatsname ist auf de-DE gepinnt, nicht `CurrentCulture`** — wie `FinancingPeriod`,
+    `StatisticsService`, `AttendanceStatisticsService`. Ein Host mit anderer Locale schriebe sonst
+    „March 2026“ in eine deutsche Seite, ohne dass etwas rot wird: „August 2026“ liest sich in beiden
+    Sprachen gleich, ein Label-Test darauf beweist also nichts. Getestet wird mit März/Oktober/Dezember.
   - **Kein Discord-Push**, anders als bei der Presse: ein Monatsbericht ist keine Eilmeldung, die Nav zeigt
     ihn ohnehin. Damit kein neuer `NotificationType`. Deckel **24** (zwei Jahre) und **auf der Seite
     genannt**; `ByPeriod` über `GroupBy`, nicht `ToDictionary` — die Eindeutigkeit hängt an einer
@@ -1419,6 +1430,59 @@ ihre Modul-Schlüssel existieren schon und stehen auf „aus".
     `RecordsReference`/`LinkService` — ein Lagebericht hängt an keiner Akte (Präzedenz `Ticket`,
     `Pressemitteilung`, `OeffentlicheWarnung`); `PublicRoutes`/`robots.txt` — `/berichte` kommt seit 14a
     aus der Modul-`NavRoute`, und damit auch `DemoModeMiddleware` und `PartnerRoutes.IsAllowed`.
+- **Phase 15a (Gefahrenlage) — was daran anders ist:**
+  - **Die Ampel ist eine redaktionelle Aussage, und der Trend ist genau die Stufe davor.** Der Plantext
+    wollte ihn „aggregiert aus `ThreatScoreHistory`, ohne Aktenbezug"; das ist zweifach unbaubar. Die Reihe
+    deckt **jede** Person und Fraktion ab, Verschlusssachen eingeschlossen — ein Aggregat darüber ist
+    genau das, was die NOOSEI-Doktrin schon intern verbietet, hier anonym. Und sie exportierte den rohen
+    Score in abgeleiteter Form, während `PublicPageScanTests.InternalMarkers` wörtlich `"ThreatScore"`
+    führt. Präzedenz ist Phase 12: die öffentliche `Einordnung` einer Fraktion wird nie aus
+    `Faction.Classification` abgeleitet. `NeverPublic["ThreatScoreHistory"]` versprach den geplanten
+    Trend und nennt jetzt den Grund.
+  - **Vier `SystemSettings`-Zeilen statt einer Tabelle** (`GefahrenlageStufe`/`…Einschaetzung`/`…Seit`/
+    `…Zuvor`, Präzedenz Not-Aus): es gibt genau eine Gefahrenlage. Gespeichert wird der **Name** der Stufe,
+    nicht die Zahl — eine „2" sagt weder in der Einstellungstabelle noch in der Audit-Zeile etwas.
+    Protokolliert wird zweimal, wie beim Not-Aus: die rohen `SystemSetting`-Zeilen über den Interceptor,
+    dazu eine `ManualAudit.Row` mit eigenem Typ `"PublicSituation"`, die die Aktion benennt.
+  - **`Seit` bewegt sich nur bei einem Stufenwechsel** (14a-Lektion `PublishedAt ??=` in ihrer schärfsten
+    Form: die Seite zeigt genau dieses Datum als „seit"). `Zuvor` wird nur dort gesetzt, und ein zweites
+    Speichern ohne Unterschied schreibt gar nichts — auch keine Protokollzeile.
+  - **`null` heißt Schweigen, und Schweigen ist nicht `Niedrig`.** `GetPublishedAsync` liefert `null` bei
+    Modul aus, nie gesetzt und unerreichbarer Datenbank; eine Standardstufe wäre in allen dreien die
+    Behauptung „keine Gefahr". Bewusste Abweichung von den anderen öffentlichen Diensten, die eine leere
+    Liste zurückgeben — die ist ehrlich „nichts veröffentlicht".
+  - **`SetAsync` ist der einzige Publish-Pfad ohne Modul-Gate.** Es gibt keinen Entwurf/Publiziert-Schnitt,
+    also zwänge ein Gate die allererste Stufe live zu gehen, bevor jemand sie schreiben kann — und weil
+    das Ausschalten des Moduls hier das Zurückziehen **ist**, machte es das unumkehrbar.
+  - **Eigenes Enum, Allowlist beim Lesen.** `PublicSituationLevel` ist bewusst nicht `HazardLevel` (das ist
+    `HazardLevelLogic.From(score)`, die Stufe *einer Akte*); ein geteiltes Enum wäre die Einladung, das eine
+    aus dem anderen zu rechnen. `PublicSituationLevelDisplay.Parse` ist eine Allowlist, **nie**
+    `Enum.Parse`: der Wert kommt aus einer von Hand editierbaren Zeile, und ein Streuwert wäre auf einer
+    `[AllowAnonymous]`-Seite ein HTTP 500. Vier unterschiedliche **sichtbare** Farben.
+  - **Die Einschätzung ist Klartext**, kein HTML: kein `HtmlCleanup`, kein `MarkupString`, Zeilenumbrüche
+    sind die Formatierung. Ein Wächter verbietet `MarkupString` gezielt in `SituationPage.razor` — nur
+    dort, weil Warnungs-Hub und Presse-Artikel es legitim benutzen.
+  - **`SystemSetting` wandert von `NeverPublic` nach `Publishable`**, mit einem Text, der genau die vier
+    Schlüssel nennt und festhält, dass jede andere Zeile (Discord-Webhooks, Wartungstext, Theme, Not-Aus)
+    das Haus nie verlässt. `PublicVisibilityCoverageTests` wird davon nicht rot — die Entität war schon
+    entschieden; deshalb eine bewusste Handänderung.
+  - **`EverySettingsRouteOfTheAuditDisplay_NamesAnExistingSection` liest jetzt die Quelle**, nicht die
+    `DbSet`s: `AuditEntityDisplay` beantwortet auch Konfigurations-Typen ohne Tabelle (`"PublicArea"`,
+    `"PublicSituation"`), und genau die sah die Reflection-Variante nicht.
+  - **Nebenbefund, mitbehoben: `robots.txt` matcht nach Zeichenkette, `PublicRoutes.Matches` nach Segment.**
+    `Allow: /lage` deckte damit das interne `/lageberichte` mit ab — dieselbe Klasse wie der 14a-Befund, nur
+    von der anderen Seite. Im selben Zug fielen `Allow: /hinweis` ⇒ `/hinweise` (der interne Eingang, dessen
+    Trennung die Segmentgrenze eben nur im Header leistet) und `Allow: /info` ⇒ `/informanten` auf. Drei
+    `Disallow:`-Zeilen (längste Regel gewinnt, RFC 9309) plus ein abgeleiteter Wächter in
+    `PublicRoutesTests`: er liest alle `@page`-Routen, nimmt die internen und verlangt für jede, die eine
+    Allow-Zeile mitdeckt, eine **echt längere** Disallow-Zeile. **Eine neue öffentliche Route, die Präfix
+    einer internen ist, macht damit den Build rot.**
+  - **Nicht** registriert, mit Grund: keine neue Entität ⇒ kein `SearchCatalog`, kein
+    `WatchlistRecordRollup`, kein Papierkorb, keine der vier Zeitstrahl-/Chronik-Stellen, kein
+    `RecordsReference`/`LinkService`, kein `NotificationType`, kein Discord-Push (eine Stufe ist keine
+    Eilmeldung, die Nav zeigt sie ohnehin) · `PublicRoutes` — `/lage` ist seit Phase 2 die Modul-`NavRoute`,
+    und `Prefixes` sammelt Nav-Routen ohne `Available`-Filter ein, `Allow: /lage` stand also schon in
+    `robots.txt`.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1448,7 +1512,7 @@ ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–13 und 14a–14c gebaut**, 15–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–13, 14a–14c und 15a gebaut**, 15b–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

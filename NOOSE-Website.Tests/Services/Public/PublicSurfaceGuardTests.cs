@@ -63,18 +63,35 @@ public class PublicSurfaceGuardTests
     [Fact]
     public void EverySettingsRouteOfTheAuditDisplay_NamesAnExistingSection()
     {
-        // a route into /einstellungen is only useful if the rail actually has that section
-        var offenders = EntityTypes()
-            .Select(t => AuditEntityDisplay.Route(t.Name, "id"))
-            .Where(r => r is not null && r.StartsWith("/einstellungen?tab=", StringComparison.Ordinal))
-            .Select(r => r!["/einstellungen?tab=".Length..])
+        // A route into /einstellungen is only useful if the rail actually has that section. Read out of the source
+        // rather than driven by EntityTypes(): the display also answers for config types that have no DbSet at all
+        // ("PublicArea", "PublicSituation"), and those were exactly the arms the reflection version could not see.
+        var slugs = Regex.Matches(File.ReadAllText(DisplayFile()), @"/einstellungen\?tab=([a-z0-9-]+)")
+            .Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
-            .Where(slug => !MergedPageSections.Settings.Contains(slug, StringComparer.Ordinal))
             .Order()
+            .ToArray();
+        // a renamed route prefix would otherwise leave this green forever
+        Assert.NotEmpty(slugs);
+
+        var offenders = slugs
+            .Where(slug => !MergedPageSections.Settings.Contains(slug, StringComparer.Ordinal))
             .ToArray();
 
         Assert.True(offenders.Length == 0,
             "Jede ?tab=-Route zeigt auf einen vorhandenen Abschnitt: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void TheSituationPage_RendersItsAssessmentAsText()
+    {
+        // The assessment never goes through HtmlCleanup, so a single MarkupString here would turn it into an
+        // anonymously reachable, unfiltered markup surface. Scoped to this one file on purpose: the warning hub and
+        // the press article render published, cleaned HTML and use MarkupString legitimately.
+        var file = Path.Combine(ProjectRoot(), "Components", "Pages", "Public", "SituationPage.razor");
+        Assert.True(File.Exists(file), $"Lage-Seite nicht gefunden: {file}");
+
+        Assert.DoesNotContain("MarkupString", WithoutComments(File.ReadAllText(file)), StringComparison.Ordinal);
     }
 
     [Fact]

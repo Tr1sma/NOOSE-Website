@@ -53,6 +53,22 @@ public static class SystemSettingKeys
 
     /// <summary>Shuts the whole public area down at once; beats every single module switch.</summary>
     public const string PublicAreaKillSwitch = "OeffentlicherBereichNotAus";
+
+    /// <summary>Published situation level, stored by name rather than by number.</summary>
+    /// <remarks>
+    /// Four rows instead of a table, the way the kill switch is stored: there is exactly one of these, ever. The
+    /// name is stored because a bare "2" says nothing to whoever reads the settings table or the audit row.
+    /// </remarks>
+    public const string PublicSituationLevel = "GefahrenlageStufe";
+
+    /// <summary>Assessment shown under the level; plain text, never HTML.</summary>
+    public const string PublicSituationNote = "GefahrenlageEinschaetzung";
+
+    /// <summary>Round-trip UTC of the last change of level; a corrected assessment does not move it.</summary>
+    public const string PublicSituationSince = "GefahrenlageSeit";
+
+    /// <summary>The level that stood before the current one; empty while the first one still stands.</summary>
+    public const string PublicSituationPrevious = "GefahrenlageZuvor";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>

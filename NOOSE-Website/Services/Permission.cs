@@ -266,6 +266,21 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to set the published situation level.</summary>
+    /// <remarks>
+    /// Same shape and order as <see cref="RequireWarningWrite"/>, and its own guard for the same reason: the message
+    /// names the area. Internal first, because a citizen account carries no rank claim at all; write before rank,
+    /// because the rank check alone would let the read-only supervision and the demo principal reach the write.
+    /// </remarks>
+    public static void RequirePublicSituationWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Die öffentliche Gefahrenlage setzt nur die Führung.");
+        }
+    }
+
     /// <summary>Require the right to write and publish a released monthly situation report.</summary>
     /// <remarks>
     /// Same shape and same order as <see cref="RequirePressWrite"/>, and its own guard for the same reason: the

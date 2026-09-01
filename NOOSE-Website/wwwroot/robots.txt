@@ -22,6 +22,15 @@ Allow: /lage
 Allow: /hinweis
 Allow: /suche-oeffentlich
 
+# A robots.txt rule matches by string prefix, not by path segment: "Allow: /lage" would otherwise also permit
+# the internal /lageberichte, "Allow: /hinweis" the internal tip desk /hinweise, and "Allow: /info" the
+# informant records. The longest matching rule wins (RFC 9309), so these three beat the Allow lines above.
+# PublicRoutes.Matches stops at the segment boundary, so the noindex header was already right — this is what
+# keeps the crawler file from saying the opposite. Derived and checked by PublicRoutesTests.
+Disallow: /hinweise
+Disallow: /informanten
+Disallow: /lageberichte
+
 # assets the public pages need to render
 Allow: /_framework
 Allow: /_content

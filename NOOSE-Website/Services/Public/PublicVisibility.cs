@@ -29,6 +29,10 @@ public static class PublicVisibility
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
+            ["SystemSetting"] = "Ausschließlich vier Zeilen: Gefahrenlage-Stufe, Einschätzung, Seit-Datum und die "
+                + "zuvor gesetzte Stufe. Jede andere Zeile dieser Tabelle — Discord-Webhooks, Wartungstext, "
+                + "Theme-Farben, Logo, Demo-Modus, Not-Aus, Worker-Stempel — verlässt das Haus nie. Die Tabelle "
+                + "steht hier und nicht in NeverPublic, weil dieses Verzeichnis sagt, *was genau* rausgeht.",
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
             ["Pressemitteilung"] = "Öffentliches Aktenzeichen, Titel, Teaser und der veröffentlichte Inhalt einer "
@@ -189,9 +193,11 @@ public static class PublicVisibility
 
             // --- scoring and config ---
             ["ThreatScoreConfig"] = "Gewichtung des Bedrohungs-Scores; ihre Kenntnis wäre eine Anleitung zur Umgehung.",
-            ["ThreatScoreHistory"] = "Score-Verlauf je Akte; öffentlich erscheint nur ein aggregierter Trend ohne Aktenbezug.",
+            ["ThreatScoreHistory"] = "Score-Verlauf je Akte. Auch aggregiert nicht: die Reihe deckt jede Person "
+                + "und Fraktion ab, Verschlusssachen eingeschlossen, und eine veröffentlichte Kurve exportierte den "
+                + "rohen Score in abgeleiteter Form — beobachtbar und damit rückwärts prüfbar gegen die Gewichtung. "
+                + "Der öffentliche Trend ist stattdessen die zuvor gesetzte Gefahrenlage-Stufe.",
             ["RecencyThreshold"] = Configuration,
-            ["SystemSetting"] = Configuration,
             ["EnumLabelOverride"] = Configuration,
             ["CaseNumberCounter"] = "Zählerstand der Aktenzeichen; verrät die Zahl der Akten.",
             ["SavedSearch"] = "Gespeicherte Suche eines Agenten; nach außen nie.",

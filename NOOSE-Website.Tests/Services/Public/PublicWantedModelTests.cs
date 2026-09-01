@@ -55,6 +55,8 @@ public class PublicWantedModelTests
         typeof(PublicReportCard),
         typeof(PublicReportView),
         typeof(PublicReportSnapshot),
+        // the situation level: what the agency says, and the level that stood before it
+        typeof(PublicSituationState),
         // the law page: the statute itself, grouped by book
         typeof(PublicLawEntry),
         typeof(PublicLawBook),
@@ -89,6 +91,8 @@ public class PublicWantedModelTests
         [typeof(PublicReportDraft)] = "Der unveröffentlichte Entwurf eines Monatstexts; anonym gibt es ihn nicht.",
         [typeof(PublicReportAnchor)] = "Ein archivierter Monatsbericht zur Auswahl im Panel; er trägt dessen interne Id.",
         [typeof(PublicReportInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(PublicSituationInput)] = "Panel-Eingabe der Gefahrenlage; Datum und Vorgängerstufe stehen bewusst "
+            + "nicht darauf, sie werden abgeleitet statt vom Client geliefert.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
         [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",

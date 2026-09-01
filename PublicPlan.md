@@ -118,7 +118,8 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 14a | Presse: Mitteilungen, Discord-Push, Auto-Entwurf bei „gefasst" | `Oeffentlich14_Presse` | 3 | **fertig** |
 | 14b | Warnungen und öffentliche Gesetzesauszüge | `Oeffentlich14_Warnungen` | 3 | **fertig** |
 | 14c | Öffentliche Lageberichte | `Oeffentlich14_Lageberichte` | 3 | **fertig** |
-| 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14a | offen |
+| 15a | Gefahrenlage-Ampel und `/lage` | keine | 2 | **fertig** |
+| 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 7, 14a, 15a | offen |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
 
 > **Migrations-Präfix `Oeffentlich<Phase>_`.** Die interne Phasen-Zählung des Projekts steht schon bei
@@ -1967,29 +1968,116 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
 
 ---
 
-## Phase 15 — Zahlen & Lage-Seite
+## Phase 15a — Gefahrenlage-Ampel
+
+**Ziel:** Die Behörde sagt in einem Wort, wie die Lage ist.
+
+**Migration:** keine — vier Zeilen in der bestehenden Key/Value-Tabelle (`SystemSettingKeys`:
+`PublicSituationLevel`, `PublicSituationNote`, `PublicSituationSince`, `PublicSituationPrevious`).
+
+**Gebaut — was daran anders ist**
+
+- **Die Ampel ist eine redaktionelle Aussage, kein berechneter Wert, und der Trend ist die Stufe davor.**
+  Der Plantext wollte „aggregiert aus `ThreatScoreHistory`, ohne Aktenbezug". Zwei unabhängige Gründe
+  dagegen: die Reihe deckt **jede** Person und Fraktion ab, Verschlusssachen eingeschlossen — ein Aggregat
+  darüber ist genau das, was die NOOSEI-Doktrin schon intern verbietet, hier anonym; und sie exportierte
+  den rohen Score in abgeleiteter Form, während `PublicPageScanTests.InternalMarkers` wörtlich
+  `"ThreatScore"` führt und `NeverPublic["ThreatScoreConfig"]` die Gewichtung „Anleitung zur Umgehung"
+  nennt. Präzedenz ist Phase 12, dieselbe Frage für Fraktionen: die öffentliche `Einordnung` wird nie aus
+  `Faction.Classification` abgeleitet, weil das veröffentlichte, woran die Behörde arbeitet. Der Trend ist
+  deshalb **genau ein Schritt zurück** („seit 12.08.2026 erhöht, zuvor: niedrig") — mehr wäre eine Tabelle,
+  und mehr trägt eine Ampel auch nicht. `NeverPublic["ThreatScoreHistory"]` versprach den geplanten Trend
+  und nennt jetzt den Grund.
+- **Vier Einstellungszeilen statt einer Tabelle** (Präzedenz Not-Aus): es gibt genau eine Gefahrenlage,
+  ewig. Gespeichert wird der **Name** der Stufe, nicht die Zahl — eine „2" sagt weder in der
+  Einstellungstabelle noch in der Audit-Zeile auf `/nachweis` etwas.
+- **`Seit` bewegt sich nur bei einer Stufenänderung.** Die 14a-Lektion (`PublishedAt ??=`) in ihrer
+  schärfsten Form: die Seite zeigt genau dieses Datum als „seit", also darf eine korrigierte Einschätzung
+  die Lage nicht auf heute umdatieren. Gleiche Sitzung, gleiche Regel: `Zuvor` wird nur dort gesetzt, und
+  ein zweites Speichern ohne Unterschied schreibt gar nichts — auch keine Protokollzeile.
+- **`null` heißt Schweigen, und Schweigen ist nicht `Niedrig`.** `GetPublishedAsync` liefert `null` für
+  drei Fälle: Modul aus, nie gesetzt, Datenbank unerreichbar. Eine Standardstufe wäre in allen dreien die
+  Behauptung „keine Gefahr". Das ist die bewusste Abweichung von den anderen öffentlichen Diensten, die
+  eine leere Liste zurückgeben — eine leere Liste ist ehrlich „nichts veröffentlicht".
+- **`SetAsync` hat als einziger Publish-Pfad kein Modul-Gate**, und das ist kein Versehen: es gibt keinen
+  Entwurf/Publiziert-Schnitt, also zwänge ein Gate die allererste Stufe live zu gehen, bevor jemand sie
+  schreiben kann — und weil das Ausschalten des Moduls hier das Zurückziehen **ist**, machte das Gate es
+  unumkehrbar. Der Modul-Schalter ist der Publizieren-Schalter.
+- **Eigenes Enum, Allowlist beim Lesen.** `PublicSituationLevel` ist bewusst nicht `HazardLevel` — das ist
+  `HazardLevelLogic.From(score)`, die Stufe *einer Akte*; ein geteiltes Enum wäre die stehende Einladung,
+  das eine aus dem anderen zu rechnen (Präzedenz `PublicReportStatus` neben `PressReleaseStatus`).
+  `Parse` ist eine Allowlist, nie `Enum.Parse`: der Wert kommt aus einer von Hand editierbaren Zeile, und
+  ein Streuwert wäre auf einer `[AllowAnonymous]`-Seite ein HTTP 500 — die `?vorschau=1`-Klasse aus Phase 3.
+  Vier unterschiedliche **sichtbare** Farben; `Inherit`, `Transparent`, `Surface` und `Dark` stehen nicht
+  zur Wahl.
+- **Die Einschätzung ist Klartext, kein HTML.** Kein `HtmlCleanup`, kein `MarkupString`, Zeilenumbrüche
+  sind die Formatierung (Präzedenz `OeffentlicheVorlage.Text`, Gesetzestext aus 14b). Gesichert nicht nur
+  durch die Absicht: ein eigener Wächter verbietet `MarkupString` in `SituationPage.razor` — gezielt in
+  dieser einen Datei, weil Warnungs-Hub und Presse-Artikel es legitim benutzen.
+- **`SystemSetting` wandert von `NeverPublic` nach `Publishable`.** Der alte Text („Konfiguration ohne
+  Inhalt für außen") stimmte ab hier nicht mehr. Der neue nennt **genau die vier Schlüssel**, die das Haus
+  verlassen, und hält fest, dass jede andere Zeile — Discord-Webhooks, Wartungstext, Theme, Not-Aus — es
+  nie tut. `PublicVisibilityCoverageTests` wird davon nicht rot, die Entität war schon entschieden; das
+  ist der Punkt, deshalb eine bewusste Handänderung.
+- **`EverySettingsRouteOfTheAuditDisplay_NamesAnExistingSection` liest jetzt die Quelle**, nicht die
+  `DbSet`s: `AuditEntityDisplay` beantwortet auch Konfigurations-Typen ohne Tabelle (`"PublicArea"`, neu
+  `"PublicSituation"`), und genau die sah die Reflection-Variante nicht.
+- **Nicht** registriert, mit Grund: keine neue Entität, also kein `PublicVisibility`-Neueintrag, kein
+  `SearchCatalog`, kein `WatchlistRecordRollup`, kein Papierkorb, keine der vier Zeitstrahl-/Chronik-Stellen,
+  kein `RecordsReference`/`LinkService`, kein `NotificationType`, kein Discord-Push, kein
+  Aktenzeichen-Präfix · `PublicRoutes`/`robots.txt` — `/lage` ist seit Phase 2 die Modul-`NavRoute`, und
+  `Prefixes` sammelt sie ohne `Available`-Filter ein, also standen `Allow: /lage`, der `noindex`-Ausschluss,
+  `DemoModeMiddleware` und `PartnerRoutes.IsAllowed` schon richtig.
+
+- **Nebenbefund, mitbehoben: `robots.txt` matcht nach Zeichenkette, `PublicRoutes.Matches` nach Segment.**
+  Damit deckte `Allow: /lage` auch das interne `/lageberichte` ab — dieselbe Klasse, die 14a beim Umbenennen
+  der öffentlichen Route auf `/berichte` behoben hat, nur von der anderen Seite und dort übersehen. Zwei
+  weitere Kollisionen fielen im selben Zug auf: `Allow: /hinweis` deckte den internen Hinweis-Eingang
+  `/hinweise` (CLAUDE.md nennt die Segmentgrenze ausdrücklich als Trennung — sie gilt für den Header, nicht
+  für die Crawler-Datei) und `Allow: /info` die Informanten-Akten. Der `noindex`-Header war in allen drei
+  Fällen richtig; falsch war nur, dass die zweite Schicht das Gegenteil sagte. Drei `Disallow:`-Zeilen
+  (längste Regel gewinnt, RFC 9309) plus ein abgeleiteter Wächter: `PublicRoutesTests` liest **alle**
+  `@page`-Routen der App, nimmt die von `PublicRoutes` als intern eingestuften und verlangt für jede, die
+  eine Allow-Zeile mitdeckt, eine **echt längere** Disallow-Zeile. Negativkontrolle gefahren.
+
+**Tests** `PublicSituationServiceTests` (Modul aus, nie gesetzt, Streuwert und unerreichbare DB sagen alle
+`null` · Datum bleibt bei einer Korrektur stehen · Stufenwechsel setzt Vorgänger und datiert neu ·
+unveränderte Eingabe schreibt nichts · Klartext wird nicht gesäubert · Schreiben bei ausgeschaltetem Modul ·
+Rechte-Matrix) · `PublicSituationLevelTests` (Allowlist, distinkte sichtbare Farben) ·
+`PublicSituationCacheDisciplineTests` (fünfter Wächter; hier zusätzlich „nur ein Dienst kennt die vier
+Schlüssel", weil `SystemSettings` allen gehört) · `PublicSurfaceGuardTests` +1 · `MySqlTranslationTests` +1 ·
+`PublicRoutesTests` +1 (Präfix-Kollisionen in `robots.txt`).
+
+**Fertig, wenn** `/lage` die gesetzte Stufe mit Datum und Vorgängerstufe zeigt und das Ausschalten des
+Moduls sie wieder verstummen lässt. ✅
+
+---
+
+## Phase 15b — Öffentliche Zahlen & Startseite
 
 **Ziel:** Statistik nach außen, und die Startseite wird zur echten Startseite.
 
-**Migration:** keine (nur `SystemSettingKeys`: `PublicHazardLevel`, `PublicHazardNote`, `PublicHazardSince`).
+**Migration:** keine.
 
 **Code**
 - `IPublicStatisticsService` — gecacht, **ausschließlich** aus öffentlichen Tabellen und publizierten
   Einträgen: offene/gefasste Fahndungen, Hinweise (eingegangen/bestätigt/führten zur Ergreifung),
-  ausgezahlte Belohnungssumme, Gefahrenlage-Trend (aggregiert aus `ThreatScoreHistory`, ohne Aktenbezug).
-- Gefahrenlage-Ampel: `PublicHazardPanel` in `/einstellungen` (`Policies.LeadershipPage`), groß auf `/lage`
-  und im Landing-Hero.
-- `Landing.razor` umbauen: Gefahrenlage-Ampel, Top-3 `/gesucht`, neueste Pressemitteilung, Hinweis-CTA,
-  Karriere-Kachel bleibt. Der „Kein Zugriff"-Block bleibt bewusst so.
+  ausgezahlte Belohnungssumme. Die Fahndungszahlen kommen aus dem Board-Snapshot, nicht aus einer zweiten
+  Abfrage — die müsste den Unterdrückungsgürtel wiederholen (Präzedenz `/gefahr/personen` aus Phase 12).
+- `Landing.razor` umbauen: Gefahrenlage-Ampel aus 15a, Top-3 `/gesucht`, neueste Pressemitteilung,
+  Hinweis-CTA, Karriere-Kachel bleibt. Der „Kein Zugriff"-Block bleibt bewusst so.
 - `StatTile` wiederverwenden, nicht neu bauen.
-- `PublicModules`: `Statistik`, `Gefahrenlage`.
+- `PublicModules`: `Statistik`.
+
+**Achtung:** jeder Dienst, den `Landing.razor` injiziert, wird für jeden anonymen Besucher samt seinem
+ganzen Konstruktor-Graphen gebaut — `PublicSurfaceGuardTests.NoServiceInjectedByAPublicPage_PullsInAnInternalStack`
+ist genau dafür da.
 
 **Tests** Jede Kennzahl stammt nachweislich nur aus öffentlichen Quellen (Test mit unpublizierten Daten in
-der DB, die in keiner Zahl auftauchen dürfen) · Trend ist aggregiert und nicht auf eine Akte rückführbar ·
-Cache-Verhalten.
+der DB, die in keiner Zahl auftauchen dürfen) · Cache-Verhalten.
 
-**Fertig, wenn** `/lage` und die neue Startseite stehen und ein Test beweist, dass unpublizierte Akten in
-keiner öffentlichen Zahl stecken.
+**Fertig, wenn** die neue Startseite steht und ein Test beweist, dass unpublizierte Akten in keiner
+öffentlichen Zahl stecken.
 
 ---
 
