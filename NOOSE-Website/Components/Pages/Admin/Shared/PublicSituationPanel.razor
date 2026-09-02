@@ -1,4 +1,4 @@
-@* The situation level the agency states on /lage: one level, one assessment, no draft step. *@
+﻿@* The situation level the agency states on /lage: one level, one assessment, no draft step. *@
 @using NOOSE_Website.Models.Public
 @inject IPublicSituationService Situation
 @inject IPublicModuleService Modules
@@ -18,8 +18,16 @@
 else
 {
     <MudStack Spacing="4">
-        <MudAlert Severity="@(_moduleOn ? Severity.Info : Severity.Warning)" Variant="Variant.Outlined" Dense="true">
-            @if (_moduleOn)
+        @* the emergency stop is named first and separately: a settings surface has to say WHICH switch is the
+           reason, and IsEnabledAsync folds the two together *@
+        <MudAlert Severity="@(_killSwitch || !_moduleOn ? Severity.Warning : Severity.Info)"
+                  Variant="Variant.Outlined" Dense="true">
+            @if (_killSwitch)
+            {
+                <text>Der öffentliche Bereich ist per Not-Aus vollständig abgeschaltet. Die Stufe lässt sich
+                setzen; sichtbar wird sie erst wieder, wenn der Not-Aus aus ist.</text>
+            }
+            else if (_moduleOn)
             {
                 <text>Das Modul „Lage" ist eingeschaltet — was hier steht, ist öffentlich sichtbar.</text>
             }
@@ -115,6 +123,7 @@ else
     private bool _load = true;
     private bool _save;
     private bool _moduleOn;
+    private bool _killSwitch;
 
     private PublicSituationState? _state;
     private PublicSituationInput _input = new();
@@ -132,7 +141,11 @@ else
         try
         {
             _state = await Situation.GetForEditAsync(_user);
-            _moduleOn = await Modules.IsEnabledAsync(PublicModules.HazardLevel);
+            // the stored choice and the emergency stop kept apart: IsEnabledAsync answers the EFFECTIVE value,
+            // so during a Not-Aus this panel blamed the module switch
+            var snapshot = await Modules.GetAsync();
+            _killSwitch = snapshot.KillSwitchActive;
+            _moduleOn = snapshot.Find(PublicModules.HazardLevel)?.IsEnabled == true;
             _input = new PublicSituationInput
             {
                 Level = _state?.Level ?? PublicSituationLevel.Niedrig,

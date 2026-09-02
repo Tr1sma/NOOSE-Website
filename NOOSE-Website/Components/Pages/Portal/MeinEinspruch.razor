@@ -69,6 +69,15 @@ else if (_ready)
                         Ausschreibung: <b>@_notice.DisplayName</b>
                     </MudAlert>
                 }
+                else if (!string.IsNullOrWhiteSpace(_input.WantedCaseNumber))
+                {
+                    @* the negative arm TipForm already has: without it a typo, a retracted notice and a draft all
+                       looked like success, and the citizen only found out after pressing send *@
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                        Zu diesem Aktenzeichen gibt es keine laufende Ausschreibung. Prüfe die Schreibweise —
+                        Einspruch lässt sich nur gegen eine veröffentlichte Ausschreibung einlegen.
+                    </MudAlert>
+                }
                 <MudTextField @bind-Value="_input.Text" Label="Begründung" Variant="Variant.Outlined"
                               Lines="8" Counter="@ObjectionRules.MaxLength"
                               MaxLength="@ObjectionRules.MaxLength"

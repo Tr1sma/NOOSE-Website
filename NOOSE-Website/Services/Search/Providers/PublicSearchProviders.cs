@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Factions;
@@ -232,12 +232,15 @@ public sealed class ObjectionSearchProvider(IDbContextFactory<AppDbContext> dbFa
             .Where(e => !e.IsDeleted)
             .Where(e => e.CaseNumber.Contains(s) || e.Text.Contains(s))
             .OrderByDescending(e => e.CreatedAt)
-            .Select(e => new { e.Id, e.CaseNumber, e.Text, e.CreatedAt })
+            .Select(e => new { e.Id, e.CaseNumber, e.Text, e.Status, e.CreatedAt })
             .Take(query.PerCategory)
             .ToListAsync(cancellationToken);
 
         return raw
-            .Select(e => new SearchHit(nameof(FahndungEinspruch), e.Id, "Einspruch " + e.CaseNumber,
+            // the status is named in the title, like the eight sibling providers do: the desk tab this links to
+            // shows OPEN objections, so a decided one used to look like a wrong hit
+            .Select(e => new SearchHit(nameof(FahndungEinspruch), e.Id,
+                $"Einspruch {e.CaseNumber} ({ObjectionStatusDisplay.Name(e.Status)})",
                 SearchSnippet.Around(e.Text, query.Text), e.CaseNumber)
             {
                 Timestamp = e.CreatedAt,

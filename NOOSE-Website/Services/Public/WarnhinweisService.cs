@@ -1,7 +1,9 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 
 namespace NOOSE_Website.Services.Public;
@@ -27,7 +29,10 @@ public class WarnhinweisService(IDbContextFactory<AppDbContext> dbFactory) : IWa
             .AsNoTracking()
             .OrderBy(w => w.SortOrder).ThenBy(w => w.Name)
             .ToListAsync(cancellationToken);
+        // only assignments on LIVING notices: the group-by touches no navigation, so nothing applied the
+        // soft-delete filter and the delete confirmation quoted a count that included deleted ones
         var counts = await db.FahndungWarnhinweise
+            .Where(z => db.OeffentlicheFahndungen.Any(f => f.Id == z.FahndungId))
             .GroupBy(z => z.WarnhinweisId)
             .Select(g => new { WarnhinweisId = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
@@ -108,7 +113,37 @@ public class WarnhinweisService(IDbContextFactory<AppDbContext> dbFactory) : IWa
             .ToListAsync(cancellationToken);
         db.FahndungWarnhinweise.RemoveRange(assignments);
         db.Warnhinweise.Remove(row);
+
+        // one row per affected notice: the assignment table is not IAuditable, so deleting a label silently
+        // changed what several notices render. Same shape SetHintsAsync uses.
+        foreach (var wantedId in assignments.Select(z => z.FahndungId).Distinct(StringComparer.Ordinal))
+        {
+            db.AuditLogs.Add(ManualAudit.Row(nameof(OeffentlicheFahndung), wantedId, AuditAction.Modified, actor,
+                ManualAudit.Change("Warnhinweis", row.Name, null)));
+        }
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Runs of whitespace folded to one space, so a typo is not mistaken for markup.</summary>
+    private static string Collapse(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        var pending = false;
+        foreach (var c in text)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                pending = builder.Length > 0;
+                continue;
+            }
+            if (pending)
+            {
+                builder.Append(' ');
+                pending = false;
+            }
+            builder.Append(c);
+        }
+        return builder.ToString();
     }
 
     /// <summary>
@@ -126,7 +161,9 @@ public class WarnhinweisService(IDbContextFactory<AppDbContext> dbFactory) : IWa
         {
             throw new InvalidOperationException($"Die Bezeichnung ist auf {MaxName} Zeichen begrenzt.");
         }
-        if (HtmlCleanup.PlainText(name) != name)
+        // compared on collapsed whitespace: PlainText also folds runs of spaces, so an accidental double space
+        // was rejected as markup
+        if (Collapse(HtmlCleanup.PlainText(name)) != Collapse(name))
         {
             throw new InvalidOperationException("Die Bezeichnung ist Klartext, kein Markup.");
         }

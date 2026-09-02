@@ -1,4 +1,4 @@
-@inject NavigationManager Nav
+﻿@inject NavigationManager Nav
 @inject IPublicModuleService ModuleService
 
 @* Tab bar for the public site; entries come from the module switches, not from a list in here. *@
@@ -50,10 +50,19 @@
         }
     }
 
+    // case-insensitive, like PublicRoutes.Matches: a typed /Gesucht highlighted nothing. And a module's sibling
+    // page keeps the tab lit by matching on the nav route's FIRST segment, so /gefahr/personen no longer leaves
+    // the whole bar unmarked.
     private bool IsActive(string href)
     {
         var rel = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('#')[0].Trim('/');
         var path = rel.Length == 0 ? "/" : "/" + rel;
-        return href == "/" ? path == "/" : path == href || path.StartsWith(href + "/");
+        if (href == "/")
+        {
+            return path == "/";
+        }
+        var root = href.IndexOf('/', 1) is var cut && cut > 0 ? href[..cut] : href;
+        return path.Equals(root, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase);
     }
 }

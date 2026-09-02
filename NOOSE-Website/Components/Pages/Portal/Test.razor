@@ -1,4 +1,4 @@
-@page "/portal/test"
+﻿@page "/portal/test"
 @layout ApplicantPortalLayout
 @attribute [AllowAnonymous]
 @inject IBewerbungTestService TestService
@@ -122,7 +122,11 @@
                 }
                 </div>
 
-                <MudStack Row="true" Justify="Justify.FlexEnd">
+                @* a way back while the test is unfinished: the completed branch has one, this one had none, so a
+                   half-answered test was a trap *@
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Href="/portal/status"
+                               StartIcon="@Icons.Material.Filled.ArrowBack">Zurück zur Bewerbung</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                                OnClick="SubmitAsync" Disabled="_busy">Test absenden</MudButton>
                 </MudStack>
