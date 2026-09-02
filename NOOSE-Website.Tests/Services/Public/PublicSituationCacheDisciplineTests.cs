@@ -5,9 +5,11 @@ namespace NOOSE_Website.Tests.Services.Public;
 
 /// <summary>The situation level has one save path and one cache key; a file scan keeps it that way.</summary>
 /// <remarks>
-/// The fifth of these, after the wanted board, the organisation profiles, the press and the released reports. This
-/// one guards a shared table rather than a private one: <c>SystemSettings</c> holds every config row in the house, so
-/// the rule is not "who writes the table" but "who touches these four keys".
+/// The sibling of <see cref="PublicWantedCacheDisciplineTests"/>, <see cref="PublicFactionProfileCacheDisciplineTests"/>,
+/// <see cref="PressCacheDisciplineTests"/>, <see cref="PublicWarningCacheDisciplineTests"/> and
+/// <see cref="PublicReportCacheDisciplineTests"/> — named rather than counted, because an ordinal goes stale the next
+/// time a phase adds one. This one guards a shared table rather than a private one: <c>SystemSettings</c> holds every
+/// config row in the house, so the rule is not "who writes the table" but "who touches these four keys".
 /// </remarks>
 public partial class PublicSituationCacheDisciplineTests
 {

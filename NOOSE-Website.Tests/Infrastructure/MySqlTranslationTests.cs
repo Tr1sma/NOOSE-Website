@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
+using NOOSE_Website.Services;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Infrastructure;
@@ -841,6 +842,152 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.Contains("Betrag", sql, StringComparison.Ordinal);
         // money history is append-only, so there is no filter here that a later change could weaken
         Assert.DoesNotContain("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
+    // ---- the shapes the search hookup and the key figures introduced ----
+
+    /// <summary>The viewer scope the two publication-snapshot providers name their gate with.</summary>
+    private static readonly ViewerScope Reader = new(
+        MayClassifiedRead: false, MayAllTaskforces: false, MeId: "agent-1", PartnerAgency: null);
+
+    [Fact]
+    public void TheNoticeProviderJoin_TranslatesAndCarriesTheClassificationGate()
+    {
+        // the join IS the visibility predicate; an untranslatable form here breaks the global search for everyone
+        var sql = (
+            from f in _db.OeffentlicheFahndungen.AsNoTracking()
+            where f.DisplayName.Contains("x") || (f.ChargeHtml != null && f.ChargeHtml.Contains("x"))
+            join p in _db.People.OnlyVisible(Reader) on f.PersonId equals p.Id
+            orderby f.PublishedAt descending
+            select new { p.Id, p.Name, p.CaseNumber, f.Kind, f.Status, f.DisplayName })
+            .Take(50)
+            .ToQueryString();
+
+        Assert.Contains("INNER JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("IstVerschlusssache", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFactionProfileProviderJoin_Translates()
+    {
+        var sql = (
+            from p in _db.OeffentlicheFraktionsprofile.AsNoTracking()
+            where p.DisplayName.Contains("x") || (p.DescriptionHtml != null && p.DescriptionHtml.Contains("x"))
+            join f in _db.Factions.OnlyVisible(Reader) on p.FactionId equals f.Id
+            orderby p.PublishedAt descending
+            select new { f.Id, f.Name, f.CaseNumber, p.DisplayName, p.Standing, p.Status })
+            .Take(50)
+            .ToQueryString();
+
+        Assert.Contains("INNER JOIN", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheObjectionProviderRoot_KeepsItsHandWrittenSoftDeleteClause()
+    {
+        // rooted like the desk: over the query filter, with !IsDeleted written back, so both answer the same set
+        var sql = _db.FahndungEinsprueche.IgnoreQueryFilters().AsNoTracking()
+            .Where(e => !e.IsDeleted)
+            .Where(e => e.CaseNumber.Contains("x") || e.Text.Contains("x"))
+            .OrderByDescending(e => e.CreatedAt)
+            .Select(e => new { e.Id, e.CaseNumber, e.Text, e.CreatedAt })
+            .Take(50)
+            .ToQueryString();
+
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTipsOfOneNotice_Translate()
+    {
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(h => h.WantedId == "f1")
+            .OrderByDescending(h => h.Priority).ThenByDescending(h => h.CreatedAt)
+            .Select(h => new { h.Id, h.CaseNumber, h.Status, h.CreatedAt, h.Text, h.Priority })
+            .Take(50)
+            .ToQueryString();
+
+        Assert.Contains("Aktenzeichen", sql, StringComparison.Ordinal);
+        // no citizen projection, so no join that could drop the tips of a removed profile
+        Assert.DoesNotContain("JOIN", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheClosedTipPredicate_Translates()
+    {
+        var sql = _db.Hinweise.AsNoTracking().Where(TipRules.ClosedRows).ToQueryString();
+        var open = _db.Hinweise.AsNoTracking().Where(TipRules.OpenRows).ToQueryString();
+
+        Assert.Contains("Status", sql, StringComparison.Ordinal);
+        // decided and open are complements, so their WHERE cannot be the same text
+        Assert.NotEqual(open, sql);
+    }
+
+    [Fact]
+    public void TheAgencyMessagePredicate_Translates()
+    {
+        var ids = new List<string> { "t1", "t2" };
+        var sql = _db.TicketNachrichten.AsNoTracking()
+            .Where(TicketRules.AgencyRows)
+            .Where(m => ids.Contains(m.TicketId))
+            .Select(m => new { m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt })
+            .ToQueryString();
+
+        Assert.Contains("Zielgruppe", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheRewardTwoHop_TranslatesToAJoinOntoTheShare()
+    {
+        // Belohnung -> Anteil -> Ausschreibung, so a payout can be attributed to the notice it closed
+        var sql = _db.HinweisBelohnungen.AsNoTracking()
+            .Where(r => r.PaidAt >= DateTime.UnixEpoch)
+            .Select(r => new
+            {
+                r.Amount,
+                Booked = r.KassenBuchungId != null,
+                HandedOver = r.SelfPaidAt != null,
+                NoticeId = r.Share!.WantedId,
+            })
+            .ToQueryString();
+
+        Assert.Contains("JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("Betrag", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheRewardedNoticeIds_TranslateWithoutAParameterList()
+    {
+        // intersected in memory afterwards: a WHERE IN over a year of capture ids is thousands of parameters
+        var sql = _db.HinweisBelohnungen.AsNoTracking()
+            .Select(r => r.Share!.WantedId)
+            .Distinct()
+            .ToQueryString();
+
+        Assert.Contains("DISTINCT", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("IN (", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAttentionListQuery_ResolvesItsFilesInASecondQuery()
+    {
+        // the notices first, then their files over the soft-delete filter — never one compilation, because
+        // IgnoreQueryFilters is compilation-scoped and would strip the filter from the notices as well
+        var notices = _db.OeffentlicheFahndungen.AsNoTracking()
+            .Where(f => f.PublishedAt != null && f.PublishedAt >= DateTime.UnixEpoch && f.CaseNumber != null)
+            .Select(f => new { f.PersonId, CaseNumber = f.CaseNumber!, f.DisplayName, f.ViewCount, f.PublishedAt })
+            .ToQueryString();
+
+        var ids = new List<string> { "p1" };
+        var people = _db.People.IgnoreQueryFilters().AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.IsClassified, p.IsTRUClassified, p.IsHRBClassified })
+            .ToQueryString();
+
+        Assert.Contains("AufrufZaehler", notices, StringComparison.Ordinal);
+        // the notice query keeps its own soft-delete filter; the second one deliberately does not
+        Assert.Contains("IstGeloescht", notices, StringComparison.Ordinal);
+        Assert.DoesNotContain("IstGeloescht", people, StringComparison.Ordinal);
     }
 
     private static int Occurrences(string text, string needle)

@@ -1,14 +1,16 @@
 # PublicPlan.md — Öffentlicher Bereich (Public Area)
 
-Planungsdokument für den öffentlichen Bereich der NOOSE-Website. Status: **beschlossen, nicht begonnen.**
+Planungsdokument für den öffentlichen Bereich der NOOSE-Website. Status: **alle 16 Phasen gebaut.**
 Ergänzt `Plan.md` (interner Phasenplan) und `AlgoPlan.md` (Bedrohungs-Score).
 
 ## Kontext
 
-Die Seite ist heute rein intern: außen gibt es nur Landing, Karriere und den Bewerber-Pfad.
-Gleichzeitig laufen zwei öffentliche Dinge weiter über Discord — die **Fahndung** (Steckbriefe, Kopfgeld)
-und das **öffentliche Ticket-System**. Beides ist dort unstrukturiert, nicht durchsuchbar, nicht
-nachvollziehbar und nicht mit dem Aktenbestand verknüpft.
+Der Ausgangszustand, gegen den dieser Plan geschrieben wurde: die Seite war rein intern — außen gab es nur
+Landing, Karriere und den Bewerber-Pfad —, während zwei öffentliche Dinge weiter über Discord liefen, die
+**Fahndung** (Steckbriefe, Kopfgeld) und das **öffentliche Ticket-System**. Beides war dort unstrukturiert,
+nicht durchsuchbar, nicht nachvollziehbar und nicht mit dem Aktenbestand verknüpft. Der Absatz bleibt in der
+Vergangenheitsform stehen, weil die Phasentexte darunter ihre Entscheidungen gegen genau diesen Zustand
+begründen; was heute steht, sagt die Statuszeile oben und die Tabelle unten.
 
 Ziel: ein öffentlicher Bereich, der (1) Fahndungen mit Kopfgeld publiziert und Hinweise entgegennimmt,
 (2) das Discord-Ticketsystem als „Führungsebenen-Ticket" ersetzt, (3) die Arbeit der Behörde in Text und
@@ -119,8 +121,8 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 14b | Warnungen und öffentliche Gesetzesauszüge | `Oeffentlich14_Warnungen` | 3 | **fertig** |
 | 14c | Öffentliche Lageberichte | `Oeffentlich14_Lageberichte` | 3 | **fertig** |
 | 15a | Gefahrenlage-Ampel und `/lage` | keine | 2 | **fertig** |
-| 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 7, 14a, 15a | **fertig** |
-| 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
+| 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 5, 7, 9, 14a, 15a | **fertig** |
+| 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10, 12, 13b, 14a–14c | **fertig** |
 
 > **Migrations-Präfix `Oeffentlich<Phase>_`.** Die interne Phasen-Zählung des Projekts steht schon bei
 > `Phase69_*`; die ursprünglich geplanten Namen `Phase61`–`Phase74` hätten sechs bestehende Migrationen
@@ -2026,7 +2028,10 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
 - **Die Einschätzung ist Klartext, kein HTML.** Kein `HtmlCleanup`, kein `MarkupString`, Zeilenumbrüche
   sind die Formatierung (Präzedenz `OeffentlicheVorlage.Text`, Gesetzestext aus 14b). Gesichert nicht nur
   durch die Absicht: ein eigener Wächter verbietet `MarkupString` in `SituationPage.razor` — gezielt in
-  dieser einen Datei, weil Warnungs-Hub und Presse-Artikel es legitim benutzen.
+  dieser einen Datei, weil Warnungs-Hub und Presse-Artikel es legitim benutzen. Der Deckel liegt bei 600
+  Zeichen (`SituationRules.MaxNote`), und **zu lang wird gekürzt statt abgelehnt** — anders als bei
+  Warnhinweis-Label und Bürger-Vorlage, die werfen. Grund: die Einschätzung ist der Satz unter der Stufe,
+  kein Artikel, und dieselbe Eingabe trägt den Stufenwechsel; ein abgewiesenes Speichern verlöre ihn mit.
 - **`SystemSetting` wandert von `NeverPublic` nach `Publishable`.** Der alte Text („Konfiguration ohne
   Inhalt für außen") stimmte ab hier nicht mehr. Der neue nennt **genau die vier Schlüssel**, die das Haus
   verlassen, und hält fest, dass jede andere Zeile — Discord-Webhooks, Wartungstext, Theme, Not-Aus — es
@@ -2035,6 +2040,10 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
 - **`EverySettingsRouteOfTheAuditDisplay_NamesAnExistingSection` liest jetzt die Quelle**, nicht die
   `DbSet`s: `AuditEntityDisplay` beantwortet auch Konfigurations-Typen ohne Tabelle (`"PublicArea"`, neu
   `"PublicSituation"`), und genau die sah die Reflection-Variante nicht.
+- **Registriert, weil die Ampel einen eigenen `/einstellungen`-Abschnitt bekommt:** `MergedPageSections.Settings`
+  (Slug `lage`) **und** `FeedbackPageTabs` — `FeedbackPageTabsTests` verlangt jeden `MergedPageSections`-Slug im
+  Feedback-Picker, also sind es hier zwei Registries und nicht null. Die Liste darunter sagt, was daneben
+  ausblieb; ohne diesen Satz liest sie sich, als hätte die Phase gar nichts registriert.
 - **Nicht** registriert, mit Grund: keine neue Entität, also kein `PublicVisibility`-Neueintrag, kein
   `SearchCatalog`, kein `WatchlistRecordRollup`, kein Papierkorb, keine der vier Zeitstrahl-/Chronik-Stellen,
   kein `RecordsReference`/`LinkService`, kein `NotificationType`, kein Discord-Push, kein
@@ -2057,7 +2066,9 @@ Zeitraum · Rechte-Matrix) · Anker-Picker übergeht einen gelöschten Monatsber
 `null` · Datum bleibt bei einer Korrektur stehen · Stufenwechsel setzt Vorgänger und datiert neu ·
 unveränderte Eingabe schreibt nichts · Klartext wird nicht gesäubert · Schreiben bei ausgeschaltetem Modul ·
 Rechte-Matrix) · `PublicSituationLevelTests` (Allowlist, distinkte sichtbare Farben) ·
-`PublicSituationCacheDisciplineTests` (fünfter Wächter; hier zusätzlich „nur ein Dienst kennt die vier
+`PublicSituationCacheDisciplineTests` (Geschwister der Wächter über Fahndung, Organisationsprofile,
+Presse, Warnungen und Berichte — benannt statt gezählt, eine Ordnungszahl veraltet mit der nächsten
+Phase; hier zusätzlich „nur ein Dienst kennt die vier
 Schlüssel", weil `SystemSettings` allen gehört) · `PublicSurfaceGuardTests` +1 · `MySqlTranslationTests` +1 ·
 `PublicRoutesTests` +1 (Präfix-Kollisionen in `robots.txt`).
 
@@ -2113,8 +2124,10 @@ der DB, die in keiner Zahl auftauchen dürfen) · Cache-Verhalten.
   `/gefasst` seinen Deckel jetzt** („die 100 jüngsten von insgesamt N"), wie es Presse, Warnungen, Berichte
   und die Gefahrenliste längst tun.
 - **Ein Dienst ohne Schreibpfad braucht keinen Cache-Wächter der bekannten Form, sondern den umgekehrten.**
-  Die vier Geschwister (`PublicWantedService`, `PublicFactionProfileService`, `PressReleaseService`,
-  `PublicLawService`) werden auf „ein `SaveChangesAsync`, ein `cache.Remove`" geprüft. `PublicStatisticsService`
+  Die Geschwister-Wächter über `PublicWantedService`, `PublicFactionProfileService`, `PressReleaseService`,
+  `PublicWarningService`, `PublicReportService` und `PublicSituationService` prüfen „ein `SaveChangesAsync`, ein
+  `cache.Remove`"; `PublicLawCacheDisciplineTests` prüft die Variante „jeder Schreiber verwirft den Snapshot",
+  weil `Gesetze` einem internen Dienst gehört. `PublicStatisticsService`
   hat **keins von beidem**: die Zahlen laufen ab und werden neu gezählt, es gibt also gar keine
   Invalidierungsstelle, die falsch sein könnte. Der Wächter hält genau das fest
   (`PublicSurfaceGuardTests.TheStatisticsService_NeverWrites`) — der Tag, an dem jemand dort schreibt, ist der
@@ -2181,7 +2194,168 @@ Länge der Archivliste; `WithoutItems` reduziert ihn) · `MySqlTranslationTests`
 `NotFound()`, nicht „kein Zugriff" · öffentliche Suche findet nichts Unpubliziertes.
 
 **Fertig, wenn** ein Agent Hinweise und Tickets in `/suche` findet, NOOSEI „welche Hinweise kamen zu X"
-beantwortet, und die öffentliche Suche nachweislich nur Publiziertes zeigt.
+beantwortet, und die öffentliche Suche nachweislich nur Publiziertes zeigt. ✅
+
+### Gebaut — was daran anders ist
+
+- **Neun Kategorien, nicht sieben.** `NotSearchable` trug neun Einträge, deren Begründung wörtlich „Ein eigener
+  Provider kommt mit der Suchanbindung des öffentlichen Bereichs" verspricht: die sieben des Plantexts plus
+  `OeffentlicheWarnung` (14b) und `OeffentlicherLagebericht` (14c), die es beim Schreiben dieses Abschnitts noch
+  nicht gab. Nur die sieben zu bauen wäre grün geblieben — `SearchCoverageTests` prüft, dass eine Begründung
+  **existiert**, nicht dass sie noch stimmt — und hätte zwei Sätze stehengelassen, die einen Provider versprechen,
+  den niemand mehr schreibt.
+- **Die zwei Publikations-Snapshots sind `ContentChild`, keine eigenen Akten.** `OeffentlicheFahndung` zielt auf
+  `/personen/{id}?tab=oeffentlich`, `OeffentlichesFraktionsprofil` auf die Fraktionsakte — beide Abschnitte gibt es
+  dort seit Phase 4 bzw. 12. Der entscheidende Nebeneffekt: der Join gegen `db.People.OnlyVisible(scope)` **ist**
+  das Sichtbarkeits-Prädikat, der Provider benennt also eines statt eines zu schreiben. **Bewusst enger als der
+  Schalter:** `GetAllAsync` löst die Einstufung über `IgnoreQueryFilters` auf, damit eine Ausschreibung auf einer
+  gelöschten Akte bearbeitbar bleibt; ein Treffer muss dagegen anspringbar sein, und eine gelöschte Akte hat keine
+  Seite. Deshalb gibt es für diese Kategorie auch **keinen** Id-Mengen-Paritätstest gegen den Schalter.
+- **`AppliesTo` nimmt den schmalen Guard.** `Permission.RequirePublicWantedRead` (Rang ≥ 3 oder Aufsicht) ist die
+  Querlisten-Autorität; `RequirePublicWantedRecordRead` existiert ausdrücklich nur für die **eine** Ausschreibung,
+  an der ein Rang-1–2-Agent gerade arbeitet. Eine Suche ist eine Querliste. `AppliesTo == false` nimmt die Kategorie
+  ganz aus dem Katalog des Betrachters — „hier darfst du suchen und es passte nichts" und „das ist nicht deins"
+  dürfen nicht gleich aussehen.
+- **Ein Suchtreffer nennt nie den Bürger — strukturell, nicht per Projektion.** Weder `TipSearchProvider` noch
+  `TicketSearchProvider` noch `ObjectionSearchProvider` liest ein Bürgerfeld, auch nicht dort, wo die
+  Anonymitätszusage längst aufgelöst ist. Ein Name im Match machte die globale Suche zum Anonymitäts-Orakel: Namen
+  tippen und schauen, ob ein Hinweis zurückkommt, umgeht `TipAnonymity.IsHidden`, ohne je ein Flag zu lesen. Der
+  Verzicht spart nebenbei die Pflicht-Navigation auf ein soft-löschbares `BuergerProfil`, die EF **INNER** joint —
+  im Schalter-Eingang fällt der Hinweis eines entfernten Kontos deshalb heraus, hier nicht. Zweite Schicht ist ein
+  Dateiscan über `Services/Search/Providers/` (`NoSearchProvider_ProjectsACitizenIdentity`), der nur `BuergerProfil`
+  und `CitizenProfile` verbietet: `FirstName`/`LastName` sind zu allgemein und würden am Agenten-Provider
+  falsch-rot oder beim nächsten Lesen entschärft.
+- **`SearchParentResolver` bekommt genau einen Arm, und aus einem anderen Grund als der Plan sagt.** Keine der neun
+  ist ein polymorphes Kind. `Hinweis` ist stattdessen ein **Verknüpfungs-Ende**: `TipTakeoverService` schreibt
+  `Link.SourceType = nameof(Hinweis)`, `LinkService.knownTypes` kennt den Typ, und `LinkSearchProvider` löst
+  **beide** Enden über den Resolver auf und überspringt die Zeile, sobald eines fehlt. Der Resolver hatte keinen
+  `Hinweis`-Arm und bewusst keinen Default-Arm — **jede Übernahme-Verknüpfung war damit in `/suche` unauffindbar**,
+  seit Phase 8b. Der Arm schließt eine bestehende stille Lücke; sein Kommentar sagt „Verknüpfungs-Ende", sonst
+  ergänzt der nächste Leser sechs tote Arme.
+- **Genau ein Typ bekommt `NooseiUse.Read`: `Hinweis`.** `Read` kostet einen Arm in
+  `Visibility.IsRecordVisibleAsync` **und** einen Zweig in `DossierContextBuilder`, je Typ. Ein
+  `lies_akteninhalt`-Abschnitt und zwei `lies_bereich`-Bereiche erledigen die anderen acht. `Hinweis` verdient
+  ihn, weil das Fertig-Kriterium eine Frage nach dem **Inhalt** eines Hinweises ist und weil er als einziger der
+  neun aktenförmig ist: eigenes Aktenzeichen, eigene Route `/hinweise/{Id}`, ein `RecordsReference`-Arm und ein
+  Eintrag in `LinkService.knownTypes`. **Kein `List`** — das Filtervokabular von `finde_akten` (Einstufung,
+  Bedrohungs-Score, Lebensstatus) ist aktenförmig und sagt über einen Hinweis nichts. **Kein `Chronicle`** —
+  `GlobalChronikService.RecordTypes` ist eine geschlossene Liste von zehn Aktenarten, und die Phasen 7 und 10
+  halten Hinweise und Tickets bewusst heraus.
+- **`Ticket` bekommt `Read` ausdrücklich nicht.** Ein Ticket hängt an keiner Akte (Phase 10): kein Zeitstrahl-Arm,
+  kein `ChronikParentResolver`, kein `RecordsReference`, kein Verknüpfungstyp. `Read` weitete `zeige_verbindungen`,
+  `finde_verbindungsweg`, `lies_zeitstrahl` und `hole_kurzbrief` auf einen Typ, der aus strukturellen Gründen immer
+  „nichts" antwortet — und das Modell kann „nichts" nicht von „gibt es nicht" unterscheiden. Stattdessen ein
+  führungs-gegateter Bereich `tickets` in `lies_bereich`.
+- **`ViewerScope` bekommt `IsInternalAgent`, und der Grund ist, dass `!IsPartner` **weiter** ist als die Regel.**
+  Ein Bürger und ein Bewerber sind auch keine Partner. Ohne das Feld ließe sich die Zielgruppe von
+  `Permission.RequireTipRead` auf einem Scope gar nicht ausdrücken. Nachgestellt und auf `false` vorbelegt, also
+  fail-closed. Der Bool-Shim am Ende von `Visibility` bleibt unangetastet: auf dem Erwähnungs-Fanout ist ein
+  Hinweis damit unsichtbar, was richtig ist.
+- **Der `Hinweis`-Arm in `Visibility` steht als „jeder interne Agent", nicht als `MayClassifiedRead`** — obwohl die
+  meisten Arme die schmalere Form haben. Dieses Gate entscheidet nämlich nicht nur NOOSEI: `CommentService`,
+  `SourceService`, `FollowupService`, `WatchlistService` und `LinkService.GetForRecordAsync` reichen einen
+  beliebigen `entityType` hindurch. Mit der schmaleren Form leerte das erste `LinkPanel` auf einem Hinweis seine
+  Zeilen, ohne es zu sagen.
+- **Der Kurzbrief eines Hinweises trägt kein Bürgerfeld, und das ist eine Cache-Regel.** `DossierSummary` wird
+  einmal je Akte auf Mindestprivileg erzeugt und von jedem gelesen, der die Akte sehen darf — eine Identität darin
+  überlebte den auditierten Führungsakt, der die Anonymität aufgelöst hat. Auch das Flag bleibt draußen: ob ein
+  Hinweisgeber anonym bleiben wollte, ist eine Aussage über die Person, nicht über den Hinweis.
+- **`lies_akteninhalt` bekommt zwei Abschnitte, `lies_bereich` zwei Bereiche.** `oeffentlich` (Person: alle
+  Ausschreibungen samt Einsprüchen; Fraktion: das öffentliche Profil) und `hinweise` (die Hinweise, die zu den
+  Ausschreibungen einer Person eingingen) — beide lesen ausschließlich über die Dienste, die die Gates halten, und
+  fangen `UnauthorizedAccessException` ab, damit ein Abschnitt ohne Recht wortgleich wie ein leerer liest.
+  `tickets` und `oeffentlichkeit` in `lies_bereich`, Letzterer als **ein** Bereich über fünf Oberflächen: sie
+  teilen ein Gate, ein Budget und eine Frage.
+- **Zwei neue Lesepfade, weil zwei Fragen fehlten.** `ITipService.GetForNoticeAsync` beantwortet „was kam zu dieser
+  Ausschreibung" und ist damit das Gegenstück zu `GetForLinkedPersonAsync`, das „was hat diese Person gemeldet"
+  beantwortet und deshalb an `TipAnonymity.Disclosable` hängt — hier nicht, weil die Projektion niemanden nennt.
+  `IObjectionService.GetForNoticeAsync` ist wie die Schalterliste gewurzelt (über den Soft-Delete-Filter, mit
+  `!IsDeleted` von Hand zurück), damit beide dieselbe Menge beantworten.
+- **`SearchIndexBackfillWorker.Version` wird ausdrücklich NICHT hochgezählt**, entgegen dem Plantext. Der Bump ist
+  an eine Änderung von `SearchIndexProjection` gebunden, und keine der neun darf `SideIndexed` sein: acht scannen
+  einen `longtext` (`A_side_indexed_category_is_not_a_longtext_scan` verbietet die Kombination), und beim neunten
+  (`Ticket`) stemmte der Interceptor einen Betreff innerhalb der Transaktion, in der ein Bürger sein Ticket öffnet.
+  Ein Bump löscht beide Indextabellen per `ExecuteDeleteAsync` und läuft beim Start durch den ganzen Bestand — für
+  null neue Zeilen. **Kein Test wehrt sich dagegen; genau deshalb steht es hier.**
+- **Die öffentliche Suche ist ein Komponist, kein Abfrage-Layer.** `PublicSearchService` nimmt
+  `IPublicModuleService` plus sieben `Services/Public`-Schnittstellen und **keinen** `IDbContextFactory`, kein
+  `IMemoryCache`, keinen `AppDbContext`. Damit erbt sie den Unterdrückungsgürtel, die Modul-Schalter je Oberfläche
+  und den Not-Aus, statt sie zu wiederholen — die Phase-4-Falle, die Phase 12 mit `/gefahr/personen` schon einmal
+  ausgeschlagen hat. Ein eigener Wächter hält das fest
+  (`ThePublicSearchService_NeverWritesAndHoldsNoContext`) und verbietet zusätzlich `IgnoreQueryFilters`: das Fehlen
+  des Handles **ist** der Entwurf. Vorbild ist `lies_kalender`, das aus demselben Grund nur `ICalendarService` nimmt.
+- **Nicht durchsucht, jeweils mit Grund** (im Dienst als Prosa, nicht als zweite Registry): das Gefasst-Archiv
+  (ein Treffer verlinkte ins Leere, und namentlich durchsuchbar wäre es ein dauerhaftes „wurde diese Person je
+  gefasst"-Nachschlagewerk, was die adresslose Liste bewusst nicht ist) · beide Gefahrenlisten (Ranglisten über
+  Zeilen, die schon zurückkommen — sie listeten dasselbe Subjekt zweimal und ließen die Gefahrenstufe wie ein
+  durchsuchbares Merkmal aussehen) · `/lage` und die Zahlen (ein Satz und ein Zahlenband) · Kopfgeldbeträge (ein
+  Betrag ist kein Suchbegriff, und ein durchsuchbarer wäre eine Preisliste auf Köpfe) · alles aus
+  `PublicVisibility.NeverPublic`. Bei den Infoseiten wird nur die **verlinkte** Menge durchsucht: `Status`
+  entscheidet die Sichtbarkeit, `ImMenue` nur die Verlinkung, und eine bewusst nicht verlinkte Seite ist „nur per
+  Direktlink erreichbar" — Suche ist ein zweites Menü.
+- **`/suche-oeffentlich` ist statisch, mit einem nackten `<form method="get">`.** Kein `InteractiveExempt`-Eintrag:
+  das Formular ist eine Browser-Navigation, es braucht weder Circuit noch Antiforgery. Ein `MudTextField` mit
+  `@bind-Value` und ein `MudButton OnClick` sähen aus wie eine Suche und täten nichts — dieselbe Klasse stumm toter
+  Bedienung wie `PrintFrame` auf dem Fahndungsposter. Der Query-Parameter ist ein **public string**, es gibt
+  **keinen** `?bereich=`-Parameter und damit auch keinen Wert, den eine Allowlist zurückparsen müsste: das
+  `PublicSearchArea`-Enum ist reiner Gruppenschlüssel. `noindex` steht, sobald eine Suchanfrage anliegt — eine
+  Ergebnisseite zu einer Anfrage, die die Behörde nicht geschrieben hat, ist kein Inhalt zum Indexieren, und die
+  Route antwortet auf jede erfundene Anfrage mit 200.
+- **Route, Modul-Schlüssel und `robots.txt`-Zeile gab es schon.** `PublicModules.PublicSearch` existiert seit
+  Phase 2 mit `NavRoute = "/suche-oeffentlich"`, und `PublicRoutes.Prefixes` sammelt Nav-Routen **ohne**
+  `Available`-Filter ein. Die Arbeit war ein Wort: `Available` von `false` auf `true`. Nebenwirkung, geprüft:
+  damit gibt es im Katalog keinen unfertigen Nav-Modul-Eintrag mehr, weshalb
+  `NavEntries_ExcludeAModuleWhosePagesDoNotExistYet` seine Stichprobe aus dem Katalog nicht mehr findet — der Test
+  behauptet die Regel jetzt zusätzlich an einem selbstgebauten Snapshot und benutzt den Katalog weiter, sobald es
+  wieder ein unfertiges Modul gibt.
+- **Die Kennzahlen rechnen in GTA-Dollar, und das ist erlaubt.** Die KI-Eigner-Regel gilt echten API-Kosten:
+  `NooseiCostVisibilityTests.MoneyMarkers` sind `ToCents`, `CostUsd`, `ToCost(`, `¢` und `Realkosten` — alles
+  Namen des OpenRouter-Preispfads. Kopfgeld und Belohnung laufen über `Services/Money.cs`, das `/kasse` jedem
+  Agenten rendert. Das Panel benutzt `Money.Format` und schreibt nirgends „Realkosten".
+- **Drei Nenner, die falsch zu wählen leicht gewesen wäre.** Die Ergreifungs-Quote läuft über die
+  **entschiedenen** Hinweise (`TipRules.ClosedRows`, neu neben `IsClosed`), nicht über alle eingegangenen — sonst
+  zählte jeder Hinweis, den noch niemand angesehen hat, als Fehlschlag. „Belohnung je Ergreifung" teilt durch die
+  Ergreifungen, für die **etwas gezahlt wurde**; ein Mittel über auch die kostenlosen beschriebe eine andere
+  Behörde, und ohne Auszahlung ist die Zahl `null`, nicht `0`. Und „Ergreifungen mit Belohnung" ist ein **Anteil
+  an den Ergreifungen des Zeitraums**, nicht an den Auszahlungen: eine Auszahlung im Fenster kann zu einer
+  Festnahme davor gehören, weil die Auszahlung ein eigener, späterer Schritt ist — die eine Kohorte durch die
+  andere zu teilen ergab Anteile über 100 %. Der Zähler fragt deshalb, ob die Festnahmen **des Fensters** je
+  belohnt wurden.
+- **Eine nicht gemessene Reaktionszeit ist `null`, keine Null.** Ohne beantwortetes Ticket gäbe ein Perzentil über
+  eine leere Stichprobe `0` zurück, und „0 min" liest sich als sofortige Antwort — dieselbe Unterscheidung, die die
+  nullable Betriebsspalten von `KiAnfragen` treffen. Das Panel zeigt einen Gedankenstrich.
+- **Ein Suchbegriff aus gewichtslosen Zeichen hätte den ganzen Bestand ausgeliefert.** Ein kultur-sensitiver
+  Vergleich hält eine Zeichenkette aus lauter Formatzeichen — drei Nullbreiten-Leerzeichen genügen — für einen
+  Treffer an Position 0, also **jede** veröffentlichte Zeile. `PublicSearchRules.Normalise` streicht Steuer-,
+  Format-, Surrogat- und Privatnutzungs-Codepunkte **vor** der Mindestlänge; die Anfrage ist danach leer und wird
+  abgewiesen. Regressionstest inbegriffen.
+- **Die Ticket-Reaktionszeit misst bis zur ersten Antwort eines Menschen — und ohne diese Regel meldet das Panel
+  einen perfekten Schalter.** Die Phase-11-Eingangsbestätigung wird in dem `SaveChanges` geschrieben, das auch das
+  Ticket anlegt; der Interceptor stempelt ein `now` für den ganzen Batch, also trägt sie den Zeitstempel des
+  Tickets und ist von einer echten Antwort sonst nicht zu unterscheiden. `TicketRules.IsHumanAgencyReply` schließt
+  sie über ein striktes `>` aus, und nichts sonst.
+- **Die Aufrufzahlen sind `null`, wenn der Leser die Ausschreibungsliste nicht führen darf** — nicht `0`. Der
+  Zweig ist heute unerreichbar (jeder, der `RequireClassifiedRead` besteht, besteht auch die Listen-Zielgruppe),
+  und genau das wird als Unit-Fakt behauptet: der Tag, an dem jemand das Panel-Gate weitet, ist ein roter Test
+  statt eines Lecks. Dasselbe gilt für den Aktenfilter über der Rangliste.
+- **Nicht** registriert, mit Grund: `TrashService`/`TrashProjection`, `TimelineService.AuditSourceAsync`,
+  `TimelineDisplay.MapAudit`, `ChronikParentResolver`, `AuditEntityDisplay`, `WatchlistRecordRollup`,
+  `RecordsReference`, `LinkService.knownTypes`, `PublicRoutes`/`robots.txt`, `PublicVisibility`, `NotificationType`,
+  Discord-Push, Aktenzeichen-Präfix, Migration. Jede dieser Registries hängt an etwas, das Durchsuchbarkeit nicht
+  ändert — `ISoftDelete` plus eine Restore-Methodengruppe, eine `AuditLog`-Zeile mit Fan-out auf einen **Elternteil**,
+  eine `IAuditable`-Instanz zum Schreibzeitpunkt, das Ziel einer manuellen Verknüpfung. Alle neun Typen stehen längst
+  dort, wo sie hingehören; die bewussten Auslassungen sind Entscheidungen der Phasen 7, 10, 13b und 14a.
+- **`NooseiPrompts.ToolChoice` nennt die zwei Abschnitte und die zwei Bereiche.** Der Routing-Text zählt sie
+  wörtlich auf; eine Fähigkeit, von der dem Modell niemand erzählt, ist keine.
+
+**Neue Tests** `PublicSearchProviderTests` (12: Einstufung der Elternakte, Ziel des Treffers, Rang-Weiche,
+gelöschte Akte, Anonymität, gelöschtes Bürgerprofil, Partner, Führungs-Gate des Tickets, gelöschte Ausschreibung
+unter einem Einspruch, Entwürfe) · `PublicSearchServiceTests` (11: Modul aus, Mindestlänge, Längendeckel, nur
+Publiziertes, Unterdrückungsgürtel, Modul je Oberfläche, Trefferform, Deckel, dunkle Oberfläche, Gruppenordnung) ·
+`PublicKpiServiceTests` (12: Rechte-Matrix, Nenner der Quote, Fenster, Belohnung je bezahlter Ergreifung,
+Eingangsbestätigung, Reaktionszeit, Rangliste, zwei Fail-closed-Fakten) · `MySqlTranslationTests` +8 ·
+`PublicSurfaceGuardTests` +3 (und `ISearchService` in `InternalStacks`) · `SearchCatalogTests` +1 (Singular
+eindeutig — ein Duplikat wirft beim statischen Init, die App startet nicht, und kein Test wurde rot).
 
 ---
 

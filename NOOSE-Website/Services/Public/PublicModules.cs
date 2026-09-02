@@ -106,8 +106,9 @@ public static class PublicModules
         new(CitizenRegistration, "Bürger-Registrierung", "Neuanmeldung eines Bürgerkontos über Discord. Bestehende Konten behalten ihren Zugang.",
             Icons.Material.Filled.Person, null, PublicModuleGroup.Service, 240, true, true,
             "Neue Bürgerkonten können derzeit nicht angelegt werden."),
-        new(PublicSearch, "Suche", "Öffentliche Suche über veröffentlichte Inhalte.",
-            Icons.Material.Filled.Search, "/suche-oeffentlich", PublicModuleGroup.Service, 250, false, false, OffGeneric),
+        new(PublicSearch, "Suche", "Volltextsuche über Fahndungen, Organisationen, Pressemitteilungen, Warnungen, "
+            + "Lageberichte, Infoseiten und freigegebene Gesetzesauszüge.",
+            Icons.Material.Filled.Search, "/suche-oeffentlich", PublicModuleGroup.Service, 250, false, true, OffGeneric),
     ];
 
     /// <summary>Icon of an editorial page that picked none.</summary>

@@ -195,14 +195,15 @@ public static class RecordsReference
             }
         }
 
-        // citizen tips: case number only, and the route is spelled out because a tip is deliberately not searchable
+        // citizen tips: case number only, never the citizen
         var tipIds = OpenIds(nameof(Hinweis));
         if (tipIds.Count > 0)
         {
             foreach (var x in await db.Hinweise.Where(h => tipIds.Contains(h.Id))
                 .Select(h => new { h.Id, h.CaseNumber }).ToListAsync(ct))
             {
-                map[(nameof(Hinweis), x.Id)] = new($"Bürgerhinweis {x.CaseNumber}", false, $"/hinweise/{x.Id}");
+                map[(nameof(Hinweis), x.Id)] = new($"Bürgerhinweis {x.CaseNumber}", false,
+                    SearchNavigation.For(nameof(Hinweis), x.Id));
             }
         }
 

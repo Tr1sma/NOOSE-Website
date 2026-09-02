@@ -137,7 +137,7 @@ public class PublicWantedService(
         {
             board = board.WithoutItems();
         }
-        return board.Archive.Count;
+        return board.CapturedTotal;
     }
 
     public async Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default)

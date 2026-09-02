@@ -350,6 +350,8 @@ builder.Services.AddScoped<IPublicLawService, PublicLawService>();
 builder.Services.AddScoped<IPublicReportService, PublicReportService>();
 builder.Services.AddScoped<IPublicSituationService, PublicSituationService>();
 builder.Services.AddScoped<IPublicStatisticsService, PublicStatisticsService>();
+builder.Services.AddScoped<IPublicSearchService, PublicSearchService>();
+builder.Services.AddScoped<IPublicKpiService, PublicKpiService>();
 builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();

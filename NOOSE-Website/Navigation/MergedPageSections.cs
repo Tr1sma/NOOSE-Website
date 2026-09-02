@@ -13,6 +13,7 @@ public static class MergedPageSections
         "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
         "oeffentliche-module", "oeffentliche-seiten", "presse", "lage", "warnungen", "berichte", "recht",
+        "oeffentliche-kennzahlen",
         "warnhinweise",
         "oeffentliche-vorlagen", "buerger",
         "basisdaten",

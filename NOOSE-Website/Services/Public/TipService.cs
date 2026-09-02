@@ -438,6 +438,26 @@ public class TipService(
             row.Priority, TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
     }
 
+    public async Task<IReadOnlyList<TipNoticeRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // no citizen projection, so no dereference of the required profile navigation — which would INNER-join the
+        // tips of a removed citizen out of a list that is supposed to describe the notice, not the tipsters
+        var rows = await db.Hinweise.AsNoTracking()
+            .Where(h => h.WantedId == wantedId)
+            .OrderByDescending(h => h.Priority).ThenByDescending(h => h.CreatedAt)
+            .Take(ListCap)
+            .Select(h => new { h.Id, h.CaseNumber, h.Status, h.CreatedAt, h.Text, h.Priority })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(r => new TipNoticeRow(r.Id, r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text), r.Priority))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<TipHistoryRow>> GetForLinkedPersonAsync(string personId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace NOOSE_Website.Tests.Services.Public;
 
-/// <summary>The public law snapshot, and the one thing that makes it different from the other three.</summary>
+/// <summary>The public law snapshot, and the one thing that makes it different from its siblings.</summary>
 /// <remarks>
 /// Its table is not the public service's own: <c>Gesetze</c> is an internal, widely read table, and
 /// <c>ILawService</c> curates it. So the rule is not "one writer" but "every writer drops the snapshot" — a corrected

@@ -63,6 +63,10 @@ public class PublicWantedModelTests
         typeof(PublicLawEntry),
         typeof(PublicLawBook),
         typeof(PublicLawSnapshot),
+        // the public search: a hit carries a public designation and an excerpt of published text, nothing else
+        typeof(PublicSearchHit),
+        typeof(PublicSearchGroup),
+        typeof(PublicSearchResults),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -119,6 +123,15 @@ public class PublicWantedModelTests
         [typeof(TipInboxCounts)] = "Zähler der Eingangs-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
         [typeof(TipDuplicateRow)] = "Geschwister einer Dublettengruppe im Eingang; trägt Aktenzeichen und Auszug.",
         [typeof(TipHistoryRow)] = "Hinweisgeber-Historie an der Personenakte; anonyme Hinweise fehlen darin ganz.",
+        [typeof(TipNoticeRow)] = "Hinweise zu einer Ausschreibung, wie eine Akte sie liest; trägt Zeilen-Id, "
+            + "Priorität und Auszug.",
+        [typeof(PublicKpiReport)] = "Kennzahlen-Auswertung der Führung; die Zahlen sind je Schalter und je "
+            + "Ausschreibung, also genau das, was der öffentliche Zahlen-Record nicht tragen darf.",
+        [typeof(PublicKpiTips)] = "Durchsatz des Hinweis-Eingangs samt offener Zeilen.",
+        [typeof(PublicKpiRewards)] = "Ausgezahlte Belohnungen, aufgeteilt nach Kasse und persönlicher Übergabe.",
+        [typeof(PublicKpiTickets)] = "Reaktionszeiten des Führungs-Schalters.",
+        [typeof(PublicKpiViews)] = "Aufrufe je Ausschreibung; nach außen geht keine Zahl je Ausschreibung.",
+        [typeof(PublicKpiNoticeViews)] = "Eine Ausschreibung in der Aufmerksamkeits-Rangliste, mit Aktenzeichen.",
         [typeof(TipAttachmentAccess)] = "Dateiname und Typ für den autorisierten Ausliefer-Endpoint.",
         [typeof(TipInput)] = "Formulareingabe des Hinweis-Formulars.",
         [typeof(RewardRow)] = "Ausgezahlte Belohnung im internen Panel; nennt Herkunft, Konto und Kassenbuchung.",

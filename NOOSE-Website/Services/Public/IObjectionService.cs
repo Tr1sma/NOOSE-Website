@@ -29,6 +29,12 @@ public interface IObjectionService
 
     Task<ObjectionCounts> GetCountsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>The objections filed against one notice, newest first.</summary>
+    /// <remarks>Rooted like the desk list — over the soft-delete filter, with <c>!IsDeleted</c> written back —
+    /// so a caller reading a notice sees exactly the objections the desk would decide.</remarks>
+    Task<IReadOnlyList<ObjectionRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     Task<ObjectionDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Moves the objection along; a decision needs a note, and upholding one needs the notice offline.</summary>

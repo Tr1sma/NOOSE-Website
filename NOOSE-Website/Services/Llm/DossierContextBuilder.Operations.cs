@@ -16,6 +16,7 @@ using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
@@ -55,6 +56,7 @@ public static partial class DossierContextBuilder
             nameof(TrainingModule) => await BuildTrainingModuleAsync(db, entityId, ct),
             nameof(CounterIntelRule) => await BuildCounterIntelRuleAsync(db, entityId, ct),
             nameof(Data.Entities.Feedback.Feedback) => await BuildFeedbackAsync(db, entityId, ct),
+            nameof(Hinweis) => await BuildTipAsync(db, entityId, scope, ct),
             _ => null,
         };
 
@@ -177,6 +179,51 @@ public static partial class DossierContextBuilder
 
         await AppendAttachmentsAsync(sb, db, nameof(Meeting), id, includeClassificationHistory: false, view, ct);
         return new DossierContext(m.Title, sb.ToString(), IsClassified: false);
+    }
+
+    /// <summary>Citizen tip. Carries no citizen field at all, and that is a cache rule as much as a promise.</summary>
+    /// <remarks>
+    /// The brief is cached once per record at minimum privilege and read by everyone who may see the tip, so an
+    /// identity in it would outlive the audited leadership act that resolved the anonymity. Not even the flag goes
+    /// in: whether a tipster asked to stay anonymous is a fact about the person, not about the tip. Classified so
+    /// the cached row is never handed to a viewer the gate has not passed.
+    /// </remarks>
+    static async Task<DossierContext?> BuildTipAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
+    {
+        var h = await db.Hinweise.AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => new
+            {
+                x.CaseNumber, x.Status, x.Text, x.Priority, x.CreatedAt,
+                HasAttachment = x.AttachmentFileName != null,
+                HandlerCodename = x.Handler!.Codename,
+                WantedCaseNumber = x.Wanted!.CaseNumber,
+                WantedDisplayName = x.Wanted!.DisplayName,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (h is null)
+        {
+            return null;
+        }
+
+        var view = scope ?? DossierScope.ForRecord(DocumentClassification.None);
+        var title = "Bürgerhinweis " + h.CaseNumber;
+        var sb = new StringBuilder();
+        sb.AppendLine("Bürgerhinweis");
+        Line(sb, "Aktenzeichen", h.CaseNumber);
+        Line(sb, "Status", TipStatusDisplay.Name(h.Status));
+        Line(sb, "Priorität", h.Priority.ToString());
+        Line(sb, "Eingegangen", Fmt(h.CreatedAt));
+        Line(sb, "Bearbeiter", h.HandlerCodename);
+        Line(sb, "Bildanhang", h.HasAttachment);
+        if (h.WantedCaseNumber is { Length: > 0 } notice)
+        {
+            Line(sb, "Bezug", notice + " · " + h.WantedDisplayName);
+        }
+        Line(sb, "Meldung", h.Text);
+
+        await AppendAttachmentsAsync(sb, db, nameof(Hinweis), id, includeClassificationHistory: false, view, ct);
+        return new DossierContext(title, sb.ToString(), IsClassified: true);
     }
 
     // ---- personnel ----

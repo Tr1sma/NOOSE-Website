@@ -13,6 +13,8 @@ using NOOSE_Website.Models.Evidence;
 using NOOSE_Website.Models.Kasse;
 using NOOSE_Website.Models.Recruiting;
 using NOOSE_Website.Services;
+using NOOSE_Website.Models.Public;
+using NOOSE_Website.Services.Public;
 using NOOSE_Website.Services.Llm.Tools;
 using NOOSE_Website.Services.Statistics;
 using NSubstitute;
@@ -101,6 +103,12 @@ public static class NooseiToolHost
         IBewerbungTestService? bewerbungTests = null,
         IBewerbungssperreService? bewerbungssperren = null,
         IBewerbungTemplateService? bewerbungTemplates = null,
+        ITicketService? tickets = null,
+        IPressReleaseService? press = null,
+        IPublicPageService? publicPages = null,
+        IPublicWarningService? publicWarnings = null,
+        IPublicReportService? publicReports = null,
+        IPublicSituationService? situation = null,
         INotificationService? notifications = null)
         => new(
             ctx.Factory,
@@ -135,6 +143,25 @@ public static class NooseiToolHost
             bewerbungTemplates ?? Quiet<IBewerbungTemplateService>(s =>
                 s.ListAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new List<DocumentTemplate>()))),
+            tickets ?? Quiet<ITicketService>(s =>
+                s.GetInboxAsync(Arg.Any<TicketInboxScope>(), Arg.Any<string?>(), Arg.Any<bool>(),
+                    Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<TicketRow>>([]))),
+            press ?? Quiet<IPressReleaseService>(s =>
+                s.GetAllAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<PressEdit>>([]))),
+            publicPages ?? Quiet<IPublicPageService>(s =>
+                s.GetAllAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<PublicPageEdit>>([]))),
+            publicWarnings ?? Quiet<IPublicWarningService>(s =>
+                s.GetAllAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<WarningEdit>>([]))),
+            publicReports ?? Quiet<IPublicReportService>(s =>
+                s.GetAllAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<PublicReportEdit>>([]))),
+            situation ?? Quiet<IPublicSituationService>(s =>
+                s.GetPublishedAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<PublicSituationState?>(null))),
             notifications ?? Quiet<INotificationService>(s =>
                 s.GetOwnAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new List<Notification>()))));

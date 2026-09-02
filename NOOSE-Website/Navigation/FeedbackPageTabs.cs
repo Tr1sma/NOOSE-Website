@@ -36,6 +36,7 @@ public static class FeedbackPageTabs
         new("warnungen", "Öffentliche Warnungen"),
         new("berichte", "Öffentliche Lageberichte"),
         new("recht", "Gesetzesauszüge"),
+        new("oeffentliche-kennzahlen", "Kennzahlen des öffentlichen Bereichs"),
         new("warnhinweise", "Warnhinweise"),
         new("oeffentliche-vorlagen", "Öffentliche Vorlagen"),
         new("buerger", "Bürgerkonten"),

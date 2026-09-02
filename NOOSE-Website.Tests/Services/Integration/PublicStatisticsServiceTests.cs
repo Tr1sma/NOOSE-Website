@@ -212,9 +212,16 @@ public sealed class PublicStatisticsServiceTests
             Notice("FA-3", PublicWantedStatus.Beantragt),
             Notice("FA-4", PublicWantedStatus.Zurueckgezogen),
             Notice("FA-5", PublicWantedStatus.Veroeffentlicht, f => f.ExpiresAt = DateTime.UtcNow.AddDays(-1)),
-            Notice("FA-6", PublicWantedStatus.Veroeffentlicht, f => f.IsDeleted = true));
+            Notice("FA-6", PublicWantedStatus.Veroeffentlicht, f => f.IsDeleted = true),
+            // retracted after a capture: RetractAsync leaves CapturedAt set, so the status clause on the counting
+            // query is the only thing keeping this row out of the captured figure
+            Notice("FA-7", PublicWantedStatus.Zurueckgezogen, f => f.CapturedAt = DateTime.UtcNow.AddHours(-2)),
+            Notice("FA-8", PublicWantedStatus.Gefasst));
 
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).OpenNotices);
+        var numbers = await host.Service.GetPublishedAsync();
+
+        Assert.Equal(1, numbers.OpenNotices);
+        Assert.Equal(1, numbers.CapturedNotices);
     }
 
     [Fact]
@@ -381,6 +388,28 @@ public sealed class PublicStatisticsServiceTests
         // a hole must not survive a cache window: the next visitor counts again rather than reading the failure
         Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
         ctx.Dispose();
+    }
+
+    [Fact]
+    public async Task AModuleSwitchIsSeenBeforeTheFigureWindowDrops()
+    {
+        // The counts are cached; the switches are not. Reading a switch inside the figure cache would leave the start
+        // page silent for a whole window after someone turns a module on, which is why the gate sits outside it.
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await AddAsync(ctx, Tip(TipStatus.Neu));
+        await ModuleAsync(ctx, host, PublicModules.Tips, false);
+        Assert.Null((await host.Service.GetPublishedAsync()).TipsReceived);
+
+        await using (var db = ctx.NewContext())
+        {
+            (await db.OeffentlicheModule.SingleAsync(m => m.Key == PublicModules.Tips)).IsEnabled = true;
+            await db.SaveChangesAsync();
+        }
+        // only the switch snapshot, deliberately not the figures: the warm counts must still answer
+        host.Cache.Remove("OeffentlicheModule");
+
+        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
     }
 
     [Fact]

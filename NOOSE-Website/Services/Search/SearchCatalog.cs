@@ -10,6 +10,7 @@ using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Data.Entities.Feedback;
 using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Data.Entities.Common;
@@ -339,6 +340,45 @@ public static class SearchCatalog
             Icons.Material.Filled.RemoveRedEye, SearchHitShape.Log, SearchTraits.Assistant, null),
         new(nameof(LlmRequestLog), "NOOSEI-Anfrage", "NOOSEI-Anfragen", SearchGroup.Logs,
             Icons.Material.Filled.QuestionAnswer, SearchHitShape.Log, SearchTraits.Heavy | SearchTraits.Assistant, null),
+
+        // ---- Oeffentlicher Bereich ----
+        // Appended, never interleaved: the array order is the facet-bar order AND the order of every NOOSEI schema
+        // enum, which is the cached prompt prefix.
+        // the notice has no page of its own: a hit targets the file it was published from
+        new(nameof(OeffentlicheFahndung), "Öffentliche Ausschreibung", "Öffentliche Ausschreibungen", SearchGroup.Content,
+            Icons.Material.Filled.PersonSearch, SearchHitShape.Content,
+            SearchTraits.ContentChild | SearchTraits.Heavy | SearchTraits.Assistant,
+            null, "oeffentlich"),
+        new(nameof(OeffentlichesFraktionsprofil), "Öffentliches Fraktionsprofil", "Öffentliche Fraktionsprofile",
+            SearchGroup.Content, Icons.Material.Filled.Public, SearchHitShape.Content,
+            SearchTraits.ContentChild | SearchTraits.Heavy | SearchTraits.Assistant,
+            null, "oeffentlich"),
+        new(nameof(Hinweis), "Bürgerhinweis", "Bürgerhinweise", SearchGroup.Records,
+            Icons.Material.Filled.TipsAndUpdates, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant,
+            "/hinweise/{0}"),
+        // not Heavy: the subject is a short column, and the longtext lives on the message rows, which stay out
+        new(nameof(Ticket), "Bürger-Ticket", "Bürger-Tickets", SearchGroup.Records,
+            Icons.Material.Filled.Forum, SearchHitShape.Record, SearchTraits.Assistant,
+            "/tickets/{0}"),
+        // decided at a section of /fahndung, so the provider stamps the href
+        new(nameof(FahndungEinspruch), "Einspruch", "Einsprüche", SearchGroup.Records,
+            Icons.Material.Filled.Balance, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant, null),
+        new(nameof(Pressemitteilung), "Pressemitteilung", "Pressemitteilungen", SearchGroup.Administration,
+            Icons.Material.Filled.Feed, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant, null),
+        new(nameof(OeffentlicheSeite), "Infoseite", "Infoseiten", SearchGroup.Administration,
+            Icons.Material.Filled.MenuBook, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant, null),
+        new(nameof(OeffentlicheWarnung), "Öffentliche Warnung", "Öffentliche Warnungen", SearchGroup.Administration,
+            Icons.Material.Filled.Campaign, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant, null),
+        // the singular differs from SituationReport's on purpose: two categories may not share a German name,
+        // and NooseiRecordTypes keys a dictionary on it
+        new(nameof(OeffentlicherLagebericht), "Öffentlicher Lagebericht", "Öffentliche Lageberichte",
+            SearchGroup.Administration, Icons.Material.Filled.Assessment, SearchHitShape.Record,
+            SearchTraits.Heavy | SearchTraits.Assistant, null),
     ];
 
     /// <summary>Entities deliberately left out of the search, each with the reason.</summary>
@@ -427,17 +467,6 @@ public static class SearchCatalog
                 + "Aktenbezug und wird ausschließlich über den Bürger-Bestand in /einstellungen gesucht.",
             ["OeffentlichesModul"] = "Ein-/Aus-Schalter einer öffentlichen Seite, kein Inhalt. Der Katalog steht im "
                 + "Code, bedient wird er in /einstellungen.",
-            ["OeffentlicheSeite"] = "Redaktionelle Außendarstellung ohne Aktenbezug; gepflegt wird sie in "
-                + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
-            ["OeffentlicheFahndung"] = "Publikations-Snapshot einer Personenakte; jedes Feld stammt aus der Akte, "
-                + "die schon durchsuchbar ist. Gefunden wird sie über die Akte, gepflegt in /fahndung. Ein eigener "
-                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
-            ["Pressemitteilung"] = "Amtliche Verlautbarung ohne Aktenbezug; gepflegt wird sie in /einstellungen. "
-                + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
-            ["OeffentlicheWarnung"] = "Amtliche Warnung ohne Aktenbezug; gepflegt wird sie in /einstellungen. "
-                + "Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
-            ["OeffentlicherLagebericht"] = "Freigegebener Monatstext ohne Aktenbezug; gepflegt wird er in "
-                + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
             ["Warnhinweis"] = "Werteliste des öffentlichen Bereichs ohne Aktenbezug; gepflegt in /einstellungen. "
                 + "Gesucht wird die Ausschreibung, die den Hinweis trägt, nicht der Hinweis selbst.",
             ["FahndungWarnhinweis"] = "Zuordnungszeile zwischen Ausschreibung und Warnhinweis; sie trägt keinen "
@@ -445,28 +474,16 @@ public static class SearchCatalog
             ["FahndungKopfgeldAnteil"] = "Geldposten an einer Ausschreibung ohne eigenen Text; gefunden wird die "
                 + "Akte, gepflegt wird der Anteil an ihrem Fahndungs-Panel. Eine durchsuchbare Geldliste wäre "
                 + "obendrein ein Verzeichnis, welcher Agent privat auf wen gesetzt hat.",
-            ["Hinweis"] = "Bürgereinreichung; bearbeitet wird sie im Eingang unter /hinweise. Ein eigener "
-                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er müsste zusätzlich die "
-                + "Anonymitätszusage tragen, die bisher nur die Bearbeiter-Projektion kennt.",
             ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; gefunden wird der Hinweis, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst an der "
                 + "Bearbeiter-Prüfung vorbei lesbar.",
             ["HinweisBelohnung"] = "Auszahlung an einen Hinweisgeber; gesucht wird der Hinweis oder die "
                 + "Kassenbuchung. Eine durchsuchbare Geldliste müsste zusätzlich die Anonymitätszusage tragen.",
-            ["Ticket"] = "Bürgeranliegen an die Führungsebene; bearbeitet wird es am Schalter unter "
-                + "/tickets. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er "
-                + "müsste zusätzlich das Führungs-Gate tragen, das bisher nur der Schalter kennt.",
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
                 + "Führungs-Gate vorbei lesbar.",
-            ["FahndungEinspruch"] = "Widerspruch eines Bürgers gegen eine Ausschreibung; bearbeitet wird er "
-                + "unter /fahndung?tab=einsprueche. Ein eigener Provider kommt mit der Suchanbindung des "
-                + "öffentlichen Bereichs — er müsste dasselbe Gate tragen, das bisher nur der Abschnitt kennt.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
-            ["OeffentlichesFraktionsprofil"] = "Publikations-Snapshot einer Fraktion; intern gefunden wird "
-                + "die Fraktionsakte selbst. Die öffentliche Suche über Veröffentlichtes kommt mit der "
-                + "Suchanbindung des öffentlichen Bereichs.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

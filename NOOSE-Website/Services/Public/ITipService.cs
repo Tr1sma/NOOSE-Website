@@ -50,6 +50,16 @@ public interface ITipService
 
     Task<TipDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>The tips filed against one public notice, most urgent first and capped. Carries no citizen field.</summary>
+    /// <remarks>
+    /// The counterpart of <see cref="GetForLinkedPersonAsync"/>: that one answers "what did this person report",
+    /// keyed on the citizen and therefore filtered by the anonymity promise, while this one answers "what came in
+    /// about this notice" and is keyed on the notice. Because it names nobody, the promise does not narrow it — an
+    /// anonymous tip about a wanted person is exactly what a handler has to be able to read.
+    /// </remarks>
+    Task<IReadOnlyList<TipNoticeRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Tips of the citizens tied to this person file; the ones under an anonymity promise are left out.</summary>
     Task<IReadOnlyList<TipHistoryRow>> GetForLinkedPersonAsync(string personId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);

@@ -18,6 +18,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
@@ -161,6 +162,14 @@ public static class Visibility
             case nameof(CounterIntelRule):
                 return scope.IsLeadership
                     && await db.CounterIntelRules.AnyAsync(r => r.Id == entityId, cancellationToken);
+            // Citizen tips: every internal agent, the read-only supervision included — the audience of
+            // Permission.RequireTipRead, expressed on the scope. Written as IsInternalAgent and NOT as
+            // MayClassifiedRead because this gate also decides comments, sources, followups, links and watchlist
+            // entries on a tip; the narrower flag would silently empty those panels the day one is rendered.
+            // A partner, a citizen and an applicant never pass.
+            case nameof(Hinweis):
+                return scope.IsInternalAgent
+                    && await db.Hinweise.AnyAsync(h => h.Id == entityId, cancellationToken);
         }
 
         // open to every internal agent, but named rather than left to the tail below: a type that falls through

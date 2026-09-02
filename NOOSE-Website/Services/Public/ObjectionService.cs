@@ -170,6 +170,32 @@ public class ObjectionService(
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ObjectionRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireObjectionRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // rooted like the desk list, and for the same reason: the projection dereferences the required Wanted
+        // navigation, which EF joins INNER
+        return await db.FahndungEinsprueche.IgnoreQueryFilters().AsNoTracking()
+            .Where(e => !e.IsDeleted && e.WantedId == wantedId)
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(ListCap)
+            .Select(e => new ObjectionRow(
+                e.Id,
+                e.CaseNumber,
+                e.Wanted!.CaseNumber ?? string.Empty,
+                e.Wanted.DisplayName,
+                e.Wanted.Status,
+                e.Status,
+                e.CitizenProfile!.FirstName + " " + e.CitizenProfile.LastName,
+                e.CreatedAt,
+                e.DecidedAt,
+                e.LinkedCaseId != null))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<ObjectionCounts> GetCountsAsync(ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {

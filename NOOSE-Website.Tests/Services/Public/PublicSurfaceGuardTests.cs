@@ -200,6 +200,72 @@ public class PublicSurfaceGuardTests
             "Eine statisch gerenderte Seite hat keine klickbare Kachel: " + string.Join(", ", offenders));
     }
 
+    [Fact]
+    public void ThePublicSearchService_NeverWritesAndHoldsNoContext()
+    {
+        // It composes the cached snapshots of the services that own the published tables. Holding a context would
+        // put the suppression belt one careless line away, and a write would need a drop site the interface says
+        // does not exist. Wider than the figures guard by exactly that: this one owns no data at all.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicSearchService.cs");
+        Assert.True(File.Exists(file), $"Suchdienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] forbidden =
+        [
+            "SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove", "cache.Set",
+            "IDbContextFactory", "AppDbContext", "IgnoreQueryFilters",
+        ];
+        var offenders = forbidden.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der öffentliche Suchdienst liest nur, und zwar durch die Dienste: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void TheKpiService_NeverWrites()
+    {
+        // Same sentence as the figures service, same reason: it is an evaluation, so there is nothing to invalidate
+        // — and the day someone writes here, the promise in the interface quietly stops being true.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicKpiService.cs");
+        Assert.True(File.Exists(file), $"Kennzahlen-Dienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] writes = ["SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove"];
+        var offenders = writes.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Kennzahlen-Dienst liest nur: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>Names that would put a citizen's identity into a search result row.</summary>
+    /// <remarks>
+    /// Only the two that are unambiguous. <c>FirstName</c>/<c>LastName</c> are generic enough that a scan on them
+    /// would either be false-red on the agent provider or get defused on the next reading — the failure this file
+    /// warns about for MentionParser.
+    /// </remarks>
+    private static readonly string[] CitizenIdentity = ["BuergerProfil", "CitizenProfile"];
+
+    [Fact]
+    public void NoSearchProvider_ProjectsACitizenIdentity()
+    {
+        // A tip and a ticket became searchable with the public-area hookup, and the anonymity promise cannot ride on
+        // the projection alone: typing a name and seeing whether a tip comes back defeats it without reading a flag.
+        // the providers only: SearchCatalog names BuergerProfil as an exclusion key, which is the opposite of a leak
+        var providers = Path.Combine(ProjectRoot(), "Services", "Search", "Providers");
+        Assert.True(Directory.Exists(providers), $"Suchprovider nicht gefunden: {providers}");
+
+        var offenders = Directory.EnumerateFiles(providers, "*.cs", SearchOption.AllDirectories)
+            .Select(f => (File: Path.GetFileName(f), Text: WithoutComments(File.ReadAllText(f))))
+            .SelectMany(f => CitizenIdentity
+                .Where(name => Regex.IsMatch(f.Text, $@"\b{name}\b"))
+                .Select(name => $"{f.File}: {name}"))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Kein Suchtreffer nennt den Bürger hinter einer Einreichung: " + string.Join(", ", offenders));
+    }
+
     private static string ProjectRoot([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website"));
 
@@ -346,6 +412,9 @@ public class PublicSurfaceGuardTests
     private static readonly string[] InternalStacks =
     [
         "ISituationReportService", "IStatisticsService", "IFinancingStatisticsService",
+        // the global search orchestrator: resolving it builds all ~60 providers, every one with its own context
+        // factory, for a visitor who is only allowed to see what was published
+        "ISearchService",
     ];
 
     [Fact]
