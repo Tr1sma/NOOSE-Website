@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
@@ -357,5 +358,135 @@ public class PublicSearchProviderTests
         Assert.Contains(nameof(OeffentlicheSeite), Categories(lead));
         Assert.Contains(nameof(OeffentlicheWarnung), Categories(lead));
         Assert.Contains(nameof(OeffentlicherLagebericht), Categories(lead));
+    }
+
+    // ---- the resolver arm: a tip is a link ENDPOINT, and both ends must resolve ----
+
+    [Fact]
+    public async Task ATakeoverLinkIsFindable_BecauseTheResolverKnowsATip()
+    {
+        // LinkSearchProvider resolves both ends and skips the row when either is absent. Before the Hinweis arm
+        // existed the resolver had none and no default arm, so every takeover link was silently unfindable.
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.BuergerProfile.Add(Citizen());
+            db.People.Add(Seed.Person("p1", "Otto Offen", p => p.CaseNumber = "NOOSE-P-2026-0001"));
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "b1",
+                Text = "Meldung", Status = TipStatus.InPruefung,
+            });
+            db.Links.Add(new Link
+            {
+                Id = "l1", SourceType = nameof(Hinweis), SourceId = "h1",
+                TargetType = nameof(Person), TargetId = "p1",
+                Label = "Übernahme " + Needle, Kind = LinkKind.Default, Automatic = false,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var results = await SearchTestHost.NewService(ctx).SearchAsync(Text(Needle), Plain());
+
+        Assert.Contains(nameof(Link), Categories(results));
+        // the tip end resolves to the wording the whole house uses for it
+        Assert.Contains(AllText(results), t => t.Contains("Bürgerhinweis NOOSE-H-2026-0001", StringComparison.Ordinal));
+        // and never to the citizen behind it
+        Assert.DoesNotContain(AllText(results), t => t.Contains("Erika", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ATakeoverLinkOfADeletedTipStaysHidden()
+    {
+        // the resolver's contract: an absent parent hides the child, and a deleted tip must stay absent
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.BuergerProfile.Add(Citizen());
+            db.People.Add(Seed.Person("p1", "Otto Offen"));
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "b1",
+                Text = "Meldung", Status = TipStatus.InPruefung, IsDeleted = true,
+            });
+            db.Links.Add(new Link
+            {
+                Id = "l1", SourceType = nameof(Hinweis), SourceId = "h1",
+                TargetType = nameof(Person), TargetId = "p1",
+                Label = "Übernahme " + Needle, Kind = LinkKind.Default, Automatic = false,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var results = await SearchTestHost.NewService(ctx).SearchAsync(Text(Needle), Plain());
+
+        Assert.DoesNotContain(nameof(Link), Categories(results));
+    }
+
+    // ---- who may search what: the negative half of every AppliesTo ----
+
+    [Fact]
+    public async Task TheRankGateOfEveryNewCategoryIsNegativelyTested()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.BuergerProfile.Add(Citizen());
+            db.People.Add(Seed.Person("p1", Needle + " Person"));
+            db.Factions.Add(Seed.Faction("f1", Needle + " Bande"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "fa1", CaseNumber = "FA-1", PersonId = "p1", DisplayName = Needle,
+                Status = PublicWantedStatus.Veroeffentlicht, PublishedAt = DateTime.UtcNow,
+            });
+            db.OeffentlicheFraktionsprofile.Add(new OeffentlichesFraktionsprofil
+            {
+                Id = "pr1", FactionId = "f1", DisplayName = Needle,
+                Status = PublicProfileStatus.Veroeffentlicht,
+            });
+            db.FahndungEinsprueche.Add(new FahndungEinspruch
+            {
+                Id = "e1", CaseNumber = "EIN-1", WantedId = "fa1", CitizenProfileId = "b1",
+                Text = Needle, Status = ObjectionStatus.Neu,
+            });
+            db.OeffentlicheSeiten.Add(new OeffentlicheSeite
+            {
+                Id = "s1", Slug = "auftrag", Title = Needle, Status = PublicPageStatus.Entwurf,
+            });
+            db.OeffentlicheWarnungen.Add(new OeffentlicheWarnung
+            {
+                Id = "w1", Title = Needle, Status = PublicWarningStatus.Entwurf,
+            });
+            db.OeffentlicheLageberichte.Add(new OeffentlicherLagebericht
+            {
+                Id = "r1", Year = 2026, Month = 8, Title = Needle, Status = PublicReportStatus.Entwurf,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var junior = await SearchTestHost.NewService(ctx).SearchAsync(Text(Needle), Plain());
+        var senior = await SearchTestHost.NewService(ctx).SearchAsync(Text(Needle), Senior());
+        var lead = await SearchTestHost.NewService(ctx).SearchAsync(Text(Needle), Leadership());
+
+        // the wanted desk: senior and up, so a junior sees neither the notice nor the profile nor the objection
+        foreach (var deskCategory in new[]
+                 {
+                     nameof(OeffentlicheFahndung), nameof(OeffentlichesFraktionsprofil), nameof(FahndungEinspruch),
+                 })
+        {
+            Assert.DoesNotContain(deskCategory, Categories(junior));
+            Assert.Contains(deskCategory, Categories(senior));
+        }
+
+        // the editorial surfaces: leadership and supervision only, so not even a senior agent
+        foreach (var editorial in new[]
+                 {
+                     nameof(OeffentlicheSeite), nameof(OeffentlicheWarnung), nameof(OeffentlicherLagebericht),
+                 })
+        {
+            Assert.DoesNotContain(editorial, Categories(junior));
+            Assert.DoesNotContain(editorial, Categories(senior));
+            Assert.Contains(editorial, Categories(lead));
+        }
     }
 }

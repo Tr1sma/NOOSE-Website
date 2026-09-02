@@ -462,6 +462,16 @@ public sealed class PublicModuleServiceTests
         ]);
 
         Assert.Empty(snapshot.NavEntries());
+
+        // and the live path still has to produce a tab for a module that IS built, or the filter above would be
+        // indistinguishable from one that drops everything
+        using var liveCtx = await SeededAsync();
+        var live = NewService(liveCtx);
+        var built = PublicModules.All.First(m => m.Available && !string.IsNullOrWhiteSpace(m.NavRoute)).Key;
+
+        await live.SaveAsync([Input(built, enabled: true)], Admin());
+
+        Assert.Contains(await live.NavEntriesAsync(), e => e.Key == built);
     }
 
     [Fact]

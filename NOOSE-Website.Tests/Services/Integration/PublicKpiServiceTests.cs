@@ -364,6 +364,101 @@ public sealed class PublicKpiServiceTests
     }
 
     [Fact]
+    public async Task ConfirmedCountsMoreThanJustTheArrests()
+    {
+        // ConfirmedRows is the wider set; with one row of each the two figures were equal and either predicate
+        // could have been swapped for the other
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await AddAsync(ctx,
+            Tip(TipStatus.Bestaetigt),
+            Tip(TipStatus.Bestaetigt),
+            Tip(TipStatus.FuehrteZurErgreifung),
+            Tip(TipStatus.Verworfen));
+
+        var tips = (await service.GetAsync(30, Leadership())).Tips;
+
+        Assert.Equal(3, tips.Confirmed);
+        Assert.Equal(1, tips.Captures);
+        Assert.Equal(4, tips.Decided);
+    }
+
+    [Fact]
+    public async Task ARewardHandedOverInPersonIsSummedApartFromTheTill()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var tip = Tip(TipStatus.FuehrteZurErgreifung);
+        await AddAsync(ctx, tip,
+            new FahndungKopfgeldAnteil
+            {
+                Id = "a1", WantedId = "f1", Origin = BountyOrigin.NooseKasse, Amount = 400m,
+                Status = BountyShareStatus.Ausgezahlt, Timestamp = Now.AddDays(-2),
+            },
+            new FahndungKopfgeldAnteil
+            {
+                Id = "a2", WantedId = "f1", Origin = BountyOrigin.AgentPrivat, Amount = 600m,
+                Status = BountyShareStatus.Ausgezahlt, Timestamp = Now.AddDays(-2),
+            },
+            new OeffentlicheFahndung
+            {
+                Id = "f1", CaseNumber = "FA-1", PersonId = PersonId, DisplayName = "Max Mustermann",
+                Status = PublicWantedStatus.Gefasst, CapturedAt = Now.AddDays(-1), PublishedAt = Now.AddDays(-3),
+            },
+            new HinweisBelohnung
+            {
+                Id = "r1", ReceiptNumber = "BEL-1", TipId = tip.Id, ShareId = "a1", Amount = 400m,
+                KassenBuchungId = "k1", PaidAt = Now.AddDays(-1),
+            },
+            new HinweisBelohnung
+            {
+                Id = "r2", ReceiptNumber = "BEL-1", TipId = tip.Id, ShareId = "a2", Amount = 600m,
+                SelfPaidAt = Now.AddDays(-1), PaidAt = Now.AddDays(-1),
+            });
+
+        var rewards = (await service.GetAsync(30, Leadership())).Rewards;
+
+        Assert.Equal(1000m, rewards.Paid);
+        Assert.Equal(400m, rewards.FromTill);
+        Assert.Equal(600m, rewards.HandedOver);
+        // one notice, so the cost per paid arrest is the whole sum
+        Assert.Equal(1, rewards.PaidCaptures);
+        Assert.Equal(1000m, rewards.PerPaidCapture);
+    }
+
+    [Fact]
+    public async Task TheReactionTimePercentilesAreRealPercentilesNotTheOnlySample()
+    {
+        // three answered tickets at 1 h, 2 h and 10 h: the median is the middle one and p95 the slowest, so
+        // neither can be the mean, the minimum or the single-sample shortcut
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var rows = new List<object>();
+        var hours = new[] { 1, 2, 10 };
+        for (var i = 0; i < hours.Length; i++)
+        {
+            var opened = Now.AddHours(-20);
+            rows.Add(new Ticket
+            {
+                Id = "t" + i, CaseNumber = "NOOSE-T-" + i, CitizenProfileId = ProfileId, Subject = "Anliegen",
+                Status = TicketStatus.WartetAufBuerger, CreatedAt = opened, LastActivityAt = Now,
+            });
+            rows.Add(new TicketNachricht
+            {
+                Id = "m" + i, TicketId = "t" + i, Audience = TicketMessageAudience.Buerger,
+                AuthorIsCitizen = false, Text = "Antwort", CreatedAt = opened.AddHours(hours[i]),
+            });
+        }
+        await AddAsync(ctx, [.. rows]);
+
+        var tickets = (await service.GetAsync(30, Leadership())).Tickets;
+
+        Assert.Equal(3, tickets.Answered);
+        Assert.Equal(120, tickets.MedianReplyMinutes);
+        Assert.Equal(600, tickets.P95ReplyMinutes);
+    }
+
+    [Fact]
     public void TheViewGateIsTheFailClosedPath_NotALiveBranch()
     {
         // Views is nullable because the attention list names notices and therefore answers to the notice-list

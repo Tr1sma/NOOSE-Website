@@ -27,7 +27,14 @@ public sealed class PublicSearchServiceTests
 
     private sealed record Host(PublicSearchService Service, IMemoryCache Cache, IPressReleaseService Press);
 
-    private static Host NewHost(SqliteTestContext ctx, PublicPressSnapshot? press = null)
+    private static Host NewHost(
+        SqliteTestContext ctx,
+        PublicPressSnapshot? press = null,
+        PublicWarningSnapshot? warningSnapshot = null,
+        PublicReportSnapshot? reportSnapshot = null,
+        PublicPageSnapshot? pageSnapshot = null,
+        PublicLawSnapshot? lawSnapshot = null,
+        PublicFactionBoard? factionBoard = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(ctx.Connection).Options;
         var factory = new TestDbContextFactory(options);
@@ -46,15 +53,20 @@ public sealed class PublicSearchServiceTests
             .Returns(Task.FromResult(press ?? PublicPressSnapshot.Empty));
 
         var factions = Substitute.For<IPublicFactionProfileService>();
-        factions.GetBoardAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(PublicFactionBoard.Empty));
+        factions.GetBoardAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(factionBoard ?? PublicFactionBoard.Empty));
         var warnings = Substitute.For<IPublicWarningService>();
-        warnings.GetPublishedAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(PublicWarningSnapshot.Empty));
+        warnings.GetPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(warningSnapshot ?? PublicWarningSnapshot.Empty));
         var reports = Substitute.For<IPublicReportService>();
-        reports.GetPublishedAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(PublicReportSnapshot.Empty));
+        reports.GetPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(reportSnapshot ?? PublicReportSnapshot.Empty));
         var pages = Substitute.For<IPublicPageService>();
-        pages.GetPublishedAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(PublicPageSnapshot.Empty));
+        pages.GetPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(pageSnapshot ?? PublicPageSnapshot.Empty));
         var laws = Substitute.For<IPublicLawService>();
-        laws.GetPublishedAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(PublicLawSnapshot.Empty));
+        laws.GetPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(lawSnapshot ?? PublicLawSnapshot.Empty));
 
         var service = new PublicSearchService(modules, wanted, factions, pressService, warnings, reports, pages, laws);
         return new Host(service, cache, pressService);
@@ -107,6 +119,109 @@ public sealed class PublicSearchServiceTests
     }
 
     // ---- the gate ----
+
+    [Fact]
+    public async Task ATypoStillFindsTheNotice_AndExactHitsStayAhead()
+    {
+        // the typo-tolerant pass is the second half of the matcher; without it a misspelling returns nothing
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await AddAsync(ctx,
+            Notice("FA-1", PublicWantedStatus.Veroeffentlicht, "Kupferdraht"),
+            Notice("FA-2", PublicWantedStatus.Veroeffentlicht, "Kupfardraht"));
+
+        var typo = await host.Service.SearchAsync("Kupfardraht");
+        var titles = typo.Groups.Single().Hits.Select(h => h.Title).ToList();
+
+        // both come back, and the exact match is never pushed below the typo match
+        Assert.Equal(["Kupfardraht", "Kupferdraht"], titles);
+    }
+
+    [Fact]
+    public async Task WithinASurfaceTheNewestPublicationComesFirst()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await AddAsync(ctx,
+            Notice("FA-OLD", PublicWantedStatus.Veroeffentlicht, "Kupferdraht alt",
+                f => f.PublishedAt = DateTime.UtcNow.AddDays(-40)),
+            Notice("FA-NEW", PublicWantedStatus.Veroeffentlicht, "Kupferdraht neu",
+                f => f.PublishedAt = DateTime.UtcNow.AddDays(-1)));
+
+        var refs = (await host.Service.SearchAsync("Kupferdraht")).Groups.Single().Hits
+            .Select(h => h.Reference).ToList();
+
+        Assert.Equal(["FA-NEW", "FA-OLD"], refs);
+    }
+
+    [Fact]
+    public async Task TheSnippetIsAWindowAroundTheMatchNotTheWholeText()
+    {
+        // a snippet that returned the whole haystack would put a 40 KB body on the page and lose the reason it matched
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var filler = new string('a', 400);
+        await AddAsync(ctx, Notice("FA-1", PublicWantedStatus.Veroeffentlicht, "Otto Offen",
+            f => f.ChargeHtml = $"<p>{filler} Kupferdraht {filler}</p>"));
+
+        var snippet = (await host.Service.SearchAsync("Kupferdraht")).Groups.Single().Hits.Single().Snippet;
+
+        Assert.Contains("Kupferdraht", snippet, StringComparison.Ordinal);
+        Assert.StartsWith("…", snippet, StringComparison.Ordinal);
+        Assert.EndsWith("…", snippet, StringComparison.Ordinal);
+        Assert.True(snippet.Length < filler.Length,
+            $"Der Auszug ist ein Fenster, kein ganzer Text: {snippet.Length} Zeichen.");
+    }
+
+    [Fact]
+    public async Task EachRemainingSurfaceProducesItsOwnGroupAndHref()
+    {
+        // five of the seven candidate builders had no fixture at all, so each could have returned nothing
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx,
+            warningSnapshot: new PublicWarningSnapshot(
+                [new PublicWarningCard("Warnung " + "Kupferdraht", "<p>Text</p>", null, DateTime.UtcNow)]),
+            reportSnapshot: new PublicReportSnapshot(
+                [new PublicReportCard(2026, 8, "Bericht Kupferdraht", DateTime.UtcNow)],
+                new Dictionary<string, PublicReportView>(StringComparer.OrdinalIgnoreCase)),
+            pageSnapshot: new PublicPageSnapshot(
+                [new PublicPageLink("auftrag", "Auftrag", "icon", 1)],
+                new Dictionary<string, PublicPageView>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["auftrag"] = new("auftrag", "Auftrag Kupferdraht", "<p>x</p>", DateTime.UtcNow),
+                }),
+            lawSnapshot: new PublicLawSnapshot(
+                [new PublicLawBook("StGB", [new PublicLawEntry("§ 1", "Kupferdraht-Diebstahl", "Text", "Strafe")])]),
+            factionBoard: new PublicFactionBoard(
+                [new PublicFactionCard("Kupferdraht-Bande", PublicFactionStanding.Beobachtet,
+                    HazardLevel.Medium, "<p>x</p>", DateTime.UtcNow)]));
+
+        var groups = (await host.Service.SearchAsync("Kupferdraht")).Groups.ToDictionary(g => g.Area);
+
+        Assert.Equal("/organisationen", groups[PublicSearchArea.Organisationen].Hits.Single().Href);
+        Assert.Equal("/warnungen", groups[PublicSearchArea.Warnungen].Hits.Single().Href);
+        Assert.Equal("/berichte/2026-08", groups[PublicSearchArea.Berichte].Hits.Single().Href);
+        Assert.Equal("/info/auftrag", groups[PublicSearchArea.Information].Hits.Single().Href);
+        Assert.Equal("/recht", groups[PublicSearchArea.Recht].Hits.Single().Href);
+        Assert.Equal("StGB § 1", groups[PublicSearchArea.Recht].Hits.Single().Reference);
+    }
+
+    [Fact]
+    public async Task APublishedPageThatIsNotLinkedIsNotSearched()
+    {
+        // Status decides whether a page is public, ShowInMenu only whether it is linked — a page deliberately
+        // kept out of the menu is "reachable by direct link", and search is a second menu
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx,
+            pageSnapshot: new PublicPageSnapshot(
+                [],
+                new Dictionary<string, PublicPageView>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["versteckt"] = new("versteckt", "Versteckt Kupferdraht", "<p>x</p>", DateTime.UtcNow),
+                }));
+
+        Assert.Empty((await host.Service.SearchAsync("Kupferdraht")).Groups);
+    }
 
     [Fact]
     public async Task ModuleOff_FindsNothing()

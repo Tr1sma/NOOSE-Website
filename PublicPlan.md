@@ -2163,7 +2163,8 @@ der DB, die in keiner Zahl auftauchen dürfen) · Cache-Verhalten.
   `AuditEntityDisplay`, keine `MergedPageSections`/`FeedbackPageTabs` (es gibt nichts zu konfigurieren außer
   dem Modulschalter), kein `NotificationType`, kein Discord-Push, kein Aktenzeichen-Präfix, keine Migration.
 
-**Neue Tests** `PublicStatisticsServiceTests` (17) · `PublicWantedBoardTests` +2 (der Zähler ist nicht die
+**Neue Tests** `PublicStatisticsServiceTests` (18, eine davon nachgetragen: ein Modul-Umschalten wird gesehen,
+bevor das Zahlen-Fenster fällt) · `PublicWantedBoardTests` +2 (der Zähler ist nicht die
 Länge der Archivliste; `WithoutItems` reduziert ihn) · `MySqlTranslationTests` +3 · `PublicSurfaceGuardTests`
 +2 · `PublicWantedModelTests` +1 Zeile.
 
@@ -2348,14 +2349,28 @@ beantwortet, und die öffentliche Suche nachweislich nur Publiziertes zeigt. ✅
 - **`NooseiPrompts.ToolChoice` nennt die zwei Abschnitte und die zwei Bereiche.** Der Routing-Text zählt sie
   wörtlich auf; eine Fähigkeit, von der dem Modell niemand erzählt, ist keine.
 
-**Neue Tests** `PublicSearchProviderTests` (12: Einstufung der Elternakte, Ziel des Treffers, Rang-Weiche,
-gelöschte Akte, Anonymität, gelöschtes Bürgerprofil, Partner, Führungs-Gate des Tickets, gelöschte Ausschreibung
-unter einem Einspruch, Entwürfe) · `PublicSearchServiceTests` (11: Modul aus, Mindestlänge, Längendeckel, nur
-Publiziertes, Unterdrückungsgürtel, Modul je Oberfläche, Trefferform, Deckel, dunkle Oberfläche, Gruppenordnung) ·
-`PublicKpiServiceTests` (12: Rechte-Matrix, Nenner der Quote, Fenster, Belohnung je bezahlter Ergreifung,
-Eingangsbestätigung, Reaktionszeit, Rangliste, zwei Fail-closed-Fakten) · `MySqlTranslationTests` +8 ·
-`PublicSurfaceGuardTests` +3 (und `ISearchService` in `InternalStacks`) · `SearchCatalogTests` +1 (Singular
-eindeutig — ein Duplikat wirft beim statischen Init, die App startet nicht, und kein Test wurde rot).
+**Neue Tests** `PublicSearchProviderTests` (15: Einstufung der Elternakte, Ziel des Treffers, Rang-Weiche für
+alle neun Kategorien negativ, gelöschte Akte, Anonymität, gelöschtes Bürgerprofil, Partner, Führungs-Gate des
+Tickets, gelöschte Ausschreibung unter einem Einspruch, Entwürfe, **und die Übernahme-Verknüpfung**, die vor dem
+Resolver-Arm unauffindbar war) · `PublicSearchServiceTests` (17: Modul aus, Mindestlänge, gewichtslose Anfrage,
+Längendeckel, nur Publiziertes, Unterdrückungsgürtel, Modul je Oberfläche, Trefferform, Tippfehler-Pass,
+Reihenfolge, Auszugsfenster, alle sieben Oberflächen samt Href, unverlinkte Infoseite, Deckel, dunkle Oberfläche,
+Gruppenordnung) · `PublicSearchRulesTests` (5: die Plattform-Tatsache hinter dem Streichen — eine gewichtslose
+Nadel wird in **jeder** Zeichenkette an Position 0 gefunden, empirisch behauptet statt geglaubt) ·
+`PublicKpiServiceTests` (17: Rechte-Matrix, Nenner der Quote, Fenster, Belohnung je bezahlter Ergreifung, Kohorte
+des Anteils, Kasse gegen persönliche Übergabe, echte Perzentile, stille Reaktionszeit, Eingangsbestätigung,
+Rangliste, zwei Fail-closed-Fakten) · `MySqlTranslationTests` +9 · `PublicSurfaceGuardTests` +3 (und
+`ISearchService` in `InternalStacks`) · `SearchCatalogTests` +1 (Singular eindeutig — ein Duplikat wirft beim
+statischen Init, die App startet nicht, und kein Test wurde rot) · `PublicModuleServiceTests` behauptet beide
+Hälften des `Available`-Filters, seit der Katalog kein unfertiges Nav-Modul mehr hergibt.
+
+- **Die zweite Suchwelle ist von 16 auf 24 Provider gewachsen, das Wanduhr-Budget nicht.** Acht der neun neuen
+  Kategorien scannen eine Langtext-Spalte und sind damit zu Recht `Heavy`; sie laufen also in derselben zweiten
+  Welle wie Dokumente, Kommentare und das Änderungsprotokoll. Der öffentliche Bestand ist klein — Mitteilungen,
+  Warnungen, Berichte und Infoseiten zählen Dutzende, Hinweise und Einsprüche Hunderte —, aber die Richtung ist
+  benannt statt übersehen: läuft `SearchOptions` (Standard 8 s) ab, fällt der phonetische Nachschlag der
+  bestehenden `SideIndexed`-Kategorien als Erstes weg, und `SearchResults.Incomplete` sagt es. Wenn das je gemessen
+  klemmt, ist die Antwort ein größeres Budget oder eine dritte Welle, nicht ein `Heavy` weniger.
 
 ---
 

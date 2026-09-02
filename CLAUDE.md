@@ -1670,6 +1670,11 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
     ergab Anteile über 100 %.
   - **Eine nicht gemessene Reaktionszeit ist `null`, keine Null** — „0 min" läse sich als sofortige Antwort
     (Vorbild: die nullable Betriebsspalten von `KiAnfragen`). Das Panel zeigt einen Gedankenstrich.
+  - **Die zweite Suchwelle wuchs von 16 auf 24 Provider, das Wanduhr-Budget nicht.** Acht der neun neuen
+    Kategorien scannen eine Langtext-Spalte und sind zu Recht `Heavy`. Der öffentliche Bestand ist klein, aber die
+    Richtung ist benannt: läuft `SearchOptions` (8 s) ab, fällt der phonetische Nachschlag der bestehenden
+    `SideIndexed`-Kategorien zuerst weg, und `SearchResults.Incomplete` sagt es. Die Antwort wäre dann ein größeres
+    Budget oder eine dritte Welle, nicht ein `Heavy` weniger.
   - **Ein Suchbegriff aus gewichtslosen Zeichen hätte den ganzen Bestand ausgeliefert.** Ein kultur-sensitiver
     Vergleich hält eine Zeichenkette aus lauter Formatzeichen — drei Nullbreiten-Leerzeichen genügen — für einen
     Treffer an Position 0, also für **jede** veröffentlichte Zeile. `PublicSearchRules.Normalise` streicht Steuer-,

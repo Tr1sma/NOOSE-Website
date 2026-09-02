@@ -243,7 +243,11 @@ public class PublicSurfaceGuardTests
     /// would either be false-red on the agent provider or get defused on the next reading — the failure this file
     /// warns about for MentionParser.
     /// </remarks>
-    private static readonly string[] CitizenIdentity = ["BuergerProfil", "CitizenProfile"];
+    private static readonly string[] CitizenIdentity =
+    [
+        "BuergerProfil", "BuergerProfile", "CitizenProfile", "CitizenProfileId", "CitizenName", "WantsAnonymity",
+        "AnonymityResolvedAt",
+    ];
 
     [Fact]
     public void NoSearchProvider_ProjectsACitizenIdentity()

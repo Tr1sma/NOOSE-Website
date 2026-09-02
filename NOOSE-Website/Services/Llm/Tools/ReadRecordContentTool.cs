@@ -149,10 +149,14 @@ public sealed class ReadRecordContentTool(
         var sb = new StringBuilder();
         sb.Append(NooseiRecordTypes.German(type)).Append(": ").AppendLine(title);
 
+        // one holder per invocation: both public sections need the same notice list, and "alles" asks for both.
+        // A field on the tool would be a race — it is a scoped service and a round's tool calls run concurrently.
+        var notices = new NoticeCache();
+
         var any = false;
         foreach (var section in sections)
         {
-            var (heading, rows) = await LoadAsync(db, section, type, id, context, cancellationToken);
+            var (heading, rows) = await LoadAsync(db, section, type, id, context, notices, cancellationToken);
             if (rows.Count == 0)
             {
                 continue;
@@ -212,7 +216,8 @@ public sealed class ReadRecordContentTool(
     }
 
     private async Task<(string Heading, IReadOnlyList<string> Rows)> LoadAsync(
-        AppDbContext db, string section, string type, string id, NooseiToolContext context, CancellationToken ct)
+        AppDbContext db, string section, string type, string id, NooseiToolContext context, NoticeCache notices,
+        CancellationToken ct)
     {
         var scope = context.Scope;
         switch (section)
@@ -368,11 +373,11 @@ public sealed class ReadRecordContentTool(
             {
                 return type == nameof(Faction)
                     ? await PublishedFactionAsync(id, context, ct)
-                    : await PublishedPersonAsync(id, context, ct);
+                    : await PublishedPersonAsync(id, context, notices, ct);
             }
             case Tips:
             {
-                return await TipsAsync(id, context, ct);
+                return await TipsAsync(id, context, notices, ct);
             }
             case Access:
             {
@@ -407,7 +412,6 @@ public sealed class ReadRecordContentTool(
         }
     }
 
-    /// <summary>Names the record the content belongs to, so the answer can cite it.</summary>
     /// <summary>What the agency has published about a person: every notice, plus the objections against each.</summary>
     /// <remarks>
     /// Reads through the wanted service, which holds the record gate and the suppression belt, rather than the
@@ -415,12 +419,12 @@ public sealed class ReadRecordContentTool(
     /// same file. Never the citizen behind an objection.
     /// </remarks>
     private async Task<(string Heading, IReadOnlyList<string> Rows)> PublishedPersonAsync(
-        string personId, NooseiToolContext context, CancellationToken ct)
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
     {
         const string heading = "Öffentliche Außendarstellung";
         try
         {
-            var notices = await NoticesAsync(personId, context, ct);
+            var notices = await NoticesAsync(personId, context, cache, ct);
             if (notices.Count == 0)
             {
                 return (heading, []);
@@ -522,12 +526,12 @@ public sealed class ReadRecordContentTool(
     /// yet. The second path is what this section adds. Never the citizen — the reader carries no name at all.
     /// </remarks>
     private async Task<(string Heading, IReadOnlyList<string> Rows)> TipsAsync(
-        string personId, NooseiToolContext context, CancellationToken ct)
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
     {
         const string heading = "Bürgerhinweise";
         try
         {
-            var notices = await NoticesAsync(personId, context, ct);
+            var notices = await NoticesAsync(personId, context, cache, ct);
             if (notices.Count == 0)
             {
                 return (heading, []);
@@ -555,15 +559,33 @@ public sealed class ReadRecordContentTool(
         }
     }
 
-    /// <summary>Every notice published from one person file, the item notices included.</summary>
+    /// <summary>Every notice published from one person file, the item notices included; resolved once a call.</summary>
     private async Task<IReadOnlyList<PublicWantedEdit>> NoticesAsync(
-        string personId, NooseiToolContext context, CancellationToken ct)
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
     {
+        if (cache.Notices is { } cached)
+        {
+            return cached;
+        }
         var person = await publicWanted.GetForPersonAsync(personId, context.Actor, ct);
         var items = await publicWanted.GetItemsForPersonAsync(personId, context.Actor, ct);
-        return person is null ? items : [person, .. items];
+        cache.Notices = person is null ? items : [person, .. items];
+        return cache.Notices;
     }
 
+    /// <summary>The notice list of the record under inspection, held for the length of one call.</summary>
+    /// <remarks>
+    /// A local rather than a field on the tool: it is registered scoped and a round's tool calls run concurrently,
+    /// so a field would be shared between two questions. One instance per invocation, and the section loop that
+    /// fills it is sequential, so no synchronisation is needed. It only ever holds one record's notices, because a
+    /// call names exactly one record.
+    /// </remarks>
+    private sealed class NoticeCache
+    {
+        public IReadOnlyList<PublicWantedEdit>? Notices { get; set; }
+    }
+
+    /// <summary>Names the record the content belongs to, so the answer can cite it.</summary>
     private static async Task<string> TitleAsync(
         AppDbContext db, string type, string id, ViewerScope scope, CancellationToken ct)
     {

@@ -933,7 +933,16 @@ public sealed class MySqlTranslationTests : IDisposable
             .Select(m => new { m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt })
             .ToQueryString();
 
+        // the column appears in the SELECT list either way, so the fact worth pinning is that the predicate
+        // narrows: an unfiltered read of the same shape produces a different statement
+        var unfiltered = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => ids.Contains(m.TicketId))
+            .Select(m => new { m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt })
+            .ToQueryString();
+
         Assert.Contains("Zielgruppe", sql, StringComparison.Ordinal);
+        Assert.Contains("VonBuerger", sql, StringComparison.Ordinal);
+        Assert.NotEqual(unfiltered, sql);
     }
 
     [Fact]
