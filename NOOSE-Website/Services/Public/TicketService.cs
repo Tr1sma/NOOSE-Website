@@ -275,7 +275,12 @@ public class TicketService(
         Permission.RequireTicketRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Tickets.AsNoTracking().Where(TicketRules.ScopeFilter(scope));
+        // rooted for the same reason as the tip inbox: the projection dereferences the REQUIRED CitizenProfile
+        // navigation, so a ticket whose citizen profile was removed vanished from the desk while the tab counter
+        // kept counting it
+        var query = db.Tickets.IgnoreQueryFilters().AsNoTracking()
+            .Where(t => !t.IsDeleted)
+            .Where(TicketRules.ScopeFilter(scope));
         if (onlyMine)
         {
             var me = actor.GetAgentId();

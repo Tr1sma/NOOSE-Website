@@ -318,7 +318,12 @@ public class TipService(
         Permission.RequireTipRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Hinweise.AsNoTracking().Where(ScopeFilter(scope));
+        // rooted, with !IsDeleted written back by hand: the projection dereferences the REQUIRED CitizenProfile
+        // navigation, so EF joins it INNER and a tip whose citizen profile was removed fell out of this list
+        // while GetCountsAsync - which touches no navigation - kept counting it. Shape from ObjectionService.
+        var query = db.Hinweise.IgnoreQueryFilters().AsNoTracking()
+            .Where(h => !h.IsDeleted)
+            .Where(ScopeFilter(scope));
         if (onlyMine)
         {
             var me = actor.GetAgentId();
