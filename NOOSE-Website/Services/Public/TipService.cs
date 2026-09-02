@@ -742,6 +742,29 @@ public class TipService(
         return new TipAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
     }
 
+    /// <inheritdoc />
+    public async Task<TipAttachmentAccess?> GetOwnAttachmentAsync(string caseNumber, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // addressed by case number, because CitizenTipDetail carries no row id - and it must not: an outward
+        // record with a bare Id is exactly what OutwardModels_CarryNoBareRecordId forbids. Ownership is in the
+        // predicate, so a foreign case number reads as "does not exist" rather than as "not yours".
+        var profile = await buerger.GetOwnAsync(actor, cancellationToken);
+        if (profile is null || string.IsNullOrWhiteSpace(caseNumber))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.Hinweise.AsNoTracking()
+            .Where(h => h.CaseNumber == caseNumber && h.CitizenProfileId == profile.Id)
+            .Select(h => new { h.AttachmentFileName, h.AttachmentContentType, h.AttachmentOriginalName })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row?.AttachmentFileName is null
+            ? null
+            : new TipAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
+    }
+
     // ---- reward ----
 
     public async Task<TipRewardTarget> MarkRewardedAsync(AppDbContext db, string tipId, decimal amount,

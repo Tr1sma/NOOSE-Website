@@ -91,6 +91,14 @@ public interface ITipService
     Task<TipAttachmentAccess?> GetAttachmentAsync(string id, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 
+    /// <summary>The caller's OWN attachment, addressed by case number; null for anything else.</summary>
+    /// <remarks>
+    /// The citizen's projection carries no row id on purpose, so the id-addressed overload above is unreachable
+    /// from the citizen side and the attachment was shown as dead text. Ownership sits in the predicate.
+    /// </remarks>
+    Task<TipAttachmentAccess?> GetOwnAttachmentAsync(string caseNumber, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     // ---- reward ----
 
     /// <summary>Closes a tip as the one that led to the arrest, inside the caller's context and transaction.</summary>

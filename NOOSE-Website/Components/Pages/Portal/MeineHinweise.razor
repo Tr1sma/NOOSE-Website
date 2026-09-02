@@ -84,8 +84,14 @@
 
                 @if (_detail.HasAttachment)
                 {
+                    @* a real link now: the projection carries no row id (deliberately), so the owner route is
+                       addressed by case number - the id route serves the desk only *@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        Anhang: @(_detail.AttachmentName ?? "Bild")
+                        Anhang:
+                        <MudLink Href="@($"/dateien/hinweise/az/{_detail.CaseNumber}?inline=true")"
+                                 Target="_blank" rel="noopener noreferrer" Typo="Typo.caption">
+                            @(_detail.AttachmentName ?? "Bild")
+                        </MudLink>
                     </MudText>
                 }
 
