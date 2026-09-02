@@ -1,6 +1,7 @@
-@page "/personengruppen/{Id}/druck"
+﻿@page "/personengruppen/{Id}/druck"
 @layout PrintLayout
 @inject IPersonGroupService GroupService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject ILinkService LinkService
 @inject ICommentService CommentService
 @inject IAccessLogService AccessLog
@@ -26,7 +27,10 @@ else
                     <tr><th>Name</th><td>@_group.Name</td></tr>
                     <tr><th>Aktenzeichen</th><td>@_group.CaseNumber</td></tr>
                     <tr><th>Art</th><td>@GroupsKindDisplay.Name(_group.Kind)</td></tr>
-                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_group.Classification)</td></tr>
+                    @if (TabOn("einstufung"))
+                    {
+                        <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_group.Classification)</td></tr>
+                    }
                     @if (_group.EstimatedMemberCount is { } count)
                     {
                         <tr><th>Geschätzte Mitgliederzahl</th><td>@count</td></tr>
@@ -103,6 +107,11 @@ else
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
 
+    private IReadOnlySet<string>? _visibleTabs;
+
+    /// <summary>False only when a partner's rank restricts this record type to other tabs.</summary>
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
@@ -113,7 +122,15 @@ else
         _group = await GroupService.GetDetailAsync(Id, scope);
         if (_group is not null)
         {
-            _classificationHistory = await GroupService.GetClassificationHistoryAsync(Id, scope);
+            _visibleTabs = user.IsPartner()
+                ? await PartnerPolicy.GetVisibleTabsAsync(user, nameof(PersonGroup), Id)
+                : null;
+            // the per-rank TAB restriction, which the detail page honours and this route did not: the coarse
+            // type gate in PrintLayout lets a tab-limited partner through to the classification history
+            if (TabOn("einstufung"))
+            {
+                _classificationHistory = await GroupService.GetClassificationHistoryAsync(Id, scope);
+            }
             // partners: core only
             if (!user.IsPartner())
             {

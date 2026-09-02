@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Recruiting;
@@ -12,8 +12,9 @@ public interface IBewerbungService
     Task<Bewerbung?> GetOwnAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
 
     /// <summary>Submit a new application. Applicant only; one open application at a time, blocked while banned or blacklisted.</summary>
+    /// <param name="attachmentSize">Length in bytes; 0 means "not supplied" and skips the size check.</param>
     Task<Bewerbung> SubmitAsync(BewerbungSubmitModel model, Stream? attachment, string? originalName, string? contentType,
-        ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
+        ClaimsPrincipal applicant, long attachmentSize = 0, CancellationToken cancellationToken = default);
 
     /// <summary>All applications (newest first) for the management overview. HRB/leadership only.</summary>
     Task<List<Bewerbung>> ListAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);

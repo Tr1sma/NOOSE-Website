@@ -42,6 +42,13 @@ public class SearchCatalogTests
         var duplicates = SearchCatalog.Categories.GroupBy(c => c.Plural, StringComparer.Ordinal)
             .Where(g => g.Count() > 1).Select(g => g.Key);
         Assert.Empty(duplicates);
+
+        // The singular matters more than the plural and used to be unchecked: NooseiRecordTypes keys a dictionary
+        // on it, case-insensitively, so a duplicate throws during static initialisation — the app does not start,
+        // and no test goes red. This turns that into a red test.
+        var sameSingular = SearchCatalog.Categories.GroupBy(c => c.German, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1).Select(g => g.Key);
+        Assert.Empty(sameSingular);
     }
 
     [Fact]

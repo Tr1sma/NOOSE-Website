@@ -57,6 +57,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] ILoggerFactory loggerFactory,
             [FromServices] IAgentInviteService inviteService,
             [FromServices] IPublicModuleService publicModules,
+            [FromServices] IAgentManagementService agentManagement,
             [FromQuery] string? returnUrl,
             [FromQuery] string? remoteError,
             [FromQuery] string? source,
@@ -140,6 +141,19 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 {
                     return Results.Redirect("/Account/Ausstehend");
                 }
+
+                // a citizen who applies keeps the account and gains the applicant portal; the branch
+                // above only ever ran for a brand-new login, so an existing citizen had no way in
+                if (agent.Status == AgentStatus.Civilian
+                    && string.Equals(source, "bewerbung", StringComparison.OrdinalIgnoreCase))
+                {
+                    // the module switch has to hold here too, exactly as it does for a new sign-up
+                    if (!await publicModules.IsEnabledAsync(PublicModules.Careers))
+                    {
+                        return RedirectToLoginPage(await publicModules.OfflineTextAsync(PublicModules.Careers));
+                    }
+                    agent = await agentManagement.StartApplicationAsync(agent.Id);
+                }
             }
 
             // only active agents get a session into the internal app
@@ -164,7 +178,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 default:
                     return Results.Redirect("/Account/Gesperrt");
             }
-        }).RequireRateLimiting(LoginRateLimitPolicy);
+        });
+        // deliberately NOT rate limited: this is Discord's callback, reachable only with the state the challenge
+        // above issued. Limiting it too spent two permits per sign-in and halved the real ceiling.
 
         group.MapPost("/Logout", async (
             [FromServices] SignInManager<Agent> signInManager,

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MudBlazor;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
@@ -435,17 +436,42 @@ public sealed class PublicModuleServiceTests
     [Fact]
     public async Task NavEntries_ExcludeAModuleWhosePagesDoNotExistYet()
     {
-        // pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not. Press has a nav route and is
-        // still unbuilt — wanted, archive, organisations and the hazard lists all ship and are Available now.
-        using var ctx = await SeededAsync();
-        var service = NewService(ctx);
+        // Pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not. Taken from the catalog
+        // rather than named, because every example gets built sooner or later — and since the last public phase
+        // shipped there is no example left, so the fact is asserted on a hand-built snapshot instead. Both halves
+        // stay: the day someone adds an unbuilt module, the live path is checked again automatically.
+        var unbuilt = PublicModules.All.FirstOrDefault(m => !m.Available && !string.IsNullOrWhiteSpace(m.NavRoute));
+        if (unbuilt is not null)
+        {
+            using var ctx = await SeededAsync();
+            var service = NewService(ctx);
 
-        await service.SaveAsync([Input(PublicModules.Press, enabled: true)], Admin());
+            await service.SaveAsync([Input(unbuilt.Key, enabled: true)], Admin());
 
-        var entries = await service.NavEntriesAsync();
-        Assert.DoesNotContain(entries, e => e.Key == PublicModules.Press);
-        // the choice itself is stored, so the tab appears by itself once the pages ship
-        Assert.True((await service.GetAsync()).Find(PublicModules.Press)!.IsEnabled);
+            var entries = await service.NavEntriesAsync();
+            Assert.DoesNotContain(entries, e => e.Key == unbuilt.Key);
+            // the choice itself is stored, so the tab appears by itself once the pages ship
+            Assert.True((await service.GetAsync()).Find(unbuilt.Key)!.IsEnabled);
+            return;
+        }
+
+        var snapshot = new PublicModuleSnapshot(false,
+        [
+            new PublicModuleState("Unfertig", "Unfertig", "Noch ohne Seiten.", Icons.Material.Filled.Search,
+                "/unfertig", PublicModuleGroup.Service, 900, IsEnabled: true, "aus", Available: false),
+        ]);
+
+        Assert.Empty(snapshot.NavEntries());
+
+        // and the live path still has to produce a tab for a module that IS built, or the filter above would be
+        // indistinguishable from one that drops everything
+        using var liveCtx = await SeededAsync();
+        var live = NewService(liveCtx);
+        var built = PublicModules.All.First(m => m.Available && !string.IsNullOrWhiteSpace(m.NavRoute)).Key;
+
+        await live.SaveAsync([Input(built, enabled: true)], Admin());
+
+        Assert.Contains(await live.NavEntriesAsync(), e => e.Key == built);
     }
 
     [Fact]

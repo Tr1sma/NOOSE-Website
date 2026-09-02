@@ -1,0 +1,130 @@
+@* Which paragraphs of the law module are released to the public law page. *@
+@using NOOSE_Website.Models.Public
+@inject IPublicLawService Laws
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Freigegebene Paragrafen erscheinen unter <code>/recht</code>. Freigegeben wird hier, geschrieben werden die
+    Paragrafen selbst weiterhin unter <MudLink Href="/gesetze">Gesetze</MudLink> — eine Freigabe veröffentlicht den
+    dort gepflegten Stand, eine spätere Korrektur wirkt sofort. Standardmäßig bleibt jeder Paragraf intern. Die Seite
+    erscheint nur, solange das Modul „Recht" eingeschaltet ist.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudTextField @bind-Value="_filter" @bind-Value:after="StateHasChanged" Immediate="true"
+                      Label="Suchen" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        <MudSpacer />
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">
+            @_rows.Count(r => r.IsPublic) von @_rows.Count freigegeben
+        </MudChip>
+    </MudStack>
+
+    <MudTable Items="Filtered()" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+              GroupBy="_grouping" T="LawReleaseRow">
+        <HeaderContent>
+            <MudTh>Paragraf</MudTh>
+            <MudTh>Titel</MudTh>
+            <MudTh Style="text-align:right;">Öffentlich</MudTh>
+        </HeaderContent>
+        <GroupHeaderTemplate>
+            <MudTh Class="mud-table-cell-custom-group" colspan="3">@context.Key</MudTh>
+        </GroupHeaderTemplate>
+        <RowTemplate>
+            <MudTd DataLabel="Paragraf"><code>@context.Paragraph</code></MudTd>
+            <MudTd DataLabel="Titel">@context.Title</MudTd>
+            <MudTd DataLabel="Öffentlich" Style="text-align:right;">
+                <MudSwitch T="bool" Value="context.IsPublic" Color="Color.Success" Disabled="!_mayEdit || _busy"
+                           ValueChanged="@(value => SetAsync(context, value))"
+                           aria-label="@($"{context.Paragraph} öffentlich freigeben")" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Keine Paragrafen gefunden.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _busy;
+    private string? _filter;
+
+    private IReadOnlyList<LawReleaseRow> _rows = Array.Empty<LawReleaseRow>();
+
+    private readonly TableGroupDefinition<LawReleaseRow> _grouping = new()
+    {
+        Selector = row => row.LawBook,
+        Indentation = false,
+        Expandable = false,
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Laws.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private IEnumerable<LawReleaseRow> Filtered()
+    {
+        var text = _filter?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return _rows;
+        }
+        return _rows.Where(r =>
+            r.LawBook.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || r.Paragraph.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || r.Title.Contains(text, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task SetAsync(LawReleaseRow row, bool isPublic)
+    {
+        _busy = true;
+        try
+        {
+            await Laws.SetPublicAsync(row.Id, isPublic, _user);
+            Snackbar.Add(isPublic ? $"{row.Paragraph} ist öffentlich." : $"{row.Paragraph} ist nicht mehr öffentlich.",
+                Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        // reloaded either way: a refused switch must snap back rather than keep showing the value nobody stored
+        await LoadAsync();
+    }
+}

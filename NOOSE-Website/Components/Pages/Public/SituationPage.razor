@@ -1,0 +1,90 @@
+﻿@page "/lage"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicSituationService Situation
+
+<PageTitle>Gefahrenlage · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.HazardLevel" Title="Gefahrenlage">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Aktuelle Gefahrenlage</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Die Einschätzung des National Office of Security Enforcement für das gesamte Staatsgebiet. Sie wird von
+            der Behörde festgelegt und gilt, bis sie geändert wird.
+        </MudText>
+
+        @if (_state is null)
+        {
+            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                Derzeit liegt keine Einschätzung vor.
+            </MudAlert>
+        }
+        else
+        {
+            <MudDivider />
+
+            <MudPaper Outlined="true" Class="pa-6">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudIcon Icon="@Icons.Material.Filled.Speed" Color="@_colour" Size="Size.Large" />
+                        <MudText Typo="Typo.h3" Color="@_colour" Style="font-weight:700;">
+                            @PublicSituationLevelDisplay.Name(_state.Level)
+                        </MudText>
+                    </MudStack>
+
+                    <MudText Typo="Typo.body1">@PublicSituationLevelDisplay.Hint(_state.Level)</MudText>
+
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        @if (_state.Since is { } since)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Gültig seit @since.ToLocalTime().ToString("dd.MM.yyyy")
+                            </MudText>
+                        }
+                        @if (_state.Previous is { } previous)
+                        {
+                            @* the trend a traffic light can honestly carry: what stood before this *@
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@PublicSituationLevelDisplay.Colour(previous)">
+                                zuvor: @PublicSituationLevelDisplay.Name(previous)
+                            </MudChip>
+                        }
+                    </MudStack>
+
+                    @if (_state.Note.Length > 0)
+                    {
+                        <MudDivider />
+                        @* plain text, deliberately not markup: the assessment never goes through HtmlCleanup, so
+                           rendering it as HTML would be an anonymously reachable, unfiltered markup surface *@
+                        <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_state.Note</MudText>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private PublicSituationState? _state;
+    private Color _colour = Color.Default;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _state = await Situation.GetPublishedAsync();
+        }
+        catch
+        {
+            /* best effort */
+        }
+        if (_state is not null)
+        {
+            _colour = PublicSituationLevelDisplay.Colour(_state.Level);
+        }
+    }
+}

@@ -87,6 +87,17 @@ public static class SearchProviderRegistration
         services.AddScoped<ISearchProvider, AccessLogSearchProvider>();
         services.AddScoped<ISearchProvider, LlmRequestLogSearchProvider>();
 
+        // Oeffentlicher Bereich
+        services.AddScoped<ISearchProvider, PublicWantedNoticeSearchProvider>();
+        services.AddScoped<ISearchProvider, PublicFactionProfileSearchProvider>();
+        services.AddScoped<ISearchProvider, TipSearchProvider>();
+        services.AddScoped<ISearchProvider, TicketSearchProvider>();
+        services.AddScoped<ISearchProvider, ObjectionSearchProvider>();
+        services.AddScoped<ISearchProvider, PressReleaseSearchProvider>();
+        services.AddScoped<ISearchProvider, PublicPageSearchProvider>();
+        services.AddScoped<ISearchProvider, PublicWarningSearchProvider>();
+        services.AddScoped<ISearchProvider, PublicReportSearchProvider>();
+
         return services;
     }
 }

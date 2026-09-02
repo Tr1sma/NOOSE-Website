@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services.Public;
+﻿namespace NOOSE_Website.Services.Public;
 
 /// <summary>The single truth about which routes are meant for the outside world.</summary>
 /// <remarks>
@@ -19,7 +19,8 @@ public static class PublicRoutes
     /// </remarks>
     public static readonly IReadOnlyList<string> ExtraPrefixes =
     [
-        "/karriere",
+        // no "/karriere": the Careers module names it as its NavRoute, and Prefixes collects those without
+        // consulting Available - so listing it here was the very repetition the remark above forbids
         "/datenschutz",
         "/nutzungsbedingungen",
         "/gefahr",

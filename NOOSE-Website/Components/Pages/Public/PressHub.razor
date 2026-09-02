@@ -1,0 +1,78 @@
+﻿@page "/presse"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPressReleaseService Press
+
+<PageTitle>Presse · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Press" Title="Presse">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Pressemitteilungen</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Amtliche Verlautbarungen des National Office of Security Enforcement.
+        </MudText>
+
+        @if (_cards.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine Pressemitteilungen veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                @foreach (var card in _cards)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    @card.CaseNumber
+                                </MudChip>
+                                @if (card.PublishedAt is { } at)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @at.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudText>
+                                }
+                            </MudStack>
+                            <MudLink Href="@($"/presse/{card.CaseNumber}")" Typo="Typo.h6" Underline="Underline.None">
+                                @card.Title
+                            </MudLink>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@card.Teaser</MudText>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            @* a silent cut reads like completeness *@
+            @if (_cards.Count >= PressRules.HubLimit)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Gezeigt werden die @PressRules.HubLimit jüngsten Mitteilungen.
+                </MudText>
+            }
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicPressCard> _cards = Array.Empty<PublicPressCard>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _cards = (await Press.GetPublishedAsync()).Cards;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

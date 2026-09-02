@@ -141,6 +141,25 @@ public class AgentManagementService(
         catch { /* best effort */ }
     }
 
+    public async Task<Agent> StartApplicationAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        // no actor guard: the account holder acts on itself, and the caller is the verified Discord callback
+        var agent = await GetOrThrow(userId, cancellationToken);
+        if (agent.Status != AgentStatus.Civilian)
+        {
+            throw new InvalidOperationException("Nur Bürgerkonten können eine Bewerbung starten.");
+        }
+
+        agent.Status = AgentStatus.Applicant;
+
+        // only the {field:[old,new]} shape renders in the audit viewer; a free-text hint would show as "—"
+        Audit(agent, AuditAction.Modified, agent.Id, agent.DiscordUsername ?? agent.Id,
+            JsonSerializer.Serialize(ManualAudit.Change("Status", "Bürger", "Bewerber")));
+        // new stamp so a session open elsewhere stops claiming citizen status
+        await Save(agent, newStamp: true);
+        return agent;
+    }
+
     public async Task MasterDataChangeAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)
     {
         Permission.RequireWriteAccess(actor);
@@ -781,6 +800,39 @@ public class AgentManagementService(
         await db.AgentPromotionRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.AgentModuleCompletions.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
 
+        // Public area: every one of these is a "who did this" pointer on a row that is history - a publication, a
+        // payment, a decision, a message to a citizen - so the row survives the account and only the pointer is
+        // dropped. All are nullable and all hold a Restrict FK, which would otherwise refuse the user delete
+        // outright: an agent who ever published a notice could not be deleted at all.
+        await db.BuergerProfile.IgnoreQueryFilters().Where(x => x.BlockedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BlockedById, (string?)null), cancellationToken);
+        await db.FahndungKopfgeldAnteile.IgnoreQueryFilters().Where(x => x.DonorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DonorAgentId, (string?)null), cancellationToken);
+        await db.FahndungEinsprueche.IgnoreQueryFilters().Where(x => x.DecidedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DecidedById, (string?)null), cancellationToken);
+        await db.Hinweise.IgnoreQueryFilters().Where(x => x.HandlerId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerId, (string?)null), cancellationToken);
+        await db.HinweisNachrichten.IgnoreQueryFilters().Where(x => x.AuthorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AuthorAgentId, (string?)null), cancellationToken);
+        await db.Tickets.IgnoreQueryFilters().Where(x => x.HandlerId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerId, (string?)null), cancellationToken);
+        await db.TicketNachrichten.IgnoreQueryFilters().Where(x => x.AuthorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AuthorAgentId, (string?)null), cancellationToken);
+        await db.KassenBuchungen.IgnoreQueryFilters().Where(x => x.BookedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BookedById, (string?)null), cancellationToken);
+        await db.OeffentlicheFahndungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheSeiten.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheWarnungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheLageberichte.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.Pressemitteilungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+
         // recruiting: this person's own invites/applications go; applications they merely processed are detached
         await db.AgentInvites.IgnoreQueryFilters().Where(x => x.UsedByUserId == agentId).ExecuteDeleteAsync(cancellationToken);
         // bans hold Restrict FKs to both the agent and the application -> purge before either drops
@@ -817,11 +869,11 @@ public class AgentManagementService(
     private bool IsBootstrapAdmin(string? discordId)
         => BootstrapAdmins.Contains(configuration, discordId);
 
-    private async Task<Agent> GetOrThrow(string agentId)
+    private async Task<Agent> GetOrThrow(string agentId, CancellationToken cancellationToken = default)
     {
-        var agent = await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
+        var agent = await db.Users.FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken)
             ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
-        await db.Entry(agent).ReloadAsync();
+        await db.Entry(agent).ReloadAsync(cancellationToken);
         return agent;
     }
 
@@ -866,15 +918,20 @@ public class AgentManagementService(
         });
 
     private void Audit(Agent target, AuditAction action, ClaimsPrincipal actor, string hint)
+        => Audit(target, action, actor.GetAgentId(), actor.GetCodename(),
+            JsonSerializer.Serialize(new { target = target.Codename, hint }));
+
+    /// <summary>Audit row for a write with no acting principal (self-service through the login callback).</summary>
+    private void Audit(Agent target, AuditAction action, string? actorId, string? actorName, string changesJson)
         => db.AuditLogs.Add(new AuditLog
         {
             Timestamp = DateTime.UtcNow,
-            AgentId = actor.GetAgentId(),
-            AgentName = actor.GetCodename(),
+            AgentId = actorId,
+            AgentName = actorName,
             EntityType = nameof(Agent),
             EntityId = target.Id,
             Action = action,
-            ChangesJson = JsonSerializer.Serialize(new { target = target.Codename, hint }),
+            ChangesJson = changesJson,
         });
 
     /// <summary>Persist agent; rotate the security stamp to force re-login when claims change.</summary>

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
@@ -254,6 +254,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
     public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
     public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
+    public DbSet<Pressemitteilung> Pressemitteilungen => Set<Pressemitteilung>();
+    public DbSet<OeffentlicheWarnung> OeffentlicheWarnungen => Set<OeffentlicheWarnung>();
+    public DbSet<OeffentlicherLagebericht> OeffentlicheLageberichte => Set<OeffentlicherLagebericht>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1504,6 +1507,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(g => g.Sentence).HasMaxLength(512);
             b.HasIndex(g => g.LawBook);
             b.HasIndex(g => g.Title);
+            // the public law page reads by this flag alone
+            b.HasIndex(g => g.IsPublic);
         });
 
         modelBuilder.Entity<LibraryFile>(b =>
@@ -1696,6 +1701,54 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(p => p.Status);
             b.HasOne(p => p.PublishedBy).WithMany()
                 .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Pressemitteilung>(b =>
+        {
+            b.Property(p => p.CaseNumber).HasMaxLength(32);
+            b.Property(p => p.Title).HasMaxLength(200).IsRequired();
+            b.Property(p => p.Teaser).HasMaxLength(400).IsRequired();
+            b.Property(p => p.ContentTitle).HasMaxLength(200);
+            b.Property(p => p.ContentTeaser).HasMaxLength(400);
+            b.Property(p => p.ContentHtml).HasColumnType("longtext");
+            b.Property(p => p.DraftHtml).HasColumnType("longtext");
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // unique, unlike the page slug: a counter number is never reused, so a soft-deleted row may keep its own
+            b.HasIndex(p => p.CaseNumber).IsUnique();
+            b.HasIndex(p => new { p.Status, p.PublishedAt });
+            b.HasOne(p => p.PublishedBy).WithMany()
+                .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicheWarnung>(b =>
+        {
+            b.Property(w => w.Title).HasMaxLength(200).IsRequired();
+            b.Property(w => w.ContentTitle).HasMaxLength(200);
+            b.Property(w => w.ContentHtml).HasColumnType("longtext");
+            b.Property(w => w.DraftHtml).HasColumnType("longtext");
+            b.Property(w => w.PublishedById).HasMaxLength(64);
+            // the read path filters on both at once
+            b.HasIndex(w => new { w.Status, w.ValidUntil });
+            b.HasOne(w => w.PublishedBy).WithMany()
+                .HasForeignKey(w => w.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicherLagebericht>(b =>
+        {
+            b.Property(r => r.Title).HasMaxLength(200).IsRequired();
+            b.Property(r => r.ContentTitle).HasMaxLength(200);
+            b.Property(r => r.ContentHtml).HasColumnType("longtext");
+            b.Property(r => r.DraftHtml).HasColumnType("longtext");
+            b.Property(r => r.SituationReportId).HasMaxLength(64);
+            b.Property(r => r.PublishedById).HasMaxLength(64);
+            // the hub filters on the status and orders by the period
+            b.HasIndex(r => new { r.Status, r.Year, r.Month });
+            // optional on purpose: a required navigation is INNER joined, so a report whose anchor was deleted would
+            // drop out of the panel projection while a count that touches no navigation kept counting it
+            b.HasOne(r => r.SituationReport).WithMany()
+                .HasForeignKey(r => r.SituationReportId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(r => r.PublishedBy).WithMany()
+                .HasForeignKey(r => r.PublishedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OeffentlicheFahndung>(b =>

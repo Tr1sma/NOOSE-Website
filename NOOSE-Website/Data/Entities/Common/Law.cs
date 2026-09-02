@@ -24,6 +24,13 @@ public class Law : IAuditable, ISoftDelete
     [Column("Strafmass")]
     public string? Sentence { get; set; }
 
+    /// <summary>Released for the public law page; off unless somebody says otherwise.</summary>
+    /// <remarks>
+    /// Written by <c>IPublicLawService</c> alone, so the release decision and the public snapshot cannot drift apart.
+    /// </remarks>
+    [Column("IstOeffentlich")]
+    public bool IsPublic { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

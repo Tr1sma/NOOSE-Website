@@ -1,0 +1,344 @@
+@* Released monthly situation reports: draft, publish, retract. *@
+@using NOOSE_Website.Models.Public
+@inject IPublicReportService Reports
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Freigegebene Monatstexte unter <code>/berichte</code>. Ein Bericht wird zu einem archivierten Monatsbericht
+    angelegt und übernimmt von dort seinen Zeitraum — der ist zugleich seine öffentliche Adresse. Nach draußen geht
+    <b>nur dieser Text</b>: die Zahlen des internen Monatsberichts bleiben drinnen, sie zählen Verschlusssachen und
+    nennen Personen beim Namen. Gespeichert wird immer nur der Entwurf; Titel und Text, die Besucher lesen, ändern
+    sich erst beim Veröffentlichen. Die Berichte erscheinen nur, solange das Modul „Lageberichte" eingeschaltet ist.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="CloseEditor" aria-label="Zurück zur Liste" />
+        <MudText Typo="Typo.h6">@(_isNew ? "Neuer Lagebericht" : _edit.Title)</MudText>
+        <MudSpacer />
+        <MudButton OnClick="SaveDraftAsync" Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" Disabled="_save">Entwurf speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Outlined="true" Class="pa-4">
+        <MudStack Spacing="3">
+            @if (_isNew)
+            {
+                <MudSelect T="string" @bind-Value="_edit.SituationReportId" Label="Monatsbericht" Required="true"
+                           Variant="Variant.Outlined" RequiredError="Ein Monatsbericht ist erforderlich"
+                           HelperText="Zeitraum und Adresse kommen von hier. Angeboten werden Monate ohne eigenen öffentlichen Text.">
+                    @foreach (var anchor in _anchors)
+                    {
+                        <MudSelectItem T="string" Value="@anchor.Id">
+                            @ReportPeriod.Label(anchor.Year, anchor.Month) — @anchor.Title
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_anchors.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Es gibt keinen archivierten Monatsbericht ohne öffentlichen Text.
+                    </MudAlert>
+                }
+            }
+            <MudTextField @bind-Value="_edit.Title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                          RequiredError="Titel ist erforderlich" MaxLength="@ReportRules.MaxTitle" />
+
+            <MudText Typo="Typo.subtitle2">Entwurf</MudText>
+            @* keyed by row: switching reports must re-initialise Quill instead of keeping the previous content *@
+            <RichTextEditor @ref="_editor" @key="_editorKey" Value="@_draftHtml" MinHeight="360px" />
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudSpacer />
+        @if (_mayEdit)
+        {
+            <MudButton OnClick="NewReport" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neuer Lagebericht</MudButton>
+        }
+    </MudStack>
+
+    <MudTable Items="_rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Zeitraum</MudTh>
+            <MudTh>Titel</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Zeitraum">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.body2">@ReportPeriod.Label(context.Year, context.Month)</MudText>
+                    <code>@ReportPeriod.Format(context.Year, context.Month)</code>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Titel">@context.Title</MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    @if (context.Status == PublicReportStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Veröffentlicht</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Entwurf</MudChip>
+                    }
+                    @* only meaningful next to a published report; on a draft the status chip already says it *@
+                    @if (context.DraftDiffers && context.Status == PublicReportStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                            Entwurf abweichend
+                        </MudChip>
+                    }
+                    @* the text stands on its own; say so rather than let the missing link look like a fault *@
+                    @if (!context.HasAnchor)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                            Monatsbericht gelöscht
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Veröffentlicht">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @* a draft has no publication date; without the fallback its only timestamp would be invisible *@
+                    @(context.PublishedAt is { } at
+                        ? $"{at.ToLocalTime():dd.MM.yyyy HH:mm}{(context.PublishedByName is { } who ? $" · {who}" : "")}"
+                        : context.ModifiedAt is { } edited
+                            ? $"Entwurf, bearbeitet {edited.ToLocalTime():dd.MM.yyyy HH:mm}"
+                            : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    @if (context.HasAnchor && context.SituationReportId is { Length: > 0 } anchorId)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Assessment" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/lageberichte/{anchorId}")"
+                                       aria-label="Internen Monatsbericht öffnen" />
+                    }
+                    @if (context.Status == PublicReportStatus.Veroeffentlicht)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/berichte/{ReportPeriod.Format(context.Year, context.Month)}")"
+                                       aria-label="Öffentlichen Bericht öffnen" />
+                    }
+                    @if (_mayEdit)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditorAsync(context))" aria-label="Bericht bearbeiten" />
+                        @if (context.Status == PublicReportStatus.Veroeffentlicht)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Warning"
+                                           OnClick="@(() => RetractAsync(context))" aria-label="Bericht zurückziehen" />
+                        }
+                        @* also next to a published report: publishing again is how a corrected draft goes out *@
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => PublishAsync(context))" aria-label="Bericht veröffentlichen" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Bericht löschen" />
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Lageberichte freigegeben.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _save;
+
+    private IReadOnlyList<PublicReportEdit> _rows = Array.Empty<PublicReportEdit>();
+    private IReadOnlyList<PublicReportAnchor> _anchors = Array.Empty<PublicReportAnchor>();
+
+    private PublicReportInput? _edit;
+    private bool _isNew;
+    private string? _draftHtml;
+    private string _editorKey = "neu";
+    private RichTextEditor? _editor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Reports.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task NewReport()
+    {
+        try
+        {
+            // fetched on demand: the picker only matters while a new report is being created
+            _anchors = await Reports.GetAnchorsAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
+        _isNew = true;
+        _draftHtml = null;
+        _editorKey = "neu";
+        _edit = new PublicReportInput();
+    }
+
+    private async Task OpenEditorAsync(PublicReportEdit row)
+    {
+        PublicReportDraft? draft;
+        try
+        {
+            // the list carries no HTML; fetch the one body about to be edited
+            draft = await Reports.GetDraftAsync(row.Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+        if (draft is null)
+        {
+            Snackbar.Add("Dieser Lagebericht existiert nicht mehr.", Severity.Error);
+            await LoadAsync();
+            return;
+        }
+
+        _isNew = false;
+        _editorKey = row.Id;
+        _draftHtml = draft.Html;
+        _edit = new PublicReportInput
+        {
+            Id = row.Id,
+            Title = draft.Title,
+        };
+    }
+
+    private void CloseEditor()
+    {
+        _edit = null;
+        _editor = null;
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (_edit is null)
+        {
+            return;
+        }
+
+        _save = true;
+        try
+        {
+            // null would tell the service to keep the stored draft; only send a body once the editor really answered
+            _edit.DraftHtml = _editor is null ? _draftHtml : await _editor.GetHtmlAsync();
+
+            await Reports.SaveDraftAsync(_edit, _user);
+            Snackbar.Add("Entwurf gespeichert.", Severity.Success);
+            await LoadAsync();
+            CloseEditor();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _save = false;
+        }
+    }
+
+    private async Task PublishAsync(PublicReportEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Lagebericht veröffentlichen?",
+            $"„{row.Title}“ ist danach unter /berichte/{ReportPeriod.Format(row.Year, row.Month)} öffentlich lesbar.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Reports.PublishAsync(row.Id, _user);
+            Snackbar.Add("Lagebericht veröffentlicht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RetractAsync(PublicReportEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Lagebericht zurückziehen?",
+            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Reports.RetractAsync(row.Id, _user);
+            Snackbar.Add("Lagebericht zurückgezogen.", Severity.Info);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(PublicReportEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Lagebericht löschen?",
+            $"„{row.Title}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Reports.DeleteAsync(row.Id, _user);
+            Snackbar.Add("Lagebericht gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

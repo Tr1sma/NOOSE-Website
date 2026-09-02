@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Navigation;
+﻿namespace NOOSE_Website.Navigation;
 
 /// <summary>Section slugs of the pages that absorbed others in V1.5; keeps LegacyRoutes and the pages in sync.</summary>
 public static class MergedPageSections
@@ -12,7 +12,10 @@ public static class MergedPageSections
         "finanzierung",
         "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
-        "oeffentliche-module", "oeffentliche-seiten", "warnhinweise", "oeffentliche-vorlagen", "buerger",
+        "oeffentliche-module", "oeffentliche-seiten", "presse", "lage", "warnungen", "berichte", "recht",
+        "oeffentliche-kennzahlen",
+        "warnhinweise",
+        "oeffentliche-vorlagen", "buerger",
         "basisdaten",
     ];
 
@@ -31,7 +34,7 @@ public static class MergedPageSections
         "informanten",
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
         "feedback", "oeffentliche-seiten", "oeffentliche-fahndungen", "oeffentliche-fraktionsprofile",
-        "hinweise", "tickets", "fahndungs-einsprueche",
+        "hinweise", "tickets", "fahndungs-einsprueche", "pressemitteilungen", "oeffentliche-warnungen", "oeffentliche-lageberichte",
     ];
 
     public static readonly string[] Wanted =

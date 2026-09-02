@@ -1,7 +1,8 @@
-@* Print view of a person record; auto-opens the browser print dialog. *@
+﻿@* Print view of a person record; auto-opens the browser print dialog. *@
 @page "/personen/{Id}/druck"
 @layout PrintLayout
 @inject IPersonService PersonService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject IPersonDocService DocService
 @inject IObservationService ObservationService
 @inject IRelationService RelationService
@@ -58,7 +59,10 @@ else
                     <tr><th>Name</th><td>@_person.Name</td></tr>
                     <tr><th>Aktenzeichen</th><td>@_person.CaseNumber</td></tr>
                     <tr><th>Lebensstatus</th><td>@LifeStatusDisplay.Name(LifeStatusLogic.Effective(_person.LifeStatus, _person.DeadUntil, DateTime.UtcNow))</td></tr>
-                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_person.Classification)</td></tr>
+                    @if (TabOn("einstufung"))
+                    {
+                        <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_person.Classification)</td></tr>
+                    }
                     @if (_informant is not null)
                     {
                         <tr>
@@ -337,6 +341,11 @@ else
     private List<Comment> _comments = new();
     private InformantPersonMarker? _informant;
 
+    private IReadOnlySet<string>? _visibleTabs;
+
+    /// <summary>False only when a partner's rank restricts this record type to other tabs.</summary>
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
@@ -347,7 +356,15 @@ else
         _person = await PersonService.GetDetailAsync(Id, scope);
         if (_person is not null)
         {
-            _classificationHistory = await PersonService.GetClassificationHistoryAsync(Id, scope);
+            _visibleTabs = user.IsPartner()
+                ? await PartnerPolicy.GetVisibleTabsAsync(user, nameof(Person), Id)
+                : null;
+            // the per-rank TAB restriction, which the detail page honours and this route did not: the coarse
+            // type gate in PrintLayout lets a tab-limited partner through to the classification history
+            if (TabOn("einstufung"))
+            {
+                _classificationHistory = await PersonService.GetClassificationHistoryAsync(Id, scope);
+            }
             // partners: core only
             if (!user.IsPartner())
             {

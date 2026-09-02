@@ -1,4 +1,4 @@
-@page "/gesucht"
+﻿@page "/gesucht"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -8,13 +8,12 @@
 <PageTitle>Gesucht · NOOSE</PageTitle>
 
 <PublicModuleGate Module="@PublicModules.Wanted" Title="Gesucht">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <MudText Typo="Typo.h4">Öffentliche Fahndung</MudText>
         <MudText Typo="Typo.body1" Class="mud-text-secondary">
             Das National Office of Security Enforcement sucht die hier ausgeschriebenen Personen, Fahrzeuge und
-            Waffen. Nähern Sie sich niemandem und nichts davon selbst — melden Sie Beobachtungen der nächsten
-            Dienststelle.
+            Waffen. Nicht selbst eingreifen — Beobachtungen bitte der nächsten Dienststelle melden.
         </MudText>
 
         @* static render, no circuit: the filters are links that rewrite the query, not interactive controls *@

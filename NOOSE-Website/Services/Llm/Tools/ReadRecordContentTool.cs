@@ -9,11 +9,14 @@ using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
+using NOOSE_Website.Models.Public;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services.Llm.Tools;
 
@@ -41,6 +44,10 @@ public sealed class ReadRecordContentTool(
     IBewerbungService applications,
     IPersonnelFileService personnel,
     IInformantService informants,
+    IPublicWantedService publicWanted,
+    IPublicFactionProfileService publicProfiles,
+    IObjectionService objections,
+    ITipService tips,
     IAuditLogQueryService auditLog) : INooseiTool
 {
     private const string Comments = "kommentare";
@@ -57,6 +64,8 @@ public sealed class ReadRecordContentTool(
     private const string Notes = "vermerke";
     private const string Meetings2 = "treffen";
     private const string Access = "zugriffe";
+    private const string Published = "oeffentlich";
+    private const string Tips = "hinweise";
     private const string Everything = "alles";
 
     /// <summary>Sections that hang off any record through the polymorphic association, in reading order.</summary>
@@ -64,14 +73,17 @@ public sealed class ReadRecordContentTool(
         [Comments, Sources, Followups, Links, CustomFields, Tags];
 
     private static readonly string[] All =
-        [.. Universal, Docs, Observations, Chat, Agenda, Messages, Notes, Meetings2, Access, Everything];
+        [.. Universal, Docs, Observations, Chat, Agenda, Messages, Notes, Meetings2, Published, Tips, Access,
+         Everything];
 
     public string Name => "lies_akteninhalt";
 
     public string Description =>
         "Liest die Inhalte einer Akte in voller Länge: Kommentare, Quellen, Wiedervorlagen, Verknüpfungen, "
         + "Zusatzfelder, Stichworte, Doks, Observationen, Taskforce-Chat, Tagesordnung, Bewerbungs-Schriftwechsel, "
-        + "Personal-Vermerke (typ=Personalakte) und Informanten-Treffen (typ=Informant). "
+        + "Personal-Vermerke (typ=Personalakte), Informanten-Treffen (typ=Informant), die öffentliche "
+        + "Außendarstellung der Akte samt Einsprüchen (oeffentlich) und die Bürgerhinweise zu einer Person "
+        + "(hinweise). "
         + "Nimm es, wenn lies_akte einen Abschnitt gekürzt hat oder wenn genau danach gefragt ist. "
         + "Mit „ab\" blätterst du weiter.";
 
@@ -137,10 +149,14 @@ public sealed class ReadRecordContentTool(
         var sb = new StringBuilder();
         sb.Append(NooseiRecordTypes.German(type)).Append(": ").AppendLine(title);
 
+        // one holder per invocation: both public sections need the same notice list, and "alles" asks for both.
+        // A field on the tool would be a race — it is a scoped service and a round's tool calls run concurrently.
+        var notices = new NoticeCache();
+
         var any = false;
         foreach (var section in sections)
         {
-            var (heading, rows) = await LoadAsync(db, section, type, id, context, cancellationToken);
+            var (heading, rows) = await LoadAsync(db, section, type, id, context, notices, cancellationToken);
             if (rows.Count == 0)
             {
                 continue;
@@ -183,8 +199,10 @@ public sealed class ReadRecordContentTool(
         string[] baseSet = type switch
         {
             // doks and observations hang off a person and off the three kinds of organisation, nothing else
-            nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party) =>
-                [.. Universal, Docs, Observations],
+            // the public sections hang off exactly the two record kinds that have an outward snapshot
+            nameof(Person) => [.. Universal, Docs, Observations, Published, Tips],
+            nameof(Faction) => [.. Universal, Docs, Observations, Published],
+            nameof(PersonGroup) or nameof(Party) => [.. Universal, Docs, Observations],
             nameof(Taskforce) => [.. Universal, Chat],
             nameof(Meeting) => [.. Universal, Agenda],
             nameof(Bewerbung) => [.. Universal, Messages],
@@ -198,7 +216,8 @@ public sealed class ReadRecordContentTool(
     }
 
     private async Task<(string Heading, IReadOnlyList<string> Rows)> LoadAsync(
-        AppDbContext db, string section, string type, string id, NooseiToolContext context, CancellationToken ct)
+        AppDbContext db, string section, string type, string id, NooseiToolContext context, NoticeCache notices,
+        CancellationToken ct)
     {
         var scope = context.Scope;
         switch (section)
@@ -350,6 +369,16 @@ public sealed class ReadRecordContentTool(
                     })
                     .ToList());
             }
+            case Published:
+            {
+                return type == nameof(Faction)
+                    ? await PublishedFactionAsync(id, context, ct)
+                    : await PublishedPersonAsync(id, context, notices, ct);
+            }
+            case Tips:
+            {
+                return await TipsAsync(id, context, notices, ct);
+            }
             case Access:
             {
                 // who viewed this record; QueryAccessAsync itself gates leadership/supervision and throws otherwise
@@ -381,6 +410,179 @@ public sealed class ReadRecordContentTool(
             default:
                 return (section, []);
         }
+    }
+
+    /// <summary>What the agency has published about a person: every notice, plus the objections against each.</summary>
+    /// <remarks>
+    /// Reads through the wanted service, which holds the record gate and the suppression belt, rather than the
+    /// snapshot table — the belt stays in one place. Item notices are included: a plate is published material of the
+    /// same file. Never the citizen behind an objection.
+    /// </remarks>
+    private async Task<(string Heading, IReadOnlyList<string> Rows)> PublishedPersonAsync(
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
+    {
+        const string heading = "Öffentliche Außendarstellung";
+        try
+        {
+            var notices = await NoticesAsync(personId, context, cache, ct);
+            if (notices.Count == 0)
+            {
+                return (heading, []);
+            }
+
+            var rows = new List<string>();
+            foreach (var notice in notices)
+            {
+                var sb = new StringBuilder(PublicWantedKindDisplay.Name(notice.Kind));
+                sb.Append(" | ").Append(notice.CaseNumber ?? "ohne Aktenzeichen");
+                sb.Append(" | ").Append(Free(notice.DisplayName));
+                sb.Append(" | Status: ").Append(PublicWantedStatusDisplay.Name(notice.Status));
+                sb.Append(" | Gefahrenstufe: ").Append(HazardLevelLogic.Name(notice.HazardLevel));
+                if (notice.PublishedAt is { } published)
+                {
+                    sb.Append(" | veröffentlicht: ").Append(Fmt(published.ToLocalTime()));
+                }
+                if (notice.ExpiresAt is { } expires)
+                {
+                    sb.Append(" | läuft ab: ").Append(Fmt(expires.ToLocalTime()));
+                }
+                sb.Append(" | Aufrufe: ").Append(notice.ViewCount);
+                rows.Add(sb.ToString());
+                rows.AddRange(await ObjectionsAsync(notice.Id, context, ct));
+            }
+            return (heading, rows);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // reads exactly like a file with nothing published, so the gate is not a rights oracle
+            return (heading, []);
+        }
+    }
+
+    /// <summary>The public profile of an organisation, if it has one.</summary>
+    private async Task<(string Heading, IReadOnlyList<string> Rows)> PublishedFactionAsync(
+        string factionId, NooseiToolContext context, CancellationToken ct)
+    {
+        const string heading = "Öffentliche Außendarstellung";
+        try
+        {
+            var profile = await publicProfiles.GetForFactionAsync(factionId, context.Actor, ct);
+            if (profile is null)
+            {
+                return (heading, []);
+            }
+            var sb = new StringBuilder(Free(profile.DisplayName));
+            sb.Append(" | Einordnung: ").Append(PublicFactionStandingDisplay.Name(profile.Standing));
+            sb.Append(" | Status: ").Append(PublicProfileStatusDisplay.Name(profile.Status));
+            sb.Append(" | Gefahrenstufe: ").Append(HazardLevelLogic.Name(profile.HazardLevel));
+            if (profile.PublishedAt is { } published)
+            {
+                sb.Append(" | veröffentlicht: ").Append(Fmt(published.ToLocalTime()));
+            }
+            return (heading, [sb.ToString()]);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return (heading, []);
+        }
+    }
+
+    /// <summary>Objections against one notice, as indented lines under it. Never the citizen who filed them.</summary>
+    private async Task<IReadOnlyList<string>> ObjectionsAsync(
+        string noticeId, NooseiToolContext context, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await objections.GetForNoticeAsync(noticeId, context.Actor, ct);
+            return rows
+                .Select(o =>
+                {
+                    var sb = new StringBuilder("  Einspruch ").Append(o.CaseNumber);
+                    sb.Append(" | ").Append(ObjectionStatusDisplay.Name(o.Status));
+                    sb.Append(" | eingelegt: ").Append(Fmt(o.CreatedAt.ToLocalTime()));
+                    if (o.DecidedAt is { } decided)
+                    {
+                        sb.Append(" | entschieden: ").Append(Fmt(decided.ToLocalTime()));
+                    }
+                    if (o.HasCase)
+                    {
+                        sb.Append(" | Vorgang angelegt");
+                    }
+                    return sb.ToString();
+                })
+                .ToList();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // a reader who may open the notice but not the objection desk gets no tail, not a refusal
+            return [];
+        }
+    }
+
+    /// <summary>Citizen tips that came in about this person, through the notices published from their file.</summary>
+    /// <remarks>
+    /// Two paths reach a tip from a file and only one of them shows up anywhere else: the manual link a takeover
+    /// writes, which the links section already carries, and a tip filed against a notice that nobody has taken over
+    /// yet. The second path is what this section adds. Never the citizen — the reader carries no name at all.
+    /// </remarks>
+    private async Task<(string Heading, IReadOnlyList<string> Rows)> TipsAsync(
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
+    {
+        const string heading = "Bürgerhinweise";
+        try
+        {
+            var notices = await NoticesAsync(personId, context, cache, ct);
+            if (notices.Count == 0)
+            {
+                return (heading, []);
+            }
+
+            var rows = new List<string>();
+            foreach (var notice in notices)
+            {
+                foreach (var tip in await tips.GetForNoticeAsync(notice.Id, context.Actor, ct))
+                {
+                    var sb = new StringBuilder("Bürgerhinweis ").Append(tip.CaseNumber);
+                    sb.Append(" | zu ").Append(notice.CaseNumber ?? Free(notice.DisplayName));
+                    sb.Append(" | ").Append(TipStatusDisplay.Name(tip.Status));
+                    sb.Append(" | Priorität: ").Append(tip.Priority);
+                    sb.Append(" | ").Append(Fmt(tip.CreatedAt.ToLocalTime()));
+                    sb.Append(" | ").Append(Free(tip.Excerpt));
+                    rows.Add(sb.ToString());
+                }
+            }
+            return (heading, rows);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return (heading, []);
+        }
+    }
+
+    /// <summary>Every notice published from one person file, the item notices included; resolved once a call.</summary>
+    private async Task<IReadOnlyList<PublicWantedEdit>> NoticesAsync(
+        string personId, NooseiToolContext context, NoticeCache cache, CancellationToken ct)
+    {
+        if (cache.Notices is { } cached)
+        {
+            return cached;
+        }
+        var person = await publicWanted.GetForPersonAsync(personId, context.Actor, ct);
+        var items = await publicWanted.GetItemsForPersonAsync(personId, context.Actor, ct);
+        cache.Notices = person is null ? items : [person, .. items];
+        return cache.Notices;
+    }
+
+    /// <summary>The notice list of the record under inspection, held for the length of one call.</summary>
+    /// <remarks>
+    /// A local rather than a field on the tool: it is registered scoped and a round's tool calls run concurrently,
+    /// so a field would be shared between two questions. One instance per invocation, and the section loop that
+    /// fills it is sequential, so no synchronisation is needed. It only ever holds one record's notices, because a
+    /// call names exactly one record.
+    /// </remarks>
+    private sealed class NoticeCache
+    {
+        public IReadOnlyList<PublicWantedEdit>? Notices { get; set; }
     }
 
     /// <summary>Names the record the content belongs to, so the answer can cite it.</summary>

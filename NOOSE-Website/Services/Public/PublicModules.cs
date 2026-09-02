@@ -1,4 +1,4 @@
-using MudBlazor;
+﻿using MudBlazor;
 using NOOSE_Website.Models.Public;
 
 namespace NOOSE_Website.Services.Public;
@@ -72,17 +72,22 @@ public static class PublicModules
             Icons.Material.Filled.MenuBook, "/info", PublicModuleGroup.Behoerde, 110, false, true,
             "Die Informationsseiten sind derzeit nicht verfügbar."),
         new(Press, "Presse", "Pressemitteilungen der Behörde.",
-            Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, false, OffGeneric),
-        new(SituationReports, "Lageberichte", "Freigegebene Auszüge der Monatsberichte.",
-            Icons.Material.Filled.Assessment, "/lageberichte", PublicModuleGroup.Behoerde, 130, false, false, OffGeneric),
-        new(Warnings, "Warnungen", "Öffentliche Warnhinweise mit Gültigkeitsdatum.",
-            Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, false, OffGeneric),
+            Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, true, OffGeneric),
+        // /berichte, not /lageberichte: that route is internal (the legacy redirect and the leadership-only print page
+        // with the classified aggregates). Because Prefixes collects the nav routes without asking Available, naming it
+        // here declared an internal page indexable
+        new(SituationReports, "Lageberichte", "Von der Führung freigegebene Monatstexte.",
+            Icons.Material.Filled.Assessment, "/berichte", PublicModuleGroup.Behoerde, 130, false, true, OffGeneric),
+        new(Warnings, "Warnungen", "Amtliche Warnungen mit Gültigkeitsdatum.",
+            Icons.Material.Filled.Campaign, "/warnungen", PublicModuleGroup.Behoerde, 140, false, true, OffGeneric),
         new(Law, "Recht", "Öffentlich freigegebene Gesetzesauszüge.",
-            Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, false, OffGeneric),
-        new(HazardLevel, "Lage", "Gefahrenlage-Ampel mit Einschätzung und Trend.",
-            Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, false, OffGeneric),
+            Icons.Material.Filled.Gavel, "/recht", PublicModuleGroup.Behoerde, 150, false, true, OffGeneric),
+        new(HazardLevel, "Lage", "Gefahrenlage-Stufe mit Einschätzung; die Stufe davor ist der Trend.",
+            Icons.Material.Filled.Speed, "/lage", PublicModuleGroup.Behoerde, 160, false, true, OffGeneric),
+        // no nav route: the figures are a band on the start page, not a page of their own — a tab would be a second
+        // truth about the same content, the same reason Kopfgeld has none
         new(Statistics, "Zahlen", "Öffentliche Kennzahlen zu Ausschreibungen, Hinweisen und Belohnungen.",
-            Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, false, OffGeneric),
+            Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, true, OffGeneric),
 
         new(Tips, "Hinweis geben", "Formular zur Übermittlung von Hinweisen.",
             Icons.Material.Filled.TipsAndUpdates, "/hinweis", PublicModuleGroup.Service, 200, false, true,
@@ -101,8 +106,9 @@ public static class PublicModules
         new(CitizenRegistration, "Bürger-Registrierung", "Neuanmeldung eines Bürgerkontos über Discord. Bestehende Konten behalten ihren Zugang.",
             Icons.Material.Filled.Person, null, PublicModuleGroup.Service, 240, true, true,
             "Neue Bürgerkonten können derzeit nicht angelegt werden."),
-        new(PublicSearch, "Suche", "Öffentliche Suche über veröffentlichte Inhalte.",
-            Icons.Material.Filled.Search, "/suche-oeffentlich", PublicModuleGroup.Service, 250, false, false, OffGeneric),
+        new(PublicSearch, "Suche", "Volltextsuche über Fahndungen, Organisationen, Pressemitteilungen, Warnungen, "
+            + "Lageberichte, Infoseiten und freigegebene Gesetzesauszüge.",
+            Icons.Material.Filled.Search, "/suche-oeffentlich", PublicModuleGroup.Service, 250, false, true, OffGeneric),
     ];
 
     /// <summary>Icon of an editorial page that picked none.</summary>

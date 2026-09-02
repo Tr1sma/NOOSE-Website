@@ -1,16 +1,18 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
 /// <summary>Integration tests for <see cref="LawService"/> against in-memory SQLite.</summary>
 public sealed class LawServiceTests
 {
-    private static LawService NewService(SqliteTestContext ctx) => new(ctx.Factory);
+    private static LawService NewService(SqliteTestContext ctx) => new(ctx.Factory, Substitute.For<IPublicLawService>());
 
     // Director => IsLeadership => passes RequireLeadership.
     private static ClaimsPrincipal Leader()

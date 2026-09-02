@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 
@@ -12,7 +12,10 @@ public static class RecruitingSeeder
 
     public static async Task SeedTemplatesAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
+        // IgnoreQueryFilters: a template the HRB deleted is still a decision, and reading past the soft-delete
+        // filter made it look absent - so the next application start created it again
         var existing = await db.DocumentTemplates
+            .IgnoreQueryFilters()
             .Where(t => t.Category == TemplateCategory)
             .ToListAsync(cancellationToken);
         var have = new HashSet<string>(existing.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services.Llm.Tools;
 
@@ -37,6 +38,12 @@ public sealed class ReadAreaTool(
     IBewerbungTestService bewerbungTests,
     IBewerbungssperreService bewerbungssperren,
     IBewerbungTemplateService bewerbungTemplates,
+    ITicketService tickets,
+    IPressReleaseService press,
+    IPublicPageService publicPages,
+    IPublicWarningService publicWarnings,
+    IPublicReportService publicReports,
+    IPublicSituationService situation,
     INotificationService notifications) : INooseiTool
 {
     private const string Treasury = "kasse";
@@ -51,10 +58,12 @@ public sealed class ReadAreaTool(
     private const string Recruiting = "bewerbungswesen";
     private const string Keywords = "stichworte";
     private const string Notifications = "benachrichtigungen";
+    private const string Tickets = "tickets";
+    private const string PublicVoice = "oeffentlichkeit";
 
     private static readonly string[] Areas =
         [Treasury, EvidenceRoom, Board, Roster, CounterIntelligence, Followups, Training, Wanted,
-         Templates, Recruiting, Keywords, Notifications];
+         Templates, Recruiting, Keywords, Notifications, Tickets, PublicVoice];
 
     public string Name => "lies_bereich";
 
@@ -63,7 +72,10 @@ public sealed class ReadAreaTool(
         + "Asservatenkammer, Schwarzes Brett, Personalbestand, Auffälligkeiten der Gegenaufklärung, eigene "
         + "offene Wiedervorlagen, Ausbildungsmodule, Fahndungsliste (wer steht drauf und warum), "
         + "Vorlagen und Kataloge, Bewerbungswesen (Tests, Sperren, Anschreiben), Stichworte mit Nutzung, "
-        + "eigene Benachrichtigungen. Für Fragen nach einzelnen Akten oder deren Anzahl nimm finde_akten.";
+        + "eigene Benachrichtigungen, Bürger-Tickets am Schalter der Führungsebene (tickets) und die "
+        + "Außendarstellung der Behörde — Pressemitteilungen, Infoseiten, Warnungen, freigegebene Monatstexte "
+        + "und die Gefahrenlage (oeffentlichkeit). "
+        + "Für Fragen nach einzelnen Akten oder deren Anzahl nimm finde_akten.";
 
     public JsonElement ParameterSchema { get; } = NooseiLimits.Schema($$"""
         {
@@ -103,6 +115,8 @@ public sealed class ReadAreaTool(
                 case Recruiting: await RecruitingAsync(sb, max, context.Actor, cancellationToken); break;
                 case Keywords: await KeywordsAsync(sb, max, context.Scope, cancellationToken); break;
                 case Notifications: await NotificationsAsync(sb, max, context.Actor, cancellationToken); break;
+                case Tickets: await TicketsAsync(sb, max, context.Actor, cancellationToken); break;
+                case PublicVoice: await PublicVoiceAsync(sb, max, context.Actor, cancellationToken); break;
                 default: await TrainingAsync(sb, max, cancellationToken); break;
             }
         }
@@ -302,6 +316,119 @@ public sealed class ReadAreaTool(
                 sb.Append(" | ").Append(description);
             }
             sb.AppendLine();
+        }
+    }
+
+    /// <summary>The citizen ticket desk. Leadership only, and never the citizen behind a ticket.</summary>
+    /// <remarks>
+    /// The service holds the gate and throws for anyone else, which the caller turns into the same sentence an
+    /// empty area produces. No citizen name: a stored assistant answer is a second place a name would live, and the
+    /// desk is where it belongs.
+    /// </remarks>
+    private async Task TicketsAsync(StringBuilder sb, int max, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        var open = await tickets.GetInboxAsync(TicketInboxScope.Offen, null, false, actor, ct);
+        var working = await tickets.GetInboxAsync(TicketInboxScope.Bearbeitung, null, false, actor, ct);
+        var waiting = await tickets.GetInboxAsync(TicketInboxScope.Wartet, null, false, actor, ct);
+
+        // the desk lists are capped, so these are the rows that came back, not the stock — the badge on /tickets is
+        // the number that counts them
+        sb.AppendLine("Bürger-Tickets");
+        sb.Append("Gezeigt: offen ").Append(open.Count)
+            .Append(" | in Bearbeitung ").Append(working.Count)
+            .Append(" | wartet auf Bürger ").Append(waiting.Count).AppendLine();
+
+        var rows = open.Concat(working).Concat(waiting)
+            .OrderByDescending(t => t.LastActivityAt)
+            .ToList();
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        sb.Append("— Laufende Tickets (").Append(Math.Min(max, rows.Count)).Append(" von ").Append(rows.Count)
+            .AppendLine(") —");
+        foreach (var t in rows.Take(max))
+        {
+            sb.Append("• ").Append(Free(t.Subject))
+                .Append(" | ").Append(t.CaseNumber)
+                .Append(" | ").Append(TicketStatusDisplay.Name(t.Status))
+                .Append(" | letzte Aktivität: ").Append(Fmt(t.LastActivityAt.ToLocalTime()));
+            if (t.HandlerCodename is { Length: > 0 } handler)
+            {
+                sb.Append(" | Bearbeiter: ").Append(handler);
+            }
+            if (t.AwaitingAnswer)
+            {
+                sb.Append(" | wartet auf Antwort");
+            }
+            sb.AppendLine();
+        }
+    }
+
+    /// <summary>What the agency says publicly: press, editorial pages, warnings, monthly texts, the threat level.</summary>
+    /// <remarks>
+    /// One area over five surfaces rather than five areas: they share a gate, a budget and a question — "what have
+    /// we said out there". Drafts are included; that is the point of an internal read. The four lists stand or fall
+    /// together because one guard admits to all of them, and a throw reads as an empty area, as everywhere else in
+    /// this file. Only the threat level degrades on its own: it answers to its own module switch and says so.
+    /// </remarks>
+    private async Task PublicVoiceAsync(StringBuilder sb, int max, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        sb.AppendLine("Außendarstellung");
+
+        // the level answers to its own module switch, so it is the one surface that can be silent on its own
+        if (await situation.GetPublishedAsync(ct) is { } level)
+        {
+            sb.Append("Gefahrenlage: ").Append(PublicSituationLevelDisplay.Name(level.Level));
+            if (level.Since is { } since)
+            {
+                sb.Append(" (seit ").Append(Fmt(since.ToLocalTime())).Append(')');
+            }
+            if (level.Previous is { } before)
+            {
+                sb.Append(" | zuvor: ").Append(PublicSituationLevelDisplay.Name(before));
+            }
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("Gefahrenlage: nicht veröffentlicht");
+        }
+
+        Section(sb, "Pressemitteilungen", max, await press.GetAllAsync(actor, ct),
+            m => $"{Free(m.Title)} | {m.CaseNumber ?? "ohne Aktenzeichen"} | {PressReleaseStatusDisplay.Name(m.Status)}"
+                + Published(m.PublishedAt));
+
+        Section(sb, "Infoseiten", max, await publicPages.GetAllAsync(actor, ct),
+            p => $"{Free(p.Title)} | /info/{p.Slug} | {PublicPageStatusDisplay.Name(p.Status)}"
+                + Published(p.PublishedAt));
+
+        Section(sb, "Warnungen", max, await publicWarnings.GetAllAsync(actor, ct),
+            w => $"{Free(w.Title)} | {PublicWarningStatusDisplay.Name(w.Status)}"
+                + (w.ValidUntil is { } until ? $" | gültig bis {Fmt(until.ToLocalTime())}" : string.Empty)
+                + (w.IsExpired ? " | abgelaufen" : string.Empty));
+
+        Section(sb, "Freigegebene Monatstexte", max, await publicReports.GetAllAsync(actor, ct),
+            r => $"{ReportPeriod.Label(r.Year, r.Month)} | {Free(r.Title)} | "
+                + PublicReportStatusDisplay.Name(r.Status) + Published(r.PublishedAt));
+    }
+
+    private static string Published(DateTime? when)
+        => when is { } value ? " | veröffentlicht: " + Fmt(value.ToLocalTime()) : string.Empty;
+
+    /// <summary>One capped block of an area, with the total named beside the shown count.</summary>
+    private static void Section<T>(StringBuilder sb, string heading, int max, IReadOnlyList<T> rows,
+        Func<T, string> line)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        sb.Append("— ").Append(heading).Append(" (").Append(Math.Min(max, rows.Count))
+            .Append(" von ").Append(rows.Count).AppendLine(") —");
+        foreach (var row in rows.Take(max))
+        {
+            sb.Append("• ").AppendLine(line(row));
         }
     }
 

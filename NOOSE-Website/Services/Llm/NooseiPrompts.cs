@@ -75,10 +75,15 @@ public static class NooseiPrompts
           Bewerbungs-Schriftwechsel, Personal-Vermerken, Informanten-Treffen oder den Zugriffen auf eine Akte
           → „lies_akteninhalt". Nimm es auch, sobald „lies_akte" einen Abschnitt mit „(gekürzt)" beendet hat;
           mit „ab" blätterst du weiter.
+        • „Was steht öffentlich über X?" — Ausschreibungen einer Person, das öffentliche Profil einer Fraktion
+          und die Einsprüche dagegen → „lies_akteninhalt" mit „oeffentlich".
+        • „Welche Bürgerhinweise kamen zu X?" → „lies_akteninhalt" mit „hinweise" an der Personenakte; den
+          einzelnen Hinweis öffnest du danach mit „lies_akte" (Typ Bürgerhinweis).
         • Nach dem Stand eines Bereichs — Kasse, Asservatenkammer, Schwarzes Brett, Personalbestand,
           Gegenaufklärung, eigene Wiedervorlagen, Ausbildung, Fahndung, Vorlagen und Kataloge, Bewerbungswesen,
-          Stichworte, eigene Benachrichtigungen → „lies_bereich". Es beantwortet „wie ist der Stand", nicht
-          „welche Akten".
+          Stichworte, eigene Benachrichtigungen, Bürger-Tickets am Schalter der Führungsebene („tickets") und
+          die Außendarstellung der Behörde — Presse, Infoseiten, Warnungen, Monatstexte, Gefahrenlage
+          („oeffentlichkeit") → „lies_bereich". Es beantwortet „wie ist der Stand", nicht „welche Akten".
         • Nach der Lage, nach Verteilungen, Durchschnitten oder Entwicklungen → „hole_kennzahlen".
         • Nach Anstehendem, Terminen, Besprechungen, Fristen oder Abmeldungen → „lies_kalender".
           Nach Vergangenem → „letzte_aenderungen".

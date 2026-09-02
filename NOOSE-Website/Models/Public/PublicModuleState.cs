@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Models.Public;
+﻿namespace NOOSE_Website.Models.Public;
 
 /// <summary>Display grouping of the public nav; independent of the module's own key.</summary>
 public enum PublicModuleGroup
@@ -87,8 +87,11 @@ public sealed record PublicModuleSnapshot(bool KillSwitchActive, IReadOnlyList<P
     public IReadOnlyList<PublicModuleState> NavEntries()
         => KillSwitchActive
             ? Array.Empty<PublicModuleState>()
+            // group-major: the tab bar draws a separator between groups, so ordering by SortOrder alone let an
+            // admin-set order interleave them and the separator then appeared mid-group
             : Modules.Where(m => m.IsEnabled && m.Available && m.HasNavEntry)
-                .OrderBy(m => m.SortOrder)
+                .OrderBy(m => m.Group)
+                .ThenBy(m => m.SortOrder)
                 .ThenBy(m => m.Label, StringComparer.CurrentCulture)
                 .ToList();
 }

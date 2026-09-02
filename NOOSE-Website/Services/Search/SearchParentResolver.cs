@@ -18,6 +18,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Authorization;
@@ -286,6 +287,20 @@ public static class SearchParentResolver
                          .Select(g => new { g.Id, g.Paragraph, g.Title }).ToListAsync(cancellationToken))
             {
                 Put(nameof(Law), x.Id, $"{x.Paragraph} {x.Title}".Trim(), x.Paragraph);
+            }
+        }
+
+        // Citizen tips are not a polymorphic parent; they are a LINK endpoint. TipTakeoverService writes
+        // Link.SourceType = nameof(Hinweis), and LinkSearchProvider drops any link whose either end fails to
+        // resolve here — so without this arm every takeover link is silently unfindable. Never the citizen:
+        // the resolved title feeds a snippet that renders both ends.
+        if (!viewer.IsPartner && viewer.User.IsInternalAgent()
+            && Ids(nameof(Hinweis)) is { Count: > 0 } tipIds)
+        {
+            foreach (var x in await db.Hinweise.Where(h => tipIds.Contains(h.Id))
+                         .Select(h => new { h.Id, h.CaseNumber }).ToListAsync(cancellationToken))
+            {
+                Put(nameof(Hinweis), x.Id, "Bürgerhinweis " + x.CaseNumber, x.CaseNumber);
             }
         }
 

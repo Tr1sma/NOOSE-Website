@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
@@ -80,7 +80,9 @@ public static class PublicTemplateSeeder
 
     public static async Task SeedAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
-        if (await db.OeffentlicheVorlagen.AnyAsync(cancellationToken))
+        // IgnoreQueryFilters: the probe reads "is this table empty", and through the soft-delete filter a table
+        // holding nothing but deleted templates looks empty - so every restart resurrected them as active
+        if (await db.OeffentlicheVorlagen.IgnoreQueryFilters().AnyAsync(cancellationToken))
         {
             return;
         }

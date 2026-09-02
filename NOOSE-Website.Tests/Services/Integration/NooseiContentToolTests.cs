@@ -3,6 +3,8 @@ using System.Text.Json;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NOOSE_Website.Models.Public;
+using NOOSE_Website.Services.Public;
 using NOOSE_Website.Services.Llm.Tools;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
@@ -72,6 +74,10 @@ public sealed class NooseiContentToolTests
             Substitute.For<IBewerbungService>(),
             Substitute.For<IPersonnelFileService>(),
             Substitute.For<IInformantService>(),
+            Substitute.For<IPublicWantedService>(),
+            Substitute.For<IPublicFactionProfileService>(),
+            Substitute.For<IObjectionService>(),
+            Substitute.For<ITipService>(),
             Substitute.For<IAuditLogQueryService>());
 
     [Fact]

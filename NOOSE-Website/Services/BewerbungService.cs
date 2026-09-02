@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NOOSE_Website.Authorization;
@@ -39,7 +39,8 @@ public class BewerbungService(
     }
 
     public async Task<Bewerbung> SubmitAsync(BewerbungSubmitModel model, Stream? attachment, string? originalName,
-        string? contentType, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+        string? contentType, ClaimsPrincipal applicant, long attachmentSize = 0,
+        CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
         var userId = applicant.GetAgentId()
@@ -73,19 +74,30 @@ public class BewerbungService(
         string? fileNameSaved = null;
         if (attachment is not null && !string.IsNullOrWhiteSpace(originalName))
         {
-            if (!string.IsNullOrWhiteSpace(contentType) && !storage.IsAllowedType(contentType))
+            // unconditional: a browser that reports no content type used to skip the allowlist entirely
+            if (!storage.IsAllowedType(contentType ?? string.Empty))
             {
                 throw new InvalidOperationException("Dieser Dateityp ist nicht erlaubt.");
+            }
+            // the size too, server-side: the page's OpenReadStream limit is the client's own bound, and this path
+            // is reachable over SignalR without it
+            // fail closed: a size of 0 means the caller stated none, and a bound that a caller can skip by
+            // omitting it is no bound at all
+            if (attachmentSize <= 0)
+            {
+                throw new InvalidOperationException("Zur Größe des Anhangs liegt keine Angabe vor.");
+            }
+            // MaxBytes of 0 means the storage declares no limit, not a limit of zero
+            if (storage.MaxBytes > 0 && attachmentSize > storage.MaxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Der Anhang ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");
             }
             fileNameSaved = await storage.SaveAsync(attachment, originalName!, cancellationToken);
         }
 
-        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-        var caseNumber = await caseNumbers.NextAsync(db, "B", cancellationToken);
-
         var bewerbung = new Bewerbung
         {
-            CaseNumber = caseNumber,
             ApplicantUserId = userId,
             AcademicDegree = Trim(model.AcademicDegree),
             Name = model.Name.Trim(),
@@ -99,9 +111,24 @@ public class BewerbungService(
             Status = BewerbungStatus.Eingereicht,
             SubmittedAt = DateTime.UtcNow,
         };
-        db.Bewerbungen.Add(bewerbung);
-        await db.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
+
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+            bewerbung.CaseNumber = await caseNumbers.NextAsync(db, "B", cancellationToken);
+            db.Bewerbungen.Add(bewerbung);
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            // the copy is the only side effect a rollback does not undo, same as in TipService.SubmitAsync
+            if (fileNameSaved is not null)
+            {
+                try { storage.Delete(fileNameSaved); } catch { /* best effort */ }
+            }
+            throw;
+        }
 
         try
         {

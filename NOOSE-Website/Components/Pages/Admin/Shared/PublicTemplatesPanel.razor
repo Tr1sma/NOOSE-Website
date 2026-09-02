@@ -1,4 +1,4 @@
-@* Templates for every citizen-facing message: ticket confirmation and answer, tip confirmation, follow-up, refusal. *@
+﻿@* Templates for every citizen-facing message: ticket confirmation and answer, tip confirmation, follow-up, refusal. *@
 @using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
@@ -30,10 +30,13 @@ else
                      Color="Color.Primary" Size="Size.Small" />
             <MudText Typo="Typo.subtitle1">@PublicTemplateKindDisplay.Name(kind)</MudText>
             <MudSpacer />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewAsync(kind))">
-                Neue Vorlage
-            </MudButton>
+            @if (_mayEdit)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewAsync(kind))">
+                    Neue Vorlage
+                </MudButton>
+            }
         </MudStack>
         <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
             @PublicTemplateKindDisplay.Hint(kind)
@@ -65,15 +68,18 @@ else
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.SortOrder</MudText>
                     </MudTd>
                     <MudTd DataLabel="Aktiv">
-                        <MudSwitch Value="context.IsActive" T="bool" Color="Color.Primary"
+                        <MudSwitch Value="context.IsActive" T="bool" Color="Color.Primary" Disabled="@(!_mayEdit)"
                                    ValueChanged="@(v => ToggleAsync(context, v))" />
                     </MudTd>
                     <MudTd DataLabel="Aktion" Style="text-align:right;">
                         <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
-                                           OnClick="@(() => EditAsync(context))" aria-label="Vorlage bearbeiten" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                           OnClick="@(() => DeleteAsync(context))" aria-label="Vorlage löschen" />
+                            @if (_mayEdit)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                               OnClick="@(() => EditAsync(context))" aria-label="Vorlage bearbeiten" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => DeleteAsync(context))" aria-label="Vorlage löschen" />
+                            }
                         </MudStack>
                     </MudTd>
                 </RowTemplate>
@@ -90,10 +96,14 @@ else
     private bool _load = true;
     private IReadOnlyList<PublicTemplateRow> _rows = [];
     private ClaimsPrincipal _user = default!;
+    // the exact twin of Permission.RequirePublicTemplateWrite: /einstellungen admits the read-only supervision
+    // to READ, so an ungated control only ever produced a red toast
+    private bool _mayEdit;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
         await LoadAsync();
     }
 

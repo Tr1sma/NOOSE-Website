@@ -40,9 +40,21 @@ public static class TipRules
     public static readonly Expression<Func<Hinweis, bool>> ConfirmedRows =
         h => h.Status == TipStatus.Bestaetigt || h.Status == TipStatus.FuehrteZurErgreifung;
 
+    /// <summary>Ended in an arrest; the figure a public tip campaign is actually judged on.</summary>
+    /// <remarks>A subset of <see cref="ConfirmedRows"/>, so the public band labels it "davon" rather than adding
+    /// the two together.</remarks>
+    public static readonly Expression<Func<Hinweis, bool>> CaptureRows =
+        h => h.Status == TipStatus.FuehrteZurErgreifung;
+
     /// <summary>Decided; the conversation is closed for both sides.</summary>
     public static bool IsClosed(TipStatus status)
         => status is TipStatus.Bestaetigt or TipStatus.Verworfen or TipStatus.FuehrteZurErgreifung;
+
+    /// <summary>Query twin of <see cref="IsClosed"/>; the honest denominator of a success rate.</summary>
+    /// <remarks>A rate over everything received counts the tips nobody has looked at yet as failures.</remarks>
+    public static readonly Expression<Func<Hinweis, bool>> ClosedRows =
+        h => h.Status == TipStatus.Bestaetigt || h.Status == TipStatus.Verworfen
+            || h.Status == TipStatus.FuehrteZurErgreifung;
 
     /// <summary>Allowed status moves; anything else is refused rather than silently applied.</summary>
     /// <remarks>

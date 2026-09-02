@@ -1,7 +1,8 @@
-@* Print view of an operation file. *@
+﻿@* Print view of an operation file. *@
 @page "/operationen/{Id}/druck"
 @layout PrintLayout
 @inject IOperationService OperationService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject ILinkService LinkService
 @inject ICommentService CommentService
 @inject IAccessLogService AccessLog
@@ -31,7 +32,10 @@ else
                     {
                         <tr><th>Typ</th><td>@_operation.Type</td></tr>
                     }
-                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_operation.Classification)</td></tr>
+                    @if (TabOn("einstufung"))
+                    {
+                        <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_operation.Classification)</td></tr>
+                    }
                     @if (!string.IsNullOrWhiteSpace(_operation.Location))
                     {
                         <tr><th>Einsatzort</th><td>@_operation.Location</td></tr>
@@ -109,6 +113,11 @@ else
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
 
+    private IReadOnlySet<string>? _visibleTabs;
+
+    /// <summary>False only when a partner's rank restricts this record type to other tabs.</summary>
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
@@ -119,7 +128,15 @@ else
         _operation = await OperationService.GetDetailAsync(Id, scope);
         if (_operation is not null)
         {
-            _classificationHistory = await OperationService.GetClassificationHistoryAsync(Id, scope);
+            _visibleTabs = user.IsPartner()
+                ? await PartnerPolicy.GetVisibleTabsAsync(user, nameof(Operation), Id)
+                : null;
+            // the per-rank TAB restriction, which the detail page honours and this route did not: the coarse
+            // type gate in PrintLayout lets a tab-limited partner through to the classification history
+            if (TabOn("einstufung"))
+            {
+                _classificationHistory = await OperationService.GetClassificationHistoryAsync(Id, scope);
+            }
             // partners: core only
             if (!user.IsPartner())
             {

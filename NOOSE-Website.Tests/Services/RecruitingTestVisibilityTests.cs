@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Recruiting;
+﻿using NOOSE_Website.Models.Recruiting;
 using NOOSE_Website.Services;
 using System.Collections;
 using System.Reflection;
@@ -55,6 +55,9 @@ public class RecruitingTestVisibilityTests
         Path.Combine("Layout", "ApplicantPortalLayout.razor"),
         Path.Combine("Pages", "Recruiting", "Shared", "BewerbungssperreCard.razor"),
         Path.Combine("Pages", "Recruiting", "Shared", "BewerbungMessagePanel.razor"),
+        // the bell renders the applicant's OWN notifications - a title and a link, keyed on their agent id, with
+        // no verdict among them. Declared rather than treated as inert, so it is scanned like everything else.
+        Path.Combine("Layout", "NotificationBell.razor"),
     ];
 
     /// <summary>Framework and inert tags that need no decision.</summary>
@@ -72,7 +75,14 @@ public class RecruitingTestVisibilityTests
     private static string ServiceFile([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "NOOSE-Website", "Services", "BewerbungTestService.cs"));
 
-    private static List<string> ApplicantSurface(string root)
+    /// <summary>The pages an applicant actually sees: the ones wearing the applicant layout.</summary>
+    /// <remarks>
+    /// Not every file under Pages/Portal — that folder also holds the citizen area (own tips, tickets, objection,
+    /// reward receipt), which answers to BuergerLayout and has nothing to do with a recruiting test. Scanning it
+    /// reported an objection's DecisionNote as a leaked test verdict. Keyed on the layout so a new applicant page is
+    /// picked up on its own and a new citizen page is not.
+    /// </remarks>
+    private static List<string> ApplicantPortalPages(string root)
     {
         var portal = Path.Combine(root, "Pages", "Portal");
         Assert.True(Directory.Exists(portal), $"Bewerber-Portalordner nicht gefunden: {portal}");
@@ -80,8 +90,16 @@ public class RecruitingTestVisibilityTests
         var files = Directory.EnumerateFiles(portal, "*.razor", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                 && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(f => File.ReadAllText(f).Contains("@layout ApplicantPortalLayout", StringComparison.Ordinal))
             .ToList();
+        // the applicant portal exists; an empty result means the layout was renamed, not that there is nothing to guard
         Assert.NotEmpty(files);
+        return files;
+    }
+
+    private static List<string> ApplicantSurface(string root)
+    {
+        var files = ApplicantPortalPages(root);
 
         foreach (var declared in DeclaredSurface)
         {
@@ -231,14 +249,27 @@ public class RecruitingTestVisibilityTests
     }
 
     [Fact]
+    public void TheScannedSurface_IsTheApplicantPortalAndNothingElse()
+    {
+        // the guard of the guard: narrowing the scan is only safe while it still covers every applicant page and
+        // still leaves the citizen area out. A renamed layout would silently shrink it to nothing otherwise.
+        var files = ApplicantPortalPages(ComponentRoot()).Select(Path.GetFileName).ToArray();
+
+        Assert.Contains("MeineBewerbung.razor", files);
+        Assert.Contains("Status.razor", files);
+        Assert.Contains("Test.razor", files);
+        Assert.DoesNotContain("MeinEinspruch.razor", files);
+        Assert.DoesNotContain("MeineTickets.razor", files);
+    }
+
+    [Fact]
     public void EveryComponentRenderedOnAPortalPage_IsPartOfTheDeclaredSurface()
     {
         var root = ComponentRoot();
-        var portal = Path.Combine(root, "Pages", "Portal");
         var known = DeclaredSurface.Select(Path.GetFileNameWithoutExtension)
             .Concat(InertTags).ToHashSet(StringComparer.Ordinal);
 
-        var files = Directory.EnumerateFiles(portal, "*.razor", SearchOption.AllDirectories)
+        var files = ApplicantPortalPages(root)
             .Append(Path.Combine(root, "Layout", "ApplicantPortalLayout.razor"));
 
         var undecided = files

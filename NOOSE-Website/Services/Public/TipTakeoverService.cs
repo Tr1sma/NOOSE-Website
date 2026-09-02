@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -58,8 +58,31 @@ public class TipTakeoverService(
             throw;
         }
 
+        // The pre-check above is only a read, so two tabs can both pass it: Links carries no unique index for this
+        // pair (a source may legitimately link to many targets of one type), which is why the documented catch
+        // never fired. The loser is therefore detected AFTER the link and discards the file it just created; the
+        // oldest link wins, so both tabs agree on which one survives.
+        var survivor = await OldestLinkedPersonAsync(tipId, cancellationToken);
+        if (survivor is not null && !string.Equals(survivor, person.Id, StringComparison.Ordinal))
+        {
+            await DiscardPersonAsync(person.Id, actor, cancellationToken);
+            throw new InvalidOperationException(
+                "Dieser Hinweis wurde soeben in eine andere Personenakte übernommen. Öffne sie über die Verknüpfung.");
+        }
+
         await AdvanceAsync(tip, actor, cancellationToken);
         return person.Id;
+    }
+
+    /// <summary>The person of the oldest Hinweis-to-Person link, so concurrent takeovers pick the same winner.</summary>
+    private async Task<string?> OldestLinkedPersonAsync(string tipId, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Links.AsNoTracking()
+            .Where(v => v.SourceType == nameof(Hinweis) && v.SourceId == tipId && v.TargetType == nameof(Person))
+            .OrderBy(v => v.CreatedAt).ThenBy(v => v.Id)
+            .Select(v => v.TargetId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task AttachPersonAsync(string tipId, string personId, ClaimsPrincipal actor,

@@ -1,14 +1,15 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ILawService" />
-public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
+public class LawService(IDbContextFactory<AppDbContext> dbFactory, IPublicLawService publicLaws) : ILawService
 {
     public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
@@ -64,6 +65,9 @@ public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.Laws.Add(law);
         await db.SaveChangesAsync(cancellationToken);
+        // after every write, not only after an obviously released one: a corrected or deleted paragraph would
+        // otherwise stand outside for a whole cache window, and "this one cannot be public" is a fact about today
+        await publicLaws.InvalidatePublicViewAsync();
         return law;
     }
 
@@ -82,6 +86,7 @@ public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
         law.Text = input.Text.Trim();
         law.Sentence = string.IsNullOrWhiteSpace(input.Sentence) ? null : input.Sentence.Trim();
         await db.SaveChangesAsync(cancellationToken);
+        await publicLaws.InvalidatePublicViewAsync();
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -92,9 +97,13 @@ public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
         var law = await db.Laws.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Paragraf nicht gefunden.");
 
+        // withdrawn from the public page on the way out: there is no restore path for a paragraph today, but a
+        // deleted row that keeps its release flag would come back published the day somebody builds one
+        law.IsPublic = false;
         // soft-delete (interceptor rewrites Remove)
         db.Laws.Remove(law);
         await db.SaveChangesAsync(cancellationToken);
+        await publicLaws.InvalidatePublicViewAsync();
     }
 
     private static void Validate(LawInput input)

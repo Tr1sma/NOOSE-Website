@@ -64,8 +64,8 @@ public sealed record CounterIntelEvent
     /// <summary>True/false once both sides resolve to a person file; null when either does not.</summary>
     public bool? ActorSharesOrgWithTarget { get; init; }
 
-    // display only, never a condition: how a flag names its subject
-    public bool ActorIsCitizen { get; init; }
+    // display only, never a condition: whether a flag can link to a personnel file at all
+    public bool ActorHasNoPersonnelFile { get; init; }
 
     /// <summary>The event is a tip whose anonymity promise still holds, so no flag may name the person behind it.</summary>
     public bool ActorIdentityWithheld { get; init; }

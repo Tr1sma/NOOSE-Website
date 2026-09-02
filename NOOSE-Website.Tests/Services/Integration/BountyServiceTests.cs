@@ -79,7 +79,7 @@ public sealed class BountyServiceTests
         var tipPriority = new TipPriorityService(factory);
         var wanted = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
-            notifications, tipPriority, discord, cache);
+            notifications, tipPriority, discord, Substitute.For<IPressReleaseService>(), cache);
         var kasse = new KassenService(factory, caseNumbers);
         var bounty = new BountyService(factory, wanted, modules, kasse, notifications, tipPriority, discord);
         return new Host(bounty, wanted, kasse, discord, notifications, cache);

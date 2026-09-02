@@ -1,4 +1,4 @@
-@page "/portal/status"
+﻿@page "/portal/status"
 @layout ApplicantPortalLayout
 @attribute [AllowAnonymous]
 @inject IBewerbungService BewerbungService
@@ -48,7 +48,10 @@
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Dein Anhang</MudText>
                 @if (IsImage(_bewerbung.AttachmentContentType))
                 {
-                    <div @onclick="OpenAttachmentAsync" style="cursor:pointer;width:max-content;" class="mt-1">
+                    @* keyboard-reachable: this is the only way to open the attachment *@
+                    <div @onclick="OpenAttachmentAsync" role="button" tabindex="0" aria-label="Anhang öffnen"
+                         @onkeydown="@(e => { if (e.Key is "Enter" or " ") { return OpenAttachmentAsync(); } return Task.CompletedTask; })"
+                         style="cursor:pointer;width:max-content;" class="mt-1">
                         <MudImage Src="@($"/dateien/bewerbungen/anhang/{_bewerbung.Id}?inline=true")" Alt="@_bewerbung.AttachmentOriginalName"
                                   Height="96" ObjectFit="ObjectFit.Cover" Class="rounded" />
                     </div>

@@ -1,0 +1,183 @@
+﻿@* The situation level the agency states on /lage: one level, one assessment, no draft step. *@
+@using NOOSE_Website.Models.Public
+@inject IPublicSituationService Situation
+@inject IPublicModuleService Modules
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Die Gefahrenlage unter <code>/lage</code>. Es gibt keinen Entwurf: gespeichert heißt hier veröffentlicht, und der
+    Modul-Schalter „Lage" entscheidet allein, ob die Stufe draußen steht. Die Stufe ist eine Einschätzung der
+    Behörde — sie wird bewusst <b>nicht</b> aus dem Bedrohungs-Score gerechnet. Nicht zu verwechseln mit den
+    <i>Warnungen</i>, das sind einzelne Durchsagen mit eigenem Ablaufdatum.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Spacing="4">
+        @* the emergency stop is named first and separately: a settings surface has to say WHICH switch is the
+           reason, and IsEnabledAsync folds the two together *@
+        <MudAlert Severity="@(_killSwitch || !_moduleOn ? Severity.Warning : Severity.Info)"
+                  Variant="Variant.Outlined" Dense="true">
+            @if (_killSwitch)
+            {
+                <text>Der öffentliche Bereich ist per Not-Aus vollständig abgeschaltet. Die Stufe lässt sich
+                setzen; sichtbar wird sie erst wieder, wenn der Not-Aus aus ist.</text>
+            }
+            else if (_moduleOn)
+            {
+                <text>Das Modul „Lage" ist eingeschaltet — was hier steht, ist öffentlich sichtbar.</text>
+            }
+            else
+            {
+                <text>Das Modul „Lage" ist ausgeschaltet. Die Stufe lässt sich trotzdem setzen; öffentlich wird
+                sie erst mit dem Schalter.</text>
+            }
+            <MudLink Href="/einstellungen?tab=oeffentliche-module" Class="ml-2">Zu den Modulen</MudLink>
+        </MudAlert>
+
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudStack Spacing="3">
+                <MudSelect T="PublicSituationLevel" @bind-Value="_input.Level" Label="Stufe"
+                           Variant="Variant.Outlined" Disabled="@(!_mayEdit)">
+                    @foreach (var level in PublicSituationLevelDisplay.All)
+                    {
+                        <MudSelectItem T="PublicSituationLevel" Value="@level">
+                            @PublicSituationLevelDisplay.Name(level) — @PublicSituationLevelDisplay.Hint(level)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                @* plain text, not a RichTextEditor: line breaks are the whole formatting, and the text goes out
+                   without HtmlCleanup *@
+                <MudTextField @bind-Value="_input.Note" Label="Einschätzung" Variant="Variant.Outlined"
+                              Lines="5" MaxLength="@SituationRules.MaxNote" Disabled="@(!_mayEdit)"
+                              Counter="@SituationRules.MaxNote"
+                              HelperText="Klartext. Zeilenumbrüche bleiben erhalten, Formatierung gibt es nicht." />
+
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save" Disabled="@(!_mayEdit || _save)">
+                        Gefahrenlage setzen
+                    </MudButton>
+                    @if (!_mayEdit)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Die Gefahrenlage setzt nur die Führung.
+                        </MudText>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle2">Aktueller Stand</MudText>
+                @if (_state is null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Es ist noch keine Stufe gesetzt. Bis dahin sagt <code>/lage</code> nichts — bewusst keine
+                        Vorgabe, denn „Niedrig" wäre eine Aussage.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@PublicSituationLevelDisplay.Colour(_state.Level)">
+                            @PublicSituationLevelDisplay.Name(_state.Level)
+                        </MudChip>
+                        @if (_state.Since is { } since)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                seit @since.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        }
+                        @if (_state.Previous is { } previous)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@PublicSituationLevelDisplay.Colour(previous)">
+                                zuvor: @PublicSituationLevelDisplay.Name(previous)
+                            </MudChip>
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Das Datum bewegt sich nur bei einem Stufenwechsel — eine korrigierte Einschätzung datiert die
+                        Lage nicht neu.
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _save;
+    private bool _moduleOn;
+    private bool _killSwitch;
+
+    private PublicSituationState? _state;
+    private PublicSituationInput _input = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _state = await Situation.GetForEditAsync(_user);
+            // the stored choice and the emergency stop kept apart: IsEnabledAsync answers the EFFECTIVE value,
+            // so during a Not-Aus this panel blamed the module switch
+            var snapshot = await Modules.GetAsync();
+            _killSwitch = snapshot.KillSwitchActive;
+            _moduleOn = snapshot.Find(PublicModules.HazardLevel)?.IsEnabled == true;
+            _input = new PublicSituationInput
+            {
+                Level = _state?.Level ?? PublicSituationLevel.Niedrig,
+                Note = _state?.Note ?? string.Empty,
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _save = true;
+        try
+        {
+            await Situation.SetAsync(_input, _user);
+            Snackbar.Add("Gefahrenlage gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _save = false;
+        }
+    }
+}

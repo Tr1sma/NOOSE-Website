@@ -39,6 +39,20 @@ public static class TicketRules
     public static readonly Expression<Func<Ticket, bool>> OpenRows =
         t => t.Status != TicketStatus.Geschlossen;
 
+    /// <summary>Lines the agency addressed to the citizen. The pre-filter of a reaction time, not the answer.</summary>
+    public static readonly Expression<Func<TicketNachricht, bool>> AgencyRows =
+        m => m.Audience == TicketMessageAudience.Buerger && !m.AuthorIsCitizen;
+
+    /// <summary>Whether an agency line is a human answer rather than the automatic entry confirmation.</summary>
+    /// <remarks>
+    /// The confirmation is written into the ticket's own SaveChanges, so the interceptor stamps it with the ticket's
+    /// timestamp and it is otherwise indistinguishable from a real reply. Without the strict comparison every ticket
+    /// with an active template reports a reaction time of zero, and the desk looks perfect.
+    /// </remarks>
+    public static bool IsHumanAgencyReply(
+        TicketMessageAudience audience, bool authorIsCitizen, DateTime createdAt, DateTime ticketCreatedAt)
+        => audience == TicketMessageAudience.Buerger && !authorIsCitizen && createdAt > ticketCreatedAt;
+
     /// <summary>Allowed status moves; anything else is refused rather than silently applied.</summary>
     /// <remarks>
     /// Closed is closed for the citizen — a reply is refused rather than reopening the thread — but leadership may

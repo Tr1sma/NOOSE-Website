@@ -1,0 +1,77 @@
+﻿@page "/berichte/{Period}"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicReportService Reports
+
+<PageTitle>@(_view?.Title ?? "Lagebericht") · NOOSE</PageTitle>
+
+@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and
+   every invented address would answer 200 without this tag *@
+@if (_view is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
+<PublicModuleGate Module="@PublicModules.SituationReports" Title="Lageberichte">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    @if (_view is null)
+    {
+        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6">Lagebericht nicht gefunden</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Dieser Bericht ist nicht veröffentlicht oder wurde zurückgezogen.
+            </MudText>
+            <MudButton Href="/berichte" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Assessment">Zur Übersicht</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Spacing="4">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                    @ReportPeriod.Label(_view.Year, _view.Month)
+                </MudChip>
+                @if (_view.PublishedAt is { } at)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @at.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                }
+            </MudStack>
+            <MudText Typo="Typo.h4">@_view.Title</MudText>
+            <MudDivider />
+            @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+            <div class="dokument-html">@((MarkupString)_view.Html)</div>
+            <MudDivider />
+            <MudButton Href="/berichte" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">Alle Lageberichte</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    // bound as a string, like every public route value: Blazor answers a value it cannot parse with a 500, and the
+    // period is parsed by ReportPeriod, which rejects anything that is not a real month
+    [Parameter] public string? Period { get; set; }
+
+    private PublicReportView? _view;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _view = await Reports.GetByPeriodAsync(Period);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

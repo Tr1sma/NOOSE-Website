@@ -248,6 +248,78 @@ public class AgentManagementServiceTests
         Assert.True(a.IsHRB);
     }
 
+    // ---- citizen starts an application ----
+
+    private static Agent NewCitizen(string id = "c")
+        => NewAgent(id, AgentStatus.Civilian, cfg: a =>
+        {
+            // citizens carry no codename; the audit row has to name them by their Discord handle
+            a.Codename = string.Empty;
+            a.DiscordUsername = "buerger-" + id;
+        });
+
+    [Fact]
+    public async Task StartApplicationAsync_PromotesCitizenAndRotatesStamp()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewCitizen());
+        var before = Reload(f, "c").SecurityStamp;
+
+        var returned = await f.Svc.StartApplicationAsync("c");
+
+        Assert.Equal(AgentStatus.Applicant, returned.Status);
+        var a = Reload(f, "c");
+        Assert.Equal(AgentStatus.Applicant, a.Status);
+        Assert.NotEqual(before, a.SecurityStamp);
+    }
+
+    [Fact]
+    public async Task StartApplicationAsync_WritesAnAuditRowTheViewerCanRender()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewCitizen());
+
+        await f.Svc.StartApplicationAsync("c");
+
+        using var db = f.Ctx.NewContext();
+        var row = Assert.Single(db.AuditLogs.Where(l => l.EntityType == nameof(Agent) && l.EntityId == "c"));
+        Assert.Equal("c", row.AgentId);
+        Assert.Equal("buerger-c", row.AgentName);
+        // the free-text shape the other agent rows use renders as an em dash
+        var change = Assert.Single(AuditDisplay.Parse(row.ChangesJson));
+        Assert.Equal("Status", change.Field);
+        Assert.Equal("Bürger", change.Alt);
+        Assert.Equal("Bewerber", change.New);
+    }
+
+    [Theory]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Pending)]
+    [InlineData(AgentStatus.Blocked)]
+    [InlineData(AgentStatus.Terminated)]
+    [InlineData(AgentStatus.Applicant)]
+    public async Task StartApplicationAsync_RejectsEveryStatusButCitizen(AgentStatus status)
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", status));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Svc.StartApplicationAsync("t"));
+
+        Assert.Equal(status, Reload(f, "t").Status);
+    }
+
+    [Fact]
+    public async Task StartApplicationAsync_KeepsTheAccountOutOfPickers()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewCitizen());
+
+        await f.Svc.StartApplicationAsync("c");
+
+        Assert.DoesNotContain(await f.Svc.GetSelectableAsync(), a => a.Id == "c");
+        Assert.DoesNotContain(await f.Svc.GetAllAsync(), a => a.Id == "c");
+    }
+
     // ---- master data / name change ----
 
     [Fact]

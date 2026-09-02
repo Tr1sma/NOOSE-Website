@@ -166,6 +166,7 @@ Three orthogonal axes: **rank** (`Models/Enums/Rank.cs`, int-backed `JuniorAgent
 ## Further docs
 
 - `CLAUDE.md` — full conventions, architecture, domain glossary
+- `claude-memory/` — per-area deep knowledge (public area, NOOSEI, services, UI); read the matching file **before** changing that area. Index: `claude-memory/README.md`
 - `Plan.md` — phase plan (status, data model, permission matrix)
 - `AlgoPlan.md` — threat-score spec (S1–S4 faction, P1–P5 person)
 - `DEPLOYMENT.md` / `DEPLOYMENT-DEMO.md` — server setup, prod & demo

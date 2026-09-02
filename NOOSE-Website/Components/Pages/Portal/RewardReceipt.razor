@@ -25,7 +25,9 @@ else if (_receipt is null)
 else
 {
     @* no PrintedBy: the paying agent appears nowhere on a citizen's receipt, and the record cannot carry them *@
-    <PrintFrame Title="Belohnung für einen Bürgerhinweis"
+    @* AutomaticPrint off: the frame renders its own print button, and a citizen's receipt opening the OS print
+       dialog unasked is the presumption the wanted poster deliberately avoids *@
+    <PrintFrame Title="Belohnung für einen Bürgerhinweis" AutomaticPrint="false"
                 BackHref="@($"/buerger/hinweise/{_receipt.TipCaseNumber}")" BackText="Zurück zum Hinweis"
                 Footer="Beleg der NOOSE über eine ausgezahlte Belohnung. Bitte für die eigenen Unterlagen aufbewahren."
                 IsClassified="false">

@@ -1,0 +1,306 @@
+﻿@* Standing public warnings of the agency: draft, publish, retract. *@
+@using NOOSE_Website.Models.Public
+@inject IPublicWarningService Warnings
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Amtliche Warnungen unter <code>/warnungen</code>. Gespeichert wird immer nur der Entwurf — Titel und Text, die
+    Besucher lesen, ändern sich erst beim Veröffentlichen. Das Gültigkeitsdatum wirkt dagegen sofort: eine abgelaufene
+    Warnung fällt von selbst aus der öffentlichen Liste, ohne dass jemand sie zurückziehen muss. Nicht zu verwechseln
+    mit den <i>Warnhinweisen</i> — das sind die Chips an einer Ausschreibung. Die Warnungen erscheinen nur, solange das
+    Modul „Warnungen" eingeschaltet ist.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="CloseEditor" aria-label="Zurück zur Liste" />
+        <MudText Typo="Typo.h6">@(_isNew ? "Neue Warnung" : _edit.Title)</MudText>
+        <MudSpacer />
+        <MudButton OnClick="SaveDraftAsync" Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" Disabled="_save">Entwurf speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Outlined="true" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_edit.Title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                          RequiredError="Titel ist erforderlich" MaxLength="@WarningRules.MaxTitle" />
+            <MudDatePicker @bind-Date="_edit.ValidUntil" Label="Gültig bis" Variant="Variant.Outlined"
+                           Clearable="true" DateFormat="dd.MM.yyyy"
+                           HelperText="Leer lassen, wenn die Warnung bis zum Zurückziehen gilt. Der gewählte Tag zählt noch mit." />
+
+            <MudText Typo="Typo.subtitle2">Entwurf</MudText>
+            @* keyed by row: switching warnings must re-initialise Quill instead of keeping the previous content *@
+            <RichTextEditor @ref="_editor" @key="_editorKey" Value="@_draftHtml" MinHeight="300px" />
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudSpacer />
+        @if (_mayEdit)
+        {
+            <MudButton OnClick="NewWarning" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neue Warnung</MudButton>
+        }
+    </MudStack>
+
+    <MudTable Items="_rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Titel</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Gültig bis</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Titel">@context.Title</MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    @if (context.Status == PublicWarningStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Veröffentlicht</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Entwurf</MudChip>
+                    }
+                    @* the status still says published, but the read path drops it — say so rather than let it look live *@
+                    @if (context.IsExpired && context.Status == PublicWarningStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                            abgelaufen
+                        </MudChip>
+                    }
+                    @* only meaningful next to a published warning; on a draft the status chip already says it *@
+                    @if (context.DraftDiffers && context.Status == PublicWarningStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                            Entwurf abweichend
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Gültig bis">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @(context.ValidUntil is { } until ? until.ToLocalTime().ToString("dd.MM.yyyy") : "unbefristet")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Veröffentlicht">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @* a draft has no publication date; without the fallback its only timestamp would be invisible *@
+                    @(context.PublishedAt is { } at
+                        ? $"{at.ToLocalTime():dd.MM.yyyy HH:mm}{(context.PublishedByName is { } who ? $" · {who}" : "")}"
+                        : context.ModifiedAt is { } edited
+                            ? $"Entwurf, bearbeitet {edited.ToLocalTime():dd.MM.yyyy HH:mm}"
+                            : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    @if (_mayEdit)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditorAsync(context))" aria-label="Warnung bearbeiten" />
+                        @if (context.Status == PublicWarningStatus.Veroeffentlicht)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Warning"
+                                           OnClick="@(() => RetractAsync(context))" aria-label="Warnung zurückziehen" />
+                        }
+                        @* also next to a published warning: publishing again is how a corrected draft goes out *@
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => PublishAsync(context))" aria-label="Warnung veröffentlichen" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Warnung löschen" />
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Warnungen angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _save;
+
+    private IReadOnlyList<WarningEdit> _rows = Array.Empty<WarningEdit>();
+
+    private WarningInput? _edit;
+    private bool _isNew;
+    private string? _draftHtml;
+    private string _editorKey = "neu";
+    private RichTextEditor? _editor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Warnings.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void NewWarning()
+    {
+        _isNew = true;
+        _draftHtml = null;
+        _editorKey = "neu";
+        _edit = new WarningInput();
+    }
+
+    private async Task OpenEditorAsync(WarningEdit row)
+    {
+        WarningDraft? draft;
+        try
+        {
+            // the list carries no HTML; fetch the one body about to be edited
+            draft = await Warnings.GetDraftAsync(row.Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+        if (draft is null)
+        {
+            Snackbar.Add("Diese Warnung existiert nicht mehr.", Severity.Error);
+            await LoadAsync();
+            return;
+        }
+
+        _isNew = false;
+        _editorKey = row.Id;
+        _draftHtml = draft.Html;
+        _edit = new WarningInput
+        {
+            Id = row.Id,
+            Title = draft.Title,
+            // shown in the operator's own time zone, which is the one the picker writes back in
+            ValidUntil = draft.ValidUntil?.ToLocalTime(),
+        };
+    }
+
+    private void CloseEditor()
+    {
+        _edit = null;
+        _editor = null;
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (_edit is null)
+        {
+            return;
+        }
+
+        _save = true;
+        try
+        {
+            // null would tell the service to keep the stored draft; only send a body once the editor really answered
+            _edit.DraftHtml = _editor is null ? _draftHtml : await _editor.GetHtmlAsync();
+
+            await Warnings.SaveDraftAsync(_edit, _user);
+            Snackbar.Add("Entwurf gespeichert.", Severity.Success);
+            await LoadAsync();
+            CloseEditor();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _save = false;
+        }
+    }
+
+    private async Task PublishAsync(WarningEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Warnung veröffentlichen?",
+            $"„{row.Title}“ wird öffentlich sichtbar"
+            + (row.ValidUntil is { } until ? $" und gilt bis zum {until.ToLocalTime():dd.MM.yyyy}." : " und gilt bis zum Zurückziehen."));
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.PublishAsync(row.Id, _user);
+            Snackbar.Add("Warnung veröffentlicht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RetractAsync(WarningEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Warnung zurückziehen?",
+            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.RetractAsync(row.Id, _user);
+            Snackbar.Add("Warnung zurückgezogen.", Severity.Info);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(WarningEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Warnung löschen?",
+            $"„{row.Title}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.DeleteAsync(row.Id, _user);
+            Snackbar.Add("Warnung gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

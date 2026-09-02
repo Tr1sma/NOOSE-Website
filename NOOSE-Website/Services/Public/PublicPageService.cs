@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MudBlazor;
@@ -18,9 +18,6 @@ public class PublicPageService(
 {
     private const string CacheKey = "OeffentlicheSeiten";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
-
-    private const int MaxTitle = 200;
-    private const int MaxMenuTitle = 64;
 
     public async Task<PublicPageSnapshot> GetPublishedAsync(CancellationToken cancellationToken = default)
     {
@@ -79,7 +76,12 @@ public class PublicPageService(
                 p.SortOrder,
                 p.Status,
                 p.ShowInMenu,
-                (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty),
+                // length as well as equality: the SQL comparison runs under a case- and accent-insensitive
+                // server collation, so a capital letter or an umlaut alone read as "nothing to publish". The body
+                // stays in SQL because PublicPageEdit deliberately carries no HTML. Residual gap, knowingly: an
+                // edit that changes only case or accents AND keeps the exact same length.
+                (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty)
+                    || (p.DraftHtml ?? string.Empty).Length != (p.ContentHtml ?? string.Empty).Length,
                 p.PublishedAt,
                 p.PublishedBy!.Codename,
                 p.ModifiedAt ?? p.CreatedAt))
@@ -141,11 +143,29 @@ public class PublicPageService(
         {
             row = await db.OeffentlicheSeiten.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
                   ?? throw new InvalidOperationException("Diese Seite existiert nicht mehr.");
+
+            // Two authors on one page: the second save would overwrite the first one's body, and the only copy
+            // left would be a diff in the audit log. Refuse instead - the same expression the panel row carries.
+            if (input.LoadedModifiedAt is { } loaded && (row.ModifiedAt ?? row.CreatedAt) != loaded)
+            {
+                throw new InvalidOperationException("Diese Seite wurde in der Zwischenzeit von jemand anderem "
+                    + "gespeichert. Schließe den Editor, lade die Liste neu und übertrage deine Änderungen.");
+            }
+        }
+
+        // The read path serves this very column, so moving it here would relocate a live page's public address
+        // without a publish click - every external link would die while the editor promises the opposite.
+        // Retracting keeps the content, so retract -> change address -> publish is a two-click round trip.
+        if (row.Status == PublicPageStatus.Veroeffentlicht
+            && !string.Equals(row.Slug, slug, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Die Seite ist unter „/info/{row.Slug}“ veröffentlicht. Zieh sie "
+                + "zuerst zurück, dann lässt sich die Adresse ändern.");
         }
 
         row.Slug = slug;
-        row.Title = Cut(title, MaxTitle);
-        row.MenuTitle = CutOrNull(Empty(input.MenuTitle), MaxMenuTitle);
+        row.Title = Cut(title, PublicPageRules.MaxTitle);
+        row.MenuTitle = CutOrNull(Empty(input.MenuTitle), PublicPageRules.MaxMenuTitle);
         // an unknown icon name is dropped, not stored: MudBlazor renders an icon value as markup
         row.IconName = PublicModules.IsKnownIcon(input.IconName) ? input.IconName!.Trim() : null;
         row.SortOrder = Math.Clamp(input.SortOrder, 0, 9999);
@@ -296,6 +316,11 @@ public class PublicPageService(
                 Pages: unique.ToDictionary(
                     p => p.Slug,
                     p => new PublicPageView(p.Slug, p.Title, p.ContentHtml ?? string.Empty, p.PublishedAt),
+                    StringComparer.OrdinalIgnoreCase),
+                // stripped once per cache fill, not once per anonymous search request
+                SearchText: unique.ToDictionary(
+                    p => p.Slug,
+                    p => HtmlCleanup.PlainText(p.ContentHtml),
                     StringComparer.OrdinalIgnoreCase));
         }
         catch (Exception)

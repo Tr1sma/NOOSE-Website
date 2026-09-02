@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -34,7 +34,8 @@ public class TipService(
     // ---- citizen ----
 
     public async Task<string> SubmitAsync(TipInput input, Stream? attachment, string? contentType,
-        string? originalName, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+        string? originalName, ClaimsPrincipal actor, long attachmentSize = 0,
+        CancellationToken cancellationToken = default)
     {
         // module first: whether this account could submit is none of the caller's business while the desk is closed
         await modules.RequireEnabledAsync(PublicModules.Tips, cancellationToken);
@@ -76,6 +77,20 @@ public class TipService(
             if (string.IsNullOrWhiteSpace(contentType) || !storage.IsAllowedType(contentType))
             {
                 throw new InvalidOperationException("Als Anhang sind nur Bilder (JPG, PNG, WEBP, GIF) erlaubt.");
+            }
+            // the size too, server-side: MaxBytes existed and was never read, so the only bound was the page's own
+            // OpenReadStream limit - and this path travels over SignalR, not through the file endpoint
+            // fail closed: a size of 0 means the caller stated none, and a bound that a caller can skip by
+            // omitting it is no bound at all
+            if (attachmentSize <= 0)
+            {
+                throw new InvalidOperationException("Zur Größe des Anhangs liegt keine Angabe vor.");
+            }
+            // MaxBytes of 0 means the storage declares no limit, not a limit of zero
+            if (storage.MaxBytes > 0 && attachmentSize > storage.MaxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Das Bild ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");
             }
             fileName = await storage.SaveAsync(attachment, contentType, cancellationToken);
         }
@@ -222,7 +237,7 @@ public class TipService(
         return new CitizenTipDetail(row.CaseNumber, row.Status, row.CreatedAt, row.Text, row.WantsAnonymity,
             row.AnonymityResolvedAt is not null, row.WantedCaseNumber, row.WantedDisplayName,
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
-            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, messages);
+            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, profile.IsBlocked, messages);
     }
 
     /// <inheritdoc />
@@ -303,7 +318,12 @@ public class TipService(
         Permission.RequireTipRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Hinweise.AsNoTracking().Where(ScopeFilter(scope));
+        // rooted, with !IsDeleted written back by hand: the projection dereferences the REQUIRED CitizenProfile
+        // navigation, so EF joins it INNER and a tip whose citizen profile was removed fell out of this list
+        // while GetCountsAsync - which touches no navigation - kept counting it. Shape from ObjectionService.
+        var query = db.Hinweise.IgnoreQueryFilters().AsNoTracking()
+            .Where(h => !h.IsDeleted)
+            .Where(ScopeFilter(scope));
         if (onlyMine)
         {
             var me = actor.GetAgentId();
@@ -438,6 +458,26 @@ public class TipService(
             row.Priority, TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
     }
 
+    public async Task<IReadOnlyList<TipNoticeRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // no citizen projection, so no dereference of the required profile navigation — which would INNER-join the
+        // tips of a removed citizen out of a list that is supposed to describe the notice, not the tipsters
+        var rows = await db.Hinweise.AsNoTracking()
+            .Where(h => h.WantedId == wantedId)
+            .OrderByDescending(h => h.Priority).ThenByDescending(h => h.CreatedAt)
+            .Take(ListCap)
+            .Select(h => new { h.Id, h.CaseNumber, h.Status, h.CreatedAt, h.Text, h.Priority })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(r => new TipNoticeRow(r.Id, r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text), r.Priority))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<TipHistoryRow>> GetForLinkedPersonAsync(string personId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
@@ -543,6 +583,7 @@ public class TipService(
                 + "ist nicht vorgesehen.");
         }
         var wasConfirmed = TipRules.CountsAsConfirmed(row.Status);
+        var wasOpen = TipRules.IsOpen(row.Status);
         row.Status = status;
         row.HandlerId ??= actor.GetAgentId();
         await db.SaveChangesAsync(cancellationToken);
@@ -552,6 +593,13 @@ public class TipService(
         {
             await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
             await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
+        }
+        else if (!wasOpen && TipRules.IsOpen(status))
+        {
+            // re-entering the open set: TipPriorityService only ever stamps open rows, so a reopened tip kept the
+            // score it had when it was closed and came back into the inbox mis-sorted - far enough down to fall
+            // off the list cap
+            await priority.StampAsync(row.Id, cancellationToken);
         }
         broadcaster.Report(row.Id);
     }
@@ -608,8 +656,11 @@ public class TipService(
     public async Task ResolveAnonymityAsync(string id, string reason, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
+        // RequireTipHandling first, not RequireWriteAccess: that guard deliberately lets the demo principal
+        // through and relies on the ReadOnlyBarrierInterceptor, which an ExecuteUpdate below never reaches.
+        // MayWrite() inside RequireTipHandling denies demo, supervision, partners and citizens.
+        Permission.RequireTipHandling(actor);
         Permission.RequireLeadership(actor);
-        Permission.RequireWriteAccess(actor);
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new InvalidOperationException("Eine Auflösung braucht eine Begründung.");
@@ -648,6 +699,15 @@ public class TipService(
         Permission.RequireTipHandling(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
+
+        // money history is append-only: the reward rows reach their tip through a required navigation, so a
+        // soft-deleted tip would hide the citizen's own receipt and the payout row along with it
+        if (await db.HinweisBelohnungen.AnyAsync(b => b.TipId == id, cancellationToken))
+        {
+            throw new InvalidOperationException("Ein belohnter Hinweis lässt sich nicht löschen — eine "
+                + "Fehlbuchung wird in der Kasse gegengebucht.");
+        }
+
         // the interceptor rewrites this into a soft delete; the attachment stays until the tip is purged for good
         db.Hinweise.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
@@ -685,6 +745,29 @@ public class TipService(
         }
 
         return new TipAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
+    }
+
+    /// <inheritdoc />
+    public async Task<TipAttachmentAccess?> GetOwnAttachmentAsync(string caseNumber, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // addressed by case number, because CitizenTipDetail carries no row id - and it must not: an outward
+        // record with a bare Id is exactly what OutwardModels_CarryNoBareRecordId forbids. Ownership is in the
+        // predicate, so a foreign case number reads as "does not exist" rather than as "not yours".
+        var profile = await buerger.GetOwnAsync(actor, cancellationToken);
+        if (profile is null || string.IsNullOrWhiteSpace(caseNumber))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.Hinweise.AsNoTracking()
+            .Where(h => h.CaseNumber == caseNumber && h.CitizenProfileId == profile.Id)
+            .Select(h => new { h.AttachmentFileName, h.AttachmentContentType, h.AttachmentOriginalName })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row?.AttachmentFileName is null
+            ? null
+            : new TipAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
     }
 
     // ---- reward ----
@@ -744,9 +827,11 @@ public class TipService(
     {
         Permission.RequireTipHandling(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // scoped to the bin like every other restore in this layer: without it a live row can be pushed through the
+        // restore path, saved and broadcast as a no-op
         var row = await db.Hinweise.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(h => h.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("Hinweis nicht gefunden.");
+            .FirstOrDefaultAsync(h => h.Id == id && h.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Der Hinweis liegt nicht im Papierkorb.");
         row.IsDeleted = false;
         row.DeletedAt = null;
         row.DeletedById = null;

@@ -1,0 +1,164 @@
+﻿@page "/suche-oeffentlich"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Public
+@inject IPublicSearchService Search
+
+@* Named PublicSearchPage, not SearchPage: /suche is the internal one, the same reason the public board is
+   WantedHub and not WantedBoard. *@
+
+<PageTitle>Suche · NOOSE</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(QueryText))
+{
+    @* a result page for a query the agency did not write is not content to index, and the route answers 200 for
+       every one of them — the same soft-404 trap the missing info page guards against *@
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
+<PublicModuleGate Module="@PublicModules.PublicSearch" Title="Suche">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <div>
+            <MudText Typo="Typo.h4">Suche</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                Durchsucht ausschließlich Veröffentlichtes: Fahndungen, Organisationsprofile, Pressemitteilungen,
+                Warnungen, Lageberichte, Informationsseiten und freigegebene Gesetzesauszüge.
+            </MudText>
+        </div>
+
+        @* a plain GET form: this page renders statically, so a bound field with a click handler would look like a
+           search box and do nothing — the same dead affordance as a print button on the wanted poster *@
+        <form method="get" action="/suche-oeffentlich" class="d-flex" style="gap:.75rem;flex-wrap:wrap;">
+            <input type="search" name="q" value="@QueryText" maxlength="@PublicSearchRules.MaxQueryLength"
+                   placeholder="Suchbegriff" aria-label="Suchbegriff"
+                   style="flex:1 1 260px;padding:.65rem .9rem;border-radius:6px;border:1px solid var(--mud-palette-lines-inputs);background:var(--mud-palette-surface);color:var(--mud-palette-text-primary);" />
+            <button type="submit"
+                    style="padding:.65rem 1.4rem;border-radius:6px;border:0;cursor:pointer;background:var(--mud-palette-primary);color:var(--mud-palette-primary-text);font-weight:600;">
+                Suchen
+            </button>
+        </form>
+
+        <MudDivider />
+
+        @if (string.IsNullOrWhiteSpace(QueryText))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Gib einen Suchbegriff ein, um die veröffentlichten Inhalte zu durchsuchen.
+            </MudText>
+        }
+        else if (_tooShort)
+        {
+            @* said out loud rather than answered with "nothing found", which would be untrue *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Bitte mindestens @PublicSearchRules.MinQueryLength Zeichen eingeben.
+            </MudAlert>
+        }
+        else if (_results.Groups.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Zu diesem Suchbegriff ist nichts veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Angezeigt: @_results.Shown</MudText>
+
+            @foreach (var group in _results.Groups)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@PublicSearchAreaDisplay.Icon(group.Area)" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.h6">@PublicSearchAreaDisplay.Name(group.Area)</MudText>
+                    </MudStack>
+
+                    @foreach (var hit in group.Hits)
+                    {
+                        <MudPaper Outlined="true" Class="pa-4">
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                    @if (!string.IsNullOrWhiteSpace(hit.Reference))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                            @hit.Reference
+                                        </MudChip>
+                                    }
+                                    @if (hit.PublishedAt is { } at)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @at.ToLocalTime().ToString("dd.MM.yyyy")
+                                        </MudText>
+                                    }
+                                </MudStack>
+                                @if (hit.Href is { Length: > 0 } href)
+                                {
+                                    <MudLink Href="@href" Typo="Typo.subtitle1" Underline="Underline.None">@hit.Title</MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.subtitle1">@hit.Title</MudText>
+                                }
+                                @* plain text, never MarkupString: the snippet is cut mid-tag out of published markup *@
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@hit.Snippet</MudText>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+
+            @if (_results.AnyCapped)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Je Bereich werden höchstens @PublicSearchRules.PerAreaLimit Treffer gezeigt.
+                </MudText>
+            }
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    @* string, always: Blazor answers a query value it cannot parse with HTTP 500, and anyone may append one.
+       Public, always: the attribute does not bind to a private field, silently. *@
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? QueryText { get; set; }
+
+    private PublicSearchResults _results = PublicSearchResults.Empty;
+    private bool _tooShort;
+    private string? _loadedQuery;
+    private bool _loaded;
+
+    @* OnParametersSetAsync, not OnInitializedAsync: only the query changes between two searches, and the route
+       template is the same, so the component instance is reused. *@
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded && string.Equals(_loadedQuery, QueryText, StringComparison.Ordinal))
+        {
+            return;
+        }
+        _loaded = true;
+        _loadedQuery = QueryText;
+        _results = PublicSearchResults.Empty;
+
+        var text = PublicSearchRules.Normalise(QueryText);
+        // discriminated on the RAW parameter: a query of emoji, soft hyphens or variation selectors normalises to
+        // empty, and answering that with "nothing published" would be a lie about the corpus
+        _tooShort = !string.IsNullOrWhiteSpace(QueryText) && PublicSearchRules.IsTooShort(text);
+        if (text.Length == 0 || _tooShort)
+        {
+            return;
+        }
+        try
+        {
+            _results = await Search.SearchAsync(text);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

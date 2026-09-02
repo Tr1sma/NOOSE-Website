@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -19,15 +19,25 @@ public sealed record PublicPageView(
 /// <see cref="Menu"/> is a subset of <see cref="Pages"/>: a published page that is not listed stays readable by
 /// direct link. Reading both from one snapshot keeps the two from disagreeing within a cache window.
 /// </remarks>
+/// <param name="SearchText">
+/// Body as plain text, per slug, computed once per cache fill - see PublicPressSnapshot for the reason.
+/// </param>
 public sealed record PublicPageSnapshot(
     IReadOnlyList<PublicPageLink> Menu,
-    IReadOnlyDictionary<string, PublicPageView> Pages)
+    IReadOnlyDictionary<string, PublicPageView> Pages,
+    IReadOnlyDictionary<string, string>? SearchText = null)
 {
     public static PublicPageSnapshot Empty { get; } =
         new([], new Dictionary<string, PublicPageView>(StringComparer.OrdinalIgnoreCase));
 
     public PublicPageView? Find(string? slug)
         => slug is not null && Pages.TryGetValue(slug, out var page) ? page : null;
+
+    /// <summary>Precomputed plain text of one page; empty when the snapshot carries none.</summary>
+    public string SearchTextFor(string? slug)
+        => slug is not null && SearchText is not null && SearchText.TryGetValue(slug, out var plain)
+            ? plain
+            : string.Empty;
 }
 
 /// <summary>Editing row of the settings panel.</summary>
@@ -66,4 +76,11 @@ public class PublicPageInput
     public string? DraftHtml { get; set; }
 
     public bool ShowInMenu { get; set; } = true;
+
+    /// <summary>The row's <c>ModifiedAt</c> when the editor opened it; a mismatch on save is a collision.</summary>
+    /// <remarks>
+    /// Same expression as the panel row carries (<c>ModifiedAt ?? CreatedAt</c>), so the two are comparable after
+    /// their common round trip through the database. Ignored when creating a page.
+    /// </remarks>
+    public DateTime? LoadedModifiedAt { get; set; }
 }

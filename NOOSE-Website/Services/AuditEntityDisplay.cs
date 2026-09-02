@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services;
+﻿namespace NOOSE_Website.Services;
 
 /// <summary>German labels and deep-links for audit entity type names (CLR type names).</summary>
 public static class AuditEntityDisplay
@@ -43,6 +43,9 @@ public static class AuditEntityDisplay
         "BuergerProfil" => "Bürgerkonto",
         "OeffentlichesModul" => "Öffentliches Modul",
         "OeffentlicheSeite" => "Öffentliche Seite",
+        "Pressemitteilung" => "Pressemitteilung",
+        "OeffentlicheWarnung" => "Öffentliche Warnung",
+        "OeffentlicherLagebericht" => "Öffentlicher Lagebericht",
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "Warnhinweis" => "Warnhinweis",
         "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
@@ -55,6 +58,7 @@ public static class AuditEntityDisplay
         "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
         "FahndungEinspruch" => "Einspruch gegen eine Ausschreibung",
         "PublicArea" => "Öffentlicher Bereich",
+        "PublicSituation" => "Gefahrenlage",
         _ => type,
     };
 
@@ -87,7 +91,11 @@ public static class AuditEntityDisplay
         "BuergerProfil" => "/einstellungen?tab=buerger",
         "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
         "PublicArea" => "/einstellungen?tab=oeffentliche-module",
+        "PublicSituation" => "/einstellungen?tab=lage",
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
+        "Pressemitteilung" => "/einstellungen?tab=presse",
+        "OeffentlicheWarnung" => "/einstellungen?tab=warnungen",
+        "OeffentlicherLagebericht" => "/einstellungen?tab=berichte",
         "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
         "Warnhinweis" => "/einstellungen?tab=warnhinweise",
         // the share has no page of its own; it is managed at the notice, which is managed here

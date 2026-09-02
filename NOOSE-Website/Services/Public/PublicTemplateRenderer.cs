@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -57,6 +57,14 @@ public static partial class PublicTemplateRenderer
     /// <summary>Sample values for the editor's preview; never used on a real message.</summary>
     public static PublicTemplateContext SampleContext(DateTime? now = null)
         => new("Max Mustermann", "NOOSE-T-2026-0001", now ?? DateTime.Now);
+
+    /// <summary>The longest values a substitution can ever produce, for checking a stored template's length.</summary>
+    /// <remarks>
+    /// Two 64-character name halves plus the separator, and the longest case number any prefix mints. Used at save
+    /// time so a template cannot be stored that renders past the message cap.
+    /// </remarks>
+    public static PublicTemplateContext WorstCaseContext(DateTime? now = null)
+        => new(new string('M', 64) + " " + new string('M', 64), "NOOSE-XXX-2026-0001", now ?? DateTime.Now);
 
     [GeneratedRegex(@"\bBUERGER\b")]
     private static partial Regex CitizenToken();

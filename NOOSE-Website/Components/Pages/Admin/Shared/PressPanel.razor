@@ -1,0 +1,315 @@
+﻿@* Press releases of the agency: draft, publish, retract. *@
+@using NOOSE_Website.Models.Public
+@inject IPressReleaseService Press
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Amtliche Verlautbarungen unter <code>/presse</code>. Gespeichert wird immer nur der Entwurf — Titel, Teaser
+    und Text, die Besucher lesen, ändern sich erst beim Veröffentlichen. Das öffentliche Aktenzeichen entsteht bei der ersten
+    Veröffentlichung; ein Entwurf hat deshalb gar keine öffentliche Adresse und ist auch mit dem direkten Link
+    nicht erreichbar. Was hier im Editor steht, ist der Stand, der veröffentlicht würde. Die Mitteilungen
+    erscheinen nur, solange das Modul „Presse" eingeschaltet ist.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit is not null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="CloseEditor" aria-label="Zurück zur Liste" />
+        <MudText Typo="Typo.h6">@(_isNew ? "Neue Pressemitteilung" : _edit.Title)</MudText>
+        <MudSpacer />
+        <MudButton OnClick="SaveDraftAsync" Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" Disabled="_save">Entwurf speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Outlined="true" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_edit.Title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                          RequiredError="Titel ist erforderlich" MaxLength="@PressRules.MaxTitle" />
+            <MudTextField @bind-Value="_edit.Teaser" Label="Teaser" Variant="Variant.Outlined" Lines="2"
+                          MaxLength="@PressRules.MaxTeaser"
+                          HelperText="Klartext für die Übersicht — er wird ohne Formatierung angezeigt." />
+
+            <MudText Typo="Typo.subtitle2">Entwurf</MudText>
+            @* keyed by row: switching releases must re-initialise Quill instead of keeping the previous content *@
+            <RichTextEditor @ref="_editor" @key="_editorKey" Value="@_draftHtml" MinHeight="360px" />
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudSpacer />
+        @if (_mayEdit)
+        {
+            <MudButton OnClick="NewRelease" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neue Pressemitteilung</MudButton>
+        }
+    </MudStack>
+
+    <MudTable Items="_rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Titel</MudTh>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Veröffentlicht</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Titel">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.body2">@context.Title</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Teaser</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                @if (context.CaseNumber is { Length: > 0 } number)
+                {
+                    <code>@number</code>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    @if (context.Status == PressReleaseStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Veröffentlicht</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Entwurf</MudChip>
+                    }
+                    @* only meaningful next to a published release; on a draft the status chip already says it *@
+                    @if (context.DraftDiffers && context.Status == PressReleaseStatus.Veroeffentlicht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                            Entwurf abweichend
+                        </MudChip>
+                    }
+                    @* the push happens once per release, so a re-publication does not spam the channel *@
+                    @if (context.DiscordPushedAt is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                            gemeldet
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Veröffentlicht">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @* a draft has no publication date; without the fallback its only timestamp would be invisible *@
+                    @(context.PublishedAt is { } at
+                        ? $"{at.ToLocalTime():dd.MM.yyyy HH:mm}{(context.PublishedByName is { } who ? $" · {who}" : "")}"
+                        : context.ModifiedAt is { } edited
+                            ? $"Entwurf, bearbeitet {edited.ToLocalTime():dd.MM.yyyy HH:mm}"
+                            : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    @if (context.Status == PressReleaseStatus.Veroeffentlicht && context.CaseNumber is { Length: > 0 } live)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/presse/{live}")" Target="_blank" aria-label="Öffentlich ansehen" />
+                    }
+                    @if (_mayEdit)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditorAsync(context))" aria-label="Mitteilung bearbeiten" />
+                        @if (context.Status == PressReleaseStatus.Veroeffentlicht)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Warning"
+                                           OnClick="@(() => RetractAsync(context))" aria-label="Mitteilung zurückziehen" />
+                        }
+                        @* also next to a published release: publishing again is how a corrected draft goes out *@
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" Color="Color.Success"
+                                       OnClick="@(() => PublishAsync(context))" aria-label="Mitteilung veröffentlichen" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Mitteilung löschen" />
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Pressemitteilungen angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _save;
+
+    private IReadOnlyList<PressEdit> _rows = Array.Empty<PressEdit>();
+
+    private PressInput? _edit;
+    private bool _isNew;
+    private string? _draftHtml;
+    private string _editorKey = "neu";
+    private RichTextEditor? _editor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Press.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void NewRelease()
+    {
+        _isNew = true;
+        _draftHtml = null;
+        _editorKey = "neu";
+        _edit = new PressInput();
+    }
+
+    private async Task OpenEditorAsync(PressEdit row)
+    {
+        PressDraft? draft;
+        try
+        {
+            // the list carries no HTML; fetch the one body about to be edited
+            draft = await Press.GetDraftAsync(row.Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+        if (draft is null)
+        {
+            Snackbar.Add("Diese Pressemitteilung existiert nicht mehr.", Severity.Error);
+            await LoadAsync();
+            return;
+        }
+
+        _isNew = false;
+        _editorKey = row.Id;
+        _draftHtml = draft.Html;
+        _edit = new PressInput { Id = row.Id, Title = draft.Title, Teaser = draft.Teaser };
+    }
+
+    private void CloseEditor()
+    {
+        _edit = null;
+        _editor = null;
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (_edit is null)
+        {
+            return;
+        }
+
+        _save = true;
+        try
+        {
+            // null would tell the service to keep the stored draft; only send a body once the editor really answered
+            _edit.DraftHtml = _editor is null ? _draftHtml : await _editor.GetHtmlAsync();
+
+            await Press.SaveDraftAsync(_edit, _user);
+            Snackbar.Add("Entwurf gespeichert.", Severity.Success);
+            await LoadAsync();
+            CloseEditor();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _save = false;
+        }
+    }
+
+    private async Task PublishAsync(PressEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Pressemitteilung veröffentlichen?",
+            $"„{row.Title}“ wird öffentlich sichtbar"
+            + (row.DiscordPushedAt is null ? " und einmalig im Discord-Kanal gemeldet." : "."));
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Press.PublishAsync(row.Id, _user);
+            Snackbar.Add("Pressemitteilung veröffentlicht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RetractAsync(PressEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Pressemitteilung zurückziehen?",
+            $"„{row.Title}“ ist danach öffentlich nicht mehr erreichbar. Entwurf und Aktenzeichen bleiben erhalten.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Press.RetractAsync(row.Id, _user);
+            Snackbar.Add("Pressemitteilung zurückgezogen.", Severity.Info);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(PressEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Pressemitteilung löschen?",
+            $"„{row.Title}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Press.DeleteAsync(row.Id, _user);
+            Snackbar.Add("Pressemitteilung gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

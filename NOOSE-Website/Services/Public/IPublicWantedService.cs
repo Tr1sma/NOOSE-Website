@@ -21,6 +21,13 @@ public interface IPublicWantedService
     /// <summary>The recently captured notices, cached; empty while the archive module is off.</summary>
     Task<IReadOnlyList<PublicWantedArchiveCard>> GetArchiveAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>How many captures there are in total; 0 while the archive module is off.</summary>
+    /// <remarks>
+    /// Not <c>GetArchiveAsync().Count</c>: that list is capped at the newest hundred for page weight, and a counter
+    /// that stops at the display limit reads as completeness. Same two module switches, same suppression belt.
+    /// </remarks>
+    Task<int> GetCapturedTotalAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The photo copy of a published or captured notice; null for every miss, so the endpoint cannot become an existence oracle.</summary>
     Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default);
 

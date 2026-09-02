@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Storage;
@@ -7,6 +7,7 @@ using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Threat;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 using NOOSE_Website.Services.Llm.Tools;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
@@ -346,7 +347,7 @@ public sealed class NooseiCoverageToolTests
             });
             db.SaveChanges();
         }
-        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory));
+        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory, Substitute.For<IPublicLawService>()));
 
         var result = await tool.InvokeAsync(
             Args("""{"typ":"Gesetz"}"""), NooseiToolContext.From(Junior()));
@@ -361,7 +362,7 @@ public sealed class NooseiCoverageToolTests
     public async Task FilterRecords_NamesWhatItCanEnumerate_WhenAskedForSomethingElse()
     {
         using var ctx = new SqliteTestContext();
-        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory));
+        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory, Substitute.For<IPublicLawService>()));
 
         // an appointment is readable but has no plain list service; lies_kalender is what answers about it
         var result = await tool.InvokeAsync(

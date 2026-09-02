@@ -75,7 +75,13 @@
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
                Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md"
                Width="300px" Class="noose-drawer" Style="max-width:88vw;">
-        <NavMenu />
+        @* /not-found and /Error render this shell for anonymous visitors too, and the internal rail has nothing
+           to offer them *@
+        <AuthorizeView>
+            <Authorized>
+                <NavMenu />
+            </Authorized>
+        </AuthorizeView>
     </MudDrawer>
 
     <MudMainContent>

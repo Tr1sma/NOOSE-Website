@@ -1,4 +1,4 @@
-@inherits LayoutComponentBase
+﻿@inherits LayoutComponentBase
 @inject IPublicModuleService ModuleService
 
 @* Public site shell (landing, career) with top tab nav; no maintenance wall, no auth chrome. *@
@@ -10,13 +10,16 @@
 <div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
     <div style="max-width:960px;margin:0 auto;">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
-                <MudStack Spacing="0">
-                    <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">National Office of Security Enforcement</MudText>
+            @* the wordmark leads home, as in the other shells *@
+            <MudLink Href="/" Underline="Underline.None" Color="Color.Inherit">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">National Office of Security Enforcement</MudText>
+                    </MudStack>
                 </MudStack>
-            </MudStack>
+            </MudLink>
             <AuthorizeView>
                 <Authorized Context="authCtx">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">

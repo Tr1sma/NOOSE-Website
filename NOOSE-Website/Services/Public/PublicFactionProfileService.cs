@@ -60,7 +60,12 @@ public class PublicFactionProfileService(
         Permission.RequirePublicFactionProfileRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await ProjectAsync(db.OeffentlicheFraktionsprofile.AsNoTracking(), cancellationToken);
+        // rooted, with !IsDeleted written back by hand: ProjectAsync dereferences the REQUIRED Faction navigation,
+        // so a profile whose file was deleted would be INNER-joined out of the list and never reach the gate
+        // below - which exists precisely to keep a leftover profile manageable
+        var rows = await ProjectAsync(
+            db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().AsNoTracking().Where(p => !p.IsDeleted),
+            cancellationToken);
         // the profile carries the content of a file, so the read gate of the file applies to it
         var visible = await VisibleFactionsAsync(db, rows.Select(r => r.FactionId), actor, cancellationToken);
         return rows.Where(r => visible.Contains(r.FactionId)).ToList();
@@ -72,8 +77,11 @@ public class PublicFactionProfileService(
         Permission.RequirePublicFactionProfileRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // rooted for the same reason as GetAllAsync
         var rows = await ProjectAsync(
-            db.OeffentlicheFraktionsprofile.AsNoTracking().Where(p => p.FactionId == factionId), cancellationToken);
+            db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().AsNoTracking()
+                .Where(p => !p.IsDeleted && p.FactionId == factionId),
+            cancellationToken);
         var row = rows.FirstOrDefault();
         if (row is null)
         {
@@ -377,11 +385,15 @@ public class PublicFactionProfileService(
             // for a deleted file, so "p.Faction == null || ..." would show exactly the rows it must hide.
             var open = await OpenFactionsAsync(db, rows.Select(r => r.FactionId), cancellationToken);
 
-            board = new PublicFactionBoard(rows
+            var cards = rows
                 .Where(r => open.Contains(r.FactionId))
                 .Select(r => new PublicFactionCard(r.DisplayName, r.Standing, r.PublicHazardLevel, r.DescriptionHtml,
                     r.PublishedAt))
-                .ToList());
+                .ToList();
+            // stripped once per cache fill, not once per anonymous search request
+            board = new PublicFactionBoard(
+                cards,
+                cards.Select(c => HtmlCleanup.PlainText(c.DescriptionHtml)).ToList());
         }
         catch (Exception)
         {

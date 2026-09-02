@@ -1,4 +1,4 @@
-@page "/hinweis"
+﻿@page "/hinweis"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @using NOOSE_Website.Models.Public
@@ -13,7 +13,7 @@
 <PageTitle>Hinweis geben · NOOSE</PageTitle>
 
 <PublicModuleGate Module="@PublicModules.Tips" Title="Hinweis geben">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <MudStack Spacing="2">
             <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerhinweis</MudText>
@@ -99,7 +99,12 @@
                                       HelperText="@($"Wann, wo, wer, was — mindestens {TipRules.MinLength} Zeichen.")" />
 
                         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept="image/*">
+                            @* Accept mirrors the server allowlist and MaxFileSize the server cap: with image/*
+                               a HEIC or SVG passed the dialog and was only refused after Send, and exceeding the
+                               limit surfaced the framework's untranslated English message *@
+                            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged"
+                                           Accept="image/jpeg,image/png,image/webp,image/gif"
+                                           MaxFileSize="@TipUploadLimit">
                                 <CustomContent>
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                                                StartIcon="@Icons.Material.Filled.AddAPhoto"
@@ -113,6 +118,13 @@
                                          OnClose="@(() => _file = null)">@_file.Name</MudChip>
                             }
                         </MudStack>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Optional: ein Bild (JPG, PNG, WEBP, GIF), maximal @(TipUploadLimit / (1024 * 1024)) MB.
+                            @if (_quota is { } quota)
+                            {
+                                <text>Du kannst @quota Hinweise in 24 Stunden einreichen.</text>
+                            }
+                        </MudText>
 
                         <MudCheckBox T="bool" @bind-Value="_input.WantsAnonymity" Color="Color.Primary"
                                      Label="Meinen Namen gegenüber den Bearbeitern nicht anzeigen" />
@@ -159,6 +171,8 @@
     private bool _busy;
     private bool _blocked;
     private bool _needsProfile;
+    // the REAL quota, which rises with the trust tier: TipRules.PerDay is only the tier-1 value
+    private int? _quota;
     private string? _caseNumber;
     private string? _loadedReference;
 
@@ -174,6 +188,7 @@
                     || string.IsNullOrWhiteSpace(profile.FirstName)
                     || string.IsNullOrWhiteSpace(profile.LastName);
                 _blocked = profile?.IsBlocked ?? false;
+                _quota = profile is null ? null : TipTrust.QuotaFor(profile.ConfirmedTips);
             }
             catch
             {
@@ -192,7 +207,18 @@
         }
     }
 
-    private void OnFileChanged(IBrowserFile? file) => _file = file;
+    // refused at pick time, in German: OpenReadStream would otherwise throw the framework's English IOException
+    // into the snackbar at submit time
+    private void OnFileChanged(IBrowserFile? file)
+    {
+        if (file is not null && file.Size > TipUploadLimit)
+        {
+            Snackbar.Add($"Das Bild ist zu groß (maximal {TipUploadLimit / (1024 * 1024)} MB).", Severity.Warning);
+            _file = null;
+            return;
+        }
+        _file = file;
+    }
 
     private async Task SubmitAsync()
     {
@@ -212,7 +238,7 @@
             else
             {
                 await using var stream = _file.OpenReadStream(TipUploadLimit);
-                _caseNumber = await Tips.SubmitAsync(_input, stream, _file.ContentType, _file.Name, _user);
+                _caseNumber = await Tips.SubmitAsync(_input, stream, _file.ContentType, _file.Name, _user, _file.Size);
             }
         }
         catch (Exception ex)

@@ -73,7 +73,7 @@ public sealed class ObjectionServiceTests
             Substitute.For<NOOSE_Website.Infrastructure.Storage.IFileStorageService>(),
             Substitute.For<NOOSE_Website.Infrastructure.Storage.IPublicWantedPhotoStorageService>(),
             Substitute.For<INotificationService>(), new TipPriorityService(factory),
-            Substitute.For<IDiscordWebhookService>(), cache);
+            Substitute.For<IDiscordWebhookService>(), Substitute.For<IPressReleaseService>(), cache);
 
         var notifications = Substitute.For<INotificationService>();
         var cases = Substitute.For<ICaseService>();
@@ -553,5 +553,91 @@ public sealed class ObjectionServiceTests
         Assert.Equal(PublicWantedStatus.Veroeffentlicht, detail.WantedStatus);
         Assert.Equal("Erika Beispiel", detail.CitizenName);
         Assert.False(detail.CitizenIsBlocked);
+    }
+
+    [Fact]
+    public async Task ADeletedNotice_DoesNotBreakTheDesk()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+        string id, wantedId;
+        await using (var read = ctx.NewContext())
+        {
+            id = (await read.FahndungEinsprueche.SingleAsync()).Id;
+            wantedId = (await read.OeffentlicheFahndungen.SingleAsync()).Id;
+        }
+        await RetractAsync(ctx, host, wantedCaseNumber);
+        await host.Wanted.DeleteAsync(wantedId, Leader());
+
+        // the notice is gone from the filtered set; the desk must still show what was disputed
+        var rows = await host.Service.GetListAsync(true, Leader());
+        Assert.Equal(wantedCaseNumber, Assert.Single(rows).WantedCaseNumber);
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.NotNull(detail);
+        Assert.Equal(wantedCaseNumber, detail!.WantedCaseNumber);
+    }
+
+    [Fact]
+    public async Task WithADeletedNotice_TheTabCountAndTheListStillAgree()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+        string wantedId;
+        await using (var read = ctx.NewContext())
+        {
+            wantedId = (await read.OeffentlicheFahndungen.SingleAsync()).Id;
+        }
+        await RetractAsync(ctx, host, wantedCaseNumber);
+        await host.Wanted.DeleteAsync(wantedId, Leader());
+
+        // a badge that insists something is open while the list cannot find it is worse than either alone
+        var counts = await host.Service.GetCountsAsync(Leader());
+        Assert.Equal(counts.Open, (await host.Service.GetListAsync(true, Leader())).Count);
+    }
+
+    [Fact]
+    public async Task RestoringAnOpenObjection_IsRefusedWhenAFreshOneTookItsPlace()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+        string first;
+        await using (var read = ctx.NewContext())
+        {
+            first = (await read.FahndungEinsprueche.SingleAsync()).Id;
+        }
+        await host.Service.DeleteAsync(first, Leader());
+        // the deleted one no longer occupies the notice, so a second submission goes through
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+
+        // restoring is the second door onto "one open objection per notice and account"
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.RestoreAsync(first, Leader()));
+    }
+
+    [Fact]
+    public async Task RestoringADecidedObjection_IsNotBlockedByAnOpenOne()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+        string first;
+        await using (var read = ctx.NewContext())
+        {
+            first = (await read.FahndungEinsprueche.SingleAsync()).Id;
+        }
+        await host.Service.SetStatusAsync(first, ObjectionStatus.Abgelehnt, "Nicht plausibel.", Leader());
+        await host.Service.DeleteAsync(first, Leader());
+        await host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen());
+
+        // a decided objection occupies nothing; its history belongs back in the file
+        await host.Service.RestoreAsync(first, Leader());
+
+        Assert.Equal(2, (await host.Service.GetOwnAsync(Citizen())).Count);
     }
 }

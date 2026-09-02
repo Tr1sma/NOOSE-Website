@@ -81,7 +81,8 @@ public sealed class RewardServiceTests
         var tipPriority = new TipPriorityService(factory);
         var wanted = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
-            notifications, tipPriority, Substitute.For<IDiscordWebhookService>(), cache);
+            notifications, tipPriority, Substitute.For<IDiscordWebhookService>(),
+            Substitute.For<IPressReleaseService>(), cache);
         var kasse = new KassenService(factory, caseNumbers);
         var bounty = new BountyService(factory, wanted, modules, kasse, notifications, tipPriority,
             Substitute.For<IDiscordWebhookService>());

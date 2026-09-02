@@ -489,7 +489,7 @@ public sealed class CounterIntelRuleEvaluatorTests
             EntityId = id,
             Action = CounterIntelActionKind.Created,
             ActorSharesOrgWithTarget = shares,
-            ActorIsCitizen = citizen,
+            ActorHasNoPersonnelFile = citizen,
             ActorIdentityWithheld = withheld,
         };
 

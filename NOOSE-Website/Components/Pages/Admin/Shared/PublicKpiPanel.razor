@@ -1,0 +1,235 @@
+﻿@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@inject IPublicKpiService Kpi
+@inject ISnackbar Snackbar
+
+@* No AuthorizeView wrapper: /einstellungen already runs on Policies.LeadershipPage and the service guard is its
+   exact twin, so a second gate here would only be a second place to get it wrong.
+   Money is in GTA dollars, which /kasse already shows every agent — the AI-owner rule is about NOOSEI API cost. *@
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Was der öffentliche Bereich einbringt: wie viele Bürgerhinweise zu einer Ergreifung führen, was eine bezahlte
+    Ergreifung kostet, wie schnell der Ticket-Schalter antwortet und wie viel Aufmerksamkeit die Ausschreibungen
+    ziehen.
+</MudText>
+
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudSelect T="int" @bind-Value="_days" @bind-Value:after="LoadAsync" Label="Zeitraum" Dense="true"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;">
+        <MudSelectItem T="int" Value="7">letzte 7 Tage</MudSelectItem>
+        <MudSelectItem T="int" Value="30">letzte 30 Tage</MudSelectItem>
+        <MudSelectItem T="int" Value="90">letzte 90 Tage</MudSelectItem>
+        <MudSelectItem T="int" Value="365">letztes Jahr</MudSelectItem>
+    </MudSelect>
+    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadAsync" Disabled="_busy">Aktualisieren</MudButton>
+</MudStack>
+
+@if (_busy)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_report is not { } report)
+{
+    <EmptyState Icon="@Icons.Material.Filled.QueryStats" Text="Für diesen Zeitraum liegen keine Zahlen vor." />
+}
+else
+{
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">Bürgerhinweise</MudText>
+    <MudGrid Spacing="2" Class="mb-4 mt-1">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.TipsAndUpdates" Label="Eingegangen"
+                      Value="@report.Tips.Received.ToString("N0")"
+                      Hint="Im Zeitraum eingereichte Hinweise." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.CheckCircle" Colour="Color.Info" Label="Bestätigt"
+                      Value="@report.Tips.Confirmed.ToString("N0")"
+                      Hint="Hinweise, die sich als zutreffend erwiesen haben." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Gavel" Colour="Color.Success" Label="Zur Ergreifung"
+                      Value="@report.Tips.Captures.ToString("N0")"
+                      Hint="Hinweise mit Status „Führte zur Ergreifung“." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Percent" Colour="@ShareColour(report.Tips.CaptureShare)"
+                      Label="Ergreifungs-Quote" Value="@report.Tips.CaptureShare.ToString("P0")"
+                      Hint="Anteil der entschiedenen Hinweise, der zu einer Festnahme geführt hat. Offene Hinweise zählen nicht als Fehlschlag." />
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-4">
+        Die Quote wird über @report.Tips.Decided entschiedene von @report.Tips.Received eingegangenen Hinweisen
+        gerechnet; @report.Tips.Open sind noch offen. Sie fällt eher zu niedrig aus: den Status „Führte zur
+        Ergreifung“ setzt in der Regel erst die Auszahlung, eine Festnahme ohne Belohnung lässt den Hinweis also
+        auf „Bestätigt“ stehen.
+    </MudText>
+
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">Belohnung</MudText>
+    <MudGrid Spacing="2" Class="mb-4 mt-1">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Paid" Colour="Color.Warning" Label="Ausgezahlt"
+                      Value="@Money.Format(report.Rewards.Paid)"
+                      Hint="Summe aller Belohnungen des Zeitraums." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.AccountBalance" Label="davon über die Kasse"
+                      Value="@Money.Format(report.Rewards.FromTill)"
+                      Hint="Der Teil, der als Kassenbuchung gelaufen ist; der Rest wurde persönlich übergeben." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Balance" Label="je bezahlter Ergreifung"
+                      Value="@(report.Rewards.PerPaidCapture is { } per ? Money.Format(per) : "—")"
+                      Hint="Ausgezahlte Summe geteilt durch die Ausschreibungen, für die etwas gezahlt wurde." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Percent" Label="Ergreifungen mit Belohnung"
+                      Value="@report.Rewards.RewardedShare.ToString("P0")"
+                      Hint="Anteil der im Zeitraum gefassten Ausschreibungen, für die je eine Belohnung gezahlt wurde." />
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">Ticket-Schalter</MudText>
+    <MudGrid Spacing="2" Class="mb-4 mt-1">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Forum" Label="Eröffnet"
+                      Value="@report.Tickets.Opened.ToString("N0")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Schedule" Label="Reaktionszeit (Median)"
+                      Value="@Duration(report.Tickets.MedianReplyMinutes)"
+                      Hint="Bis zur ersten Antwort eines Menschen; die automatische Eingangsbestätigung zählt nicht. „—“ heißt: im Zeitraum wurde nichts beantwortet." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Timer" Label="Reaktionszeit (p95)"
+                      Value="@Duration(report.Tickets.P95ReplyMinutes)"
+                      Hint="Der langsamste Zwanzigstel-Fall." />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.HourglassEmpty"
+                      Colour="@(report.Tickets.Waiting > 0 ? Color.Warning : Color.Default)"
+                      Label="Noch ohne Antwort" Value="@report.Tickets.Waiting.ToString("N0")"
+                      Hint="@(report.Tickets.OldestWaitingMinutes is { } oldest ? $"Ältestes seit {Duration(oldest)}." : "Kein offenes Ticket ohne Antwort.")" />
+        </MudItem>
+    </MudGrid>
+
+    @if (report.Views is { } views)
+    {
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aufrufe der Ausschreibungen</MudText>
+        <MudGrid Spacing="2" Class="mb-3 mt-1">
+            <MudItem xs="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.Visibility" Label="Aufrufe gesamt"
+                          Value="@views.Total.ToString("N0")"
+                          @* the counter is a lifetime total per notice, so the window selects the notices, never
+                             the views: saying "im Zeitraum" about the number itself would be wrong *@
+                          Hint="@($"Lebenszeit-Aufrufe der {views.Notices} Ausschreibungen, die im Zeitraum "
+                                  + "veröffentlicht wurden.")" />
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.Analytics" Label="Median je Ausschreibung"
+                          Value="@views.Median.ToString("N0")" />
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.TrendingUp" Label="p90 je Ausschreibung"
+                          Value="@views.P90.ToString("N0")" />
+            </MudItem>
+        </MudGrid>
+
+        @if (views.Top.Count > 0)
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Aktenzeichen</th>
+                        <th>Ausschreibung</th>
+                        <th style="text-align:right;">Aufrufe</th>
+                        <th>Veröffentlicht</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in views.Top)
+                    {
+                        <tr>
+                            <td>@row.CaseNumber</td>
+                            <td>@row.DisplayName</td>
+                            <td style="text-align:right;">@row.ViewCount.ToString("N0")</td>
+                            <td>@(row.PublishedAt is { } at ? at.ToLocalTime().ToString("dd.MM.yyyy") : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                Gezeigt werden die @views.Top.Count meistaufgerufenen Ausschreibungen des Zeitraums.
+            </MudText>
+        }
+    }
+    else
+    {
+        @* the fail-closed path: today everyone who reads this panel also reads the notice list, so this stays
+           unrendered — but null must not render as "nobody looked" the day the panel gate widens *@
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+            Aufrufzahlen sieht, wer die Ausschreibungsliste führt (Senior Special Agent aufwärts und die Aufsicht).
+        </MudText>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal? _user;
+    private PublicKpiReport? _report;
+    private int _days = 30;
+    private int _request;
+    private bool _busy = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_user is null)
+        {
+            return;
+        }
+        // a request token, because the period selector can start a second load while the first is still running:
+        // the slower answer used to land last and the panel then showed one window's figures under the other
+        // window's label
+        var token = ++_request;
+        _busy = true;
+        try
+        {
+            var report = await Kpi.GetAsync(_days, _user);
+            if (token != _request)
+            {
+                return;
+            }
+            _report = report;
+        }
+        catch (Exception ex)
+        {
+            if (token == _request)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+        finally
+        {
+            if (token == _request)
+            {
+                _busy = false;
+            }
+        }
+    }
+
+    private static Color ShareColour(double share)
+        => share >= 0.25 ? Color.Success : share > 0 ? Color.Warning : Color.Default;
+
+    /// <summary>Minutes as something a human reads at a glance; nothing measured reads as a dash, never as zero.</summary>
+    private static string Duration(int? minutes)
+        => minutes is not { } value ? "—"
+            : value >= 1440 ? (value / 1440.0).ToString("0.0") + " d"
+            : value >= 60 ? (value / 60.0).ToString("0.0") + " h"
+            : value + " min";
+}

@@ -16,9 +16,19 @@ public sealed record PublicFactionCard(
     DateTime? PublishedAt);
 
 /// <summary>Everything the outside world may read about organisations, in one cached snapshot.</summary>
-public sealed record PublicFactionBoard(IReadOnlyList<PublicFactionCard> Cards)
+/// <param name="SearchText">
+/// Descriptions as plain text, index-aligned with <paramref name="Cards"/>, computed once per cache fill - see
+/// PublicPressSnapshot for the reason. The hub is a profile's address, so there is no key to hang them on.
+/// </param>
+public sealed record PublicFactionBoard(
+    IReadOnlyList<PublicFactionCard> Cards,
+    IReadOnlyList<string>? SearchText = null)
 {
     public static PublicFactionBoard Empty { get; } = new([]);
+
+    /// <summary>Precomputed plain text of the card at that position; empty when the board carries none.</summary>
+    public string SearchTextAt(int index)
+        => SearchText is not null && index >= 0 && index < SearchText.Count ? SearchText[index] : string.Empty;
 }
 
 /// <summary>Row of the internal management list.</summary>

@@ -1,4 +1,4 @@
-@page "/buerger/profil"
+﻿@page "/buerger/profil"
 @layout BuergerLayout
 @attribute [AllowAnonymous]
 @inject IBuergerService BuergerService
@@ -9,7 +9,7 @@
 
 @if (_ready)
 {
-    <MudPaper Elevation="4" Class="pa-8">
+    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="4">
             <MudStack Spacing="2">
                 <MudText Typo="Typo.h4">Mein Konto</MudText>
@@ -28,16 +28,32 @@
                 </MudAlert>
             }
 
-            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
-                <MudTextField @bind-Value="_firstName" Label="Vorname" Variant="Variant.Outlined"
-                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
-                <MudTextField @bind-Value="_lastName" Label="Nachname" Variant="Variant.Outlined"
-                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
-            </MudStack>
+            @* width-bounded grid, not a flexing row: two name fields in the full 860px shell grew to half the
+               viewport each. One column below sm, two above, and never wider than a name needs. *@
+            <div style="max-width:640px;">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_firstName" Label="Vorname" Variant="Variant.Outlined"
+                                      MaxLength="64" Immediate="true" Required="true" autocomplete="given-name" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_lastName" Label="Nachname" Variant="Variant.Outlined"
+                                      MaxLength="64" Immediate="true" Required="true" autocomplete="family-name" />
+                    </MudItem>
+                </MudGrid>
+            </div>
 
+            @if (!_mayWrite)
+            {
+                @* SaveOwnAsync holds RequireWriteAccess, so a partner and the read-only supervision can read this
+                   page but never save it. An enabled button would only ever produce a red toast. *@
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Nur-Lese-Modus: In dieser Rolle lässt sich keine Zivil-Identität anlegen oder ändern.
+                </MudAlert>
+            }
             <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
-                           Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+                           Disabled="@(_saving || !_mayWrite)" OnClick="SaveAsync">Speichern</MudButton>
                 @if (!_isNew || !_mustComplete)
                 {
                     <MudButton Href="/buerger" Variant="Variant.Text" Color="Color.Default">Zurück</MudButton>
@@ -65,6 +81,7 @@
     private bool _isNew;
     private bool _mustComplete;
     private bool _blocked;
+    private bool _mayWrite;
     private string _firstName = string.Empty;
     private string _lastName = string.Empty;
 
@@ -84,6 +101,8 @@
         _isNew = string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName);
         // only a citizen account is held on this page until the names are there
         _mustComplete = _user.IsCitizen();
+        // the twin of RequireWriteAccess in BuergerService.SaveOwnAsync
+        _mayWrite = _user.MayWrite();
         _ready = true;
     }
 

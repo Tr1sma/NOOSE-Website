@@ -1,12 +1,13 @@
-@* Editorial pages of the public area: draft, preview, publish, retract. *@
+﻿@* Editorial pages of the public area: draft, preview, publish, retract. *@
 @using NOOSE_Website.Models.Public
 @inject IPublicPageService PageService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Redaktionelle Seiten unter <code>/info/&lt;adresse&gt;</code>. Gespeichert wird immer nur der Entwurf —
-    was Besucher lesen, ändert sich erst beim Veröffentlichen. Vor dem Veröffentlichen lässt sich jeder Entwurf
+    Redaktionelle Seiten unter <code>/info/&lt;adresse&gt;</code>. Der <em>Text</em> einer Seite ändert sich für
+    Besucher erst beim Veröffentlichen. Titel und Menü-Einstellungen wirken dagegen sofort, und die Adresse einer
+    veröffentlichten Seite lässt sich erst nach dem Zurückziehen ändern. Vor dem Veröffentlichen lässt sich jeder Entwurf
     als Agent über die Vorschau ansehen; anonym ist er nicht erreichbar. Die Seiten erscheinen nur, solange das
     Modul „Information" eingeschaltet ist.
 </MudText>
@@ -34,16 +35,20 @@ else if (_edit is not null)
         <MudStack Spacing="3">
             <MudGrid>
                 <MudItem xs="12" md="7">
+                    @* MaxLength, because the service cuts silently once the column is full *@
                     <MudTextField @bind-Value="_edit.Title" Label="Titel" Variant="Variant.Outlined" Required="true"
-                                  RequiredError="Titel ist erforderlich" />
+                                  RequiredError="Titel ist erforderlich"
+                                  MaxLength="@PublicPageRules.MaxTitle" Counter="@PublicPageRules.MaxTitle" />
                 </MudItem>
                 <MudItem xs="12" md="5">
                     <MudTextField @bind-Value="_edit.Slug" Label="Adresse (/info/…)" Variant="Variant.Outlined"
-                                  Placeholder="@SlugSuggestion" HelperText="Leer lassen, um sie aus dem Titel zu bilden." />
+                                  Placeholder="@SlugSuggestion" HelperText="Leer lassen, um sie aus dem Titel zu bilden."
+                                  MaxLength="@PublicPageSlug.MaxLength" />
                 </MudItem>
                 <MudItem xs="12" md="5">
                     <MudTextField @bind-Value="_edit.MenuTitle" Label="Menütitel (optional)" Variant="Variant.Outlined"
-                                  Placeholder="@_edit.Title" />
+                                  Placeholder="@_edit.Title"
+                                  MaxLength="@PublicPageRules.MaxMenuTitle" Counter="@PublicPageRules.MaxMenuTitle" />
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <MudSelect T="string" @bind-Value="_edit.IconName" Label="Icon" Clearable="true"
@@ -237,6 +242,7 @@ else
             IconName = row.IconName,
             SortOrder = row.SortOrder,
             ShowInMenu = row.ShowInMenu,
+            LoadedModifiedAt = row.ModifiedAt,
         };
     }
 

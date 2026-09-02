@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using NOOSE_Website.Authorization;
@@ -63,18 +63,35 @@ public class PublicSurfaceGuardTests
     [Fact]
     public void EverySettingsRouteOfTheAuditDisplay_NamesAnExistingSection()
     {
-        // a route into /einstellungen is only useful if the rail actually has that section
-        var offenders = EntityTypes()
-            .Select(t => AuditEntityDisplay.Route(t.Name, "id"))
-            .Where(r => r is not null && r.StartsWith("/einstellungen?tab=", StringComparison.Ordinal))
-            .Select(r => r!["/einstellungen?tab=".Length..])
+        // A route into /einstellungen is only useful if the rail actually has that section. Read out of the source
+        // rather than driven by EntityTypes(): the display also answers for config types that have no DbSet at all
+        // ("PublicArea", "PublicSituation"), and those were exactly the arms the reflection version could not see.
+        var slugs = Regex.Matches(File.ReadAllText(DisplayFile()), @"/einstellungen\?tab=([a-z0-9-]+)")
+            .Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
-            .Where(slug => !MergedPageSections.Settings.Contains(slug, StringComparer.Ordinal))
             .Order()
+            .ToArray();
+        // a renamed route prefix would otherwise leave this green forever
+        Assert.NotEmpty(slugs);
+
+        var offenders = slugs
+            .Where(slug => !MergedPageSections.Settings.Contains(slug, StringComparer.Ordinal))
             .ToArray();
 
         Assert.True(offenders.Length == 0,
             "Jede ?tab=-Route zeigt auf einen vorhandenen Abschnitt: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void TheSituationPage_RendersItsAssessmentAsText()
+    {
+        // The assessment never goes through HtmlCleanup, so a single MarkupString here would turn it into an
+        // anonymously reachable, unfiltered markup surface. Scoped to this one file on purpose: the warning hub and
+        // the press article render published, cleaned HTML and use MarkupString legitimately.
+        var file = Path.Combine(ProjectRoot(), "Components", "Pages", "Public", "SituationPage.razor");
+        Assert.True(File.Exists(file), $"Lage-Seite nicht gefunden: {file}");
+
+        Assert.DoesNotContain("MarkupString", WithoutComments(File.ReadAllText(file)), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,6 +163,115 @@ public class PublicSurfaceGuardTests
             "Eine öffentliche Route ist für einen Partner nie gesperrt: " + string.Join(", ", offenders));
     }
 
+    [Fact]
+    public void TheStatisticsService_NeverWrites()
+    {
+        // It is the one public service without an invalidation path, and that is only sound because it has no write
+        // path either: the figures simply expire and are counted again. A write here would need a drop site, and the
+        // sentence in the interface that says there is none would quietly become false.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicStatisticsService.cs");
+        Assert.True(File.Exists(file), $"Zahlen-Dienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] writes = ["SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove"];
+        var offenders = writes.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Zahlen-Dienst liest nur: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void NoPublicPage_RendersAClickableStatTile()
+    {
+        // StatTile navigates from an @onclick handler. Public pages render statically, so the handler never runs and
+        // an Href would only give the tile a pointer cursor and a link role that lead nowhere — the same class of
+        // silently dead affordance as PrintFrame on the wanted poster.
+        var pages = Path.Combine(ProjectRoot(), "Components", "Pages", "Public");
+        Assert.True(Directory.Exists(pages), $"Öffentliche Seiten nicht gefunden: {pages}");
+
+        var offenders = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .Where(f => Regex.IsMatch(WithoutComments(File.ReadAllText(f)),
+                @"<StatTile\b[^>]*\bHref\s*=", RegexOptions.Singleline))
+            .Select(Path.GetFileName)
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Eine statisch gerenderte Seite hat keine klickbare Kachel: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void ThePublicSearchService_NeverWritesAndHoldsNoContext()
+    {
+        // It composes the cached snapshots of the services that own the published tables. Holding a context would
+        // put the suppression belt one careless line away, and a write would need a drop site the interface says
+        // does not exist. Wider than the figures guard by exactly that: this one owns no data at all.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicSearchService.cs");
+        Assert.True(File.Exists(file), $"Suchdienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] forbidden =
+        [
+            "SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove", "cache.Set",
+            // IMemoryCache by name too: the rule is "holds no cache", and the three cache.* spellings above only
+            // catch a field that happens to be called "cache"
+            "IMemoryCache", "IDbContextFactory", "AppDbContext", "IgnoreQueryFilters",
+        ];
+        var offenders = forbidden.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der öffentliche Suchdienst liest nur, und zwar durch die Dienste: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void TheKpiService_NeverWrites()
+    {
+        // Same sentence as the figures service, same reason: it is an evaluation, so there is nothing to invalidate
+        // — and the day someone writes here, the promise in the interface quietly stops being true.
+        var file = Path.Combine(ProjectRoot(), "Services", "Public", "PublicKpiService.cs");
+        Assert.True(File.Exists(file), $"Kennzahlen-Dienst nicht gefunden: {file}");
+
+        var code = WithoutComments(File.ReadAllText(file));
+        string[] writes = ["SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove"];
+        var offenders = writes.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Kennzahlen-Dienst liest nur: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>Names that would put a citizen's identity into a search result row.</summary>
+    /// <remarks>
+    /// Only the two that are unambiguous. <c>FirstName</c>/<c>LastName</c> are generic enough that a scan on them
+    /// would either be false-red on the agent provider or get defused on the next reading — the failure this file
+    /// warns about for MentionParser.
+    /// </remarks>
+    private static readonly string[] CitizenIdentity =
+    [
+        "BuergerProfil", "BuergerProfile", "CitizenProfile", "CitizenProfileId", "CitizenName", "WantsAnonymity",
+        "AnonymityResolvedAt",
+    ];
+
+    [Fact]
+    public void NoSearchProvider_ProjectsACitizenIdentity()
+    {
+        // A tip and a ticket became searchable with the public-area hookup, and the anonymity promise cannot ride on
+        // the projection alone: typing a name and seeing whether a tip comes back defeats it without reading a flag.
+        // the providers only: SearchCatalog names BuergerProfil as an exclusion key, which is the opposite of a leak
+        var providers = Path.Combine(ProjectRoot(), "Services", "Search", "Providers");
+        Assert.True(Directory.Exists(providers), $"Suchprovider nicht gefunden: {providers}");
+
+        var offenders = Directory.EnumerateFiles(providers, "*.cs", SearchOption.AllDirectories)
+            .Select(f => (File: Path.GetFileName(f), Text: WithoutComments(File.ReadAllText(f))))
+            .SelectMany(f => CitizenIdentity
+                .Where(name => Regex.IsMatch(f.Text, $@"\b{name}\b"))
+                .Select(name => $"{f.File}: {name}"))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Kein Suchtreffer nennt den Bürger hinter einer Einreichung: " + string.Join(", ", offenders));
+    }
+
     private static string ProjectRoot([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website"));
 
@@ -187,7 +313,13 @@ public class PublicSurfaceGuardTests
         var offenders = Directory
             .EnumerateFiles(ProjectRoot(), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains(Path.Combine("Data", "Migrations"), StringComparison.Ordinal))
-            .Select(f => (File: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            // AgentManagementService only nulls the donor pointer when an account is hard-deleted. The advertised
+            // sum counts statuses, never donors, so no snapshot can go stale from it - and its write is an
+            // ExecuteUpdate, matched here only because the file holds a SaveChangesAsync elsewhere.
+            .Where(f => Path.GetFileName(f) != "AgentManagementService.cs")
+            // WithoutComments like its siblings: prose that explains why a file does NOT invalidate contains the
+            // very method name this scan looks for, which silently excused TipPriorityService
+            .Select(f => (File: Path.GetFileName(f), Text: WithoutComments(File.ReadAllText(f))))
             .Where(f => f.Text.Contains("FahndungKopfgeldAnteile", StringComparison.Ordinal)
                 && f.Text.Contains("SaveChangesAsync", StringComparison.Ordinal)
                 && !f.Text.Contains("InvalidatePublicViewAsync", StringComparison.Ordinal))
@@ -204,6 +336,14 @@ public class PublicSurfaceGuardTests
     [
         "AuthorAgentId", "AuthorCodename", "TicketMessageRow", "TicketRow", "TicketDetail",
         "TipMessageRow", "TipRow", "TipDetail",
+        // the objection desk: ObjectionDetail carries the citizen's block flag and the decider's codename
+        "ObjectionRow", "ObjectionDetail", "DecidedByCodename",
+        // the press desk: PressEdit names the publishing agent, and PressDraft is the unpublished body
+        "PressEdit", "PressDraft", "PublishedByName",
+        // the warning and law desks: the same shape, plus the paragraphs that stay in
+        "WarningEdit", "WarningDraft", "LawReleaseRow",
+        // the report desk: the edit row names the publishing agent and the internal anchor
+        "PublicReportEdit", "PublicReportDraft", "PublicReportAnchor",
     ];
 
     [Fact]
@@ -272,6 +412,59 @@ public class PublicSurfaceGuardTests
 
         Assert.True(offenders.Length == 0,
             "Der öffentliche Pfad nutzt ausschließlich PublicTemplateRenderer: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>Internal stacks that must never hang off a service an anonymous page constructs.</summary>
+    /// <remarks>
+    /// Not about reading, about the object graph: a public page injects its service, so every constructor parameter of
+    /// that service is built for an anonymous visitor. PublicReportService took ISituationReportService for its anchor
+    /// picker once, which pulled statistics, funding statistics and notifications onto /berichte — and the marker list
+    /// in PublicPageScanTests, which keeps that name off the pages themselves, could not see it one layer down.
+    /// </remarks>
+    private static readonly string[] InternalStacks =
+    [
+        "ISituationReportService", "IStatisticsService", "IFinancingStatisticsService",
+        // the global search orchestrator: resolving it builds all ~60 providers, every one with its own context
+        // factory, for a visitor who is only allowed to see what was published
+        "ISearchService",
+    ];
+
+    [Fact]
+    public void NoServiceInjectedByAPublicPage_PullsInAnInternalStack()
+    {
+        var root = ProjectRoot();
+        var pages = Path.Combine(root, "Components", "Pages", "Public");
+        Assert.True(Directory.Exists(pages), $"Öffentliche Seiten nicht gefunden: {pages}");
+
+        // resolved by the house convention IFooService -> FooService.cs; a service the pages inject but that cannot be
+        // resolved is reported rather than skipped, so a renamed file does not quietly empty this scan
+        var injected = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .SelectMany(f => Regex.Matches(WithoutComments(File.ReadAllText(f)), @"@inject\s+(I[A-Za-z]+Service)\b")
+                .Select(m => m.Groups[1].Value))
+            .Distinct(StringComparer.Ordinal)
+            .Order()
+            .ToArray();
+        Assert.NotEmpty(injected);
+
+        var offenders = new List<string>();
+        foreach (var name in injected)
+        {
+            var file = Directory.EnumerateFiles(Path.Combine(root, "Services"), name[1..] + ".cs",
+                SearchOption.AllDirectories).FirstOrDefault();
+            if (file is null)
+            {
+                offenders.Add($"{name}: Implementierung nicht gefunden");
+                continue;
+            }
+            var code = WithoutComments(File.ReadAllText(file));
+            offenders.AddRange(InternalStacks
+                .Where(stack => Regex.IsMatch(code, $@"\b{stack}\b"))
+                .Select(stack => $"{Path.GetFileName(file)}: {stack}"));
+        }
+
+        Assert.True(offenders.Count == 0,
+            "Ein Dienst, den eine anonyme Seite injiziert, zieht keinen internen Stack in seinen Objektgraphen: "
+            + string.Join(", ", offenders.Order()));
     }
 
     /// <summary>Strips comments: the rule is about code, and prose has to be allowed to name what it rules out.</summary>

@@ -21,8 +21,13 @@ public static class DiscordRouting
         // category on its own, so a routable operating category would post each expiry into the public channel
         NotificationType.PublicWantedPublished,
         NotificationType.PublicWantedBountyRaised,
+        // the one public category that is routable without a caveat: an official statement, no citizen named, and the
+        // link is a permanent public address
+        NotificationType.PublicPressPublished,
         // PublicTipReceived/PublicTipAnswered are absent for the same reason and a sharper one: a tip is a
-        // citizen's submission, and its arrival in a public channel would out the person who filed it
+        // citizen's submission, and its arrival in a public channel would out the person who filed it.
+        // PublicObjectionReceived/PublicObjectionDecided likewise: the first names a citizen disputing a public
+        // accusation, the second is addressed to exactly one of them
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);

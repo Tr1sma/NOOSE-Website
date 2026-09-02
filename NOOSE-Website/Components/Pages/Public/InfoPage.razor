@@ -1,4 +1,4 @@
-@page "/info/{Slug}"
+﻿@page "/info/{Slug}"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -7,14 +7,43 @@
 
 <PageTitle>@(_page?.Title ?? "Information") · NOOSE</PageTitle>
 
+@* hoisted out of the module gate: with the module off (the shipped default) the gate renders instead of the
+   miss branch, and every invented slug would answer 200 without this tag *@
+@if (_page is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
+@* The draft preview sits OUTSIDE the gate: PublicPageService.GetPreviewAsync is deliberately not module-gated,
+   because preparing content while the module is still off is the point of a draft. Keyed on IsDraft rather than on
+   Preview, so published content can never escape the gate - and a draft only ever comes back from GetPreviewAsync,
+   whose first statement is Permission.RequireClassifiedRead. *@
+@if (_page is { IsDraft: true })
+{
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
+            Vorschau des Entwurfs — dieser Stand ist öffentlich nicht sichtbar.
+        </MudAlert>
+        <MudText Typo="Typo.h4">@_page.Title</MudText>
+        <MudDivider />
+        @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+        <div class="dokument-html">@((MarkupString)_page.Html)</div>
+        <div>
+            <MudButton Href="/info" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">Zur Übersicht</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+}
+else
+{
 <PublicModuleGate Module="@PublicModules.InfoPages" Title="Information">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     @if (_page is null)
     {
-        @* /info is indexable, and this route answers for any slug someone invents; keep the misses out of the index *@
-        <HeadContent>
-            <meta name="robots" content="noindex, nofollow" />
-        </HeadContent>
         <MudStack Spacing="3" AlignItems="AlignItems.Center">
             <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
             <MudText Typo="Typo.h6">Seite nicht gefunden</MudText>
@@ -28,17 +57,11 @@
     else
     {
         <MudStack Spacing="4">
-            @if (_page.IsDraft)
-            {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
-                    Vorschau des Entwurfs — dieser Stand ist öffentlich nicht sichtbar.
-                </MudAlert>
-            }
             <MudText Typo="Typo.h4">@_page.Title</MudText>
             <MudDivider />
-            @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+            @* raw markup, not RichHtml: that component resolves @@{Typ:GUID} mentions and would print internal record names outside *@
             <div class="dokument-html">@((MarkupString)_page.Html)</div>
-            @if (!_page.IsDraft && _page.PublishedAt is { } published)
+            @if (_page.PublishedAt is { } published)
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     Stand: @published.ToLocalTime().ToString("dd.MM.yyyy")
@@ -52,6 +75,7 @@
     }
 </MudPaper>
 </PublicModuleGate>
+}
 
 @code {
     [Parameter]

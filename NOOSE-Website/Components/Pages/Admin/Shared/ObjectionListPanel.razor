@@ -10,12 +10,16 @@
         <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Primary" />
         <MudText Typo="Typo.h6">Einsprüche</MudText>
         <MudSpacer />
-        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
-            <MudButton Color="@(_onlyOpen ? Color.Primary : Color.Default)"
-                       OnClick="@(() => SwitchAsync(true))">Offen (@_counts.Open)</MudButton>
-            <MudButton Color="@(_onlyOpen ? Color.Default : Color.Primary)"
-                       OnClick="@(() => SwitchAsync(false))">Entschieden (@_counts.Decided)</MudButton>
-        </MudButtonGroup>
+        @* only for someone allowed to know them: "Offen (0)" to a rank-2 agent states a fact they may not read *@
+        @if (_mayRead)
+        {
+            <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                <MudButton Color="@(_onlyOpen ? Color.Primary : Color.Default)"
+                           OnClick="@(() => SwitchAsync(true))">Offen (@_counts.Open)</MudButton>
+                <MudButton Color="@(_onlyOpen ? Color.Default : Color.Primary)"
+                           OnClick="@(() => SwitchAsync(false))">Entschieden (@_counts.Decided)</MudButton>
+            </MudButtonGroup>
+        }
     </MudStack>
     <MudText Typo="Typo.body2" Class="mud-text-secondary">
         Ein Einspruch bestreitet, was die Behörde veröffentlicht hat. Stattgeben lässt sich ihm erst, wenn die
@@ -63,6 +67,9 @@
                                      Class="mud-text-secondary" />
                         }
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CitizenName</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @((row.DecidedAt ?? row.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy"))
+                        </MudText>
                     </MudStack>
                 </TitleContent>
                 <ChildContent>
@@ -100,10 +107,15 @@
                             @if (_mayDecide)
                             {
                                 <MudDivider />
-                                <MudTextField @bind-Value="_note" Label="Begründung der Entscheidung"
-                                              Variant="Variant.Outlined" Lines="4"
-                                              MaxLength="@ObjectionRules.MaxNoteLength"
-                                              HelperText="Der Bürger liest diesen Text." />
+                                @* only when a decision is actually reachable: reopening takes no note, and a field
+                                   whose content would be dropped without a word is worse than no field *@
+                                @if (Decidable(_detail.Status))
+                                {
+                                    <MudTextField @bind-Value="_note" Label="Begründung der Entscheidung"
+                                                  Variant="Variant.Outlined" Lines="4"
+                                                  MaxLength="@ObjectionRules.MaxNoteLength"
+                                                  HelperText="Der Bürger liest diesen Text." />
+                                }
                                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                                     @foreach (var target in ObjectionRules.AllowedTargets(_detail.Status))
                                     {
@@ -292,6 +304,11 @@
             _busy = false;
         }
     }
+
+    /// <summary>True when a decision is reachable from here; only then is the note field of any use.</summary>
+    private static bool Decidable(ObjectionStatus status)
+        => ObjectionRules.AllowedTargets(status)
+            .Any(t => t is ObjectionStatus.Angenommen or ObjectionStatus.Abgelehnt);
 
     private static Color StatusColour(ObjectionStatus status) => status switch
     {

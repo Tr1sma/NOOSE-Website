@@ -116,7 +116,7 @@ public static class CounterIntelEventLoader
                 ActorIsAdmin = actor.IsAdmin,
                 ActorPartnerAgency = actor.PartnerAgency,
                 ActorSharesOrgWithTarget = orgs.Shares(r.AgentId, r.EntityType, r.EntityId),
-                ActorIsCitizen = actor.IsCitizen,
+                ActorHasNoPersonnelFile = actor.HasNoPersonnelFile,
                 // fail closed: a tip we cannot resolve keeps its subject unnamed, the promise is not guessed at
                 ActorIdentityWithheld = r.EntityType == nameof(Hinweis)
                                         && (!tips.TryGetValue(r.EntityId, out var tip) || tip.Withheld),
@@ -135,7 +135,9 @@ public static class CounterIntelEventLoader
         return rows.ToDictionary(
             u => u.Id,
             u => new Actor(u.Codename, u.Rank, u.IsTRU, u.IsHRB, u.IsAdmin, u.IsTeamLead && !u.IsAdmin,
-                u.PartnerAgency, u.Status == AgentStatus.Civilian));
+                u.PartnerAgency,
+                // an applicant has no file either, and a citizen who applies keeps being administered as one
+                u.Status == AgentStatus.Civilian || u.Status == AgentStatus.Applicant));
     }
 
     // one row per touched tip: the person it points at through its notice, and whether its anonymity still holds
@@ -341,7 +343,7 @@ public static class CounterIntelEventLoader
 
     private readonly record struct Actor(
         string? Codename, Rank? Rank, bool IsTru, bool IsHrb, bool IsAdmin, bool IsOnlyReader,
-        PartnerAgency? PartnerAgency, bool IsCitizen);
+        PartnerAgency? PartnerAgency, bool HasNoPersonnelFile);
 
     private readonly record struct Tip(string? PersonId, bool Withheld);
 

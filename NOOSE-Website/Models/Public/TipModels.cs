@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -32,6 +32,8 @@ public record CitizenTipDetail(
     bool HasAttachment,
     string? AttachmentName,
     bool MayReply,
+    /// <summary>Kept apart from <paramref name="MayReply"/>, same reason as on a ticket.</summary>
+    bool IsBlocked,
     IReadOnlyList<CitizenTipMessage> Messages);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>
@@ -107,6 +109,15 @@ public record TipHistoryRow(
 
 /// <summary>A sibling of the same duplicate group, as a handler sees it.</summary>
 public record TipDuplicateRow(string Id, string CaseNumber, TipStatus Status, DateTime CreatedAt, string Excerpt);
+
+/// <summary>A tip that came in against one public notice.</summary>
+/// <remarks>
+/// Inward, and it carries no citizen field at all — not even where the anonymity promise no longer holds. This is
+/// the shape a record-facing reader gets: it answers "what came in about this file", which needs the text and the
+/// state and nothing about who wrote it. The audited leadership resolution stays the only way to a name.
+/// </remarks>
+public record TipNoticeRow(
+    string Id, string CaseNumber, TipStatus Status, DateTime CreatedAt, string Excerpt, int Priority);
 
 /// <summary>One line of either thread as a handler sees it.</summary>
 public record TipMessageRow(

@@ -1,0 +1,87 @@
+﻿@page "/warnungen"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWarningService Warnings
+
+<PageTitle>Warnungen · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Warnings" Title="Warnungen">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Amtliche Warnungen</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Aktuelle Warnungen des National Office of Security Enforcement. Abgelaufene Warnungen werden nicht mehr
+            angezeigt.
+        </MudText>
+
+        @if (_cards.Count == 0)
+        {
+            @* Info, not Success, and worded as a publication state: the read path answers an unreachable
+               database with an empty list too, and a green all-clear would then claim safety nobody checked *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine Warnungen veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudDivider />
+            <MudStack Spacing="3">
+                @foreach (var card in _cards)
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Warning" Size="Size.Small" />
+                                <MudText Typo="Typo.h6">@card.Title</MudText>
+                            </MudStack>
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                @if (card.PublishedAt is { } at)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        Veröffentlicht am @at.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudText>
+                                }
+                                @if (card.ValidUntil is { } until)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                                        gültig bis @until.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudChip>
+                                }
+                            </MudStack>
+                            <MudDivider />
+                            @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+                            <div class="dokument-html">@((MarkupString)card.Html)</div>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            @* a silent cut reads like completeness *@
+            @if (_cards.Count >= WarningRules.HubLimit)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Gezeigt werden die @WarningRules.HubLimit jüngsten Warnungen.
+                </MudText>
+            }
+        }
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicWarningCard> _cards = Array.Empty<PublicWarningCard>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _cards = (await Warnings.GetPublishedAsync()).Cards;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

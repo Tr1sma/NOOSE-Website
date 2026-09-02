@@ -69,19 +69,34 @@ public sealed record PublicWantedArchiveCard(
 /// by exactly the same writes; a second key would double every drop site and create a failure class where one is
 /// dropped and the other left standing — and marking a notice as captured moves a row between both lists at once.
 /// </remarks>
+/// <param name="CapturedTotals">How many captures there are per kind, behind the same belt but without the display
+/// cap the <see cref="Archive"/> list carries.</param>
 public sealed record PublicWantedBoard(
     IReadOnlyList<PublicWantedCard> Cards,
     IReadOnlyDictionary<string, PublicWantedDetail> ByCaseNumber,
     IReadOnlyList<PublicWantedArchiveCard> Archive,
     IReadOnlyDictionary<string, PublicWantedArchiveCard> CapturedByCaseNumber,
-    IReadOnlyDictionary<string, PublicBounty> BountyByCaseNumber)
+    IReadOnlyDictionary<string, PublicBounty> BountyByCaseNumber,
+    IReadOnlyDictionary<PublicWantedKind, int> CapturedTotals,
+    IReadOnlyDictionary<string, string>? SearchText = null)
 {
     public static IReadOnlyDictionary<string, PublicBounty> NoBounties { get; } =
         new Dictionary<string, PublicBounty>(StringComparer.OrdinalIgnoreCase);
 
+    public static IReadOnlyDictionary<PublicWantedKind, int> NoCaptures { get; } =
+        new Dictionary<PublicWantedKind, int>();
+
     public static PublicWantedBoard Empty { get; } =
         new([], new Dictionary<string, PublicWantedDetail>(StringComparer.OrdinalIgnoreCase),
-            [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase), NoBounties);
+            [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase), NoBounties,
+            NoCaptures);
+
+    /// <summary>Every capture the outside may know about; the archive list shows only the newest of them.</summary>
+    /// <remarks>
+    /// Kept as a per-kind breakdown rather than one number so the item switch can drop what it owns here too. A
+    /// scalar total could not be reduced by <see cref="WithoutItems"/> without counting the rows a second time.
+    /// </remarks>
+    public int CapturedTotal => CapturedTotals.Values.Sum();
 
     public PublicWantedDetail? Find(string? caseNumber)
         => caseNumber is not null && ByCaseNumber.TryGetValue(caseNumber, out var entry) ? entry : null;
@@ -97,6 +112,16 @@ public sealed record PublicWantedBoard(
     /// </remarks>
     public PublicBounty? BountyFor(string? caseNumber)
         => caseNumber is not null && BountyByCaseNumber.TryGetValue(caseNumber, out var bounty) ? bounty : null;
+
+    /// <summary>Precomputed searchable plain text of one notice; empty when the board carries none.</summary>
+    /// <remarks>
+    /// Filled once per cache fill so the public search does not strip the markup of every accusation on every
+    /// anonymous request. Dropped together with its card in <see cref="WithoutItems"/>, like the bounty.
+    /// </remarks>
+    public string SearchTextFor(string? caseNumber)
+        => caseNumber is not null && SearchText is not null && SearchText.TryGetValue(caseNumber, out var plain)
+            ? plain
+            : string.Empty;
 
     /// <summary>The same snapshot without the vehicle and weapon notices; what the item module switch owns.</summary>
     /// <remarks>
@@ -121,6 +146,12 @@ public sealed record PublicWantedBoard(
             Archive = Archive.Where(c => !WantedKinds.IsItem(c.Kind)).ToList(),
             CapturedByCaseNumber = capturedByCaseNumber,
             BountyByCaseNumber = BountyByCaseNumber
+                .Where(e => byCaseNumber.ContainsKey(e.Key))
+                .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase),
+            CapturedTotals = CapturedTotals
+                .Where(e => !WantedKinds.IsItem(e.Key))
+                .ToDictionary(e => e.Key, e => e.Value),
+            SearchText = SearchText?
                 .Where(e => byCaseNumber.ContainsKey(e.Key))
                 .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase),
         };

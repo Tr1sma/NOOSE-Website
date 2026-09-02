@@ -1,4 +1,4 @@
-@page "/gefasst"
+﻿@page "/gefasst"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -8,7 +8,7 @@
 <PageTitle>Gefasst · NOOSE</PageTitle>
 
 <PublicModuleGate Module="@PublicModules.WantedArchive" Title="Gefasst">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <div>
             <MudText Typo="Typo.h4">Gefasst</MudText>
@@ -60,6 +60,15 @@
             </MudGrid>
         }
 
+        @if (_total > _cards.Count)
+        {
+            @* the cap is named rather than applied silently: a list that stops at a hundred otherwise reads as the
+               whole record *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Angezeigt werden die @_cards.Count jüngsten von insgesamt @_total abgeschlossenen Ausschreibungen.
+            </MudText>
+        }
+
         <div>
             <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                        StartIcon="@Icons.Material.Filled.PersonSearch">Laufende Fahndungen</MudButton>
@@ -70,6 +79,7 @@
 
 @code {
     private IReadOnlyList<PublicWantedArchiveCard> _cards = [];
+    private int _total;
     private bool _loaded;
 
     protected override async Task OnParametersSetAsync()
@@ -82,6 +92,7 @@
         try
         {
             _cards = await Wanted.GetArchiveAsync();
+            _total = await Wanted.GetCapturedTotalAsync();
         }
         catch
         {

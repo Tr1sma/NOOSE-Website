@@ -77,14 +77,14 @@ public static class CounterIntelRuleEvaluator
         return rows.Select(e => e.AgentName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "(unbenannt)";
     }
 
-    // a civilian account has no personnel file; withheld identity gets no link at all
+    // neither a citizen nor an applicant has a personnel file; withheld identity gets no link at all
     private static string? Href(List<CounterIntelEvent> rows, string agentId)
     {
         if (rows.All(e => e.ActorIdentityWithheld))
         {
             return null;
         }
-        return rows.Any(e => e.ActorIsCitizen) ? "/einstellungen?tab=buerger" : $"/personal/{agentId}";
+        return rows.Any(e => e.ActorHasNoPersonnelFile) ? "/einstellungen?tab=buerger" : $"/personal/{agentId}";
     }
 
     /// <summary>True when the event satisfies every condition category of the rule.</summary>

@@ -1,4 +1,4 @@
-@* Editorial value list of the warning chips a public wanted notice can carry. *@
+﻿@* Editorial value list of the warning chips a public wanted notice can carry. *@
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 @inject IWarnhinweisService Warnings
@@ -7,9 +7,12 @@
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
-        Neuer Warnhinweis
-    </MudButton>
+    @if (_mayEdit)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+            Neuer Warnhinweis
+        </MudButton>
+    }
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Warnhinweise erscheinen als Chips auf dem öffentlichen Fahndungsboard, dem Steckbrief und dem Poster.
@@ -55,10 +58,13 @@ else
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
-                                   OnClick="@(() => EditAsync(context))" aria-label="Warnhinweis bearbeiten" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => DeleteAsync(context))" aria-label="Warnhinweis löschen" />
+                    @if (_mayEdit)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => EditAsync(context))" aria-label="Warnhinweis bearbeiten" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Warnhinweis löschen" />
+                    }
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -74,10 +80,14 @@ else
     private bool _load = true;
     private IReadOnlyList<WarnhinweisUsage> _entries = [];
     private ClaimsPrincipal _user = default!;
+    // the exact twin of RequireLeadership + RequireWriteAccess in WarnhinweisService: /einstellungen lets the
+    // read-only supervision in to READ, so an ungated button only ever produced a red toast
+    private bool _mayEdit;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _mayEdit = _user.MayWrite() && _user.IsLeadership();
         await LoadAsync();
     }
 

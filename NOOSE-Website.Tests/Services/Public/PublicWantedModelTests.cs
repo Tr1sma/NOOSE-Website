@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Reflection;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
@@ -44,6 +44,29 @@ public class PublicWantedModelTests
         // the organisation hub and both hazard rankings render these
         typeof(PublicFactionCard),
         typeof(PublicFactionBoard),
+        // the press hub and one release
+        typeof(PublicPressCard),
+        typeof(PublicPressView),
+        typeof(PublicPressSnapshot),
+        // the warning hub renders the whole body on the card; there is no page of its own
+        typeof(PublicWarningCard),
+        typeof(PublicWarningSnapshot),
+        // the report hub and one released month
+        typeof(PublicReportCard),
+        typeof(PublicReportView),
+        typeof(PublicReportSnapshot),
+        // the situation level: what the agency says, and the level that stood before it
+        typeof(PublicSituationState),
+        // the figures band on the start page: counts and one sum, and structurally nothing they could be about
+        typeof(PublicStatistics),
+        // the law page: the statute itself, grouped by book
+        typeof(PublicLawEntry),
+        typeof(PublicLawBook),
+        typeof(PublicLawSnapshot),
+        // the public search: a hit carries a public designation and an excerpt of published text, nothing else
+        typeof(PublicSearchHit),
+        typeof(PublicSearchGroup),
+        typeof(PublicSearchResults),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -61,6 +84,21 @@ public class PublicWantedModelTests
         [typeof(ObjectionDetail)] = "Ein Einspruch in der Bearbeitung; trägt Zeilen-Ids und den Sperrstatus des Kontos.",
         [typeof(ObjectionCounts)] = "Zähler der beiden Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
         [typeof(ObjectionInput)] = "Formulareingabe des Bürgers; wandert nach innen, nicht nach außen.",
+        [typeof(PressEdit)] = "Zeile des Presse-Panels; nennt den veröffentlichenden Agenten und den Discord-Stempel.",
+        [typeof(PressDraft)] = "Der unveröffentlichte Entwurf einer Mitteilung; anonym gibt es ihn nicht.",
+        [typeof(PressInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(WarningEdit)] = "Zeile des Warnungs-Panels; nennt den veröffentlichenden Agenten und den "
+            + "Abgelaufen-Zustand einer Zeile, die draußen gar nicht mehr steht.",
+        [typeof(WarningDraft)] = "Der unveröffentlichte Entwurf einer Warnung; anonym gibt es ihn nicht.",
+        [typeof(WarningInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(LawReleaseRow)] = "Zeile des Freigabe-Panels; sie nennt auch die Paragrafen, die drinnen bleiben.",
+        [typeof(PublicReportEdit)] = "Zeile des Lageberichts-Panels; nennt den veröffentlichenden Agenten und den "
+            + "internen Monatsbericht als Anker.",
+        [typeof(PublicReportDraft)] = "Der unveröffentlichte Entwurf eines Monatstexts; anonym gibt es ihn nicht.",
+        [typeof(PublicReportAnchor)] = "Ein archivierter Monatsbericht zur Auswahl im Panel; er trägt dessen interne Id.",
+        [typeof(PublicReportInput)] = "Editor-Eingabe des Panels; wandert nach innen, nicht nach außen.",
+        [typeof(PublicSituationInput)] = "Panel-Eingabe der Gefahrenlage; Datum und Vorgängerstufe stehen bewusst "
+            + "nicht darauf, sie werden abgeleitet statt vom Client geliefert.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
         [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",
@@ -85,6 +123,15 @@ public class PublicWantedModelTests
         [typeof(TipInboxCounts)] = "Zähler der Eingangs-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
         [typeof(TipDuplicateRow)] = "Geschwister einer Dublettengruppe im Eingang; trägt Aktenzeichen und Auszug.",
         [typeof(TipHistoryRow)] = "Hinweisgeber-Historie an der Personenakte; anonyme Hinweise fehlen darin ganz.",
+        [typeof(TipNoticeRow)] = "Hinweise zu einer Ausschreibung, wie eine Akte sie liest; trägt Zeilen-Id, "
+            + "Priorität und Auszug.",
+        [typeof(PublicKpiReport)] = "Kennzahlen-Auswertung der Führung; die Zahlen sind je Schalter und je "
+            + "Ausschreibung, also genau das, was der öffentliche Zahlen-Record nicht tragen darf.",
+        [typeof(PublicKpiTips)] = "Durchsatz des Hinweis-Eingangs samt offener Zeilen.",
+        [typeof(PublicKpiRewards)] = "Ausgezahlte Belohnungen, aufgeteilt nach Kasse und persönlicher Übergabe.",
+        [typeof(PublicKpiTickets)] = "Reaktionszeiten des Führungs-Schalters.",
+        [typeof(PublicKpiViews)] = "Aufrufe je Ausschreibung; nach außen geht keine Zahl je Ausschreibung.",
+        [typeof(PublicKpiNoticeViews)] = "Eine Ausschreibung in der Aufmerksamkeits-Rangliste, mit Aktenzeichen.",
         [typeof(TipAttachmentAccess)] = "Dateiname und Typ für den autorisierten Ausliefer-Endpoint.",
         [typeof(TipInput)] = "Formulareingabe des Hinweis-Formulars.",
         [typeof(RewardRow)] = "Ausgezahlte Belohnung im internen Panel; nennt Herkunft, Konto und Kassenbuchung.",

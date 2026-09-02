@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace NOOSE_Website.Tests.Services.Public;
@@ -63,6 +63,11 @@ public partial class PublicFactionProfileCacheDisciplineTests
                 Path.GetFullPath(Path.Combine(ServiceRoot(), "..", "..")), "*.cs", SearchOption.AllDirectories)
             .Where(f => Path.GetFileName(f) != ServiceName)
             .Where(f => !f.Contains(Path.Combine("Data", "Migrations"), StringComparison.Ordinal))
+            // AgentManagementService only clears the agent pointer on these rows when an account is hard-
+            // deleted. No outward record carries a publisher, handler or donor, so no cached snapshot can
+            // go stale from it - and its writes are ExecuteUpdate, matched here only because the file
+            // contains a SaveChangesAsync elsewhere.
+            .Where(f => Path.GetFileName(f) != "AgentManagementService.cs")
             .Where(f => File.ReadAllText(f) is var t
                 && t.Contains("OeffentlicheFraktionsprofile", StringComparison.Ordinal)
                 && SaveChanges().IsMatch(t))

@@ -1,4 +1,4 @@
-@page "/organisationen"
+﻿@page "/organisationen"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -8,7 +8,7 @@
 <PageTitle>Organisationen · NOOSE</PageTitle>
 
 <PublicModuleGate Module="@PublicModules.Organisations" Title="Organisationen">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <div>
             <MudText Typo="Typo.h4">Beobachtete und verbotene Organisationen</MudText>
@@ -46,7 +46,9 @@
             <MudGrid Spacing="3">
                 @foreach (var card in Filtered)
                 {
-                    <MudItem xs="12" md="6">
+                    @* sm as well as md: without it the cards stay a single column all the way to 960px,
+                       where every other public grid already goes two-wide at 600px *@
+                    <MudItem xs="12" sm="6">
                         <MudPaper Outlined="true" Class="pa-4" Style="height:100%;">
                             <MudStack Spacing="2">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">

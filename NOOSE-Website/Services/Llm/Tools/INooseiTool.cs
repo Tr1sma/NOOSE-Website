@@ -20,6 +20,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Requests;
@@ -213,6 +214,13 @@ public static class NooseiRecordTypes
         [nameof(TrainingModule)] = NooseiUse.Read | NooseiUse.List,
         [nameof(CounterIntelRule)] = NooseiUse.Read | NooseiUse.List,
         [nameof(Data.Entities.Feedback.Feedback)] = NooseiUse.Read | NooseiUse.List,
+
+        // The one type of the public area the assistant opens as a record. It has its own case number, its own
+        // page and a manual link to the file it was taken over into, so "which tips came in about X" is a question
+        // about content that only Read can answer. Deliberately no List: the filter tool's whole vocabulary
+        // (classification, threat score, life status) is record-shaped and says nothing about a tip. Deliberately
+        // no Chronicle: it is a closed list of ten record kinds that deliberately excludes tips and tickets.
+        [nameof(Hinweis)] = NooseiUse.Read,
     };
 
     /// <summary>Every category, in catalog order, with the capabilities decided above.</summary>
@@ -266,6 +274,18 @@ public static class NooseiRecordTypes
             ["BewerbungTest"] = "bewerbungswesen (lies_bereich)",
             ["Bewerbungssperre"] = "bewerbungswesen (lies_bereich)",
             ["AuditLog"] = "lies_zeitstrahl / letzte_aenderungen",
+
+            // public area: reachable through the section of the file they were published from, or through the
+            // operating area that reports the agency's outward voice. None of them is opened as a record —
+            // Read would cost a dossier branch and a visibility arm apiece, and a section discharges all of them.
+            ["OeffentlicheFahndung"] = "oeffentlich (lies_akteninhalt)",
+            ["OeffentlichesFraktionsprofil"] = "oeffentlich (lies_akteninhalt)",
+            ["FahndungEinspruch"] = "oeffentlich (lies_akteninhalt)",
+            ["Ticket"] = "tickets (lies_bereich)",
+            ["Pressemitteilung"] = "oeffentlichkeit (lies_bereich)",
+            ["OeffentlicheSeite"] = "oeffentlichkeit (lies_bereich)",
+            ["OeffentlicheWarnung"] = "oeffentlichkeit (lies_bereich)",
+            ["OeffentlicherLagebericht"] = "oeffentlichkeit (lies_bereich)",
         };
 
     /// <summary>Search categories NOOSEI deliberately does not read as a record, each with the reason.</summary>

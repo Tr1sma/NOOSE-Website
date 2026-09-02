@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services.Public;
+﻿namespace NOOSE_Website.Services.Public;
 
 /// <summary>The single truth about what may leave the house — the public counterpart to <see cref="Visibility"/>.</summary>
 /// <remarks>
@@ -29,19 +29,50 @@ public static class PublicVisibility
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
+            ["SystemSetting"] = "Sechs Zeilen, nicht mehr: die vier der Gefahrenlage (Stufe, Einschätzung, "
+                + "Seit-Datum, zuvor gesetzte Stufe), die Anforderungsliste der Karriereseite "
+                + "(KarriereAnforderungen) und die Logo-Metadaten (LogoFileName, LogoContentType), die der "
+                + "anonyme Endpoint /system/logo ausliefert. Abgegrenzt wird nach Bereich, nicht nach "
+                + "Beispielen: alles, was die interne Konfiguration steuert — Discord-Webhooks, Wartungstext, "
+                + "Theme-Farben, Demo-Modus, Not-Aus, Worker-Stempel — verlässt das Haus nie. Die Tabelle steht "
+                + "hier und nicht in NeverPublic, weil dieses Verzeichnis sagt, *was genau* rausgeht.",
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
+            ["Pressemitteilung"] = "Öffentliches Aktenzeichen, Titel, Teaser und der veröffentlichte Inhalt einer "
+                + "amtlichen Verlautbarung. Der Entwurf, der veröffentlichende Agent und der Discord-Stempel bleiben "
+                + "drinnen; einen Aktenbezug hat die Zeile nicht.",
+            ["OeffentlicheWarnung"] = "Titel, Text und Gültigkeitsdatum einer amtlichen Warnung. Der Entwurf und "
+                + "der veröffentlichende Agent bleiben drinnen; einen Aktenbezug hat die Zeile nicht.",
+            ["OeffentlicherLagebericht"] = "Zeitraum, Titel und der freigegebene Text eines Monatsberichts — ein "
+                + "von der Führung geschriebener Text, kein Auszug des internen Zahlen-Snapshots. Entwurf, Anker "
+                + "und veröffentlichender Agent bleiben drinnen.",
+            ["Law"] = "Gesetzbuch, Paragraf, Titel, Text und Strafmaß eines ausdrücklich freigegebenen "
+                + "Paragrafen. Standardmäßig bleibt jeder Paragraf drinnen; die Freigabe ist eine eigene "
+                + "Entscheidung je Zeile, und wer sie getroffen hat, steht nicht auf der öffentlichen Seite.",
             ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
                 + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
                 + "beim Publizieren festgehaltene Gefahrenstufe, eine Kopie des Fotos und — im Archiv — das "
                 + "Gefasst-Datum, dazu die Kopfgeld-Obergrenze als \"bis X\". Bei einer Fahrzeug- oder "
                 + "Waffen-Ausschreibung ist der Anzeigename das Kennzeichen bzw. die Bezeichnung, und ein Foto gibt "
                 + "es dort nicht. Der Aktenbezug (PersonId/FraktionId), die Steckbrief-Zeile, aus der vorbefüllt "
-                + "wurde, der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund bleiben drinnen.",
+                + "wurde, der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund bleiben drinnen. "
+                + "Aus dem Bestand geht zusätzlich je eine Anzahl nach außen: wie viele Ausschreibungen laufen und "
+                + "wie viele abgeschlossen sind — beide hinter demselben Unterdrückungsgürtel gezählt.",
             ["FahndungKopfgeldAnteil"] = "Ausschließlich die Summe aller zugesagten und gesicherten Anteile "
                 + "einer laufenden Ausschreibung, als eine Zahl. Herkunft, Stifter, der Betrag eines einzelnen "
                 + "Anteils, ihre Anzahl, das Konto, die Kassenbuchung und der Status bleiben drinnen — eine "
                 + "Aufschlüsselung verriete, welcher Agent wie viel eigenes Geld auf einen Kopf gesetzt hat.",
+            ["Hinweis"] = "Ausschließlich Anzahlen über den gesamten Bestand: wie viele Hinweise eingegangen "
+                + "sind, wie viele davon bestätigt wurden und wie viele zur Ergreifung führten. Text, Anhang, "
+                + "Bezug, Status und Hinweisgeber einer einzelnen Zeile bleiben drinnen, und eine Anzahl je "
+                + "Ausschreibung ebenfalls — die wäre ein öffentliches Verzeichnis darüber, wer wie viel "
+                + "Aufmerksamkeit auf sich zieht, und über kleine Zahlen wieder einer Person zuzuordnen. Den "
+                + "eigenen Hinweis liest der Hinweisgeber angemeldet im Bürgerbereich; das ist sein Konto, nicht "
+                + "die Öffentlichkeit.",
+            ["HinweisBelohnung"] = "Ausschließlich die Summe aller ausgezahlten Belohnungen, als eine Zahl. Der "
+                + "Betrag einer einzelnen Auszahlung, der Anteil, die Kassenbuchung, die Belegnummer und der "
+                + "Empfänger bleiben drinnen; darüber hinaus geht nach draußen nur der eigene Beleg eines Bürgers, "
+                + "angemeldet im Bürgerbereich.",
             ["Warnhinweis"] = "Bezeichnung und Farbe eines zugeordneten Warnhinweises, als Chip auf Board, "
                 + "Steckbrief und Poster. Reihenfolge, Aktiv-Kennzeichen und die Zeilen-Id bleiben drinnen.",
             ["OeffentlichesFraktionsprofil"] = "Der Publikations-Snapshot einer Organisation: Anzeigename, "
@@ -129,7 +160,6 @@ public static class PublicVisibility
             ["LibraryFile"] = "Anhang der Bibliothek; nach außen nie.",
             ["DocumentAccessExclusion"] = Assignment,
             ["PartnerShare"] = "Freigabe an eine Partnerbehörde; das ist ein eigener Kanal, nicht die Öffentlichkeit.",
-            ["Law"] = "Gesetzestext, standardmäßig intern; nach außen geht nur ein ausdrücklich freigegebener Auszug.",
 
             // --- personnel ---
             ["AgentRankHistory"] = Personnel,
@@ -159,7 +189,9 @@ public static class PublicVisibility
             ["Announcement"] = "Mitteilung an die Belegschaft; nach außen geht stattdessen eine Pressemitteilung.",
             ["AnnouncementAcknowledgment"] = Assignment,
             ["Feedback"] = "Rückmeldung eines Agenten zur Anwendung; nach außen nie.",
-            ["SituationReport"] = "Monats-Lagebericht; nach außen geht nur ein ausdrücklich freigegebener Auszug.",
+            ["SituationReport"] = "Gefrorener Statistik-Snapshot eines Monats — er zählt Verschlusssachen und nennt "
+                + "Personen mit ihrem internen Aktenzeichen. Nach außen geht kein Auszug daraus, sondern ein "
+                + "von der Führung geschriebener Text (siehe OeffentlicherLagebericht).",
             ["DossierSummary"] = "Maschineller Kurzbrief zu einer Akte; nach außen nie.",
 
             // --- money ---
@@ -179,9 +211,11 @@ public static class PublicVisibility
 
             // --- scoring and config ---
             ["ThreatScoreConfig"] = "Gewichtung des Bedrohungs-Scores; ihre Kenntnis wäre eine Anleitung zur Umgehung.",
-            ["ThreatScoreHistory"] = "Score-Verlauf je Akte; öffentlich erscheint nur ein aggregierter Trend ohne Aktenbezug.",
+            ["ThreatScoreHistory"] = "Score-Verlauf je Akte. Auch aggregiert nicht: die Reihe deckt jede Person "
+                + "und Fraktion ab, Verschlusssachen eingeschlossen, und eine veröffentlichte Kurve exportierte den "
+                + "rohen Score in abgeleiteter Form — beobachtbar und damit rückwärts prüfbar gegen die Gewichtung. "
+                + "Der öffentliche Trend ist stattdessen die zuvor gesetzte Gefahrenlage-Stufe.",
             ["RecencyThreshold"] = Configuration,
-            ["SystemSetting"] = Configuration,
             ["EnumLabelOverride"] = Configuration,
             ["CaseNumberCounter"] = "Zählerstand der Aktenzeichen; verrät die Zahl der Akten.",
             ["SavedSearch"] = "Gespeicherte Suche eines Agenten; nach außen nie.",
@@ -206,12 +240,8 @@ public static class PublicVisibility
             // --- public area's own tables ---
             ["BuergerProfil"] = "Konto eines Bürgers; sein Name gehört ihm, nicht der Website. Nach außen sieht ihn nur er selbst.",
             ["FahndungWarnhinweis"] = Assignment,
-            ["Hinweis"] = "Bürgereinreichung; sie ist Aktenmaterial. Der Hinweisgeber liest seinen eigenen "
-                + "Hinweis angemeldet im Bürgerbereich — das ist sein Konto, nicht die Öffentlichkeit.",
             ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; er gehört den beiden Beteiligten. "
                 + "Die interne Zielgruppe verlässt das Haus nie.",
-            ["HinweisBelohnung"] = "Ausgezahltes Geld: Betrag, Anteil, Kassenbuchung und Empfänger. Nach draußen "
-                + "geht ausschließlich der eigene Beleg eines Bürgers, angemeldet im Bürgerbereich.",
             ["Ticket"] = "Anliegen eines namentlich bekannten Bürgers an die Führungsebene. Nach draußen "
                 + "geht nur der eigene Faden, angemeldet im Bürgerbereich — das ist sein Konto, nicht die "
                 + "Öffentlichkeit.",
