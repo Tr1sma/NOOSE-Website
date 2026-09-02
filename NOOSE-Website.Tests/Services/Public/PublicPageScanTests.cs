@@ -160,22 +160,26 @@ public partial class PublicPageScanTests
     }
 
     [Fact]
-    public void EveryPublicQueryParameterIsBoundAsAString()
+    public void EveryPublicQueryParameterIsBoundAsAPublicString()
     {
-        // Blazor answers a query value it cannot parse with HTTP 500, and anyone can append a query to a public URL
+        // Blazor answers a query value it cannot parse with HTTP 500, and anyone can append a query to a public URL.
+        // The declaration is matched whatever its accessibility and then required to be public - the old pattern
+        // only matched "public", so a private declaration escaped the type check without a word.
         var offenders = Files()
             .Select(f => (File: Path.GetFileName(f), Text: Code(f)))
             .SelectMany(x => QueryParameter().Matches(x.Text)
-                .Where(m => !m.Groups["type"].Value.StartsWith("string", StringComparison.Ordinal))
-                .Select(m => $"{x.File}: {m.Groups["type"].Value}"))
+                .Where(m => !m.Groups["decl"].Value.Contains("public", StringComparison.Ordinal)
+                    || !m.Groups["type"].Value.StartsWith("string", StringComparison.Ordinal))
+                .Select(m => $"{x.File}: {m.Groups["decl"].Value.Trim()} {m.Groups["type"].Value}"))
             .Order()
             .ToArray();
 
         Assert.True(offenders.Length == 0,
-            "Query-Parameter öffentlicher Routen werden als string gebunden: " + string.Join(", ", offenders));
+            "Query-Parameter öffentlicher Routen werden als public string gebunden: " + string.Join(", ", offenders));
     }
 
-    [GeneratedRegex(@"\[SupplyParameterFromQuery[^\]]*\]\s*public\s+(?<type>\S+)\s", RegexOptions.Singleline)]
+    [GeneratedRegex(@"\[SupplyParameterFromQuery[^\]]*\]\s*(?<decl>(?:public|private|internal|protected)?\s*)"
+        + @"(?<type>\S+)\s", RegexOptions.Singleline)]
     private static partial Regex QueryParameter();
 
     [Fact]
