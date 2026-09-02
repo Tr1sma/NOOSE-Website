@@ -57,6 +57,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] ILoggerFactory loggerFactory,
             [FromServices] IAgentInviteService inviteService,
             [FromServices] IPublicModuleService publicModules,
+            [FromServices] IAgentManagementService agentManagement,
             [FromQuery] string? returnUrl,
             [FromQuery] string? remoteError,
             [FromQuery] string? source,
@@ -139,6 +140,19 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                     && await inviteService.RedeemForExistingAsync(inviteToken, agent.Id))
                 {
                     return Results.Redirect("/Account/Ausstehend");
+                }
+
+                // a citizen who applies keeps the account and gains the applicant portal; the branch
+                // above only ever ran for a brand-new login, so an existing citizen had no way in
+                if (agent.Status == AgentStatus.Civilian
+                    && string.Equals(source, "bewerbung", StringComparison.OrdinalIgnoreCase))
+                {
+                    // the module switch has to hold here too, exactly as it does for a new sign-up
+                    if (!await publicModules.IsEnabledAsync(PublicModules.Careers))
+                    {
+                        return RedirectToLoginPage(await publicModules.OfflineTextAsync(PublicModules.Careers));
+                    }
+                    agent = await agentManagement.StartApplicationAsync(agent.Id);
                 }
             }
 

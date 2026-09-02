@@ -30,6 +30,19 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
   gar nicht anlegen darf: `SaveOwnAsync` ist ein Schreibpfad und hält zusätzlich `RequireWriteAccess`.
   Wer kein Profil hat, sieht die Seiten ohne eigene Zeilen; jeder Einreichungspfad geht über
   `RequireSubmittingCitizenAsync` (vollständig + nicht gesperrt).
+- **Bürger → Bewerber ist der einzige erlaubte Statuswechsel aus `Civilian` heraus** — und er ist
+  Selbstbedienung, kein Rechtezuwachs. Früher lag der `source=bewerbung`-Zweig **innerhalb** von
+  `if (agent is null)`: wer einmal ein Bürgerkonto hatte, konnte sich nie mehr bewerben, weil der
+  Status-Switch ihn stumm auf `/buerger` warf und `returnUrl=/portal` verwarf. Der Bestandskonto-Zweig
+  in `IdentityComponentsEndpointRouteBuilderExtensions.cs` ruft deshalb
+  `AgentManagementService.StartApplicationAsync` — gleiches Modul-Gate wie bei einer Neuanmeldung,
+  Guard auf `Status == Civilian` (nie einen Agenten herabstufen), `newStamp: true`, damit eine zweite
+  Session nicht weiter `Civilian` behauptet. Ohne `Permission.Require*`, weil der Kontoinhaber auf sich
+  selbst handelt und die Autorität der verifizierte Discord-Callback ist. Der Bürgerbereich bleibt
+  vollständig erhalten — er hängt an `MayUseCitizenPortal()`, nicht an `IsCitizen()` (siehe oben).
+  Eine Bewerbungssperre wird hier **absichtlich nicht** geprüft: der Bewerber sieht den Grund auf
+  `/portal`, genau wie ein neu angelegtes gesperrtes Konto, und `BewerbungService.SubmitAsync` blockt
+  ohnehin.
 - **Welche Module es gibt, steht ausschließlich in `Services/Public/PublicModules.cs`** — eine Zeile je
   Modul, auch für noch nicht gebaute. `PublicModuleSeeder` legt fehlende Zeilen beim Start an und
   überschreibt **nie** eine gespeicherte Wahl; ein Modul geht deshalb nie durch ein Deploy online.

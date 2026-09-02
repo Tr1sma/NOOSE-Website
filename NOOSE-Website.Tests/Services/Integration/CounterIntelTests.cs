@@ -78,6 +78,37 @@ public sealed class CounterIntelTests
     }
 
     [Fact]
+    public async Task LoadAsync_DeniesAPersonnelFileToCitizensAndApplicantsAlike()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.AddRange(
+                Seed.Agent("act", status: AgentStatus.Active),
+                Seed.Agent("civ", status: AgentStatus.Civilian),
+                Seed.Agent("app", status: AgentStatus.Applicant));
+            foreach (var id in new[] { "act", "civ", "app" })
+            {
+                db.AccessLogs.Add(new AccessLog
+                {
+                    AgentId = id, AgentName = id, Timestamp = DateTime.UtcNow.AddMinutes(-1),
+                    EntityType = "Person", EntityId = "p1",
+                });
+            }
+            db.SaveChanges();
+        }
+
+        using var read = ctx.NewContext();
+        var events = await CounterIntelEventLoader.LoadAsync(
+            read, [new CounterIntelRuleDefinition { WindowDays = 30, Threshold = 1 }]);
+
+        // a citizen who applies keeps no personnel file, so the flag must not start linking to one
+        Assert.True(events.Single(e => e.AgentId == "civ").ActorHasNoPersonnelFile);
+        Assert.True(events.Single(e => e.AgentId == "app").ActorHasNoPersonnelFile);
+        Assert.False(events.Single(e => e.AgentId == "act").ActorHasNoPersonnelFile);
+    }
+
+    [Fact]
     public async Task GetFlagsAsync_ExcludesReadOnlySupervisors()
     {
         using var ctx = new SqliteTestContext();

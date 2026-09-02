@@ -28,6 +28,9 @@ public interface IAgentManagementService
     /// <summary>Promote an applicant (status Applicant) directly to an active agent with rank/flags; leadership only. Rotates the SecurityStamp.</summary>
     Task PromoteApplicantToAgentAsync(string applicantUserId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor);
 
+    /// <summary>Turn a citizen account into an applicant so it can use the applicant portal; the citizen area stays open.</summary>
+    Task<Agent> StartApplicationAsync(string userId, CancellationToken cancellationToken = default);
+
     /// <summary>Set an agent's master data; codename is required.</summary>
     Task MasterDataChangeAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor);
 

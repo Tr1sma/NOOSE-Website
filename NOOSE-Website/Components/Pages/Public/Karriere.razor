@@ -81,18 +81,27 @@
                 }
                 else if (authCtx.User.IsCitizen())
                 {
-                    @* a citizen is neither an applicant nor an agent: the agent branch below claimed it was one
-                       and offered a /dashboard button that lands on "no access" *@
+                    @* a citizen is not an applicant yet: the login callback promotes the account on the way in,
+                       so this posts the same form the anonymous branch does *@
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                        Du bist mit einem Bürgerkonto angemeldet. Für eine Bewerbung wende dich an das HRB — dein
-                        Bürgerkonto bleibt davon unberührt.
+                        Du bist mit einem Bürgerkonto angemeldet. Du kannst dich damit direkt bewerben — dein
+                        Bürgerkonto, deine Hinweise und Tickets bleiben erhalten.
                     </MudAlert>
-                    <div>
-                        <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                        <form method="post" action="/Account/PerformExternalLogin">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="returnUrl" value="/portal" />
+                            <input type="hidden" name="source" value="bewerbung" />
+                            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                                       Size="Size.Large" StartIcon="@Icons.Material.Filled.Badge">
+                                Jetzt bewerben
+                            </MudButton>
+                        </form>
+                        <MudButton Href="/buerger" Variant="Variant.Outlined" Color="Color.Default"
                                    Size="Size.Large" StartIcon="@Icons.Material.Filled.Person">
                             Zum Bürgerbereich
                         </MudButton>
-                    </div>
+                    </MudStack>
                 }
                 else
                 {
