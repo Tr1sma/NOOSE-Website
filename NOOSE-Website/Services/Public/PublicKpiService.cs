@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -109,31 +109,47 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
         var replies = await db.TicketNachrichten.AsNoTracking()
             .Where(TicketRules.AgencyRows)
             .Where(m => ids.Contains(m.TicketId))
-            .Select(m => new { m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt })
+            .Select(m => new TicketReplyRow(m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt))
             .ToListAsync(ct);
 
         var byTicket = replies.GroupBy(r => r.TicketId, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         var minutes = new List<int>();
-        var waiting = new List<int>();
         var now = DateTime.UtcNow;
         foreach (var ticket in tickets)
         {
-            var first = byTicket.TryGetValue(ticket.Id, out var rows)
-                ? rows.Where(r => TicketRules.IsHumanAgencyReply(
-                        r.Audience, r.AuthorIsCitizen, r.CreatedAt, ticket.CreatedAt))
-                    .Select(r => (DateTime?)r.CreatedAt)
-                    .DefaultIfEmpty(null)
-                    .Min()
-                : null;
+            var first = FirstHumanReply(byTicket, ticket.Id, ticket.CreatedAt);
             if (first is { } answered)
             {
                 minutes.Add((int)Math.Max(0, (answered - ticket.CreatedAt).TotalMinutes));
             }
-            else if (TicketRules.IsOpen(ticket.Status))
+        }
+
+        // "still unanswered" and "oldest one" are statements about NOW, so they are counted over every open
+        // ticket regardless of age. Windowed, the longest-neglected ticket in the house fell out of the figure
+        // and the panel reported an all-clear. Opened/Answered and the percentiles stay the window's cohort.
+        var open = await db.Tickets.AsNoTracking()
+            .Where(TicketRules.OpenRows)
+            .Select(t => new { t.Id, t.CreatedAt })
+            .ToListAsync(ct);
+        var waiting = new List<int>();
+        if (open.Count > 0)
+        {
+            var openIds = open.Select(t => t.Id).ToList();
+            var openReplies = await db.TicketNachrichten.AsNoTracking()
+                .Where(TicketRules.AgencyRows)
+                .Where(m => openIds.Contains(m.TicketId))
+                .Select(m => new TicketReplyRow(m.TicketId, m.Audience, m.AuthorIsCitizen, m.CreatedAt))
+                .ToListAsync(ct);
+            var openByTicket = openReplies.GroupBy(r => r.TicketId, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+            foreach (var ticket in open)
             {
-                waiting.Add((int)Math.Max(0, (now - ticket.CreatedAt).TotalMinutes));
+                if (FirstHumanReply(openByTicket, ticket.Id, ticket.CreatedAt) is null)
+                {
+                    waiting.Add((int)Math.Max(0, (now - ticket.CreatedAt).TotalMinutes));
+                }
             }
         }
 
@@ -146,6 +162,25 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
             minutes.Count == 0 ? null : Percentile(minutes, 0.95),
             waiting.Count == 0 ? null : waiting.Max());
     }
+
+    /// <summary>The reply columns the reaction-time figures need, named so one helper can serve both queries.</summary>
+    private sealed record TicketReplyRow(string TicketId, TicketMessageAudience Audience, bool AuthorIsCitizen,
+        DateTime CreatedAt);
+
+    /// <summary>When a human at the desk first answered, or null while the citizen is still waiting.</summary>
+    /// <remarks>
+    /// The Phase-11 acknowledgement is written in the same SaveChanges as the ticket and therefore carries its
+    /// timestamp, so IsHumanAgencyReply requires a strictly later one - otherwise every installation with an
+    /// active template reports a perfect desk.
+    /// </remarks>
+    private static DateTime? FirstHumanReply(
+        Dictionary<string, List<TicketReplyRow>> byTicket, string ticketId, DateTime openedAt)
+        => byTicket.TryGetValue(ticketId, out var rows)
+            ? rows.Where(r => TicketRules.IsHumanAgencyReply(r.Audience, r.AuthorIsCitizen, r.CreatedAt, openedAt))
+                .Select(r => (DateTime?)r.CreatedAt)
+                .DefaultIfEmpty(null)
+                .Min()
+            : null;
 
     /// <summary>Attention drawn by the published notices; null when the reader may not open the cross-list.</summary>
     /// <remarks>

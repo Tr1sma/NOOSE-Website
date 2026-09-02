@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @using NOOSE_Website.Models.Public
 @inject IPublicKpiService Kpi
 @inject ISnackbar Snackbar
@@ -119,7 +119,10 @@ else
             <MudItem xs="6" md="3">
                 <StatTile Icon="@Icons.Material.Filled.Visibility" Label="Aufrufe gesamt"
                           Value="@views.Total.ToString("N0")"
-                          Hint="@($"Über {views.Notices} im Zeitraum veröffentlichte Ausschreibungen.")" />
+                          @* the counter is a lifetime total per notice, so the window selects the notices, never
+                             the views: saying "im Zeitraum" about the number itself would be wrong *@
+                          Hint="@($"Lebenszeit-Aufrufe der {views.Notices} Ausschreibungen, die im Zeitraum "
+                                  + "veröffentlicht wurden.")" />
             </MudItem>
             <MudItem xs="6" md="3">
                 <StatTile Icon="@Icons.Material.Filled.Analytics" Label="Median je Ausschreibung"
@@ -175,6 +178,7 @@ else
     private ClaimsPrincipal? _user;
     private PublicKpiReport? _report;
     private int _days = 30;
+    private int _request;
     private bool _busy = true;
 
     protected override async Task OnInitializedAsync()
@@ -189,18 +193,33 @@ else
         {
             return;
         }
+        // a request token, because the period selector can start a second load while the first is still running:
+        // the slower answer used to land last and the panel then showed one window's figures under the other
+        // window's label
+        var token = ++_request;
         _busy = true;
         try
         {
-            _report = await Kpi.GetAsync(_days, _user);
+            var report = await Kpi.GetAsync(_days, _user);
+            if (token != _request)
+            {
+                return;
+            }
+            _report = report;
         }
         catch (Exception ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            if (token == _request)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
         }
         finally
         {
-            _busy = false;
+            if (token == _request)
+            {
+                _busy = false;
+            }
         }
     }
 

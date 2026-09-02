@@ -104,10 +104,10 @@ public class PublicSearchService(
         {
             return plain.Length <= PublicSearchRules.SnippetRadius * 2
                 ? plain
-                : plain[..(PublicSearchRules.SnippetRadius * 2)].TrimEnd() + "…";
+                : plain[..Back(plain, PublicSearchRules.SnippetRadius * 2)].TrimEnd() + "…";
         }
-        var from = Math.Max(0, at - PublicSearchRules.SnippetRadius);
-        var to = Math.Min(plain.Length, at + text.Length + PublicSearchRules.SnippetRadius);
+        var from = Back(plain, Math.Max(0, at - PublicSearchRules.SnippetRadius));
+        var to = Back(plain, Math.Min(plain.Length, at + text.Length + PublicSearchRules.SnippetRadius));
         return (from > 0 ? "…" : string.Empty) + plain[from..to].Trim() + (to < plain.Length ? "…" : string.Empty);
     }
 
@@ -224,6 +224,14 @@ public class PublicSearchService(
 
     private static string Join(params string?[] parts)
         => string.Join(" · ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+    /// <summary>Moves a cut off the middle of a surrogate pair, always backwards.</summary>
+    /// <remarks>
+    /// The cuts are UTF-16 indices and the haystack comes from the database, so slicing between the halves of a
+    /// pair would emit a replacement character on an anonymous page. Backwards, so the snippet never grows.
+    /// </remarks>
+    private static int Back(string text, int index)
+        => index > 0 && index < text.Length && char.IsLowSurrogate(text[index]) ? index - 1 : index;
 
     /// <summary>The precomputed plain text of a body, or the markup stripped here when a snapshot carries none.</summary>
     /// <remarks>

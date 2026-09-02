@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Services.Search;
+﻿namespace NOOSE_Website.Services.Search;
 
 /// <summary>Builds the bit of text a result row shows under the title.</summary>
 public static class SearchSnippet
@@ -24,12 +24,21 @@ public static class SearchSnippet
             : plain.IndexOf(query.Trim(), StringComparison.CurrentCultureIgnoreCase);
         if (at < 0)
         {
-            return plain.Length <= HeadMax ? plain : plain[..HeadMax].TrimEnd() + "…";
+            return plain.Length <= HeadMax ? plain : plain[..Back(plain, HeadMax)].TrimEnd() + "…";
         }
 
-        var from = Math.Max(0, at - radius);
-        var to = Math.Min(plain.Length, at + query!.Trim().Length + radius);
+        var from = Back(plain, Math.Max(0, at - radius));
+        var to = Back(plain, Math.Min(plain.Length, at + query!.Trim().Length + radius));
         var window = plain[from..to].Trim();
         return (from > 0 ? "…" : string.Empty) + window + (to < plain.Length ? "…" : string.Empty);
     }
+
+    /// <summary>Moves a cut off the middle of a surrogate pair, always backwards.</summary>
+    /// <remarks>
+    /// Both cuts are UTF-16 indices, and the haystack comes from the database, so it can hold non-BMP characters:
+    /// slicing between the two halves of a pair emits a replacement character. Backwards rather than forwards, so
+    /// a snippet never grows past the length its callers assert on.
+    /// </remarks>
+    private static int Back(string text, int index)
+        => index > 0 && index < text.Length && char.IsLowSurrogate(text[index]) ? index - 1 : index;
 }

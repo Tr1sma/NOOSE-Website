@@ -1,4 +1,4 @@
-@* One public wanted notice: snapshot fields, accusation, and the publish/retract actions. Shared by the file page and the management list. *@
+﻿@* One public wanted notice: snapshot fields, accusation, and the publish/retract actions. Shared by the file page and the management list. *@
 @using System.Security.Claims
 @using NOOSE_Website.Data.Entities.Public
 @using NOOSE_Website.Models.Public
@@ -42,15 +42,21 @@ else
 
         <MudGrid>
             <MudItem xs="12" md="6">
+                @* MaxLength, because the service cuts silently: without it a shortened name reaches the poster *@
                 <MudTextField @bind-Value="_input.DisplayName" Label="@NameLabel" Variant="Variant.Outlined"
+                              MaxLength="@PublicWantedRules.MaxDisplayName"
+                              Counter="@PublicWantedRules.MaxDisplayName"
                               Required="true" RequiredError="Anzeigename ist erforderlich" />
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField @bind-Value="_input.AliasText" Label="@AliasLabel" Variant="Variant.Outlined"
+                              MaxLength="@PublicWantedRules.MaxAliasText"
+                              Counter="@PublicWantedRules.MaxAliasText"
                               HelperText="Nur was nach außen darf — nichts davon wird automatisch aus der Akte übernommen." />
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined"
+                              MaxLength="@PublicWantedRules.MaxLastArea" />
                 @if (_options.Areas.Count > 0)
                 {
                     <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
@@ -65,7 +71,8 @@ else
             @if (_draft.Kind != PublicWantedKind.Waffe)
             {
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="_input.VehicleText" Label="@VehicleLabel" Variant="Variant.Outlined" />
+                    <MudTextField @bind-Value="_input.VehicleText" Label="@VehicleLabel" Variant="Variant.Outlined"
+                                  MaxLength="@PublicWantedRules.MaxVehicleText" />
                 </MudItem>
             }
             @* no photo picker for an item notice: the only photo store in the house holds mugshots of the owner,

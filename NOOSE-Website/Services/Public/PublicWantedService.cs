@@ -60,10 +60,11 @@ public class PublicWantedService(
     /// <summary>Own case-number counter: "F" belongs to factions, and one number must name one kind of record.</summary>
     public const string CaseNumberPrefix = "FA";
 
-    private const int MaxDisplayName = 200;
-    private const int MaxAliasText = 400;
-    private const int MaxLastArea = 200;
-    private const int MaxVehicleText = 400;
+    // the four outward length limits live in PublicWantedRules so the editor can state them
+    private const int MaxDisplayName = PublicWantedRules.MaxDisplayName;
+    private const int MaxAliasText = PublicWantedRules.MaxAliasText;
+    private const int MaxLastArea = PublicWantedRules.MaxLastArea;
+    private const int MaxVehicleText = PublicWantedRules.MaxVehicleText;
 
     /// <summary>The states in which a notice occupies its subject; a second one for the same subject is refused.</summary>
     private static readonly PublicWantedStatus[] LiveStates =
