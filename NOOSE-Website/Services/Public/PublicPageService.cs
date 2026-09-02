@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MudBlazor;
@@ -79,7 +79,12 @@ public class PublicPageService(
                 p.SortOrder,
                 p.Status,
                 p.ShowInMenu,
-                (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty),
+                // length as well as equality: the SQL comparison runs under a case- and accent-insensitive
+                // server collation, so a capital letter or an umlaut alone read as "nothing to publish". The body
+                // stays in SQL because PublicPageEdit deliberately carries no HTML. Residual gap, knowingly: an
+                // edit that changes only case or accents AND keeps the exact same length.
+                (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty)
+                    || (p.DraftHtml ?? string.Empty).Length != (p.ContentHtml ?? string.Empty).Length,
                 p.PublishedAt,
                 p.PublishedBy!.Codename,
                 p.ModifiedAt ?? p.CreatedAt))

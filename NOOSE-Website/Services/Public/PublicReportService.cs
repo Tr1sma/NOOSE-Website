@@ -72,8 +72,15 @@ public class PublicReportService(
                 r.Month,
                 r.Title,
                 r.Status,
+                // length as well as equality, and the title compared case-sensitively via its length too: the SQL
+                // comparison runs under a case- and accent-insensitive server collation, so a capital letter or an
+                // umlaut alone read as "nothing to publish". The body stays in SQL because PublicReportEdit
+                // deliberately carries no HTML. Residual gap, knowingly: an edit that changes only case or accents
+                // AND keeps the exact same length.
                 (r.DraftHtml ?? string.Empty) != (r.ContentHtml ?? string.Empty)
-                    || r.Title != (r.ContentTitle ?? string.Empty),
+                    || (r.DraftHtml ?? string.Empty).Length != (r.ContentHtml ?? string.Empty).Length
+                    || r.Title != (r.ContentTitle ?? string.Empty)
+                    || r.Title.Length != (r.ContentTitle ?? string.Empty).Length,
                 r.PublishedAt,
                 r.PublishedBy!.Codename,
                 r.SituationReportId,
@@ -97,8 +104,11 @@ public class PublicReportService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.SituationReports
             .AsNoTracking()
-            // a month whose public text was deleted is free again, so only living rows count as taken
-            .Where(l => !db.OeffentlicheLageberichte.Any(r => r.SituationReportId == l.Id))
+            // a month whose public text was deleted is free again, so only living rows count as taken - and taken
+            // by PERIOD, not just by anchor: "one living report per month" is the rule the save enforces, so an
+            // anchor whose month is already published would be offered and then always throw
+            .Where(l => !db.OeffentlicheLageberichte.Any(r => r.SituationReportId == l.Id)
+                && !db.OeffentlicheLageberichte.Any(r => r.Year == l.Year && r.Month == l.Month))
             .OrderByDescending(l => l.Year).ThenByDescending(l => l.Month)
             .Select(l => new PublicReportAnchor(l.Id, l.Year, l.Month, l.Title))
             .ToListAsync(cancellationToken);

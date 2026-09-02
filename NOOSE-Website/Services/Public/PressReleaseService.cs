@@ -67,23 +67,48 @@ public class PressReleaseService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // projected rather than Include'd: only the codename is wanted, and pulling the whole identity user would
         // carry the publisher's clear name into a panel the read-only supervision renders
-        return await db.Pressemitteilungen
+        // The divergence flag is decided in memory, not in SQL: a comparison inside the projection runs under the
+        // column collation, and the server default is case- AND accent-insensitive, so correcting a capital letter
+        // or an umlaut in a published title read as "nothing to publish". Title and teaser are bounded (200/400),
+        // so pulling them costs nothing; the body is compared by length plus SQL equality, because PressEdit
+        // deliberately carries no HTML - a list with every draft attached would be megabytes per render. Residual
+        // gap, knowingly: a body edit that changes only case or accents AND keeps the exact same length.
+        var rows = await db.Pressemitteilungen
             .AsNoTracking()
             .OrderByDescending(p => p.PublishedAt ?? p.CreatedAt)
+            .Select(p => new
+            {
+                p.Id,
+                p.CaseNumber,
+                p.Title,
+                p.Teaser,
+                p.Status,
+                BodyDiffers = (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty)
+                    || (p.DraftHtml ?? string.Empty).Length != (p.ContentHtml ?? string.Empty).Length,
+                ContentTitle = p.ContentTitle ?? string.Empty,
+                ContentTeaser = p.ContentTeaser ?? string.Empty,
+                p.PublishedAt,
+                PublishedByName = p.PublishedBy!.Codename,
+                p.DiscordPushedAt,
+                Touched = p.ModifiedAt ?? p.CreatedAt,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
             .Select(p => new PressEdit(
                 p.Id,
                 p.CaseNumber,
                 p.Title,
                 p.Teaser,
                 p.Status,
-                (p.DraftHtml ?? string.Empty) != (p.ContentHtml ?? string.Empty)
-                    || p.Title != (p.ContentTitle ?? string.Empty)
-                    || p.Teaser != (p.ContentTeaser ?? string.Empty),
+                p.BodyDiffers
+                    || !string.Equals(p.Title, p.ContentTitle, StringComparison.Ordinal)
+                    || !string.Equals(p.Teaser, p.ContentTeaser, StringComparison.Ordinal),
                 p.PublishedAt,
-                p.PublishedBy!.Codename,
+                p.PublishedByName,
                 p.DiscordPushedAt,
-                p.ModifiedAt ?? p.CreatedAt))
-            .ToListAsync(cancellationToken);
+                p.Touched))
+            .ToList();
     }
 
     public async Task<PressDraft?> GetDraftAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

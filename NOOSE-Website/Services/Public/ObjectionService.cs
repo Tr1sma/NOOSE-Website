@@ -272,24 +272,37 @@ public class ObjectionService(
             await RequireNoticeOfflineAsync(db, row.WantedId, cancellationToken);
         }
 
-        row.Status = status;
-        if (decided)
+        // Compare-and-swap on the status just read, like ToCaseAsync below: the decision is what the citizen is
+        // told, so two people deciding at once must not both get through. A tracked write let one press Annehmen
+        // and the other Ablehnen, both pass the transition check, both save and both notify - the citizen received
+        // two contradictory messages while the row kept only the last writer's reason.
+        var previous = row.Status;
+        var decidedById = decided ? actor.GetAgentId() : null;
+        var decidedAt = decided ? DateTime.UtcNow : (DateTime?)null;
+        var claimed = await db.FahndungEinsprueche
+            .Where(e => e.Id == id && e.Status == previous)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.Status, status)
+                .SetProperty(e => e.DecisionNote, decided ? clean : null)
+                .SetProperty(e => e.DecidedById, decidedById)
+                .SetProperty(e => e.DecidedAt, decidedAt), cancellationToken);
+        if (claimed == 0)
         {
-            row.DecisionNote = clean;
-            row.DecidedById = actor.GetAgentId();
-            row.DecidedAt = DateTime.UtcNow;
+            throw new InvalidOperationException("Dieser Einspruch wurde soeben von jemand anderem entschieden.");
         }
-        else
-        {
-            // back into review: these fields describe the current decision, not its history
-            row.DecisionNote = null;
-            row.DecidedById = null;
-            row.DecidedAt = null;
-        }
+
+        // ExecuteUpdate bypasses the audit interceptor, so the decision is recorded by hand
+        db.AuditLogs.Add(ManualAudit.Row(nameof(FahndungEinspruch), id, AuditAction.Modified, actor,
+            ManualAudit.Change("Status", ObjectionStatusDisplay.Name(previous), ObjectionStatusDisplay.Name(status))));
         await db.SaveChangesAsync(cancellationToken);
 
         if (decided)
         {
+            // the in-memory row is what the notification reads, so it has to match what was just written
+            row.Status = status;
+            row.DecisionNote = clean;
+            row.DecidedById = decidedById;
+            row.DecidedAt = decidedAt;
             await NotifyCitizenAsync(db, row, cancellationToken);
         }
     }
