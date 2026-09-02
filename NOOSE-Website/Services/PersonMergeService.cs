@@ -298,6 +298,13 @@ public class PersonMergeService(
         db.AuditLogs.Add(ManualAudit.Row(nameof(Person), targetId, AuditAction.Modified, actor,
             ManualAudit.Change("Zusammengeführt aus", null, $"{source.Name} ({source.CaseNumber})")));
 
+        // the citizen link is a pointer like the others: left on the source it would take the whole tipster
+        // history off the surviving file, because GetForLinkedPersonAsync keys on exactly this column.
+        // IgnoreQueryFilters so a deactivated profile moves too.
+        await db.BuergerProfile.IgnoreQueryFilters()
+            .Where(p => p.LinkedPersonId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.LinkedPersonId, targetId), cancellationToken);
+
         // ---- send source record to the trash (interceptor soft-deletes) ----
         db.People.Remove(source);
 

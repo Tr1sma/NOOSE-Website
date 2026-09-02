@@ -138,7 +138,10 @@ public class RewardService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await db.HinweisBelohnungen.AsNoTracking()
+        // rooted over the soft-delete filter: Tip is a REQUIRED navigation, so EF joins it INNER and a deleted
+        // tip would take the citizen's paid receipt with it. HinweisBelohnung is deliberately not ISoftDelete,
+        // so there is no !IsDeleted to write back - the widening only restores the uncut join.
+        var rows = await db.HinweisBelohnungen.IgnoreQueryFilters().AsNoTracking()
             .Where(b => b.Tip!.CitizenProfileId == profile.Id)
             .Select(b => new { b.ReceiptNumber, TipCaseNumber = b.Tip!.CaseNumber, b.Amount, b.PaidAt })
             .ToListAsync(cancellationToken);
@@ -159,7 +162,8 @@ public class RewardService(
         Permission.RequireCitizenPortal(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await db.HinweisBelohnungen.AsNoTracking()
+        // rooted for the same reason as GetOwnAsync: the receipt must survive the deletion of its tip
+        var rows = await db.HinweisBelohnungen.IgnoreQueryFilters().AsNoTracking()
             .Where(b => b.ReceiptNumber == receiptNumber)
             .Select(b => new
             {
@@ -375,7 +379,8 @@ public class RewardService(
     private static async Task<IReadOnlyList<RewardRow>> RowsAsync(AppDbContext db,
         System.Linq.Expressions.Expression<Func<HinweisBelohnung, bool>> filter, CancellationToken cancellationToken)
     {
-        var rows = await db.HinweisBelohnungen.AsNoTracking()
+        // rooted for the same reason as the citizen reads: the payout row outlives its tip
+        var rows = await db.HinweisBelohnungen.IgnoreQueryFilters().AsNoTracking()
             .Where(filter)
             .OrderByDescending(b => b.PaidAt)
             .Select(b => new

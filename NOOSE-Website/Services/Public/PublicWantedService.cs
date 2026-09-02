@@ -556,6 +556,13 @@ public class PublicWantedService(
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == input.Id, cancellationToken)
             ?? throw new InvalidOperationException(NotFound);
 
+        // the same gate the read path holds, and unconditionally like the sibling write paths: without it an agent
+        // whose circuit predates a classification could write against a Verschlusssache and audit it
+        if (!await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken))
+        {
+            throw new InvalidOperationException(NotFound);
+        }
+
         var live = row.Status == PublicWantedStatus.Veroeffentlicht;
         if (live)
         {
@@ -584,12 +591,29 @@ public class PublicWantedService(
         }
 
         var previousPhoto = row.PhotoFileName;
+        var previousSource = row.PhotoSourceId;
         await PhotoSourceSetAsync(db, row, input.PhotoSourceId, cancellationToken);
         if (live)
         {
             // the copy has to follow the choice here, not only at publish time: otherwise clearing the photo of a
             // published notice reports success while the mugshot stays anonymously downloadable
             await PhotoCopyAsync(db, row, cancellationToken);
+        }
+        else if (row.Status == PublicWantedStatus.Gefasst)
+        {
+            // an archive row is still outside: /gefasst renders it and the photo endpoint widens to Gefasst, so a
+            // removal has to reach the copy here too. A swap is refused rather than copied, because a fresh
+            // mugshot must not go outside without passing the publication gates above.
+            if (row.PhotoSourceId is not { Length: > 0 })
+            {
+                row.PhotoFileName = null;
+                row.PhotoContentType = null;
+            }
+            else if (!string.Equals(row.PhotoSourceId, previousSource, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Das Foto einer gefassten Ausschreibung lässt sich nicht "
+                    + "tauschen — dazu zurückziehen und neu veröffentlichen.");
+            }
         }
 
         // null means "leave the stored accusation alone", "" means "clear it" — without the split, saving a renamed
@@ -606,8 +630,9 @@ public class PublicWantedService(
 
         await SaveAndInvalidateAsync(db, cancellationToken);
 
-        // after the save, for the same reason as in the publish body
-        if (live && previousPhoto != row.PhotoFileName)
+        // after the save, for the same reason as in the publish body. Gefasst counts as outside, so its stale
+        // copy has to go too.
+        if ((live || row.Status == PublicWantedStatus.Gefasst) && previousPhoto != row.PhotoFileName)
         {
             DeleteCopy(previousPhoto);
         }
@@ -744,7 +769,10 @@ public class PublicWantedService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException(NotFound);
-        if (row.Status == PublicWantedStatus.Veroeffentlicht)
+        // Gefasst is outside too — /gefasst renders it — so deleting it would be the same silent depublication.
+        // Beantragt stays deletable: CloseOpenRequestsAsync below closes its request, and the editor offers
+        // Zurückziehen for it as the alternative.
+        if (row.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Gefasst)
         {
             // otherwise deleting would be a silent depublication with no reason on the record
             throw new InvalidOperationException("Zuerst zurückziehen, dann löschen.");
@@ -1093,7 +1121,12 @@ public class PublicWantedService(
         var (request, row) = await PendingRequestAsync(db, requestId, cancellationToken);
 
         DecideRequest(request, approved: false, note, actor);
-        row.Status = PublicWantedStatus.Entwurf;
+        // only the state the request asked about: PendingRequestAsync validates the request, never the notice, so an
+        // unconditional write would take a live notice offline with no reason and past RetractAsync
+        if (row.Status == PublicWantedStatus.Beantragt)
+        {
+            row.Status = PublicWantedStatus.Entwurf;
+        }
         await SaveAndInvalidateAsync(db, cancellationToken);
         await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
             "Veröffentlichung abgelehnt", "/fahndung?tab=oeffentlich", cancellationToken);
@@ -1387,13 +1420,12 @@ public class PublicWantedService(
                 })
                 .ToListAsync(cancellationToken);
 
-            // the archive is a record of recent results, not a dump: an anonymous page rendering every capture since
-            // launch is a page-weight problem and a scraping target
+            // Uncapped on purpose, the cap is applied AFTER the belt below: taking the newest hundred first lets
+            // suppressed rows consume slots, so a visible capture behind them could never be shown at all.
             var captured = await db.OeffentlicheFahndungen
                 .AsNoTracking()
                 .Where(f => f.Status == PublicWantedStatus.Gefasst && f.CaseNumber != null && f.CapturedAt != null)
                 .OrderByDescending(f => f.CapturedAt)
-                .Take(ArchiveLimit)
                 .Select(f => new
                 {
                     f.PersonId,
@@ -1452,7 +1484,13 @@ public class PublicWantedService(
                     r.CapturedAt!.Value))
                 .GroupBy(f => f.CaseNumber, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-            var archive = capturedByCaseNumber.Values.OrderByDescending(f => f.CapturedAt).ToList();
+            // the archive is a record of recent results, not a dump: an anonymous page rendering every capture since
+            // launch is a page-weight problem and a scraping target. Capped here, behind the belt, so only visible
+            // rows fill the window.
+            var archive = capturedByCaseNumber.Values
+                .OrderByDescending(f => f.CapturedAt)
+                .Take(ArchiveLimit)
+                .ToList();
 
             // keyed by case number like everything else the outside addresses; a notice whose shares add up to
             // nothing gets no entry at all rather than an advertised "0 $"
@@ -1470,8 +1508,20 @@ public class PublicWantedService(
                 .GroupBy(r => r.Kind)
                 .ToDictionary(g => g.Key, g => g.Count());
 
+            // stripped once per cache fill, not once per anonymous search request. Built from the same chosen rows
+            // as the cards, so a notice and its searchable text can never describe different rows.
+            var searchText = byCaseNumber.ToDictionary(
+                e => e.Key,
+                e => string.Join(" · ", new[]
+                    {
+                        e.Value.DisplayName, e.Value.AliasText, e.Value.LastArea, e.Value.VehicleText,
+                        HtmlCleanup.PlainText(e.Value.ChargeHtml),
+                    }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
+                StringComparer.OrdinalIgnoreCase);
+
             board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber, bountyByCaseNumber,
-                capturedTotals);
+                capturedTotals, searchText);
         }
         catch (Exception)
         {

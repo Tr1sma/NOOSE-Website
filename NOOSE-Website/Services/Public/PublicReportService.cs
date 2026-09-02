@@ -39,7 +39,20 @@ public class PublicReportService(
         {
             return null;
         }
-        return (await GetPublishedAsync(cancellationToken)).Find(ReportPeriod.Format(year, month));
+        // its own row read, NOT a lookup in the hub snapshot: that list is capped at HubLimit (two years), so the
+        // 25th monthly report would retire month one from an address the docs call citable
+        if (!await modules.IsEnabledAsync(PublicModules.SituationReports, cancellationToken))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.OeffentlicheLageberichte
+            .AsNoTracking()
+            .Where(r => r.Status == PublicReportStatus.Veroeffentlicht && r.Year == year && r.Month == month)
+            .Select(r => new PublicReportView(r.Year, r.Month, r.ContentTitle ?? string.Empty,
+                r.ContentHtml ?? string.Empty, r.PublishedAt))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<PublicReportEdit>> GetAllAsync(ClaimsPrincipal actor,
@@ -310,7 +323,11 @@ public class PublicReportService(
                 // GroupBy rather than ToDictionary: the month is unique among living rows by service rule, not by an
                 // index, and a snapshot that throws would hide every report instead of the one disputed month
                 ByPeriod: rows.GroupBy(r => ReportPeriod.Format(r.Year, r.Month), StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase));
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase),
+                // stripped once per cache fill, not once per anonymous search request
+                SearchText: rows.GroupBy(r => ReportPeriod.Format(r.Year, r.Month), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => HtmlCleanup.PlainText(g.First().Html),
+                        StringComparer.OrdinalIgnoreCase));
         }
         catch (Exception)
         {

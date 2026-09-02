@@ -142,7 +142,9 @@ else
                     @(_mayPublish ? "Veröffentlichen" : "Veröffentlichung beantragen")
                 </MudButton>
             }
-            @if (_draft.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Beantragt)
+            @* Gefasst included: the archive row is still outside, and retracting is now its only way off it *@
+            @if (_draft.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Beantragt
+                or PublicWantedStatus.Gefasst)
             {
                 <MudButton OnClick="RetractAsync" Variant="Variant.Outlined" Color="Color.Default" Disabled="_busy"
                            StartIcon="@Icons.Material.Filled.Block">Zurückziehen</MudButton>
@@ -155,7 +157,8 @@ else
                            StartIcon="@Icons.Material.Filled.Refresh">Stufe aktualisieren</MudButton>
             }
             <MudSpacer />
-            @if (_draft.Status != PublicWantedStatus.Veroeffentlicht)
+            @* both outward states are retract-before-delete in the service, so neither offers the button *@
+            @if (_draft.Status is not (PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Gefasst))
             {
                 <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error" Disabled="_busy"
                            StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>

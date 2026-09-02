@@ -37,8 +37,28 @@ public class PressReleaseService(
         return await LoadAsync(cancellationToken);
     }
 
-    public async Task<PublicPressView?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default)
-        => (await GetPublishedAsync(cancellationToken)).Find(caseNumber);
+    public async Task<PublicPressView?> GetByCaseNumberAsync(string? caseNumber,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseNumber))
+        {
+            return null;
+        }
+        // its own row read, NOT a lookup in the hub snapshot: that list is capped at HubLimit, so an older release
+        // would answer "not published" at the permanent address its own Discord post points at
+        if (!await modules.IsEnabledAsync(PublicModules.Press, cancellationToken))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Pressemitteilungen
+            .AsNoTracking()
+            .Where(p => p.Status == PressReleaseStatus.Veroeffentlicht && p.CaseNumber == caseNumber)
+            .Select(p => new PublicPressView(p.CaseNumber!, p.ContentTitle ?? string.Empty,
+                p.ContentTeaser ?? string.Empty, p.ContentHtml ?? string.Empty, p.PublishedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyList<PressEdit>> GetAllAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
@@ -302,7 +322,10 @@ public class PressReleaseService(
 
             snapshot = new PublicPressSnapshot(
                 Cards: rows.Select(p => new PublicPressCard(p.CaseNumber, p.Title, p.Teaser, p.PublishedAt)).ToList(),
-                ByCaseNumber: rows.ToDictionary(p => p.CaseNumber, p => p, StringComparer.OrdinalIgnoreCase));
+                ByCaseNumber: rows.ToDictionary(p => p.CaseNumber, p => p, StringComparer.OrdinalIgnoreCase),
+                // stripped once per cache fill, not once per anonymous search request
+                SearchText: rows.ToDictionary(p => p.CaseNumber, p => HtmlCleanup.PlainText(p.Html),
+                    StringComparer.OrdinalIgnoreCase));
         }
         catch (Exception)
         {

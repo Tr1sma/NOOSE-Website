@@ -628,8 +628,11 @@ public class TipService(
     public async Task ResolveAnonymityAsync(string id, string reason, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
+        // RequireTipHandling first, not RequireWriteAccess: that guard deliberately lets the demo principal
+        // through and relies on the ReadOnlyBarrierInterceptor, which an ExecuteUpdate below never reaches.
+        // MayWrite() inside RequireTipHandling denies demo, supervision, partners and citizens.
+        Permission.RequireTipHandling(actor);
         Permission.RequireLeadership(actor);
-        Permission.RequireWriteAccess(actor);
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new InvalidOperationException("Eine Auflösung braucht eine Begründung.");
@@ -668,6 +671,15 @@ public class TipService(
         Permission.RequireTipHandling(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
+
+        // money history is append-only: the reward rows reach their tip through a required navigation, so a
+        // soft-deleted tip would hide the citizen's own receipt and the payout row along with it
+        if (await db.HinweisBelohnungen.AnyAsync(b => b.TipId == id, cancellationToken))
+        {
+            throw new InvalidOperationException("Ein belohnter Hinweis lässt sich nicht löschen — eine "
+                + "Fehlbuchung wird in der Kasse gegengebucht.");
+        }
+
         // the interceptor rewrites this into a soft delete; the attachment stays until the tip is purged for good
         db.Hinweise.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
@@ -764,9 +776,11 @@ public class TipService(
     {
         Permission.RequireTipHandling(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // scoped to the bin like every other restore in this layer: without it a live row can be pushed through the
+        // restore path, saved and broadcast as a no-op
         var row = await db.Hinweise.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(h => h.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("Hinweis nicht gefunden.");
+            .FirstOrDefaultAsync(h => h.Id == id && h.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Der Hinweis liegt nicht im Papierkorb.");
         row.IsDeleted = false;
         row.DeletedAt = null;
         row.DeletedById = null;

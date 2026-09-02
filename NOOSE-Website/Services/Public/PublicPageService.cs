@@ -143,6 +143,16 @@ public class PublicPageService(
                   ?? throw new InvalidOperationException("Diese Seite existiert nicht mehr.");
         }
 
+        // The read path serves this very column, so moving it here would relocate a live page's public address
+        // without a publish click - every external link would die while the editor promises the opposite.
+        // Retracting keeps the content, so retract -> change address -> publish is a two-click round trip.
+        if (row.Status == PublicPageStatus.Veroeffentlicht
+            && !string.Equals(row.Slug, slug, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Die Seite ist unter „/info/{row.Slug}“ veröffentlicht. Zieh sie "
+                + "zuerst zurück, dann lässt sich die Adresse ändern.");
+        }
+
         row.Slug = slug;
         row.Title = Cut(title, MaxTitle);
         row.MenuTitle = CutOrNull(Empty(input.MenuTitle), MaxMenuTitle);
@@ -296,6 +306,11 @@ public class PublicPageService(
                 Pages: unique.ToDictionary(
                     p => p.Slug,
                     p => new PublicPageView(p.Slug, p.Title, p.ContentHtml ?? string.Empty, p.PublishedAt),
+                    StringComparer.OrdinalIgnoreCase),
+                // stripped once per cache fill, not once per anonymous search request
+                SearchText: unique.ToDictionary(
+                    p => p.Slug,
+                    p => HtmlCleanup.PlainText(p.ContentHtml),
                     StringComparer.OrdinalIgnoreCase));
         }
         catch (Exception)
