@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -65,6 +65,15 @@ public class BewerbungTestService(
         {
             return;
         }
+        // an open assignment points at this test, and there is no way to un-assign one: deleting it left the
+        // applicant unable to finish and the HRB unable to decide, with no route out for either
+        if (await db.BewerbungTestAssignments
+                .AnyAsync(a => a.TestId == id && a.CompletedAt == null, cancellationToken))
+        {
+            throw new InvalidOperationException("Dieser Test ist noch zugewiesen und nicht abgeschlossen. "
+                + "Setze ihn auf inaktiv, damit er nicht mehr vergeben wird.");
+        }
+
         db.BewerbungTests.Remove(test); // soft-delete
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -374,6 +383,12 @@ public class BewerbungTestService(
         if (assignment.CompletedAt is not null)
         {
             throw new InvalidOperationException("Dieser Test wurde bereits abgeschlossen.");
+        }
+        // and not after the application itself is decided: answers arriving then change nothing and read as if
+        // the decision were still open
+        if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
+        {
+            throw new InvalidOperationException("Über diese Bewerbung ist bereits entschieden.");
         }
 
         foreach (var input in answers)

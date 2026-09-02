@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -385,6 +385,21 @@ public class BountyService(
         await RequireLiveModuleAsync(row, cancellationToken);
 
         var before = await AdvertisedAsync(db, share.WantedId, cancellationToken);
+
+        // Claim the share before announcing: neither the request nor the share carries a concurrency token, so two
+        // approvals both read Beantragt, both saved and both posted a "Kopfgeld erhoeht" message that cannot be
+        // recalled. Pattern from PayInAsync; ExecuteUpdate bypasses the interceptor, hence the manual audit row.
+        var claimed = await db.FahndungKopfgeldAnteile
+            .Where(a => a.Id == share.Id && a.Status == BountyShareStatus.Beantragt)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, BountyShareStatus.Zugesagt), cancellationToken);
+        if (claimed == 0)
+        {
+            throw new InvalidOperationException("Über dieses Kopfgeld wurde soeben entschieden.");
+        }
+        db.AuditLogs.Add(ManualAudit.Row(nameof(FahndungKopfgeldAnteil), share.Id, AuditAction.Modified, actor,
+            ManualAudit.Change("Status", BountyShareStatusDisplay.Name(BountyShareStatus.Beantragt),
+                BountyShareStatusDisplay.Name(BountyShareStatus.Zugesagt))));
+
         Decide(request, approved: true, note, actor);
         share.Status = BountyShareStatus.Zugesagt;
         await SaveAsync(db, share.WantedId, cancellationToken);

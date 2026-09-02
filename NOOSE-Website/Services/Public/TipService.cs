@@ -578,6 +578,7 @@ public class TipService(
                 + "ist nicht vorgesehen.");
         }
         var wasConfirmed = TipRules.CountsAsConfirmed(row.Status);
+        var wasOpen = TipRules.IsOpen(row.Status);
         row.Status = status;
         row.HandlerId ??= actor.GetAgentId();
         await db.SaveChangesAsync(cancellationToken);
@@ -587,6 +588,13 @@ public class TipService(
         {
             await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
             await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
+        }
+        else if (!wasOpen && TipRules.IsOpen(status))
+        {
+            // re-entering the open set: TipPriorityService only ever stamps open rows, so a reopened tip kept the
+            // score it had when it was closed and came back into the inbox mis-sorted - far enough down to fall
+            // off the list cap
+            await priority.StampAsync(row.Id, cancellationToken);
         }
         broadcaster.Report(row.Id);
     }

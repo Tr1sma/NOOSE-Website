@@ -61,7 +61,31 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
             profile.LastName = last;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        var inserting = db.Entry(profile).State == EntityState.Added;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (inserting)
+        {
+            // read-then-insert against a unique UserId: two tabs both found no profile and both inserted, and the
+            // loser got a raw provider error on its own account page. Only the insert branch can lose, so the
+            // retry reads the row the winner wrote and applies the same name to it. A plain SaveChanges again, so
+            // the audit interceptor still records the field diff.
+            db.Entry(profile).State = EntityState.Detached;
+            await using var retry = await dbFactory.CreateDbContextAsync(cancellationToken);
+            var winner = await retry.BuergerProfile
+                .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
+            if (winner is null)
+            {
+                // not the race then, so the original failure stands
+                throw;
+            }
+            winner.FirstName = first;
+            winner.LastName = last;
+            await retry.SaveChangesAsync(cancellationToken);
+            return winner;
+        }
         return profile;
     }
 

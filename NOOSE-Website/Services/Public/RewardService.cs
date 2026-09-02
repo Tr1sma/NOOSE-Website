@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -212,8 +212,11 @@ public class RewardService(
         }
 
         var shares = await CapacitiesAsync(db, notice.Id, cancellationToken);
+        // ordered at the boundary: RewardAllocation promises that the same payout always produces the same
+        // bookings, and the order the operator happened to touch the amount fields in is not part of the payout
         var demands = (input.Tips ?? [])
             .Select(t => new RewardAllocation.TipDemand(t.TipId, t.Amount))
+            .OrderBy(t => t.TipId, StringComparer.Ordinal)
             .ToList();
         // the split rules, the sum invariant included, live in one place
         var slices = RewardAllocation.Distribute(shares, demands);
