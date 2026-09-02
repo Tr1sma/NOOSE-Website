@@ -47,8 +47,14 @@ public class PublicWarningService(
                 w.Id,
                 w.Title,
                 w.Status,
+                // length as well as equality: the SQL comparison runs under a case- and accent-insensitive server
+                // collation, so a capital letter or an umlaut alone read as "nothing to publish". The body stays
+                // in SQL because WarningEdit deliberately carries no HTML. Residual gap, knowingly: an edit that
+                // changes only case or accents AND keeps the exact same length.
                 (w.DraftHtml ?? string.Empty) != (w.ContentHtml ?? string.Empty)
-                    || w.Title != (w.ContentTitle ?? string.Empty),
+                    || (w.DraftHtml ?? string.Empty).Length != (w.ContentHtml ?? string.Empty).Length
+                    || w.Title != (w.ContentTitle ?? string.Empty)
+                    || w.Title.Length != (w.ContentTitle ?? string.Empty).Length,
                 w.ValidUntil,
                 w.ValidUntil != null && w.ValidUntil <= now,
                 w.PublishedAt,

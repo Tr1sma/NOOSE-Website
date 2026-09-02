@@ -1,10 +1,13 @@
-@* Opens a citizen ticket to leadership. Under Pages/Portal so the citizen-surface scan covers it too. *@
+﻿@* Opens a citizen ticket to leadership. Under Pages/Portal so the citizen-surface scan covers it too. *@
 @inject ITicketService Tickets
 @inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
-        <MudStack Spacing="3" Style="min-width:480px;max-width:600px;">
+        @* no min-width: a 480px floor plus the dialog padding needs 528px, which put the submit button off
+           screen on every phone and MudBlazor clamps nothing below its own 600px cap. FullWidth on the options
+           below does the sizing, the house pattern of every other dialog here. *@
+        <MudStack Spacing="3">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 Dein Anliegen geht an die Führungsebene des NOOSE. Die zuständigen Agenten bleiben dabei anonym;
                 du erhältst die Antwort hier im Bürgerbereich.
@@ -67,7 +70,8 @@
     public static async Task<string?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
     {
         var parameters = new DialogParameters<TicketOpenDialog> { { x => x.User, user } };
-        var reference = await dialog.ShowAsync<TicketOpenDialog>("Neues Ticket", parameters);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var reference = await dialog.ShowAsync<TicketOpenDialog>("Neues Ticket", parameters, options);
         var result = await reference.Result;
         return result is { Canceled: false, Data: string caseNumber } ? caseNumber : null;
     }

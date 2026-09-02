@@ -55,6 +55,9 @@ public class RecruitingTestVisibilityTests
         Path.Combine("Layout", "ApplicantPortalLayout.razor"),
         Path.Combine("Pages", "Recruiting", "Shared", "BewerbungssperreCard.razor"),
         Path.Combine("Pages", "Recruiting", "Shared", "BewerbungMessagePanel.razor"),
+        // the bell renders the applicant's OWN notifications - a title and a link, keyed on their agent id, with
+        // no verdict among them. Declared rather than treated as inert, so it is scanned like everything else.
+        Path.Combine("Layout", "NotificationBell.razor"),
     ];
 
     /// <summary>Framework and inert tags that need no decision.</summary>

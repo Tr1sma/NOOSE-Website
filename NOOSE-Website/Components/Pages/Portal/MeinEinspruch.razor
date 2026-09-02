@@ -145,8 +145,9 @@ else
 @code {
     /// <summary>Notice to object to, prefilled from its profile.</summary>
     /// <remarks>
-    /// A string and a public property: Blazor answers a query value it cannot parse with a 500, and a
-    /// [SupplyParameterFromQuery] on a private member binds nothing at all — silently.
+    /// A string, because Blazor answers a query value it cannot parse with a 500 and anyone can append a query
+    /// to this route. Public by house convention so the scan in CitizenSurfaceScanTests can see it - a private
+    /// one does bind (the attribute derives from CascadingParameterAttributeBase), it just cannot be checked.
     /// </remarks>
     [SupplyParameterFromQuery(Name = "fahndung")]
     public string? Fahndung { get; set; }
