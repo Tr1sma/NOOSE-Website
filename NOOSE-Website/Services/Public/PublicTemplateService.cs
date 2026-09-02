@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
@@ -80,6 +80,15 @@ public class PublicTemplateService(IDbContextFactory<AppDbContext> dbFactory) : 
         {
             throw new InvalidOperationException(
                 $"Der Text fasst höchstens {PublicTemplateRules.MaxLength} Zeichen.");
+        }
+        // and the rendered length, because the reserve above is a guess: BUERGER grows by up to 122 characters
+        // per occurrence, so a template full of them would be stored and then produce a message over the cap
+        if (PublicTemplateRenderer.Render(text, PublicTemplateRenderer.WorstCaseContext()).Length
+            > PublicTemplateRules.MaxRenderedLength)
+        {
+            throw new InvalidOperationException(
+                "Mit eingesetzten Platzhaltern wird der Text zu lang. Bitte kürzen oder weniger Platzhalter "
+                + "verwenden.");
         }
         // refused rather than half-expanded on send: a token of another system travels to the citizen as literal text
         if (PublicTemplateRenderer.HasForeignToken(text))

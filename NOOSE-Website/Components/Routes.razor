@@ -15,6 +15,10 @@
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-7" />
             </Authorizing>
         </AuthorizeRouteView>
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        @* the selector has to name an element that exists: every page titles with MudText Typo.h4, which renders
+           an <h4>, so "h1" matched only the print poster and focus never moved after a navigation. Listing the
+           levels restores that for every page. The deeper issue - a page title should BE an h1 - is a change to
+           PageHeader and every hand-rolled header, and is not this. *@
+        <FocusOnNavigate RouteData="routeData" Selector="h1, h2, h3, h4" />
     </Found>
 </Router>
