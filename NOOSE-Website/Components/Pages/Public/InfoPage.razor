@@ -22,7 +22,7 @@
    whose first statement is Permission.RequireClassifiedRead. *@
 @if (_page is { IsDraft: true })
 {
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
             Vorschau des Entwurfs — dieser Stand ist öffentlich nicht sichtbar.
@@ -41,7 +41,7 @@
 else
 {
 <PublicModuleGate Module="@PublicModules.InfoPages" Title="Information">
-<MudPaper Elevation="4" Class="pa-8">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     @if (_page is null)
     {
         <MudStack Spacing="3" AlignItems="AlignItems.Center">

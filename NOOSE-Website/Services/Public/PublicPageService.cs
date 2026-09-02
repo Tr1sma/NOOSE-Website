@@ -19,9 +19,6 @@ public class PublicPageService(
     private const string CacheKey = "OeffentlicheSeiten";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
-    private const int MaxTitle = 200;
-    private const int MaxMenuTitle = 64;
-
     public async Task<PublicPageSnapshot> GetPublishedAsync(CancellationToken cancellationToken = default)
     {
         // the module switch is checked outside the content cache: caching "module is off" as an empty snapshot would
@@ -146,6 +143,14 @@ public class PublicPageService(
         {
             row = await db.OeffentlicheSeiten.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
                   ?? throw new InvalidOperationException("Diese Seite existiert nicht mehr.");
+
+            // Two authors on one page: the second save would overwrite the first one's body, and the only copy
+            // left would be a diff in the audit log. Refuse instead - the same expression the panel row carries.
+            if (input.LoadedModifiedAt is { } loaded && (row.ModifiedAt ?? row.CreatedAt) != loaded)
+            {
+                throw new InvalidOperationException("Diese Seite wurde in der Zwischenzeit von jemand anderem "
+                    + "gespeichert. Schließe den Editor, lade die Liste neu und übertrage deine Änderungen.");
+            }
         }
 
         // The read path serves this very column, so moving it here would relocate a live page's public address
@@ -159,8 +164,8 @@ public class PublicPageService(
         }
 
         row.Slug = slug;
-        row.Title = Cut(title, MaxTitle);
-        row.MenuTitle = CutOrNull(Empty(input.MenuTitle), MaxMenuTitle);
+        row.Title = Cut(title, PublicPageRules.MaxTitle);
+        row.MenuTitle = CutOrNull(Empty(input.MenuTitle), PublicPageRules.MaxMenuTitle);
         // an unknown icon name is dropped, not stored: MudBlazor renders an icon value as markup
         row.IconName = PublicModules.IsKnownIcon(input.IconName) ? input.IconName!.Trim() : null;
         row.SortOrder = Math.Clamp(input.SortOrder, 0, 9999);

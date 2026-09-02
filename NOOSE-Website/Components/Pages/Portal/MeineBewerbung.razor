@@ -10,13 +10,13 @@
 
 @if (_blocked && _ban is not null)
 {
-    <MudPaper Elevation="4" Class="pa-8">
+    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <BewerbungssperreCard IsBlacklist="_ban.IsBlacklist" BannedUntil="_ban.BannedUntil" DecisionStatus="_lastStatus" />
     </MudPaper>
 }
 else if (_ready)
 {
-    <MudPaper Elevation="4" Class="pa-8">
+    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="4">
             <MudText Typo="Typo.h4">Deine Bewerbung</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">

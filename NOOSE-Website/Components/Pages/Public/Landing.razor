@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -13,7 +13,7 @@
 
 <MudStack Spacing="4">
 
-    <MudPaper Elevation="4" Class="pa-8">
+    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="5">
             <MudStack Row="true" Spacing="5" Wrap="Wrap.Wrap" AlignItems="AlignItems.Start">
                 <MudStack Spacing="2" Style="flex:2 1 420px;">
@@ -115,7 +115,7 @@
 
     @if (_wanted.Count > 0)
     {
-        <MudPaper Elevation="4" Class="pa-8">
+        <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
             <MudStack Spacing="4">
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                     <MudText Typo="Typo.h5">Zuletzt ausgeschrieben</MudText>
@@ -197,7 +197,7 @@
         </MudStack>
     }
 
-    <MudPaper Elevation="4" Class="pa-8">
+    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
             @if (_careersEnabled)
             {

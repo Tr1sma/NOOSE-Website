@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -76,4 +76,11 @@ public class PublicPageInput
     public string? DraftHtml { get; set; }
 
     public bool ShowInMenu { get; set; } = true;
+
+    /// <summary>The row's <c>ModifiedAt</c> when the editor opened it; a mismatch on save is a collision.</summary>
+    /// <remarks>
+    /// Same expression as the panel row carries (<c>ModifiedAt ?? CreatedAt</c>), so the two are comparable after
+    /// their common round trip through the database. Ignored when creating a page.
+    /// </remarks>
+    public DateTime? LoadedModifiedAt { get; set; }
 }

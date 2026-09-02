@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
@@ -840,5 +840,46 @@ public sealed class PublicPageServiceTests
         Assert.Equal(AuditAction.Modified, rows[2].Action);
         // and the row is readable in /nachweis rather than showing a raw CLR name
         Assert.Equal("Öffentliche Seite", AuditEntityDisplay.Label(nameof(OeffentlicheSeite)));
+    }
+
+    // ---- two authors on one page ----
+
+    [Fact]
+    public async Task SavingADraft_WithAStaleToken_IsRefused_AndKeepsTheOtherAuthorsBody()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+
+        var id = await service.SaveDraftAsync(Input(html: "<p>Erst</p>"), Leader());
+        var opened = (await service.GetAllAsync(Leader())).Single(r => r.Id == id);
+
+        // the other author saves first, so the token the open editor holds is now stale
+        var second = Input(id: id, html: "<p>Von B</p>");
+        second.LoadedModifiedAt = opened.ModifiedAt;
+        await service.SaveDraftAsync(second, Leader());
+
+        var first = Input(id: id, html: "<p>Von A</p>");
+        first.LoadedModifiedAt = opened.ModifiedAt;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.SaveDraftAsync(first, Leader()));
+        Assert.Contains("jemand anderem", error.Message, StringComparison.Ordinal);
+
+        Assert.Equal("<p>Von B</p>", await service.GetDraftAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task SavingADraft_WithTheCurrentToken_Succeeds()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+
+        var id = await service.SaveDraftAsync(Input(html: "<p>Erst</p>"), Leader());
+        var opened = (await service.GetAllAsync(Leader())).Single(r => r.Id == id);
+
+        var edit = Input(id: id, html: "<p>Zweit</p>");
+        edit.LoadedModifiedAt = opened.ModifiedAt;
+        await service.SaveDraftAsync(edit, Leader());
+
+        Assert.Equal("<p>Zweit</p>", await service.GetDraftAsync(id, Leader()));
     }
 }
