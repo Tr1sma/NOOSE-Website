@@ -47,4 +47,18 @@ public interface IPartyService
 
     /// <summary>Audit entries of the party and its memberships (record history; classified-filtered).</summary>
     Task<List<AuditLog>> GetHistoryAsync(string partyId, bool isLeadership, CancellationToken cancellationToken = default);
+
+    /// <summary>Party photos (title image first, then by capture time).</summary>
+    Task<List<PartyPhoto>> GetPhotosAsync(string partyId, CancellationToken cancellationToken = default);
+
+    /// <summary>Loads a photo with its party for the protected endpoint, gated to the viewer (partner: child-release gated); null if not visible.</summary>
+    Task<PartyPhoto?> GetPhotoWithPartyAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default);
+
+    /// <summary>Add a photo; the first photo becomes the title image.</summary>
+    Task<PartyPhoto> PhotoAddAsync(string partyId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Mark the given photo as title image; clears the flag on all others.</summary>
+    Task AsTitleImageSetAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

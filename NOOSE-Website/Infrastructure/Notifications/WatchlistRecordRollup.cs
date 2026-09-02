@@ -70,6 +70,12 @@ public static class WatchlistRecordRollup
             case PersonRelation pb: return Two((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
             // not watchable
+            // a gallery photo is file material, but no follower wants a push per upload; the four galleries
+            // stay silent alike
+            case PersonPhoto:
+            case FactionPhoto:
+            case PersonGroupPhoto:
+            case PartyPhoto:
             // the objection is two hops from a file (notice, then record) and this map has no database; the
             // publication of the notice stays the watchable event
             case FahndungEinspruch:

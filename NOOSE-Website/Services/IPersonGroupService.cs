@@ -50,4 +50,18 @@ public interface IPersonGroupService
 
     /// <summary>Audit entries of the group and its memberships (record history; classified-filtered).</summary>
     Task<List<AuditLog>> GetHistoryAsync(string groupId, bool isLeadership, CancellationToken cancellationToken = default);
+
+    /// <summary>Group photos (title image first, then by capture time).</summary>
+    Task<List<PersonGroupPhoto>> GetPhotosAsync(string groupId, CancellationToken cancellationToken = default);
+
+    /// <summary>Loads a photo with its group for the protected endpoint, gated to the viewer (partner: child-release gated); null if not visible.</summary>
+    Task<PersonGroupPhoto?> GetPhotoWithGroupAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default);
+
+    /// <summary>Add a photo; the first photo becomes the title image.</summary>
+    Task<PersonGroupPhoto> PhotoAddAsync(string groupId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Mark the given photo as title image; clears the flag on all others.</summary>
+    Task AsTitleImageSetAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

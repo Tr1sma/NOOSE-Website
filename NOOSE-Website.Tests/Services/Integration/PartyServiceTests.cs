@@ -5,6 +5,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Parties;
 using NOOSE_Website.Services;
@@ -25,8 +26,19 @@ public sealed class PartyServiceTests
     private static ViewerScope LeaderScope() => ViewerScope.From(Leader());
     private static ViewerScope PlainScope() => ViewerScope.From(Junior());
 
+    private static IPartyPhotoStorageService PhotoStorage(
+        bool allowed = true, long maxBytes = 10 * 1024 * 1024, string saved = "saved.jpg")
+    {
+        var s = Substitute.For<IPartyPhotoStorageService>();
+        s.IsAllowedType(Arg.Any<string>()).Returns(allowed);
+        s.MaxBytes.Returns(maxBytes);
+        s.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(saved);
+        return s;
+    }
+
     private static PartyService NewService(SqliteTestContext ctx,
-        IPersonService? person = null, IThreatScoreService? threat = null, IProfileSuggestionService? suggestion = null)
+        IPersonService? person = null, IThreatScoreService? threat = null, IProfileSuggestionService? suggestion = null,
+        IPartyPhotoStorageService? photo = null)
     {
         var caseNo = Substitute.For<ICaseNumberService>();
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -37,7 +49,8 @@ public sealed class PartyServiceTests
             suggestion ?? Substitute.For<IProfileSuggestionService>(),
             person ?? Substitute.For<IPersonService>(),
             threat ?? Substitute.For<IThreatScoreService>(),
-            Substitute.For<INotificationService>());
+            Substitute.For<INotificationService>(),
+            photo ?? PhotoStorage());
     }
 
     private static Party NewParty(string id, string name = "Grove Street", Action<Party>? configure = null)
@@ -856,5 +869,276 @@ public sealed class PartyServiceTests
         var result = await svc.GetHistoryAsync("p1", isLeadership: false);
 
         Assert.Empty(result);
+    }
+
+    // ==================== GetPhotosAsync ====================
+
+    [Fact]
+    public async Task GetPhotosAsync_OrdersTitleImageFirst()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "early", PartyId = "p1", FileNameSaved = "a.jpg", IsTitleImage = false, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.PartyPhotos.Add(new PartyPhoto { Id = "title", PartyId = "p1", FileNameSaved = "b.jpg", IsTitleImage = true, CreatedAt = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetPhotosAsync("p1");
+
+        Assert.Equal("title", result[0].Id);
+    }
+
+    // ==================== GetPhotoWithPartyAsync ====================
+
+    [Fact]
+    public async Task GetPhotoWithPartyAsync_ReturnsPhoto_WhenVisible()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph1", PartyId = "p1", FileNameSaved = "a.jpg" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetPhotoWithPartyAsync("ph1", PlainScope());
+
+        Assert.NotNull(result);
+        Assert.Equal("ph1", result!.Id);
+    }
+
+    [Fact]
+    public async Task GetPhotoWithPartyAsync_ReturnsNull_WhenClassified_AndNonLeader()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1", configure: p => p.SecrecyLevel = DocumentClassification.Leadership));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph1", PartyId = "p1", FileNameSaved = "a.jpg" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        Assert.Null(await svc.GetPhotoWithPartyAsync("ph1", PlainScope()));
+    }
+
+    // A TRU record reads to TRU, not to leadership alone: the coarse
+    // "classified, so leadership" check would lock its own audience out.
+    [Fact]
+    public async Task GetPhotoWithPartyAsync_ReturnsPhoto_ForTruRecord_AndTruAgent()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1", configure: p => p.SecrecyLevel = DocumentClassification.Tru));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph1", PartyId = "p1", FileNameSaved = "a.jpg" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+        var tru = ClaimsPrincipalBuilder.Agent("tru").WithRank(Rank.JuniorAgent).AsTru().Build();
+
+        Assert.NotNull(await svc.GetPhotoWithPartyAsync("ph1", ViewerScope.From(tru)));
+    }
+
+    // ==================== PhotoAddAsync ====================
+
+    [Fact]
+    public async Task PhotoAddAsync_SavesPhoto_AsTitle_WhenFirst()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.SaveChanges();
+        }
+        var photo = PhotoStorage(saved: "stored.jpg");
+        var svc = NewService(ctx, photo: photo);
+
+        using var content = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await svc.PhotoAddAsync("p1", content, "orig.jpg", "image/jpeg", 3, Leader());
+
+        Assert.Equal("stored.jpg", result.FileNameSaved);
+        Assert.True(result.IsTitleImage);
+        using var check = ctx.NewContext();
+        var stored = await check.PartyPhotos.SingleAsync(p => p.PartyId == "p1");
+        Assert.Equal("lead", stored.CreatedById);
+    }
+
+    [Fact]
+    public async Task PhotoAddAsync_Throws_OnDisallowedType()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, photo: PhotoStorage(allowed: false));
+
+        using var content = new MemoryStream(new byte[] { 1 });
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.PhotoAddAsync("p1", content, "x.exe", "application/octet-stream", 1, Leader()));
+    }
+
+    [Fact]
+    public async Task PhotoAddAsync_Throws_OnOversizedFile()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, photo: PhotoStorage(maxBytes: 10));
+
+        using var content = new MemoryStream(new byte[] { 1 });
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.PhotoAddAsync("p1", content, "orig.jpg", "image/jpeg", 11, Leader()));
+    }
+
+    [Fact]
+    public async Task PhotoAddAsync_Throws_WhenClassified_AndNonLeader()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1", configure: p => p.SecrecyLevel = DocumentClassification.Leadership));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        using var content = new MemoryStream(new byte[] { 1 });
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.PhotoAddAsync("p1", content, "orig.jpg", "image/jpeg", 1, Junior()));
+    }
+
+    [Fact]
+    public async Task PhotoAddAsync_Throws_OnUnknownParty()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        using var content = new MemoryStream(new byte[] { 1 });
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.PhotoAddAsync("nope", content, "orig.jpg", "image/jpeg", 1, Leader()));
+    }
+
+    // ==================== PhotoRemoveAsync ====================
+
+    [Fact]
+    public async Task PhotoRemoveAsync_RemovesRecord_AndDeletesFile()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph1", PartyId = "p1", FileNameSaved = "gone.jpg" });
+            db.SaveChanges();
+        }
+        var photo = PhotoStorage();
+        var svc = NewService(ctx, photo: photo);
+
+        await svc.PhotoRemoveAsync("ph1", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.False(await check.PartyPhotos.AnyAsync(p => p.Id == "ph1"));
+        photo.Received().Delete("gone.jpg");
+    }
+
+    [Fact]
+    public async Task PhotoRemoveAsync_NoOp_OnUnknown()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("nope", Leader());
+    }
+
+    // ==================== AsTitleImageSetAsync ====================
+
+    [Fact]
+    public async Task AsTitleImageSetAsync_MarksSingleTitle()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph1", PartyId = "p1", FileNameSaved = "a.jpg", IsTitleImage = true });
+            db.PartyPhotos.Add(new PartyPhoto { Id = "ph2", PartyId = "p1", FileNameSaved = "b.jpg", IsTitleImage = false });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.AsTitleImageSetAsync("ph2", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.False((await check.PartyPhotos.SingleAsync(p => p.Id == "ph1")).IsTitleImage);
+        Assert.True((await check.PartyPhotos.SingleAsync(p => p.Id == "ph2")).IsTitleImage);
+    }
+
+    [Fact]
+    public async Task AsTitleImageSetAsync_Throws_OnUnknown()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AsTitleImageSetAsync("nope", Leader()));
+    }
+
+    // Deleting the profile picture must hand the mark on, or the file would show the
+    // placeholder icon while photos are still in the gallery.
+    [Fact]
+    public async Task PhotoRemoveAsync_PromotesOldestRemaining_WhenTitleImageGoes()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "title", PartyId = "p1", FileNameSaved = "a.jpg", IsTitleImage = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.PartyPhotos.Add(new PartyPhoto { Id = "young", PartyId = "p1", FileNameSaved = "c.jpg", CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.PartyPhotos.Add(new PartyPhoto { Id = "old", PartyId = "p1", FileNameSaved = "b.jpg", CreatedAt = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.True((await check.PartyPhotos.SingleAsync(p => p.Id == "old")).IsTitleImage);
+        Assert.False((await check.PartyPhotos.SingleAsync(p => p.Id == "young")).IsTitleImage);
+    }
+
+    [Fact]
+    public async Task PhotoRemoveAsync_LeavesNoTitleImage_WhenTheLastPhotoGoes()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "title", PartyId = "p1", FileNameSaved = "a.jpg", IsTitleImage = true });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Empty(await check.PartyPhotos.ToListAsync());
+    }
+
+    // A sibling record must not inherit the mark across file boundaries.
+    [Fact]
+    public async Task PhotoRemoveAsync_PromotesOnlyWithinTheSameRecord()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Parties.Add(NewParty("p1"));
+            db.Parties.Add(NewParty("p2", "Andere Partei"));
+            db.PartyPhotos.Add(new PartyPhoto { Id = "title", PartyId = "p1", FileNameSaved = "a.jpg", IsTitleImage = true });
+            db.PartyPhotos.Add(new PartyPhoto { Id = "foreign", PartyId = "p2", FileNameSaved = "b.jpg" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.False((await check.PartyPhotos.SingleAsync(p => p.Id == "foreign")).IsTitleImage);
     }
 }

@@ -36,8 +36,19 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* real link: enables middle/ctrl-click and keyboard access *@
-                    <MudLink Href="@($"/parteien/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @if (!string.IsNullOrEmpty(context.Item.TitleImagePhotoId))
+                        {
+                            <MudImage Src="@RecordAvatar.Url(nameof(Party), context.Item.TitleImagePhotoId)" Alt="Titelbild"
+                                      Height="28" Width="28" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Default" Size="Size.Small" />
+                        }
+                        @* real link: enables middle/ctrl-click and keyboard access *@
+                        <MudLink Href="@($"/parteien/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    </MudStack>
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.MemberCount" Title="Mitglieder" />
@@ -109,6 +120,7 @@ else
                 // count only members with a visible record, matching the detail view
                 // partners: hide member count
                 MemberCount = isPartner ? 0 : p.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                TitleImagePhotoId = RecordAvatar.ProfileId(p.Photos),
                 Classification = p.Classification,
                 IsClassified = p.IsClassified,
                 SecrecyLevel = p.SecrecyLevel,
@@ -139,6 +151,7 @@ else
         public string CaseNumber { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public int MemberCount { get; set; }
+        public string? TitleImagePhotoId { get; set; }
         public Classification Classification { get; set; }
         public bool IsClassified { get; set; }
         public DocumentClassification SecrecyLevel { get; set; }

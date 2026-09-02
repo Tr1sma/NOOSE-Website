@@ -90,11 +90,13 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<PersonGroup> PersonGroups => Set<PersonGroup>();
     public DbSet<PersonGroupMember> PersonGroupMembers => Set<PersonGroupMember>();
     public DbSet<PersonGroupAgent> PersonGroupAgents => Set<PersonGroupAgent>();
+    public DbSet<PersonGroupPhoto> PersonGroupPhotos => Set<PersonGroupPhoto>();
 
     // parties
     public DbSet<Party> Parties => Set<Party>();
     public DbSet<PartyMember> PartyMembers => Set<PartyMember>();
     public DbSet<PartyAgent> PartyAgents => Set<PartyAgent>();
+    public DbSet<PartyPhoto> PartyPhotos => Set<PartyPhoto>();
 
     // operations
     public DbSet<Operation> Operations => Set<Operation>();
@@ -742,6 +744,24 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.ContentType).HasMaxLength(100);
             b.Property(f => f.CreatedById).HasMaxLength(64);
             b.HasIndex(f => f.FactionId);
+        });
+
+        modelBuilder.Entity<PersonGroupPhoto>(b =>
+        {
+            b.Property(f => f.FileNameSaved).HasMaxLength(128);
+            b.Property(f => f.OriginalName).HasMaxLength(260);
+            b.Property(f => f.ContentType).HasMaxLength(100);
+            b.Property(f => f.CreatedById).HasMaxLength(64);
+            b.HasIndex(f => f.PersonGroupId);
+        });
+
+        modelBuilder.Entity<PartyPhoto>(b =>
+        {
+            b.Property(f => f.FileNameSaved).HasMaxLength(128);
+            b.Property(f => f.OriginalName).HasMaxLength(260);
+            b.Property(f => f.ContentType).HasMaxLength(100);
+            b.Property(f => f.CreatedById).HasMaxLength(64);
+            b.HasIndex(f => f.PartyId);
         });
 
         modelBuilder.Entity<FactionAgent>(b =>

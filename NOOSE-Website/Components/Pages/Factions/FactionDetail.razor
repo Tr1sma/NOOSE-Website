@@ -66,7 +66,7 @@ else
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
                 <FactionCard Faction="_faction" MemberCount="_memberCount" InvestigationLead="_investigationLead"
-                                TitleImagePhotoId="@(_faction.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id)"
+                                TitleImagePhotoId="@RecordAvatar.ProfileId(_faction.Photos)"
                                 User="_user" Changed="NewLoadAsync" />
             </div>
         </MudItem>

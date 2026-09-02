@@ -1174,4 +1174,66 @@ public sealed class FactionServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.AsTitleImageSetAsync("nope", Leader()));
     }
+
+    // Deleting the profile picture must hand the mark on, or the file would show the
+    // placeholder icon while photos are still in the gallery.
+    [Fact]
+    public async Task PhotoRemoveAsync_PromotesOldestRemaining_WhenTitleImageGoes()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.FactionPhotos.Add(new FactionPhoto { Id = "title", FactionId = "f1", FileNameSaved = "a.jpg", IsTitleImage = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.FactionPhotos.Add(new FactionPhoto { Id = "young", FactionId = "f1", FileNameSaved = "c.jpg", CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.FactionPhotos.Add(new FactionPhoto { Id = "old", FactionId = "f1", FileNameSaved = "b.jpg", CreatedAt = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.True((await check.FactionPhotos.SingleAsync(p => p.Id == "old")).IsTitleImage);
+        Assert.False((await check.FactionPhotos.SingleAsync(p => p.Id == "young")).IsTitleImage);
+    }
+
+    [Fact]
+    public async Task PhotoRemoveAsync_LeavesNoTitleImage_WhenTheLastPhotoGoes()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.FactionPhotos.Add(new FactionPhoto { Id = "title", FactionId = "f1", FileNameSaved = "a.jpg", IsTitleImage = true });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Empty(await check.FactionPhotos.ToListAsync());
+    }
+
+    // A sibling record must not inherit the mark across file boundaries.
+    [Fact]
+    public async Task PhotoRemoveAsync_PromotesOnlyWithinTheSameRecord()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.FactionPhotos.Add(new FactionPhoto { Id = "title", FactionId = "f1", FileNameSaved = "a.jpg", IsTitleImage = true });
+            db.FactionPhotos.Add(new FactionPhoto { Id = "foreign", FactionId = "f2", FileNameSaved = "b.jpg" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await svc.PhotoRemoveAsync("title", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.False((await check.FactionPhotos.SingleAsync(p => p.Id == "foreign")).IsTitleImage);
+    }
 }

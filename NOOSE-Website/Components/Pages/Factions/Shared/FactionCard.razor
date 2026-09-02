@@ -3,7 +3,7 @@
         @if (!string.IsNullOrEmpty(TitleImagePhotoId))
         {
             <div @onclick="OpenLightboxAsync" style="cursor:pointer;">
-                <MudImage Src="@($"/dateien/fraktionen/foto/{TitleImagePhotoId}")" Alt="Titelbild"
+                <MudImage Src="@RecordAvatar.Url(nameof(Faction), TitleImagePhotoId)" Alt="Titelbild"
                           Height="120" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
             </div>
         }
@@ -98,7 +98,7 @@
 
     private async Task OpenLightboxAsync()
         => await ImageLightbox.ShowAsync(DialogService,
-            new[] { new ImageLightbox.LightboxImage($"/dateien/fraktionen/foto/{TitleImagePhotoId}", Faction.Name) });
+            new[] { new ImageLightbox.LightboxImage(RecordAvatar.Url(nameof(Faction), TitleImagePhotoId)!, Faction.Name) });
 
     /// <summary>Toggle this record's aging exemption.</summary>
     private async Task ToggleAgingAsync(bool value)

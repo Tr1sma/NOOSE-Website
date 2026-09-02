@@ -388,6 +388,12 @@ public static partial class DossierContextBuilder
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
+        var groupPhotos = await db.PersonGroupPhotos.AsNoTracking().Where(x => x.PersonGroupId == id).CountAsync(ct);
+        if (groupPhotos > 0)
+        {
+            Line(sb, "Fotos", groupPhotos.ToString());
+        }
+
         await AppendAttachmentsAsync(sb, db, nameof(PersonGroup), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{g.Name} ({g.CaseNumber})", sb.ToString(), g.IsRestricted);
     }
@@ -428,6 +434,12 @@ public static partial class DossierContextBuilder
             db.PartyAgents.AsNoTracking().Where(x => x.PartyId == id)
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
+
+        var partyPhotos = await db.PartyPhotos.AsNoTracking().Where(x => x.PartyId == id).CountAsync(ct);
+        if (partyPhotos > 0)
+        {
+            Line(sb, "Fotos", partyPhotos.ToString());
+        }
 
         await AppendAttachmentsAsync(sb, db, nameof(Party), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);

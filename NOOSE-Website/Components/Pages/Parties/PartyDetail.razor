@@ -55,7 +55,9 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <PartyCard Party="_party" MemberCount="_memberCount" InvestigationLead="_investigationLead" User="_user" Changed="NewLoadAsync" />
+                <PartyCard Party="_party" MemberCount="_memberCount" InvestigationLead="_investigationLead"
+                           TitleImagePhotoId="@RecordAvatar.ProfileId(_party.Photos)"
+                           User="_user" Changed="NewLoadAsync" />
             </div>
         </MudItem>
 
@@ -127,6 +129,12 @@ else
                     <OrgDocsPanel OrgType="@nameof(Party)" OrgId="@_party.Id" User="_user" />
                 </RecordSection>
                 }
+                @if (TabOn("fotos"))
+                {
+                <RecordSection Group="Anhänge" Slug="fotos" Label="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <PartyPhotoGallery PartyId="@_party.Id" User="_user" Changed="NewLoadAsync" />
+                </RecordSection>
+                }
                 @* partner-safe child services *@
                 @if (TabOn("beziehungen"))
                 {
@@ -194,7 +202,7 @@ else
     // every section slug on this page; the rail owns which one is active
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "agents", "einstufung", "doks",
+        "stammdaten", "mitglieder", "agents", "einstufung", "doks", "fotos",
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 

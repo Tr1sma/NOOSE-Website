@@ -48,7 +48,7 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.Allocation, $"Agent {Verb("zugeteilt", "entfernt")}");
         }
-        if (entityType is nameof(PersonPhoto) or nameof(FactionPhoto))
+        if (entityType is nameof(PersonPhoto) or nameof(FactionPhoto) or nameof(PersonGroupPhoto) or nameof(PartyPhoto))
         {
             return (TimelineCategory.Photo, $"Foto {Verb("hinzugefügt", "entfernt")}");
         }

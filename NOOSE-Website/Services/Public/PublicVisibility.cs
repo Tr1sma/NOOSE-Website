@@ -86,9 +86,11 @@ public static class PublicVisibility
             ["PersonGroup"] = InternalRecord,
             ["PersonGroupMember"] = "Mitgliederliste; nach außen nie.",
             ["PersonGroupAgent"] = Assignment,
+            ["PersonGroupPhoto"] = "Bilddatei der Akte; nach außen nur über den geprüften Publikations-Pfad.",
             ["Party"] = InternalRecord,
             ["PartyMember"] = "Mitgliederliste; nach außen nie.",
             ["PartyAgent"] = Assignment,
+            ["PartyPhoto"] = "Bilddatei der Akte; nach außen nur über den geprüften Publikations-Pfad.",
 
             // --- casework ---
             ["Case"] = InternalRecord,

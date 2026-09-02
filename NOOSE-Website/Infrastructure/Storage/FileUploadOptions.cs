@@ -9,6 +9,12 @@ public class FileUploadOptions
     /// <summary>Factions upload path.</summary>
     public string FactionsPath { get; set; } = "App_Data/uploads/fraktionen";
 
+    /// <summary>Person-groups upload path.</summary>
+    public string GroupsPath { get; set; } = "App_Data/uploads/personengruppen";
+
+    /// <summary>Parties upload path.</summary>
+    public string PartiesPath { get; set; } = "App_Data/uploads/parteien";
+
     /// <summary>Evidence-room item images path.</summary>
     public string AsservatePath { get; set; } = "App_Data/uploads/asservate";
 

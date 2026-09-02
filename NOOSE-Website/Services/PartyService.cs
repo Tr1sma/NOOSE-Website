@@ -6,6 +6,7 @@ using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Parties;
 using NOOSE_Website.Models.People;
@@ -15,7 +16,8 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IParteiService" />
 public class PartyService(
     IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
-    IPersonService personService, IThreatScoreService threat, INotificationService notifications) : IPartyService
+    IPersonService personService, IThreatScoreService threat, INotificationService notifications,
+    IPartyPhotoStorageService photoStorage) : IPartyService
 {
     private static string MentionScope(Party p) => MentionNotify.Scope(p.Description, p.Targets, p.Remarks);
 
@@ -25,6 +27,8 @@ public class PartyService(
         // include members so the list count matches the detail view
         return await VisibleParties(db, scope)
             .Include(p => p.Members).ThenInclude(m => m.Person)
+            .Include(p => p.Photos)
+            .AsSplitQuery()
             .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -32,7 +36,10 @@ public class PartyService(
     public async Task<Party?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        // photos come along for the card's title image
+        var party = await db.Parties
+            .Include(p => p.Photos)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         if (party is null || !await Visibility.IsRecordVisibleAsync(db, nameof(Party), id, scope, cancellationToken))
         {
             return null;
@@ -488,6 +495,134 @@ public class PartyService(
             .Where(a => types.Contains(a.EntityType) && ids.Contains(a.EntityId))
             .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<PartyPhoto>> GetPhotosAsync(string partyId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Title image first, then by capture time.
+        return await db.PartyPhotos
+            .Where(f => f.PartyId == partyId)
+            .OrderByDescending(f => f.IsTitleImage)
+            .ThenBy(f => f.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PartyPhoto?> GetPhotoWithPartyAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var photo = await db.PartyPhotos.Include(f => f.Party).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        if (photo?.Party is null)
+        {
+            return null;
+        }
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: parent visible AND (whole-record or this photo released)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Party), photo.PartyId, nameof(PartyPhoto), photoId, agency, scope.MeId, cancellationToken)
+                ? photo
+                : null;
+        }
+        // the record's own audience (TRU/HRB) reads it too, not leadership alone
+        return scope.CanSee(photo.Party.SecrecyLevel) ? photo : null;
+    }
+
+    public async Task<PartyPhoto> PhotoAddAsync(string partyId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!photoStorage.IsAllowedType(contentType))
+        {
+            throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
+        }
+        // Enforce the size limit server-side, not just in the UI.
+        if (size > photoStorage.MaxBytes)
+        {
+            throw new InvalidOperationException($"Datei zu groß (max. {photoStorage.MaxBytes / (1024 * 1024)} MB).");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Check existence and visibility before writing a file.
+        var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == partyId, cancellationToken)
+            ?? throw new InvalidOperationException($"Partei '{partyId}' nicht gefunden.");
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
+
+        // The first photo becomes the title image automatically.
+        var isFirst = !await db.PartyPhotos.AnyAsync(f => f.PartyId == partyId, cancellationToken);
+
+        var fileName = await photoStorage.SaveAsync(content, contentType, cancellationToken);
+        var photo = new PartyPhoto
+        {
+            PartyId = partyId,
+            FileNameSaved = fileName,
+            OriginalName = originalName,
+            ContentType = contentType,
+            SizeBytes = size,
+            IsTitleImage = isFirst,
+            CreatedAt = DateTime.UtcNow,
+            CreatedById = actor.GetAgentId(),
+        };
+        db.PartyPhotos.Add(photo);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Remove the written file if the DB insert fails, to avoid an orphaned attachment.
+            photoStorage.Delete(fileName);
+            throw;
+        }
+        return photo;
+    }
+
+    public async Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var photo = await db.PartyPhotos.Include(f => f.Party).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        if (photo is null)
+        {
+            return;
+        }
+        if (photo.Party is { } photoParty)
+        {
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, photoParty.SecrecyLevel);
+        }
+        // The title image is the record's profile picture: hand it on instead of leaving the file blank.
+        if (photo.IsTitleImage)
+        {
+            var remaining = await db.PartyPhotos
+                .Where(f => f.PartyId == photo.PartyId && f.Id != photoId)
+                .ToListAsync(cancellationToken);
+            if (RecordAvatar.Successor(remaining) is { } successor)
+            {
+                successor.IsTitleImage = true;
+            }
+        }
+        // Remove the DB record first, then the file, so a storage error leaves no record pointing at a missing file.
+        db.PartyPhotos.Remove(photo);
+        await db.SaveChangesAsync(cancellationToken);
+        photoStorage.Delete(photo.FileNameSaved);
+    }
+
+    public async Task AsTitleImageSetAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var photo = await db.PartyPhotos.Include(f => f.Party).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken)
+            ?? throw new InvalidOperationException($"Foto '{photoId}' nicht gefunden.");
+        if (photo.Party is { } photoParty)
+        {
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, photoParty.SecrecyLevel);
+        }
+
+        // Exactly one title image per party: clear all siblings, mark this one.
+        var siblings = await db.PartyPhotos.Where(f => f.PartyId == photo.PartyId).ToListAsync(cancellationToken);
+        foreach (var g in siblings)
+        {
+            g.IsTitleImage = g.Id == photoId;
+        }
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Syncs the person's automatic party-colleague links: one exists iff two people share a party.</summary>

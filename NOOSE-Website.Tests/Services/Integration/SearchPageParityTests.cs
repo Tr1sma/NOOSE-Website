@@ -128,11 +128,13 @@ public class SearchPageParityTests
                 return (await factions.GetListAsync(scope)).Select(x => x.Id).ToList();
 
             case nameof(Data.Entities.Groups.PersonGroup):
-                var groups = new PersonGroupService(ctx.Factory, caseNo, People(ctx), threat, notify);
+                var groups = new PersonGroupService(ctx.Factory, caseNo, People(ctx), threat, notify,
+                    Substitute.For<IPersonGroupPhotoStorageService>());
                 return (await groups.GetListAsync(scope)).Select(x => x.Id).ToList();
 
             case nameof(Data.Entities.Parties.Party):
-                var parties = new PartyService(ctx.Factory, caseNo, suggest, People(ctx), threat, notify);
+                var parties = new PartyService(ctx.Factory, caseNo, suggest, People(ctx), threat, notify,
+                    Substitute.For<IPartyPhotoStorageService>());
                 return (await parties.GetListAsync(scope)).Select(x => x.Id).ToList();
 
             case nameof(Data.Entities.Operations.Operation):

@@ -1,9 +1,21 @@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
         <MudStack AlignItems="AlignItems.Center" Class="py-2">
-            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
-                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Style="font-size:3rem;" />
-            </MudAvatar>
+            @if (!string.IsNullOrEmpty(TitleImagePhotoId))
+            {
+                <div @onclick="OpenLightboxAsync" style="cursor:pointer;">
+                    <MudAvatar Rounded="true" Style="height:120px;width:120px;">
+                        <MudImage Src="@RecordAvatar.Url(nameof(PersonGroup), TitleImagePhotoId)" Alt="Titelbild"
+                                  ObjectFit="ObjectFit.Cover" Style="height:120px;width:120px;" />
+                    </MudAvatar>
+                </div>
+            }
+            else
+            {
+                <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Diversity3" Style="font-size:3rem;" />
+                </MudAvatar>
+            }
         </MudStack>
 
         <div>
@@ -71,11 +83,18 @@
     /// <summary>Investigation lead codenames for prominent display.</summary>
     [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
 
+    [Parameter] public string? TitleImagePhotoId { get; set; }
+
     [Parameter] public ClaimsPrincipal? User { get; set; }
     [Parameter] public EventCallback Changed { get; set; }
 
     [Inject] private IRecencyService Recency { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+
+    private async Task OpenLightboxAsync()
+        => await ImageLightbox.ShowAsync(DialogService,
+            new[] { new ImageLightbox.LightboxImage(RecordAvatar.Url(nameof(PersonGroup), TitleImagePhotoId)!, Group.Name) });
 
     /// <summary>Toggle this record's aging exemption.</summary>
     private async Task ToggleAgingAsync(bool value)

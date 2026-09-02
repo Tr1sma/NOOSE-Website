@@ -54,7 +54,7 @@ else
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         @if (!string.IsNullOrEmpty(context.Item.TitleImagePhotoId))
                         {
-                            <MudImage Src="@($"/dateien/fraktionen/foto/{context.Item.TitleImagePhotoId}")" Alt="Titelbild"
+                            <MudImage Src="@RecordAvatar.Url(nameof(Faction), context.Item.TitleImagePhotoId)" Alt="Titelbild"
                                       Height="28" Width="28" ObjectFit="ObjectFit.Cover" Class="rounded" />
                         }
                         else
@@ -186,7 +186,7 @@ else
                 // count only members with a visible record
                 // partners: hide member count
                 MemberCount = isPartner ? 0 : f.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
-                TitleImagePhotoId = f.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id,
+                TitleImagePhotoId = RecordAvatar.ProfileId(f.Photos),
                 Classification = f.Classification,
                 ThreatScore = f.IsStateFaction ? null : f.ThreatScore,
                 ThreatConfidence = f.ThreatConfidence,

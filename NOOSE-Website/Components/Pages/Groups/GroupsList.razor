@@ -44,8 +44,19 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
-                    <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @if (!string.IsNullOrEmpty(context.Item.TitleImagePhotoId))
+                        {
+                            <MudImage Src="@RecordAvatar.Url(nameof(PersonGroup), context.Item.TitleImagePhotoId)" Alt="Titelbild"
+                                      Height="28" Width="28" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Diversity3" Color="Color.Default" Size="Size.Small" />
+                        }
+                        @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
+                        <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    </MudStack>
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Sortable="true" Title="Kategorie" SortBy="x => x.Kind">
@@ -123,6 +134,7 @@ else
                 // Count only members with a visible (non-deleted, classification-permitted) file; partners hidden
                 MemberCount = isPartner ? 0 : g.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 Kind = g.Kind,
+                TitleImagePhotoId = RecordAvatar.ProfileId(g.Photos),
                 Classification = g.Classification,
                 IsClassified = g.IsClassified,
                 SecrecyLevel = g.SecrecyLevel,
@@ -158,6 +170,7 @@ else
         public string Name { get; set; } = string.Empty;
         public int MemberCount { get; set; }
         public GroupsKind Kind { get; set; }
+        public string? TitleImagePhotoId { get; set; }
         public Classification Classification { get; set; }
         public bool IsClassified { get; set; }
         public DocumentClassification SecrecyLevel { get; set; }

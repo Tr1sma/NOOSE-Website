@@ -1,5 +1,5 @@
-@inject IFactionService FactionService
-@inject IFactionPhotoStorageService FileStorage
+@inject IPersonGroupService GroupService
+@inject IPersonGroupPhotoStorageService FileStorage
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPartnerShareService PartnerShareService
@@ -37,7 +37,7 @@
             {
                 <MudPaper Class="pa-1" Elevation="2" Style="width:160px;">
                     <div @onclick="@(() => OpenLightboxAsync(photo))" style="position:relative;cursor:pointer;">
-                        <MudImage Src="@RecordAvatar.Url(nameof(Faction), photo.Id)" Alt="@photo.OriginalName"
+                        <MudImage Src="@RecordAvatar.Url(nameof(PersonGroup), photo.Id)" Alt="@photo.OriginalName"
                                   Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded" />
                         @if (photo.IsTitleImage)
                         {
@@ -51,7 +51,7 @@
                             @photo.OriginalName
                         </MudText>
                         <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
-                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(FactionPhoto)" ChildId="@photo.Id" />
+                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(PersonGroupPhoto)" ChildId="@photo.Id" />
                             @if (_mayWrite)
                             {
                                 @if (!photo.IsTitleImage)
@@ -71,11 +71,11 @@
 </MudStack>
 
 @code {
-    [Parameter, EditorRequired] public string FactionId { get; set; } = default!;
+    [Parameter, EditorRequired] public string GroupId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
     [Parameter] public EventCallback Changed { get; set; }
 
-    private List<FactionPhoto> _photos = new();
+    private List<PersonGroupPhoto> _photos = new();
     private bool _load;
     private bool _mayWrite;
     private bool _canShareChildren;
@@ -86,7 +86,7 @@
         // leadership: per-item release only matters when the record is shell-released
         if (User.IsLeadership())
         {
-            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Faction), FactionId))
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(PersonGroup), GroupId))
                 .Any(s => s.Released && !s.IncludesChildren);
         }
         await LoadAsync();
@@ -94,13 +94,13 @@
 
     private async Task LoadAsync()
     {
-        _photos = await FactionService.GetPhotosAsync(FactionId);
+        _photos = await GroupService.GetPhotosAsync(GroupId);
     }
 
-    private async Task OpenLightboxAsync(FactionPhoto photo)
+    private async Task OpenLightboxAsync(PersonGroupPhoto photo)
     {
         var images = _photos
-            .Select(p => new ImageLightbox.LightboxImage(RecordAvatar.Url(nameof(Faction), p.Id)!, p.OriginalName))
+            .Select(p => new ImageLightbox.LightboxImage(RecordAvatar.Url(nameof(PersonGroup), p.Id)!, p.OriginalName))
             .ToList();
         var start = _photos.IndexOf(photo);
         await ImageLightbox.ShowAsync(DialogService, images, Math.Max(0, start));
@@ -125,7 +125,7 @@
                     continue;
                 }
                 await using var stream = file.OpenReadStream(FileStorage.MaxBytes);
-                await FactionService.PhotoAddAsync(FactionId, stream, file.Name, file.ContentType, file.Size, User);
+                await GroupService.PhotoAddAsync(GroupId, stream, file.Name, file.ContentType, file.Size, User);
                 uploaded++;
             }
 
@@ -146,11 +146,11 @@
         }
     }
 
-    private async Task AsTitleImageAsync(FactionPhoto photo)
+    private async Task AsTitleImageAsync(PersonGroupPhoto photo)
     {
         try
         {
-            await FactionService.AsTitleImageSetAsync(photo.Id, User);
+            await GroupService.AsTitleImageSetAsync(photo.Id, User);
             Snackbar.Add("Als Titelbild gesetzt.", Severity.Success);
             await LoadAsync();
             await Changed.InvokeAsync();
@@ -161,7 +161,7 @@
         }
     }
 
-    private async Task RemoveAsync(FactionPhoto photo)
+    private async Task RemoveAsync(PersonGroupPhoto photo)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Foto löschen?",
             $"'{photo.OriginalName}' wird dauerhaft gelöscht.");
@@ -171,7 +171,7 @@
         }
         try
         {
-            await FactionService.PhotoRemoveAsync(photo.Id, User);
+            await GroupService.PhotoRemoveAsync(photo.Id, User);
             Snackbar.Add("Foto gelöscht.", Severity.Success);
             await LoadAsync();
             await Changed.InvokeAsync();

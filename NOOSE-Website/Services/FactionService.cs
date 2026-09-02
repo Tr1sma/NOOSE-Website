@@ -795,6 +795,17 @@ public class FactionService(
             // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
             Permission.RequireMaySeeClassified(actor, photoFaction.SecrecyLevel);
         }
+        // The title image is the record's profile picture: hand it on instead of leaving the file blank.
+        if (photo.IsTitleImage)
+        {
+            var remaining = await db.FactionPhotos
+                .Where(f => f.FactionId == photo.FactionId && f.Id != photoId)
+                .ToListAsync(cancellationToken);
+            if (RecordAvatar.Successor(remaining) is { } successor)
+            {
+                successor.IsTitleImage = true;
+            }
+        }
         // Remove the DB record first, then the file, so a storage error leaves no record pointing at a missing file.
         db.FactionPhotos.Remove(photo);
         await db.SaveChangesAsync(cancellationToken);

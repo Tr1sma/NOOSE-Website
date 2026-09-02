@@ -38,8 +38,10 @@ public static class ChronikParentResolver
         [nameof(FactionPhoto)] = nameof(Faction),
         [nameof(PersonGroupMember)] = nameof(PersonGroup),
         [nameof(PersonGroupAgent)] = nameof(PersonGroup),
+        [nameof(PersonGroupPhoto)] = nameof(PersonGroup),
         [nameof(PartyMember)] = nameof(Party),
         [nameof(PartyAgent)] = nameof(Party),
+        [nameof(PartyPhoto)] = nameof(Party),
         [nameof(OperationAgent)] = nameof(Operation),
         [nameof(CaseAgent)] = nameof(Case),
         [nameof(TaskforceAgent)] = nameof(Taskforce),
@@ -156,10 +158,14 @@ public static class ChronikParentResolver
             .Where(m => i.Contains(m.Id)).Select(m => new Pair(m.Id, m.PersonGroupId)));
         await FanInAsync(nameof(PersonGroupAgent), nameof(PersonGroup), i => db.PersonGroupAgents.IgnoreQueryFilters()
             .Where(a => i.Contains(a.Id)).Select(a => new Pair(a.Id, a.PersonGroupId)));
+        await FanInAsync(nameof(PersonGroupPhoto), nameof(PersonGroup), i => db.PersonGroupPhotos.IgnoreQueryFilters()
+            .Where(f => i.Contains(f.Id)).Select(f => new Pair(f.Id, f.PersonGroupId)));
         await FanInAsync(nameof(PartyMember), nameof(Party), i => db.PartyMembers.IgnoreQueryFilters()
             .Where(m => i.Contains(m.Id)).Select(m => new Pair(m.Id, m.PartyId)));
         await FanInAsync(nameof(PartyAgent), nameof(Party), i => db.PartyAgents.IgnoreQueryFilters()
             .Where(a => i.Contains(a.Id)).Select(a => new Pair(a.Id, a.PartyId)));
+        await FanInAsync(nameof(PartyPhoto), nameof(Party), i => db.PartyPhotos.IgnoreQueryFilters()
+            .Where(f => i.Contains(f.Id)).Select(f => new Pair(f.Id, f.PartyId)));
         await FanInAsync(nameof(OperationAgent), nameof(Operation), i => db.OperationAgents.IgnoreQueryFilters()
             .Where(a => i.Contains(a.Id)).Select(a => new Pair(a.Id, a.OperationId)));
         await FanInAsync(nameof(CaseAgent), nameof(Case), i => db.CaseAgents.IgnoreQueryFilters()

@@ -39,14 +39,16 @@ public static class PartnerTabCatalog
         }),
         new PartnerRecordType(nameof(PersonGroup), "personengruppen", "Personengruppen", new PartnerTab[]
         {
-            new("stammdaten", "Stammdaten"), new("mitglieder", "Mitglieder"), new("einstufung", "Einstufung"),
+            new("stammdaten", "Stammdaten"), new("mitglieder", "Mitglieder"), new("fotos", "Fotos"),
+            new("einstufung", "Einstufung"),
             new("doks", "Doks"), new("beziehungen", "Beziehungen"), new("quellen", "Quellen"),
             new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"), new("zusatzfelder", "Zusatzfelder"),
             new("historie", "Zeitstrahl"),
         }),
         new PartnerRecordType(nameof(Party), "parteien", "Parteien", new PartnerTab[]
         {
-            new("stammdaten", "Stammdaten"), new("mitglieder", "Mitglieder"), new("einstufung", "Einstufung"),
+            new("stammdaten", "Stammdaten"), new("mitglieder", "Mitglieder"), new("fotos", "Fotos"),
+            new("einstufung", "Einstufung"),
             new("doks", "Doks"), new("beziehungen", "Beziehungen"), new("quellen", "Quellen"),
             new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"), new("zusatzfelder", "Zusatzfelder"),
             new("historie", "Zeitstrahl"),

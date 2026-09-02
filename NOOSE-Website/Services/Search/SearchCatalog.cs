@@ -379,6 +379,8 @@ public static class SearchCatalog
             ["AgentModuleCompletion"] = "Kein eigener Text; das Modul trägt ihn.",
             ["AgentBadge"] = "Auszeichnung ohne Freitext.",
             ["FactionMember"] = "Mitgliedschaft; die Person und die Fraktion sind je eigene Kategorien.",
+            ["PersonGroupPhoto"] = "Binärdatei ohne Text.",
+            ["PartyPhoto"] = "Binärdatei ohne Text.",
             ["PersonGroupMember"] = "Mitgliedschaft; die Person und die Gruppe sind je eigene Kategorien.",
             ["PartyMember"] = "Mitgliedschaft; die Person und die Partei sind je eigene Kategorien.",
             ["PersonRelation"] = "Notiz zwischen zwei Personen; beide Akten sind je eigene Kategorien.",

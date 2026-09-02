@@ -10,6 +10,11 @@ public static class AuditEntityDisplay
         "PersonDoc" => "Personen-Dok",
         "Observation" => "Observation",
         "PersonRelation" => "Personen-Beziehung",
+        // no route for any of these: the audit row carries the photo id, not the file it hangs on
+        "PersonPhoto" => "Personen-Foto",
+        "FactionPhoto" => "Fraktions-Foto",
+        "PersonGroupPhoto" => "Gruppen-Foto",
+        "PartyPhoto" => "Partei-Foto",
         "Faction" => "Fraktion",
         "PersonGroup" => "Personengruppe",
         "Party" => "Partei",

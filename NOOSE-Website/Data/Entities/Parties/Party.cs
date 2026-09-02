@@ -64,6 +64,7 @@ public class Party : IAuditable, ISoftDelete, IClassifiableRecord
 
     public List<PartyMember> Members { get; set; } = new();
     public List<PartyAgent> Agents { get; set; } = new();
+    public List<PartyPhoto> Photos { get; set; } = new();
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

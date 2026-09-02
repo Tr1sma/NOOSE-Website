@@ -68,6 +68,7 @@ public class PersonGroup : IAuditable, ISoftDelete, IClassifiableRecord
 
     public List<PersonGroupMember> Members { get; set; } = new();
     public List<PersonGroupAgent> Agents { get; set; } = new();
+    public List<PersonGroupPhoto> Photos { get; set; } = new();
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

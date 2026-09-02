@@ -56,7 +56,9 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <GroupCard Group="_group" Progress="_progress" InvestigationLead="_investigationLead" User="_user" Changed="NewLoadAsync" />
+                <GroupCard Group="_group" Progress="_progress" InvestigationLead="_investigationLead"
+                           TitleImagePhotoId="@RecordAvatar.ProfileId(_group.Photos)"
+                           User="_user" Changed="NewLoadAsync" />
             </div>
         </MudItem>
 
@@ -133,6 +135,12 @@ else
                     <AgentActivityLinkedPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </RecordSection>
                 }
+                @if (TabOn("fotos"))
+                {
+                <RecordSection Group="Anhänge" Slug="fotos" Label="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <GroupPhotoGallery GroupId="@_group.Id" User="_user" Changed="NewLoadAsync" />
+                </RecordSection>
+                }
                 @* partner-safe child services *@
                 @if (TabOn("beziehungen"))
                 {
@@ -201,7 +209,7 @@ else
     // every section slug on this page; the rail persists the active one in the URL
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "agents", "einstufung", "doks", "aktivitaeten",
+        "stammdaten", "mitglieder", "agents", "einstufung", "doks", "aktivitaeten", "fotos",
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 

@@ -348,12 +348,14 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             case nameof(PersonGroup):
                 ids.UnionWith(await db.PersonGroupMembers.IgnoreQueryFilters().Where(m => m.PersonGroupId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PersonGroupAgents.IgnoreQueryFilters().Where(a => a.PersonGroupId == id).Select(a => a.Id).ToListAsync(ct));
-                types.AddRange([nameof(PersonGroupMember), nameof(PersonGroupAgent)]);
+                ids.UnionWith(await db.PersonGroupPhotos.IgnoreQueryFilters().Where(f => f.PersonGroupId == id).Select(f => f.Id).ToListAsync(ct));
+                types.AddRange([nameof(PersonGroupMember), nameof(PersonGroupAgent), nameof(PersonGroupPhoto)]);
                 break;
             case nameof(Party):
                 ids.UnionWith(await db.PartyMembers.IgnoreQueryFilters().Where(m => m.PartyId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PartyAgents.IgnoreQueryFilters().Where(a => a.PartyId == id).Select(a => a.Id).ToListAsync(ct));
-                types.AddRange([nameof(PartyMember), nameof(PartyAgent)]);
+                ids.UnionWith(await db.PartyPhotos.IgnoreQueryFilters().Where(f => f.PartyId == id).Select(f => f.Id).ToListAsync(ct));
+                types.AddRange([nameof(PartyMember), nameof(PartyAgent), nameof(PartyPhoto)]);
                 break;
             case nameof(Operation):
                 ids.UnionWith(await db.OperationAgents.IgnoreQueryFilters().Where(a => a.OperationId == id).Select(a => a.Id).ToListAsync(ct));
