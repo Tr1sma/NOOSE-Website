@@ -79,7 +79,7 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **`Program.cs`** ist Composition-Root (Top-Level-Statements): alle DI-Registrierungen inline, nach Build-„Phase" gruppiert/kommentiert.
 - **Render-Mode** wird pro Seite in `App.razor` gesetzt: `InteractiveServer`, außer `[ExcludeFromInteractiveRouting]` (Error, NotFound, Login, Pending, Blocked, Legal) → statisch.
 - **Culture global auf de-DE** fixiert (`UseRequestLocalization` + `CultureInfo.DefaultThread*`).
-- **Middleware-Reihenfolge** (load-bearing): `UseForwardedHeaders` (zuerst, vertraut nur Loopback/nginx) → `RequestLocalization` → `PublicIndexingMiddleware` (noindex außerhalb der öffentlichen Routen; **vor** dem ExceptionHandler, damit re-executete Fehlerseiten den Header behalten) → (nur Prod) `ExceptionHandler`+`HSTS` → `StatusCodePagesWithReExecute("/not-found")` → `HttpsRedirection` → `Authentication` → `Authorization` → `RateLimiter` → `Antiforgery` → `MapStaticAssets` → `/health` → `MapRazorComponents<App>` → `Map*Endpoints`-Gruppen.
+- **Middleware-Reihenfolge** (load-bearing): `UseForwardedHeaders` (zuerst, vertraut nur Loopback/nginx) → `RequestLocalization` → `PublicIndexingMiddleware` (noindex außerhalb der öffentlichen Routen; **vor** dem ExceptionHandler, damit re-executete Fehlerseiten den Header behalten) → (nur Prod) `ExceptionHandler`+`HSTS` → `StatusCodePagesWithReExecute("/not-found")` → `HttpsRedirection` → `Authentication` → `DemoModeMiddleware` → `Authorization` → `Antiforgery` → `RateLimiter` (**nach** Antiforgery: ein POST ohne Token darf kein Permit verbrauchen, sonst hält ein anonymer Besucher die Anmeldung dauerhaft auf 429) → `MapStaticAssets` → `/health` → `MapRazorComponents<App>` → `Map*Endpoints`-Gruppen.
 - **SignalR Hub:** `MaximumReceiveMessageSize = 25 MB` (für den RichTextEditor, der volles HTML inkl. base64-Bildern über SignalR streamt — nicht zurücksetzen).
 - **Background-Worker** (`AddHostedService`): `FollowupDueWorker` (Wiedervorlagen), `ThreatScoreSweepWorker` (tägl. Score-Decay, seedet Fraktionen beim ersten Start), `SituationReportWorker` (monatl. Lageberichte). Laufen pro Host-Instanz → keine Multi-Instanz gegen eine DB.
 - **Health-Check** `/health` (`AddDbContextCheck`) — von Deploy-Skript und Status-Seite genutzt.
@@ -571,9 +571,12 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
   - **Ein Query-Parameter einer öffentlichen Route wird als `string` gebunden, nicht als `bool`/`int`.**
     Blazor antwortet auf einen Wert, den es nicht parsen kann, mit HTTP 500 — und an eine öffentliche URL
     hängt jeder eine Query. `?vorschau=1` war genau so ein 500.
-    Und er wird als **public** Property deklariert: `[SupplyParameterFromQuery]` auf einem privaten Feld
-    bindet nicht — kein Fehler, kein Warning, der Filter tut einfach nichts (`?einordnung=` auf
-    `/organisationen` war genau das). Kein Test fängt es, weil `.razor` ohne bUnit nicht testbar ist.
+    Und er wird als **public** Property deklariert — Hauskonvention, damit die Regex-Wächter ihn sehen
+    (`PublicPageScanTests`, `CitizenSurfaceScanTests`). Technisch **bindet** eine private Deklaration durchaus
+    (`SupplyParameterFromQueryAttribute` leitet von `CascadingParameterAttributeBase` ab, und dieselbe Codebasis
+    nutzt private `[CascadingParameter]` erfolgreich) — sie ist nur für keinen Scan sichtbar, weshalb zwei
+    private auf `/Account/Login` jahrelang ungeprüft blieben. `CitizenSurfaceScanTests` lehnt die private Form
+    jetzt ausdrücklich ab statt sie zu überspringen.
   - Ein Tab je Seite gibt es nicht: `Infoseiten` hat **einen** Tab auf den Hub `/info`, damit die Nav weiter
     allein aus `PublicModules` kommt.
 - **Eine öffentliche Ausschreibung (`OeffentlicheFahndung`, `/gesucht/{Aktenzeichen}`) ist ein
@@ -634,7 +637,8 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
   - **Das Foto wird beim Publizieren kopiert** (`App_Data/uploads/fahndung`, eigener
     `IPublicWantedPhotoStorageService`). `PersonService.PhotoRemoveAsync` löscht die Datei hart, während die
     Zeile nur soft-gelöscht wird — eine Referenz zerrisse den Steckbrief lautlos. Der Endpoint
-    `/gesucht/{Aktenzeichen}/foto` ist die **einzige** `[AllowAnonymous]`-Dateiroute der App: die Autorisierung
+    `/gesucht/{Aktenzeichen}/foto` ist die einzige anonyme Dateiroute **des öffentlichen Bereichs** (app-weit
+    gibt es eine zweite, `/system/logo` in `SystemEndpointRouteBuilderExtensions`): die Autorisierung
     ist die Publikationsprüfung, und er liefert **eine** `404` für jeden Fehlschlag, sonst wäre er ein
     Existenz-Orakel. Er liegt unter `/gesucht`, weil das Präfix schon öffentlich ist — eine eigene
     `/dateien/…`-Route bräuchte `PublicRoutes.ExtraPrefixes` **und** eine `robots.txt`-Zeile.
@@ -663,7 +667,10 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
     Der Übersichts-Abschnitt auf `/fahndung?tab=oeffentlich` hängt in `AuthorizeView Policy="InternalAgent"`,
     weil `/fahndung` keine Seiten-Policy trägt und `ActiveAgent` erbt — was ein Partner erfüllt.
   - **`DemoModeMiddleware.ExcludedPrefixes` wird aus `PublicRoutes.Prefixes` abgeleitet**, nicht ein zweites Mal
-    gepflegt — sonst trägt ein anonymer Besucher bei aktivem Demo-Modus das Demo-Principal. `/gesucht` stand dort
+    gepflegt. **Achtung, dieser Satz war falsch:** die Liste verhindert das Demo-Principal *nicht*, weil
+    `DemoAwareAuthenticationStateProvider` es routen-unabhängig liefert — und `DEPLOYMENT-DEMO.md` verspricht
+    das auch ausdrücklich so ("jeder anonyme Besucher wird auf den read-only Demo-Agenten geschaltet"). Die
+    Präfixliste ist reine Konsistenz. `/gesucht` stand dort
     von Hand; `/gefasst` ist eine **Geschwister**-Route, kein Kind davon, und wäre genauso durchgerutscht. Ebenso
     gibt `PartnerRoutes.IsAllowed` für jede öffentliche Route `true` zurück: ein Partner kann dieselbe Seite
     abgemeldet öffnen, die Sperrmeldung behauptete also eine Einschränkung, die es nicht gibt.
@@ -751,7 +758,7 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
     Konto, Kassenbuchung und Anzahl der Anteile strukturell nicht tragen; eine Aufschlüsselung wäre ein öffentliches
     Verzeichnis, welcher Agent eigenes Geld auf wen gesetzt hat. Zwei Schichten: der Typ **und** ein Dateiscan über
     `Components/Pages/Public/` (`PublicSurfaceGuardTests`), weil eine Seite den Dienst auch selbst fragen könnte.
-  - **Die Summe wird im Snapshot berechnet, hinter dem Gürtel** — fünfte Abfrage in `LoadAsync`, exakt neben
+  - **Die Summe wird im Snapshot berechnet, hinter dem Gürtel** — direkt neben
     `HintsAsync`. **Keine Spalte** auf der Ausschreibungszeile (eine denormalisierte Summe driftet still, und eine
     falsche Zahl über Geld ist schlimmer als eine 10 s alte) und **kein zweiter Lesepfad** (der müsste den
     Unterdrückungsgürtel wiederholen — genau die Phase-4-Falle). Eine Summe `<= 0` erzeugt keinen Eintrag statt
@@ -1053,7 +1060,7 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
   - **`PublicTemplateRules.MaxLength` ist abgeleitet** (`TicketRules.MaxMessageLength` minus Reserve): was
     gespeichert wird, muss gerendert noch in eine Nachricht passen.
   - **Kein `PublicModules`-Schlüssel** (interne Konfiguration) und **kein Papierkorb-Eintrag**
-    (Konfigurationstabelle, Präzedenz `Warnhinweis`/`DocumentTemplate` — beide `ISoftDelete` und trotzdem
+    (Konfigurationstabelle, Präzedenz `DocumentTemplate` — `ISoftDelete` und trotzdem
     nicht im globalen Papierkorb; zurückgezogen wird über `IstAktiv`). Registriert ist die Tabelle in
     `PublicVisibility`, `SearchCatalog` (`NotSearchable`), `AuditEntityDisplay` (Label **und** Route),
     `MergedPageSections.Settings`, `WatchlistRecordRollup` — **und in `FeedbackPageTabs`, der sechsten

@@ -29,10 +29,13 @@ public static class PublicVisibility
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
-            ["SystemSetting"] = "Ausschließlich vier Zeilen: Gefahrenlage-Stufe, Einschätzung, Seit-Datum und die "
-                + "zuvor gesetzte Stufe. Jede andere Zeile dieser Tabelle — Discord-Webhooks, Wartungstext, "
-                + "Theme-Farben, Logo, Demo-Modus, Not-Aus, Worker-Stempel — verlässt das Haus nie. Die Tabelle "
-                + "steht hier und nicht in NeverPublic, weil dieses Verzeichnis sagt, *was genau* rausgeht.",
+            ["SystemSetting"] = "Sechs Zeilen, nicht mehr: die vier der Gefahrenlage (Stufe, Einschätzung, "
+                + "Seit-Datum, zuvor gesetzte Stufe), die Anforderungsliste der Karriereseite "
+                + "(KarriereAnforderungen) und die Logo-Metadaten (LogoFileName, LogoContentType), die der "
+                + "anonyme Endpoint /system/logo ausliefert. Abgegrenzt wird nach Bereich, nicht nach "
+                + "Beispielen: alles, was die interne Konfiguration steuert — Discord-Webhooks, Wartungstext, "
+                + "Theme-Farben, Demo-Modus, Not-Aus, Worker-Stempel — verlässt das Haus nie. Die Tabelle steht "
+                + "hier und nicht in NeverPublic, weil dieses Verzeichnis sagt, *was genau* rausgeht.",
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
             ["Pressemitteilung"] = "Öffentliches Aktenzeichen, Titel, Teaser und der veröffentlichte Inhalt einer "

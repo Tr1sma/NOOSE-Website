@@ -726,7 +726,7 @@ private Anteil optional eingezahlt werden kann und `/kasse` die Deckung korrekt 
 - **`Konto` trägt eine Bedeutung für beide Herkünfte**: behördlich das Konto, aus dem gezahlt wird; privat
   das, in das eingezahlt wurde (erst beim Einzahlen gesetzt). Der Plan reservierte es für behördlich.
 - **Die Summe steht nicht auf der Ausschreibungszeile**, sondern wird im Snapshot **hinter dem
-  Unterdrückungsgürtel** summiert (fünfte Abfrage in `LoadAsync`, neben `HintsAsync`). Eine denormalisierte
+  Unterdrückungsgürtel** summiert (in `LoadAsync`, neben `HintsAsync`). Eine denormalisierte
   Summe driftet still; ein zweiter Lesepfad müsste den Gürtel wiederholen.
 - **Der Anteil ist nicht beobachtbar** (`WatchlistRecordRollup` → „not watchable"): die Map ist statisch
   und ohne Datenbank, Anteil → Ausschreibung → Akte sind zwei Hops. Zeitstrahl und Chronik gehen über beide.
