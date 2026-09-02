@@ -28,12 +28,20 @@
                 </MudAlert>
             }
 
-            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
-                <MudTextField @bind-Value="_firstName" Label="Vorname" Variant="Variant.Outlined"
-                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
-                <MudTextField @bind-Value="_lastName" Label="Nachname" Variant="Variant.Outlined"
-                              MaxLength="64" Immediate="true" Style="min-width:240px;flex:1 1 240px;" />
-            </MudStack>
+            @* width-bounded grid, not a flexing row: two name fields in the full 860px shell grew to half the
+               viewport each. One column below sm, two above, and never wider than a name needs. *@
+            <div style="max-width:640px;">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_firstName" Label="Vorname" Variant="Variant.Outlined"
+                                      MaxLength="64" Immediate="true" Required="true" autocomplete="given-name" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_lastName" Label="Nachname" Variant="Variant.Outlined"
+                                      MaxLength="64" Immediate="true" Required="true" autocomplete="family-name" />
+                    </MudItem>
+                </MudGrid>
+            </div>
 
             <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"

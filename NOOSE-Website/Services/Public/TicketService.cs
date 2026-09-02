@@ -519,8 +519,24 @@ public class TicketService(
         Permission.RequireTicketHandling(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Tickets.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("Ticket nicht gefunden.");
+            .FirstOrDefaultAsync(t => t.Id == id && t.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Das Ticket liegt nicht im Papierkorb.");
+
+        // the citizen got the slot back when this was deleted (OpenAsync counts living rows only), so restoring is
+        // the second door onto MaxOpen and only the service guards that rule
+        if (TicketRules.IsOpen(row.Status))
+        {
+            var open = await db.Tickets
+                .Where(t => t.CitizenProfileId == row.CitizenProfileId)
+                .Where(TicketRules.OpenRows)
+                .CountAsync(cancellationToken);
+            if (open >= TicketRules.MaxOpen)
+            {
+                throw new InvalidOperationException(
+                    $"Dieses Konto hat bereits {TicketRules.MaxOpen} offene Tickets.");
+            }
+        }
+
         row.IsDeleted = false;
         row.DeletedAt = null;
         row.DeletedById = null;
