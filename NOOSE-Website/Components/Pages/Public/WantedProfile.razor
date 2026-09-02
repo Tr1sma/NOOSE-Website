@@ -1,4 +1,4 @@
-@page "/gesucht/{CaseNumber}"
+﻿@page "/gesucht/{CaseNumber}"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -8,14 +8,20 @@
 
 <PageTitle>@(_entry?.DisplayName ?? "Gesucht") · NOOSE</PageTitle>
 
+@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and
+   every invented address would answer 200 without this tag *@
+@if (_entry is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
 <PublicModuleGate Module="@PublicModules.Wanted" Title="Gesucht">
 <MudPaper Elevation="4" Class="pa-8">
     @if (_entry is null)
     {
         @* /gesucht is indexable and this route answers 200 for any case number someone invents *@
-        <HeadContent>
-            <meta name="robots" content="noindex, nofollow" />
-        </HeadContent>
         <MudStack Spacing="3" AlignItems="AlignItems.Center">
             <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
             <MudText Typo="Typo.h6">Ausschreibung nicht gefunden</MudText>

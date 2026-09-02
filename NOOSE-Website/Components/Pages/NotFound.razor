@@ -13,8 +13,18 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
                 Der gesuchte Inhalt existiert nicht oder wurde verschoben.
             </MudText>
-            <MudButton Href="/dashboard" Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Home">Zum Dashboard</MudButton>
+            @* this page answers EVERY 404, including a mistyped public URL, so the destination follows the
+               visitor: an anonymous one has no business being sent into the internal area *@
+            <AuthorizeView>
+                <Authorized>
+                    <MudButton Href="/dashboard" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Home">Zum Dashboard</MudButton>
+                </Authorized>
+                <NotAuthorized>
+                    <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Home">Zur Startseite</MudButton>
+                </NotAuthorized>
+            </AuthorizeView>
         </MudStack>
     </MudPaper>
 </MudContainer>

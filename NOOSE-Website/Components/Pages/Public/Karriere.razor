@@ -79,6 +79,21 @@
                         </MudButton>
                     </div>
                 }
+                else if (authCtx.User.IsCitizen())
+                {
+                    @* a citizen is neither an applicant nor an agent: the agent branch below claimed it was one
+                       and offered a /dashboard button that lands on "no access" *@
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Du bist mit einem Bürgerkonto angemeldet. Für eine Bewerbung wende dich an das HRB — dein
+                        Bürgerkonto bleibt davon unberührt.
+                    </MudAlert>
+                    <div>
+                        <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Person">
+                            Zum Bürgerbereich
+                        </MudButton>
+                    </div>
+                }
                 else
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">

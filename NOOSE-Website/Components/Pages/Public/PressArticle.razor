@@ -1,4 +1,4 @@
-@page "/presse/{CaseNumber}"
+﻿@page "/presse/{CaseNumber}"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -7,14 +7,19 @@
 
 <PageTitle>@(_view?.Title ?? "Pressemitteilung") · NOOSE</PageTitle>
 
+@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and
+   every invented address would answer 200 without this tag *@
+@if (_view is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
 <PublicModuleGate Module="@PublicModules.Press" Title="Presse">
 <MudPaper Elevation="4" Class="pa-8">
     @if (_view is null)
     {
-        @* /presse is indexable and this route answers for any case number someone invents; keep the misses out *@
-        <HeadContent>
-            <meta name="robots" content="noindex, nofollow" />
-        </HeadContent>
         <MudStack Spacing="3" AlignItems="AlignItems.Center">
             <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
             <MudText Typo="Typo.h6">Pressemitteilung nicht gefunden</MudText>

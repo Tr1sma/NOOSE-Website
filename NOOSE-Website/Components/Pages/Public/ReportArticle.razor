@@ -1,4 +1,4 @@
-@page "/berichte/{Period}"
+﻿@page "/berichte/{Period}"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -7,14 +7,19 @@
 
 <PageTitle>@(_view?.Title ?? "Lagebericht") · NOOSE</PageTitle>
 
+@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and
+   every invented address would answer 200 without this tag *@
+@if (_view is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
 <PublicModuleGate Module="@PublicModules.SituationReports" Title="Lageberichte">
 <MudPaper Elevation="4" Class="pa-8">
     @if (_view is null)
     {
-        @* /berichte is indexable and this route answers for any period someone invents; keep the misses out *@
-        <HeadContent>
-            <meta name="robots" content="noindex, nofollow" />
-        </HeadContent>
         <MudStack Spacing="3" AlignItems="AlignItems.Center">
             <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
             <MudText Typo="Typo.h6">Lagebericht nicht gefunden</MudText>
