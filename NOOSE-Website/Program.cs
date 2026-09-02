@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -371,20 +372,59 @@ builder.Services.AddSingleton<TicketBroadcaster>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter(IdentityComponentsEndpointRouteBuilderExtensions.LoginRateLimitPolicy, limiter =>
+    // Answer with a body: a bodyless 429 is re-executed by UseStatusCodePagesWithReExecute, which would tell a
+    // rate-limited visitor that the route does not exist.
+    options.OnRejected = async (context, cancellationToken) =>
     {
-        limiter.PermitLimit = 10;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-    });
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(NumberFormatInfo.InvariantInfo);
+        }
+        await context.HttpContext.Response.WriteAsync(
+            "Zu viele Anfragen. Bitte versuche es in einer Minute erneut.", cancellationToken);
+    };
+    // Partitioned per caller: AddFixedWindowLimiter would share ONE bucket across the whole site, so ten
+    // anonymous requests a minute could hold the login endpoint at 429 for every agent, citizen and applicant.
+    options.AddPolicy(IdentityComponentsEndpointRouteBuilderExtensions.LoginRateLimitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            CallerKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
     // guards the tip attachment endpoint only. The submission itself travels over SignalR and never reaches this
     // middleware, so the real quota is the count in TipService.SubmitAsync
-    options.AddFixedWindowLimiter(TipFileEndpointRouteBuilderExtensions.TipRateLimitPolicy, limiter =>
-    {
-        limiter.PermitLimit = 60;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-    });
+    options.AddPolicy(TipFileEndpointRouteBuilderExtensions.TipRateLimitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.User.GetAgentId() ?? CallerKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+    // The public search rebuilds its haystacks per request, and it is a Razor route: it carries no endpoint
+    // metadata a named policy could attach to, so it has to be gated here. Everything else - above all the
+    // SignalR and framework paths - stays unlimited.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        context.Request.Path.StartsWithSegments("/suche-oeffentlich", StringComparison.OrdinalIgnoreCase)
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                "suche:" + CallerKey(context),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                })
+            : RateLimitPartition.GetNoLimiter<string>("unbegrenzt"));
+
+    static string CallerKey(HttpContext context)
+        => context.Connection.RemoteIpAddress?.ToString() ?? "unbekannt";
 });
 
 builder.Services.AddRazorComponents()
@@ -423,8 +463,10 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseMiddleware<NOOSE_Website.Infrastructure.DemoModeMiddleware>();
 app.UseAuthorization();
-app.UseRateLimiter();
 app.UseAntiforgery();
+// after Antiforgery on purpose: a tokenless POST must be refused before it spends a permit, or an anonymous
+// visitor could hold the login endpoint at 429 for everyone
+app.UseRateLimiter();
 
 app.MapStaticAssets();
 app.MapHealthChecks("/health").AllowAnonymous();

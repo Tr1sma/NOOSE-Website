@@ -164,7 +164,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 default:
                     return Results.Redirect("/Account/Gesperrt");
             }
-        }).RequireRateLimiting(LoginRateLimitPolicy);
+        });
+        // deliberately NOT rate limited: this is Discord's callback, reachable only with the state the challenge
+        // above issued. Limiting it too spent two permits per sign-in and halved the real ceiling.
 
         group.MapPost("/Logout", async (
             [FromServices] SignInManager<Agent> signInManager,
