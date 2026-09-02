@@ -28,6 +28,12 @@ public static class PublicSearchRules
     /// the length gate. A culture-sensitive comparison treats a string made only of those as equal at position zero,
     /// so three zero-width spaces would pass the minimum and then match every published row: the whole corpus,
     /// handed to an anonymous visitor as a search result.
+    /// <para>
+    /// The category list alone is not enough, and a longer list would not fix it either: a variation selector
+    /// (U+FE0F) and the combining grapheme joiner (U+034F) are NonSpacingMark, survive any such filter, and still
+    /// carry zero collation weight. So what remains is measured against the empty string instead — that asks the
+    /// comparer the same question the matcher will ask, whatever the code point.
+    /// </para>
     /// </remarks>
     public static string Normalise(string? query)
     {
@@ -44,8 +50,19 @@ public static class PublicSearchRules
         }
 
         var text = kept.ToString().Trim();
-        return text.Length > MaxQueryLength ? text[..MaxQueryLength] : text;
+        if (text.Length > MaxQueryLength)
+        {
+            text = text[..MaxQueryLength];
+        }
+        // nothing the comparer can weigh is not a search term: it would match at position zero of every row
+        return HasCollationWeight(text) ? text : string.Empty;
     }
+
+    /// <summary>True when the comparer sees anything at all in the text; the matcher uses the same comparison.</summary>
+    private static bool HasCollationWeight(string text)
+        => text.Length > 0
+            && CultureInfo.CurrentCulture.CompareInfo.Compare(
+                text, string.Empty, CompareOptions.IgnoreCase) != 0;
 
     public static bool IsTooShort(string normalised) => normalised.Length < MinQueryLength;
 }

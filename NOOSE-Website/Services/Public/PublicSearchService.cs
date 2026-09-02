@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 
 namespace NOOSE_Website.Services.Public;
@@ -137,12 +137,19 @@ public class PublicSearchService(
     private async Task<IReadOnlyList<Candidate>> NoticesAsync(CancellationToken ct)
     {
         var board = await wanted.GetBoardAsync(ct);
+        // the haystack is precomputed in the snapshot: stripping every accusation's markup here would redo that
+        // work, base64 pictures included, on every anonymous request
         return board.Cards
             .Select(card =>
             {
+                // the notice haystack spans five fields, so its fallback has to rebuild all of them - Body() alone
+                // would leave the alias, the area and the plate out of the search
+                var precomputed = board.SearchTextFor(card.CaseNumber);
                 var detail = board.Find(card.CaseNumber);
-                var haystack = Join(card.DisplayName, card.AliasText, detail?.LastArea, detail?.VehicleText,
-                    HtmlCleanup.PlainText(detail?.ChargeHtml));
+                var haystack = precomputed.Length > 0
+                    ? precomputed
+                    : Join(card.DisplayName, card.AliasText, detail?.LastArea, detail?.VehicleText,
+                        HtmlCleanup.PlainText(detail?.ChargeHtml));
                 return new Candidate(card.DisplayName, card.CaseNumber, $"/gesucht/{card.CaseNumber}",
                     card.PublishedAt, haystack);
             })
@@ -153,8 +160,8 @@ public class PublicSearchService(
     {
         var board = await factions.GetBoardAsync(ct);
         return board.Cards
-            .Select(card => new Candidate(card.DisplayName, null, "/organisationen", card.PublishedAt,
-                Join(card.DisplayName, HtmlCleanup.PlainText(card.DescriptionHtml))))
+            .Select((card, i) => new Candidate(card.DisplayName, null, "/organisationen", card.PublishedAt,
+                Join(card.DisplayName, Body(board.SearchTextAt(i), card.DescriptionHtml))))
             .ToList();
     }
 
@@ -163,7 +170,8 @@ public class PublicSearchService(
         var snapshot = await press.GetPublishedAsync(ct);
         return snapshot.Cards
             .Select(card => new Candidate(card.Title, card.CaseNumber, $"/presse/{card.CaseNumber}", card.PublishedAt,
-                Join(card.Title, card.Teaser, HtmlCleanup.PlainText(snapshot.Find(card.CaseNumber)?.Html))))
+                Join(card.Title, card.Teaser,
+                    Body(snapshot.SearchTextFor(card.CaseNumber), snapshot.Find(card.CaseNumber)?.Html))))
             .ToList();
     }
 
@@ -172,8 +180,8 @@ public class PublicSearchService(
         var snapshot = await warnings.GetPublishedAsync(ct);
         // the hub is the warning's address: there is no detail route, by design
         return snapshot.Cards
-            .Select(card => new Candidate(card.Title, null, "/warnungen", card.PublishedAt,
-                Join(card.Title, HtmlCleanup.PlainText(card.Html))))
+            .Select((card, i) => new Candidate(card.Title, null, "/warnungen", card.PublishedAt,
+                Join(card.Title, Body(snapshot.SearchTextAt(i), card.Html))))
             .ToList();
     }
 
@@ -186,7 +194,7 @@ public class PublicSearchService(
                 var period = ReportPeriod.Format(card.Year, card.Month);
                 return new Candidate(card.Title, ReportPeriod.Label(card.Year, card.Month), $"/berichte/{period}",
                     card.PublishedAt,
-                    Join(card.Title, HtmlCleanup.PlainText(snapshot.Find(period)?.Html)));
+                    Join(card.Title, Body(snapshot.SearchTextFor(period), snapshot.Find(period)?.Html)));
             })
             .ToList();
     }
@@ -200,7 +208,7 @@ public class PublicSearchService(
         return snapshot.Pages.Values
             .Where(page => linked.Contains(page.Slug))
             .Select(page => new Candidate(page.Title, null, $"/info/{page.Slug}", page.PublishedAt,
-                Join(page.Title, HtmlCleanup.PlainText(page.Html))))
+                Join(page.Title, Body(snapshot.SearchTextFor(page.Slug), page.Html))))
             .ToList();
     }
 
@@ -216,4 +224,12 @@ public class PublicSearchService(
 
     private static string Join(params string?[] parts)
         => string.Join(" · ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+    /// <summary>The precomputed plain text of a body, or the markup stripped here when a snapshot carries none.</summary>
+    /// <remarks>
+    /// The precomputation is a saving, never the source of truth: a snapshot built without it - a test double, or a
+    /// future producer that forgets the field - must still be searchable rather than silently lose its bodies.
+    /// </remarks>
+    private static string Body(string precomputed, string? html)
+        => precomputed.Length > 0 ? precomputed : HtmlCleanup.PlainText(html);
 }

@@ -10,9 +10,19 @@ namespace NOOSE_Website.Models.Public;
 public sealed record PublicWarningCard(string Title, string Html, DateTime? ValidUntil, DateTime? PublishedAt);
 
 /// <summary>Everything the public warning page reads, cached as one unit.</summary>
-public sealed record PublicWarningSnapshot(IReadOnlyList<PublicWarningCard> Cards)
+/// <param name="SearchText">
+/// Bodies as plain text, index-aligned with <paramref name="Cards"/>, computed once per cache fill - see
+/// PublicPressSnapshot for the reason. A warning has no detail route, so there is no key to hang them on.
+/// </param>
+public sealed record PublicWarningSnapshot(
+    IReadOnlyList<PublicWarningCard> Cards,
+    IReadOnlyList<string>? SearchText = null)
 {
     public static PublicWarningSnapshot Empty { get; } = new([]);
+
+    /// <summary>Precomputed plain text of the card at that position; empty when the snapshot carries none.</summary>
+    public string SearchTextAt(int index)
+        => SearchText is not null && index >= 0 && index < SearchText.Count ? SearchText[index] : string.Empty;
 }
 
 /// <summary>Editing row of the settings panel.</summary>

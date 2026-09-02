@@ -77,7 +77,8 @@ public sealed record PublicWantedBoard(
     IReadOnlyList<PublicWantedArchiveCard> Archive,
     IReadOnlyDictionary<string, PublicWantedArchiveCard> CapturedByCaseNumber,
     IReadOnlyDictionary<string, PublicBounty> BountyByCaseNumber,
-    IReadOnlyDictionary<PublicWantedKind, int> CapturedTotals)
+    IReadOnlyDictionary<PublicWantedKind, int> CapturedTotals,
+    IReadOnlyDictionary<string, string>? SearchText = null)
 {
     public static IReadOnlyDictionary<string, PublicBounty> NoBounties { get; } =
         new Dictionary<string, PublicBounty>(StringComparer.OrdinalIgnoreCase);
@@ -112,6 +113,16 @@ public sealed record PublicWantedBoard(
     public PublicBounty? BountyFor(string? caseNumber)
         => caseNumber is not null && BountyByCaseNumber.TryGetValue(caseNumber, out var bounty) ? bounty : null;
 
+    /// <summary>Precomputed searchable plain text of one notice; empty when the board carries none.</summary>
+    /// <remarks>
+    /// Filled once per cache fill so the public search does not strip the markup of every accusation on every
+    /// anonymous request. Dropped together with its card in <see cref="WithoutItems"/>, like the bounty.
+    /// </remarks>
+    public string SearchTextFor(string? caseNumber)
+        => caseNumber is not null && SearchText is not null && SearchText.TryGetValue(caseNumber, out var plain)
+            ? plain
+            : string.Empty;
+
     /// <summary>The same snapshot without the vehicle and weapon notices; what the item module switch owns.</summary>
     /// <remarks>
     /// One pass over all five collections rather than a second cache key: board, archive and item notices come from
@@ -140,6 +151,9 @@ public sealed record PublicWantedBoard(
             CapturedTotals = CapturedTotals
                 .Where(e => !WantedKinds.IsItem(e.Key))
                 .ToDictionary(e => e.Key, e => e.Value),
+            SearchText = SearchText?
+                .Where(e => byCaseNumber.ContainsKey(e.Key))
+                .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase),
         };
     }
 }

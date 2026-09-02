@@ -13,15 +13,25 @@ public sealed record PublicReportCard(int Year, int Month, string Title, DateTim
 public sealed record PublicReportView(int Year, int Month, string Title, string Html, DateTime? PublishedAt);
 
 /// <summary>Everything the public report pages read, cached as one unit.</summary>
+/// <param name="SearchText">
+/// Body as plain text, per period, computed once per cache fill - see PublicPressSnapshot for the reason.
+/// </param>
 public sealed record PublicReportSnapshot(
     IReadOnlyList<PublicReportCard> Cards,
-    IReadOnlyDictionary<string, PublicReportView> ByPeriod)
+    IReadOnlyDictionary<string, PublicReportView> ByPeriod,
+    IReadOnlyDictionary<string, string>? SearchText = null)
 {
     public static PublicReportSnapshot Empty { get; } =
         new([], new Dictionary<string, PublicReportView>(StringComparer.OrdinalIgnoreCase));
 
     public PublicReportView? Find(string? period)
         => period is not null && ByPeriod.TryGetValue(period, out var view) ? view : null;
+
+    /// <summary>Precomputed plain text of one report; empty when the snapshot carries none.</summary>
+    public string SearchTextFor(string? period)
+        => period is not null && SearchText is not null && SearchText.TryGetValue(period, out var plain)
+            ? plain
+            : string.Empty;
 }
 
 /// <summary>Editing row of the settings panel.</summary>

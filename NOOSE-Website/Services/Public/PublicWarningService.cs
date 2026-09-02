@@ -243,7 +243,8 @@ public class PublicWarningService(
                     w.ValidUntil, w.PublishedAt))
                 .ToListAsync(cancellationToken);
 
-            snapshot = new PublicWarningSnapshot(rows);
+            // stripped once per cache fill, not once per anonymous search request
+            snapshot = new PublicWarningSnapshot(rows, rows.Select(w => HtmlCleanup.PlainText(w.Html)).ToList());
         }
         catch (Exception)
         {

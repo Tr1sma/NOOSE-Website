@@ -9,15 +9,26 @@ public sealed record PublicPressCard(string CaseNumber, string Title, string Tea
 public sealed record PublicPressView(string CaseNumber, string Title, string Teaser, string Html, DateTime? PublishedAt);
 
 /// <summary>Everything the public press pages read, cached as one unit.</summary>
+/// <param name="SearchText">
+/// Body as plain text, per case number, computed once per cache fill. The public search would otherwise strip the
+/// markup of every release - base64 pictures included - on every anonymous request.
+/// </param>
 public sealed record PublicPressSnapshot(
     IReadOnlyList<PublicPressCard> Cards,
-    IReadOnlyDictionary<string, PublicPressView> ByCaseNumber)
+    IReadOnlyDictionary<string, PublicPressView> ByCaseNumber,
+    IReadOnlyDictionary<string, string>? SearchText = null)
 {
     public static PublicPressSnapshot Empty { get; } =
         new([], new Dictionary<string, PublicPressView>(StringComparer.OrdinalIgnoreCase));
 
     public PublicPressView? Find(string? caseNumber)
         => caseNumber is not null && ByCaseNumber.TryGetValue(caseNumber, out var view) ? view : null;
+
+    /// <summary>Precomputed plain text of one release; empty when the snapshot carries none.</summary>
+    public string SearchTextFor(string? caseNumber)
+        => caseNumber is not null && SearchText is not null && SearchText.TryGetValue(caseNumber, out var plain)
+            ? plain
+            : string.Empty;
 }
 
 /// <summary>Editing row of the settings panel.</summary>
