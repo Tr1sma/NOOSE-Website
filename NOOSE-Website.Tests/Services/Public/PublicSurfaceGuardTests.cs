@@ -213,7 +213,9 @@ public class PublicSurfaceGuardTests
         string[] forbidden =
         [
             "SaveChangesAsync", "ExecuteUpdate", "ExecuteDelete", "ExecuteSql", "cache.Remove", "cache.Set",
-            "IDbContextFactory", "AppDbContext", "IgnoreQueryFilters",
+            // IMemoryCache by name too: the rule is "holds no cache", and the three cache.* spellings above only
+            // catch a field that happens to be called "cache"
+            "IMemoryCache", "IDbContextFactory", "AppDbContext", "IgnoreQueryFilters",
         ];
         var offenders = forbidden.Where(w => code.Contains(w, StringComparison.Ordinal)).Order().ToArray();
 
@@ -311,7 +313,13 @@ public class PublicSurfaceGuardTests
         var offenders = Directory
             .EnumerateFiles(ProjectRoot(), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains(Path.Combine("Data", "Migrations"), StringComparison.Ordinal))
-            .Select(f => (File: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            // AgentManagementService only nulls the donor pointer when an account is hard-deleted. The advertised
+            // sum counts statuses, never donors, so no snapshot can go stale from it - and its write is an
+            // ExecuteUpdate, matched here only because the file holds a SaveChangesAsync elsewhere.
+            .Where(f => Path.GetFileName(f) != "AgentManagementService.cs")
+            // WithoutComments like its siblings: prose that explains why a file does NOT invalidate contains the
+            // very method name this scan looks for, which silently excused TipPriorityService
+            .Select(f => (File: Path.GetFileName(f), Text: WithoutComments(File.ReadAllText(f))))
             .Where(f => f.Text.Contains("FahndungKopfgeldAnteile", StringComparison.Ordinal)
                 && f.Text.Contains("SaveChangesAsync", StringComparison.Ordinal)
                 && !f.Text.Contains("InvalidatePublicViewAsync", StringComparison.Ordinal))

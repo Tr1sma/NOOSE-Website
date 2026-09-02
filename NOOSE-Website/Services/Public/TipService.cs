@@ -80,7 +80,14 @@ public class TipService(
             }
             // the size too, server-side: MaxBytes existed and was never read, so the only bound was the page's own
             // OpenReadStream limit - and this path travels over SignalR, not through the file endpoint
-            if (attachmentSize > storage.MaxBytes)
+            // fail closed: a size of 0 means the caller stated none, and a bound that a caller can skip by
+            // omitting it is no bound at all
+            if (attachmentSize <= 0)
+            {
+                throw new InvalidOperationException("Zur Größe des Anhangs liegt keine Angabe vor.");
+            }
+            // MaxBytes of 0 means the storage declares no limit, not a limit of zero
+            if (storage.MaxBytes > 0 && attachmentSize > storage.MaxBytes)
             {
                 throw new InvalidOperationException(
                     $"Das Bild ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");

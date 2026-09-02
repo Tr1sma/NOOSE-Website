@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
@@ -480,7 +480,9 @@ public sealed class TipServiceTests
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("bild"));
         var caseNumber = await host.Service.SubmitAsync(
             new TipInput { Text = new string('x', TipRules.MinLength + 1) },
-            content, "image/jpeg", "handy.jpg", Citizen());
+            // the length is stated: an attachment without one is refused, because a bound a caller can skip by
+            // omitting it is no bound at all
+            content, "image/jpeg", "handy.jpg", Citizen(), content.Length);
         var id = await TipIdAsync(host, caseNumber);
 
         Assert.NotNull(await host.Service.GetAttachmentAsync(id, Citizen()));

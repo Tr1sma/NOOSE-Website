@@ -781,6 +781,39 @@ public class AgentManagementService(
         await db.AgentPromotionRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.AgentModuleCompletions.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
 
+        // Public area: every one of these is a "who did this" pointer on a row that is history - a publication, a
+        // payment, a decision, a message to a citizen - so the row survives the account and only the pointer is
+        // dropped. All are nullable and all hold a Restrict FK, which would otherwise refuse the user delete
+        // outright: an agent who ever published a notice could not be deleted at all.
+        await db.BuergerProfile.IgnoreQueryFilters().Where(x => x.BlockedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BlockedById, (string?)null), cancellationToken);
+        await db.FahndungKopfgeldAnteile.IgnoreQueryFilters().Where(x => x.DonorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DonorAgentId, (string?)null), cancellationToken);
+        await db.FahndungEinsprueche.IgnoreQueryFilters().Where(x => x.DecidedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DecidedById, (string?)null), cancellationToken);
+        await db.Hinweise.IgnoreQueryFilters().Where(x => x.HandlerId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerId, (string?)null), cancellationToken);
+        await db.HinweisNachrichten.IgnoreQueryFilters().Where(x => x.AuthorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AuthorAgentId, (string?)null), cancellationToken);
+        await db.Tickets.IgnoreQueryFilters().Where(x => x.HandlerId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerId, (string?)null), cancellationToken);
+        await db.TicketNachrichten.IgnoreQueryFilters().Where(x => x.AuthorAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AuthorAgentId, (string?)null), cancellationToken);
+        await db.KassenBuchungen.IgnoreQueryFilters().Where(x => x.BookedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.BookedById, (string?)null), cancellationToken);
+        await db.OeffentlicheFahndungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheSeiten.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheWarnungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheLageberichte.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.OeffentlicheFraktionsprofile.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+        await db.Pressemitteilungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
+
         // recruiting: this person's own invites/applications go; applications they merely processed are detached
         await db.AgentInvites.IgnoreQueryFilters().Where(x => x.UsedByUserId == agentId).ExecuteDeleteAsync(cancellationToken);
         // bans hold Restrict FKs to both the agent and the application -> purge before either drops
