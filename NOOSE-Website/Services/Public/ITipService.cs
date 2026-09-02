@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
@@ -18,8 +18,9 @@ public interface ITipService
 
     /// <summary>Files a tip and returns its case number.</summary>
     /// <remarks>The attachment stream is read before the transaction opens; the caller owns and disposes it.</remarks>
+    /// <param name="attachmentSize">Length in bytes; 0 means "not supplied" and skips the size check.</param>
     Task<string> SubmitAsync(TipInput input, Stream? attachment, string? contentType, string? originalName,
-        ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+        ClaimsPrincipal actor, long attachmentSize = 0, CancellationToken cancellationToken = default);
 
     /// <summary>The caller's own tips, newest first; empty for an account without a civilian profile.</summary>
     Task<IReadOnlyList<CitizenTipRow>> GetOwnAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);

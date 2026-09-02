@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -34,7 +34,8 @@ public class TipService(
     // ---- citizen ----
 
     public async Task<string> SubmitAsync(TipInput input, Stream? attachment, string? contentType,
-        string? originalName, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+        string? originalName, ClaimsPrincipal actor, long attachmentSize = 0,
+        CancellationToken cancellationToken = default)
     {
         // module first: whether this account could submit is none of the caller's business while the desk is closed
         await modules.RequireEnabledAsync(PublicModules.Tips, cancellationToken);
@@ -76,6 +77,13 @@ public class TipService(
             if (string.IsNullOrWhiteSpace(contentType) || !storage.IsAllowedType(contentType))
             {
                 throw new InvalidOperationException("Als Anhang sind nur Bilder (JPG, PNG, WEBP, GIF) erlaubt.");
+            }
+            // the size too, server-side: MaxBytes existed and was never read, so the only bound was the page's own
+            // OpenReadStream limit - and this path travels over SignalR, not through the file endpoint
+            if (attachmentSize > storage.MaxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Das Bild ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");
             }
             fileName = await storage.SaveAsync(attachment, contentType, cancellationToken);
         }

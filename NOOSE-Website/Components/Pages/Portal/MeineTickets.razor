@@ -1,4 +1,4 @@
-@page "/buerger/tickets"
+﻿@page "/buerger/tickets"
 @page "/buerger/tickets/{CaseNumber}"
 @layout BuergerLayout
 @attribute [AllowAnonymous]
@@ -69,7 +69,13 @@
                     }
                 </MudStack>
 
-                @if (_detail.MayReply)
+                @if (_loadFailed)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">
+                        Deine Tickets konnten nicht geladen werden. Bitte lade die Seite neu.
+                    </MudAlert>
+                }
+                else if (_detail.MayReply)
                 {
                     <MudTextField @bind-Value="_reply" Label="Antwort" Lines="3" Variant="Variant.Outlined"
                                   MaxLength="@TicketRules.MaxMessageLength" />
@@ -96,7 +102,12 @@
                 <MudStack Spacing="2">
                     @foreach (var row in _rows)
                     {
+                        @* keyboard-reachable, like StatTile: this row is the ONLY way into the detail view, so
+                           a click-only div locks out every keyboard and screen-reader user *@
                         <MudPaper Outlined="true" Class="pa-4" Style="cursor:pointer;"
+                                  role="link" tabindex="0"
+                                  aria-label="@($"Ticket {row.CaseNumber} öffnen")"
+                                  @onkeydown="@(e => { if (e.Key is "Enter" or " ") Open(row.CaseNumber); })"
                                   @onclick="@(() => Open(row.CaseNumber))">
                             <MudStack Spacing="2">
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
@@ -133,6 +144,7 @@
 
     private ClaimsPrincipal _user = default!;
     private IReadOnlyList<CitizenTicketRow> _rows = Array.Empty<CitizenTicketRow>();
+    private bool _loadFailed;
     private CitizenTicketDetail? _detail;
     private string _reply = string.Empty;
     private bool _ready;
@@ -172,6 +184,7 @@
             {
                 _detail = null;
                 _rows = await Tickets.GetOwnAsync(_user);
+                _loadFailed = false;
             }
             else
             {
@@ -187,6 +200,9 @@
         }
         catch (Exception ex)
         {
+            // the flag as well as the snackbar: the toast is gone on the next render, and without it the list
+            // below would claim the account has none
+            _loadFailed = true;
             Snackbar.Add(ex.Message, Severity.Error);
         }
         _ready = true;

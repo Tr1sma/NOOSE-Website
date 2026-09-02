@@ -1,4 +1,4 @@
-@page "/portal"
+﻿@page "/portal"
 @layout ApplicantPortalLayout
 @attribute [AllowAnonymous]
 @inject IBewerbungService BewerbungService
@@ -109,7 +109,7 @@ else if (_ready)
             if (_file is not null)
             {
                 await using var stream = _file.OpenReadStream(MaxBytes);
-                await BewerbungService.SubmitAsync(_model, stream, _file.Name, _file.ContentType, _user);
+                await BewerbungService.SubmitAsync(_model, stream, _file.Name, _file.ContentType, _user, _file.Size);
             }
             else
             {

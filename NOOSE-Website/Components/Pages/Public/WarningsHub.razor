@@ -18,8 +18,10 @@
 
         @if (_cards.Count == 0)
         {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
-                Derzeit liegen keine Warnungen vor.
+            @* Info, not Success, and worded as a publication state: the read path answers an unreachable
+               database with an empty list too, and a green all-clear would then claim safety nobody checked *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine Warnungen veröffentlicht.
             </MudAlert>
         }
         else

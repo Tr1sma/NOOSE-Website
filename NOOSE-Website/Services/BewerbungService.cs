@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NOOSE_Website.Authorization;
@@ -39,7 +39,8 @@ public class BewerbungService(
     }
 
     public async Task<Bewerbung> SubmitAsync(BewerbungSubmitModel model, Stream? attachment, string? originalName,
-        string? contentType, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+        string? contentType, ClaimsPrincipal applicant, long attachmentSize = 0,
+        CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
         var userId = applicant.GetAgentId()
@@ -73,9 +74,17 @@ public class BewerbungService(
         string? fileNameSaved = null;
         if (attachment is not null && !string.IsNullOrWhiteSpace(originalName))
         {
-            if (!string.IsNullOrWhiteSpace(contentType) && !storage.IsAllowedType(contentType))
+            // unconditional: a browser that reports no content type used to skip the allowlist entirely
+            if (!storage.IsAllowedType(contentType ?? string.Empty))
             {
                 throw new InvalidOperationException("Dieser Dateityp ist nicht erlaubt.");
+            }
+            // the size too, server-side: the page's OpenReadStream limit is the client's own bound, and this path
+            // is reachable over SignalR without it
+            if (attachmentSize > storage.MaxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Der Anhang ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");
             }
             fileNameSaved = await storage.SaveAsync(attachment, originalName!, cancellationToken);
         }
