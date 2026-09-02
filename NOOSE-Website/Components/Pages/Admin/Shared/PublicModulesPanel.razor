@@ -1,4 +1,4 @@
-@inject IPublicModuleService ModuleService
+﻿@inject IPublicModuleService ModuleService
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
@@ -19,7 +19,7 @@
                 Wartungsmodus wirkt nach außen bewusst nicht — dafür ist dieser Schalter da.
             </MudText>
         </MudStack>
-        <MudSwitch T="bool" Value="_killSwitchActive" ValueChanged="KillSwitchChangedAsync"
+        <MudSwitch T="bool" Value="_killSwitchActive" ValueChanged="KillSwitchChangedAsync" Disabled="@(!_mayEdit)"
                    Color="Color.Error" Label="@(_killSwitchActive ? "Abgeschaltet" : "Erreichbar")" />
     </MudStack>
 </MudPaper>
@@ -46,7 +46,8 @@ else
                 <MudPaper Outlined="true" Class="pa-3" @key="row.Input.Key">
                     <MudStack Spacing="2">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-                            <MudSwitch T="bool" @bind-Value="row.Input.IsEnabled" Color="Color.Primary" Class="ml-1" />
+                            <MudSwitch T="bool" @bind-Value="row.Input.IsEnabled" Disabled="@(!_mayEdit)"
+                                       Color="Color.Primary" Class="ml-1" />
                             <MudStack Spacing="0" Style="flex:1 1 300px;">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                                     <MudIcon Icon="@row.Icon" Size="Size.Small" Color="Color.Default" />
@@ -64,9 +65,10 @@ else
                             </MudStack>
                             <MudNumericField T="int" @bind-Value="row.Input.SortOrder" Label="Reihenfolge"
                                              Min="0" Max="9999" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                             Style="max-width:120px;" />
+                                             Disabled="@(!_mayEdit)" Style="max-width:120px;" />
                             <MudSelect T="string" @bind-Value="row.Input.IconOverride" Label="Icon" Clearable="true"
-                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:180px;">
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!_mayEdit)"
+                                       Style="max-width:180px;">
                                 @foreach (var choice in PublicModules.IconChoices)
                                 {
                                     <MudSelectItem T="string" Value="@choice.Name">@choice.Label</MudSelectItem>
@@ -89,7 +91,7 @@ else
 
     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
-                   OnClick="SaveAsync" Disabled="_save">Speichern</MudButton>
+                   OnClick="SaveAsync" Disabled="@(_save || !_mayEdit)">Speichern</MudButton>
         <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="LoadAsync" Disabled="_save">Verwerfen</MudButton>
     </MudStack>
 }
@@ -116,6 +118,9 @@ else
     private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private ClaimsPrincipal _user = default!;
+    // the exact twin of Permission.RequireAdmin: Policies.AdminPage is "IsAdmin() || IsOnlyReader()", so the
+    // supervision reaches this section to read and was offered the emergency stop as a live switch
+    private bool _mayEdit;
     private bool _load = true;
     private bool _save;
     private bool _killSwitchActive;
@@ -124,6 +129,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsAdmin();
         await LoadAsync();
     }
 

@@ -188,7 +188,22 @@ public class PressReleaseService(
         // unconditional: the case-number service refuses to issue a number without an enclosing transaction
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        row.CaseNumber ??= await caseNumbers.NextAsync(db, CaseNumberPrefix, cancellationToken);
+        // Claim the MINT, not the status: re-publishing is a legitimate flow here - it is how a corrected draft
+        // goes out - so the row must stay publishable. What must happen once is the number, because two tabs both
+        // saw CaseNumber == null, both minted, and the losing number was announced to Discord while no row carried
+        // it. A row that already has one skips the claim and keeps it. Pattern from BountyService.PayInAsync.
+        if (row.CaseNumber is null)
+        {
+            var minted = await caseNumbers.NextAsync(db, CaseNumberPrefix, cancellationToken);
+            var claimed = await db.Pressemitteilungen
+                .Where(p => p.Id == row.Id && p.CaseNumber == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.CaseNumber, minted), cancellationToken);
+            if (claimed == 0)
+            {
+                throw new InvalidOperationException("Diese Mitteilung hat soeben eine Nummer erhalten.");
+            }
+            row.CaseNumber = minted;
+        }
         row.DraftHtml = html;
         row.ContentHtml = html;
         row.ContentTitle = row.Title;
@@ -204,10 +219,19 @@ public class PressReleaseService(
         // stamped before the push, so the guarantee is at-most-once: a dead webhook loses one announcement, while
         // stamping afterwards would post twice whenever the process died in between. A message cannot be recalled,
         // a missing one can be seen — the panel shows whether a release was announced.
-        var announce = row.DiscordPushedAt is null;
-        if (announce)
+        // and claimed rather than merely stamped: two publishes both read null, both stamped, one save won and
+        // BOTH pushed. The claim is what makes at-most-once true when they overlap.
+        var announce = false;
+        if (row.DiscordPushedAt is null)
         {
-            row.DiscordPushedAt = DateTime.UtcNow;
+            var stamped = DateTime.UtcNow;
+            announce = await db.Pressemitteilungen
+                .Where(p => p.Id == row.Id && p.DiscordPushedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.DiscordPushedAt, stamped), cancellationToken) == 1;
+            if (announce)
+            {
+                row.DiscordPushedAt = stamped;
+            }
         }
         var card = new PublicPressCard(row.CaseNumber, row.ContentTitle!, row.ContentTeaser!, row.PublishedAt);
 

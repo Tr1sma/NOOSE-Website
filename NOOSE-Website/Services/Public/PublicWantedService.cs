@@ -1146,6 +1146,20 @@ public class PublicWantedService(
         // unconditional: the case-number service refuses to issue a number without an enclosing transaction
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
+        // Claim the row before minting anything. The table carries no concurrency token, so two tabs both saw
+        // Status != Veroeffentlicht, both minted a case number, both copied the photo and both posted to Discord -
+        // and a Discord post cannot be recalled, so one of them pointed at a number no row carries. Inside the
+        // transaction, both because the number service demands one and because the claim must roll back with it.
+        // Pattern from BountyService.PayInAsync.
+        var claimed = await db.OeffentlicheFahndungen
+            .Where(f => f.Id == row.Id && f.Status != PublicWantedStatus.Veroeffentlicht)
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.Status, PublicWantedStatus.Veroeffentlicht),
+                cancellationToken);
+        if (claimed == 0)
+        {
+            throw new InvalidOperationException("Diese Ausschreibung ist bereits veröffentlicht.");
+        }
+
         row.CaseNumber ??= await caseNumbers.NextAsync(db, CaseNumberPrefix, cancellationToken);
 
         var previousPhoto = row.PhotoFileName;
