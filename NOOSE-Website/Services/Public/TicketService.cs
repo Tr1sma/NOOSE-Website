@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -187,7 +187,7 @@ public class TicketService(
             .ToListAsync(cancellationToken);
 
         return new CitizenTicketDetail(row.CaseNumber, row.Subject, row.Status, row.CreatedAt,
-            TicketRules.IsOpen(row.Status) && !profile.IsBlocked, messages);
+            TicketRules.IsOpen(row.Status) && !profile.IsBlocked, profile.IsBlocked, messages);
     }
 
     /// <inheritdoc />

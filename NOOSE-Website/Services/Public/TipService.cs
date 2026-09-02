@@ -237,7 +237,7 @@ public class TipService(
         return new CitizenTipDetail(row.CaseNumber, row.Status, row.CreatedAt, row.Text, row.WantsAnonymity,
             row.AnonymityResolvedAt is not null, row.WantedCaseNumber, row.WantedDisplayName,
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
-            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, messages);
+            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, profile.IsBlocked, messages);
     }
 
     /// <inheritdoc />

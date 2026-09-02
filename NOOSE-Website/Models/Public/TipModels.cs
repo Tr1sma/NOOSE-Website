@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -32,6 +32,8 @@ public record CitizenTipDetail(
     bool HasAttachment,
     string? AttachmentName,
     bool MayReply,
+    /// <summary>Kept apart from <paramref name="MayReply"/>, same reason as on a ticket.</summary>
+    bool IsBlocked,
     IReadOnlyList<CitizenTipMessage> Messages);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>

@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -24,6 +24,9 @@ public record CitizenTicketDetail(
     TicketStatus Status,
     DateTime CreatedAt,
     bool MayReply,
+    /// <summary>Kept apart from <paramref name="MayReply"/>: a blocked account must not be told its open ticket
+    /// is closed, which is what one collapsed flag said.</summary>
+    bool IsBlocked,
     IReadOnlyList<CitizenTicketMessage> Messages);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>

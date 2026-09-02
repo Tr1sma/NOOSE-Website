@@ -131,6 +131,13 @@
                                    StartIcon="@Icons.Material.Filled.Send">Antwort senden</MudButton>
                     </div>
                 }
+                else if (_detail.IsBlocked)
+                {
+                    @* the real reason, as on a ticket: one collapsed flag claimed the tip was closed *@
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                        Dieses Konto ist für Einreichungen gesperrt. Antworten ist derzeit nicht möglich.
+                    </MudAlert>
+                }
                 else
                 {
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
