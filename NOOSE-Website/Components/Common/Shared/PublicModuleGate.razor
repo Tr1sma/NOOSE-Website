@@ -1,4 +1,4 @@
-@inject IPublicModuleService ModuleService
+﻿@inject IPublicModuleService ModuleService
 
 @* Renders a public module's content, or its offline notice while the module (or the whole area) is off. *@
 @if (_loaded)
@@ -9,6 +9,12 @@
     }
     else
     {
+        @* A switched-off module is not "a page with a notice", it is gone: the route answers 404 (set below) and
+           carries noindex, so a known URL cannot reach it and the notice never enters an index. The body still
+           explains why, because StatusCodePagesWithReExecute only re-executes a response that has none. *@
+        <HeadContent>
+            <meta name="robots" content="noindex, nofollow" />
+        </HeadContent>
         <MudPaper Elevation="4" Class="pa-8">
             <MudStack Spacing="3" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Default" Size="Size.Large" />
@@ -36,6 +42,10 @@
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
+    /// <summary>Present during static rendering, null once a page runs interactively.</summary>
+    [CascadingParameter]
+    private HttpContext? PageContext { get; set; }
+
     private bool _loaded;
     private bool _enabled;
     private string _offlineText = string.Empty;
@@ -53,6 +63,16 @@
         {
             /* best effort */
             _offlineText = "Dieser Bereich ist derzeit nicht verfügbar.";
+        }
+
+        // A URL into a switched-off module answers 404, not 200: a module that is off is indistinguishable from a
+        // page that does not exist, which is also the honest answer to "which modules does this site have".
+        // Consequence, deliberate: Routes.razor sets Router.NotFoundPage, so the router renders NotFound.razor
+        // instead of the notice below - the offline text reaches a visitor only on an interactive page, where
+        // there is no HttpContext to carry a status code.
+        if (!_enabled && PageContext is { } http && !http.Response.HasStarted)
+        {
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
         }
         _loaded = true;
     }

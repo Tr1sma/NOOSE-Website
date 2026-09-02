@@ -1,6 +1,7 @@
-@page "/fraktionen/{Id}/druck"
+﻿@page "/fraktionen/{Id}/druck"
 @layout PrintLayout
 @inject IFactionService FactionService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject IAgentActivityService ActivityService
 @inject ILinkService LinkService
 @inject ICommentService CommentService
@@ -30,7 +31,10 @@ else
                     {
                         <tr><th>Art</th><td>@_faction.Kind</td></tr>
                     }
-                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_faction.Classification)</td></tr>
+                    @if (TabOn("einstufung"))
+                    {
+                        <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_faction.Classification)</td></tr>
+                    }
                     <tr><th>Gefährdung</th><td>@HazardDisplayText()</td></tr>
                     @if (_faction.IsStateFaction)
                     {
@@ -229,6 +233,11 @@ else
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
 
+    private IReadOnlySet<string>? _visibleTabs;
+
+    /// <summary>False only when a partner's rank restricts this record type to other tabs.</summary>
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
@@ -239,7 +248,15 @@ else
         _faction = await FactionService.GetDetailAsync(Id, scope);
         if (_faction is not null)
         {
-            _classificationHistory = await FactionService.GetClassificationHistoryAsync(Id, scope);
+            _visibleTabs = user.IsPartner()
+                ? await PartnerPolicy.GetVisibleTabsAsync(user, nameof(Faction), Id)
+                : null;
+            // the per-rank TAB restriction, which the detail page honours and this route did not: the coarse
+            // type gate in PrintLayout lets a tab-limited partner through to the classification history
+            if (TabOn("einstufung"))
+            {
+                _classificationHistory = await FactionService.GetClassificationHistoryAsync(Id, scope);
+            }
             // partners: core only
             if (!user.IsPartner())
             {

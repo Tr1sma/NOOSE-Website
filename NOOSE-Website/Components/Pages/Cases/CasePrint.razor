@@ -1,7 +1,8 @@
-@* Print view of a case file. *@
+﻿@* Print view of a case file. *@
 @page "/vorgaenge/{Id}/druck"
 @layout PrintLayout
 @inject ICaseService CaseService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject ILinkService LinkService
 @inject ICommentService CommentService
 @inject IAccessLogService AccessLog
@@ -31,7 +32,10 @@ else
                     {
                         <tr><th>Typ</th><td>@_case.Type</td></tr>
                     }
-                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_case.Classification)</td></tr>
+                    @if (TabOn("einstufung"))
+                    {
+                        <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_case.Classification)</td></tr>
+                    }
                     <tr><th>Eröffnet</th><td>@_case.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
                     @if (_case.CompletedAt is { } completed)
                     {
@@ -102,6 +106,11 @@ else
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
 
+    private IReadOnlySet<string>? _visibleTabs;
+
+    /// <summary>False only when a partner's rank restricts this record type to other tabs.</summary>
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
@@ -112,7 +121,15 @@ else
         _case = await CaseService.GetDetailAsync(Id, scope);
         if (_case is not null)
         {
-            _classificationHistory = await CaseService.GetClassificationHistoryAsync(Id, scope);
+            _visibleTabs = user.IsPartner()
+                ? await PartnerPolicy.GetVisibleTabsAsync(user, nameof(Case), Id)
+                : null;
+            // the per-rank TAB restriction, which the detail page honours and this route did not: the coarse
+            // type gate in PrintLayout lets a tab-limited partner through to the classification history
+            if (TabOn("einstufung"))
+            {
+                _classificationHistory = await CaseService.GetClassificationHistoryAsync(Id, scope);
+            }
             // partners: core only
             if (!user.IsPartner())
             {
