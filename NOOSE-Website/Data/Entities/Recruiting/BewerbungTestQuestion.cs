@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using NOOSE_Website.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -43,6 +43,11 @@ public class BewerbungTestQuestion : IAuditable, ISoftDelete
     /// <summary>Serve options in authoring order instead of shuffled; for factually ordered options.</summary>
     [Column("ReihenfolgeFesthalten")]
     public bool KeepOptionOrder { get; set; }
+
+    /// <summary>Let the applicant tick several options; an explicit author choice, never derived from the key.</summary>
+    /// <remarks>Deriving it from "more than one option is flagged correct" would leak the key's shape to the form.</remarks>
+    [Column("MehrfachauswahlErlaubt")]
+    public bool AllowMultiple { get; set; }
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

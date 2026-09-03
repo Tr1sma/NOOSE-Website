@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -54,6 +54,18 @@ public class ObjectionService(
         // suppression belt, so a draft or a retracted notice reads as "does not exist"
         var notice = await wanted.GetByCaseNumberAsync(input.WantedCaseNumber, cancellationToken)
             ?? throw new InvalidOperationException("Zu diesem Aktenzeichen gibt es keine laufende Ausschreibung.");
+
+        // enforced here, not only by hiding the button: the submission travels over SignalR and the form is not a
+        // gate. An item notice names nobody, so it can be disputed by nobody.
+        if (!ObjectionRules.MayObject(notice.Kind))
+        {
+            throw new InvalidOperationException(
+                "Gegen eine Sachfahndung kann kein Einspruch eingelegt werden.");
+        }
+        if (!ObjectionRules.NamesCitizen(profile.FirstName, profile.LastName, notice.DisplayName))
+        {
+            throw new InvalidOperationException(ObjectionRules.NotTheNamedPerson);
+        }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var wantedId = await db.OeffentlicheFahndungen.AsNoTracking()

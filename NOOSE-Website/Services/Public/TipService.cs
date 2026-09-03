@@ -401,7 +401,57 @@ public class TipService(
     public async Task<int> GetOpenCountAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Hinweise.AsNoTracking().CountAsync(h => h.Status == TipStatus.Neu, cancellationToken);
+        // unread, not unhandled: the badge used to count Status == Neu, so looking at every tip changed nothing and
+        // the number only moved when someone took one over. That reads as broken, and it was reported as such.
+        return await db.Hinweise.AsNoTracking()
+            .CountAsync(h => h.AgentLastReadAt == null && h.Status == TipStatus.Neu, cancellationToken);
+    }
+
+    public async Task MarkAgentReadAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // ExecuteUpdate, like the citizen's own read mark: opening a tip is not a change to it, and a tracked write
+        // would stamp GeaendertAm and push the tip onto the record timeline on every visit
+        var changed = await db.Hinweise
+            .Where(h => h.Id == id && h.AgentLastReadAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(h => h.AgentLastReadAt, DateTime.UtcNow), cancellationToken);
+        if (changed > 0)
+        {
+            broadcaster.Report(id);
+        }
+    }
+
+    public async Task SetPriorityAsync(string id, int? pinned, string? reason, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var tip = await db.Hinweise.FirstOrDefaultAsync(h => h.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException("Hinweis nicht gefunden.");
+
+        if (pinned is null)
+        {
+            tip.PriorityOverride = null;
+            tip.PriorityOverrideReason = null;
+        }
+        else
+        {
+            // Priority itself is written too: every read path sorts on it, and a second source of order would
+            // put the manual value in the detail and the computed one in the list
+            var value = Math.Clamp(pinned.Value, TipPriority.Min, TipPriority.Max);
+            tip.PriorityOverride = value;
+            tip.PriorityOverrideReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+            tip.Priority = value;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        // handing it back means the automatic value has to be recomputed at once, or the pinned number would stay
+        if (pinned is null)
+        {
+            await priority.StampAsync(id, cancellationToken);
+        }
+        broadcaster.Report(id);
     }
 
     public async Task<TipDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -430,6 +480,8 @@ public class TipService(
                 h.HandlerId,
                 HandlerCodename = h.Handler!.Codename,
                 h.Priority,
+                h.PriorityOverride,
+                h.PriorityOverrideReason,
                 h.DuplicateGroupId,
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -455,7 +507,8 @@ public class TipService(
             row.WantedCaseNumber, row.WantedDisplayName,
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
             row.HandlerId, row.HandlerCodename,
-            row.Priority, TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
+            row.Priority, row.PriorityOverride, row.PriorityOverrideReason,
+            TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
     }
 
     public async Task<IReadOnlyList<TipNoticeRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,

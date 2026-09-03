@@ -1,27 +1,55 @@
-﻿@inject NavigationManager Nav
+@inject NavigationManager Nav
 @inject IPublicModuleService ModuleService
 
-@* Tab bar for the public site; entries come from the module switches, not from a list in here. *@
-<MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-    @{
-        var previousGroup = StartGroup;
-    }
-    @foreach (var tab in _tabs)
-    {
-        @if (tab.Group != previousGroup)
-        {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mx-1">·</MudText>
+@* Two rows: the public modules, and — for a signed-in visitor — their own area. Both come from a catalog. *@
+<MudStack Spacing="1">
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        @{
+            var previousGroup = StartGroup;
         }
-        var active = IsActive(tab.Href);
-        <MudButton Href="@tab.Href"
-                   Variant="@(active ? Variant.Filled : Variant.Text)"
-                   Color="@(active ? Color.Primary : Color.Default)"
-                   StartIcon="@tab.Icon"
-                   Size="Size.Small">
-            @tab.Label
-        </MudButton>
-        previousGroup = tab.Group;
-    }
+        @foreach (var tab in _tabs)
+        {
+            @if (tab.Group != previousGroup)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mx-1">·</MudText>
+            }
+            var active = IsActive(tab.Href);
+            <MudButton Href="@tab.Href"
+                       Variant="@(active ? Variant.Filled : Variant.Text)"
+                       Color="@(active ? Color.Primary : Color.Default)"
+                       StartIcon="@tab.Icon"
+                       Size="Size.Small">
+                @tab.Label
+            </MudButton>
+            previousGroup = tab.Group;
+        }
+    </MudStack>
+
+    @* the personal row is never rendered for an anonymous visitor: these routes are private and carry no switch *@
+    <AuthorizeView>
+        <Authorized Context="authCtx">
+            @{
+                var mine = CitizenNav.For(authCtx.User);
+            }
+            @if (mine.Count > 0)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary mr-1">Mein Bereich</MudText>
+                    @foreach (var entry in mine)
+                    {
+                        var active = IsActive(entry.Href);
+                        <MudButton Href="@entry.Href"
+                                   Variant="@(active ? Variant.Filled : Variant.Text)"
+                                   Color="@(active ? Color.Secondary : Color.Default)"
+                                   StartIcon="@entry.Icon"
+                                   Size="Size.Small">
+                            @entry.Label
+                        </MudButton>
+                    }
+                </MudStack>
+            }
+        </Authorized>
+    </AuthorizeView>
 </MudStack>
 
 @code {
@@ -60,6 +88,12 @@
         if (href == "/")
         {
             return path == "/";
+        }
+        // the personal routes are nested under /buerger, so they match on the whole path, not on the first segment
+        if (href.StartsWith("/buerger", StringComparison.Ordinal) || href == "/portal")
+        {
+            return path.Equals(href, StringComparison.OrdinalIgnoreCase)
+                || (href != "/buerger" && path.StartsWith(href + "/", StringComparison.OrdinalIgnoreCase));
         }
         var root = href.IndexOf('/', 1) is var cut && cut > 0 ? href[..cut] : href;
         return path.Equals(root, StringComparison.OrdinalIgnoreCase)

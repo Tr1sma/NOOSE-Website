@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using NOOSE_Website.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -57,9 +57,16 @@ public class Hinweis : IAuditable, ISoftDelete
     [Column("DublettenGruppeId")]
     public string? DuplicateGroupId { get; set; }
 
-    /// <summary>Column now, computed by the prioritisation phase.</summary>
+    /// <summary>Effective order of the inbox; computed unless an override below pins it.</summary>
     [Column("Prioritaet")]
     public int Priority { get; set; }
+
+    /// <summary>Priority set by hand; while it is present the automatic recomputation leaves the row alone.</summary>
+    [Column("PrioritaetManuell")]
+    public int? PriorityOverride { get; set; }
+
+    [Column("PrioritaetManuellGrund")]
+    public string? PriorityOverrideReason { get; set; }
 
     [Column("AnonymitaetAufgeloestAm")]
     public DateTime? AnonymityResolvedAt { get; set; }
@@ -69,6 +76,15 @@ public class Hinweis : IAuditable, ISoftDelete
     /// <summary>Drives the citizen's unread count; only the citizen's own reading moves it.</summary>
     [Column("ZuletztGelesenBuergerAm")]
     public DateTime? CitizenLastReadAt { get; set; }
+
+    /// <summary>Drives the inbox badge: set the first time any agent opens the tip.</summary>
+    /// <remarks>
+    /// One stamp for the whole desk, not one per agent: the badge answers "has anyone looked at this yet", which is
+    /// what the inbox is for. A per-agent read state would need its own table and would mean five agents each have
+    /// to open every tip before the number goes away.
+    /// </remarks>
+    [Column("ZuletztGelesenAgentAm")]
+    public DateTime? AgentLastReadAt { get; set; }
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

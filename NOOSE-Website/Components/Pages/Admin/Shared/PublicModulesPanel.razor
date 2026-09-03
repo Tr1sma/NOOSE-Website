@@ -1,5 +1,6 @@
 ﻿@inject IPublicModuleService ModuleService
 @inject ISnackbar Snackbar
+@inject ILogger<PublicModulesPanel> Log
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
     Jedes Modul des öffentlichen Bereichs lässt sich hier einzeln abschalten. Ein abgeschaltetes Modul verschwindet
@@ -75,13 +76,16 @@ else
                                 }
                             </MudSelect>
                         </MudStack>
-                        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                        @* max-width on both: a MudBlazor input is a greedy flex item, and these two were the only
+                           ones in the panel without a cap, so they ate the whole settings column *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
                             <MudTextField @bind-Value="row.Input.LabelOverride" Label="Eigene Bezeichnung"
                                           Placeholder="@row.DefaultLabel" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                          Style="flex:0 1 240px;" />
+                                          Disabled="@(!_mayEdit)" Style="flex:0 1 240px;max-width:240px;" />
                             <MudTextField @bind-Value="row.Input.OfflineText" Label="Offline-Text"
                                           Placeholder="@row.DefaultOfflineText" Variant="Variant.Outlined"
-                                          Margin="Margin.Dense" Style="flex:1 1 360px;" />
+                                          Margin="Margin.Dense" Disabled="@(!_mayEdit)"
+                                          Style="flex:1 1 360px;max-width:520px;" />
                         </MudStack>
                     </MudStack>
                 </MudPaper>
@@ -168,6 +172,7 @@ else
         }
         catch (Exception ex)
         {
+            Log.LogError(ex, "Public module panel action failed");
             Snackbar.Add(ex.Message, Severity.Error);
         }
         finally
@@ -187,6 +192,7 @@ else
         }
         catch (Exception ex)
         {
+            Log.LogError(ex, "Public module panel action failed");
             Snackbar.Add(ex.Message, Severity.Error);
         }
         finally

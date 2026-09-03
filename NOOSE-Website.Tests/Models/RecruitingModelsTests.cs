@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Recruiting;
+﻿using NOOSE_Website.Models.Recruiting;
 
 namespace NOOSE_Website.Tests.Models;
 
@@ -11,6 +11,8 @@ public class RecruitingModelsTests
             TotalPoints: totalPoints,
             MaxPoints: maxPoints,
             PassPercent: passPercent,
+            GradedAt: null,
+            GradedByName: null,
             Items: Array.Empty<TestEvaluationItem>());
 
     // ----- Percent: div-by-zero guard -----
@@ -123,8 +125,8 @@ public class RecruitingModelsTests
     public void TestEvaluation_ValueEquality_SameItemsReferenceEqual()
     {
         var items = Array.Empty<TestEvaluationItem>();
-        var a = new TestEvaluation("T", null, 5, 10, 50, items);
-        var b = new TestEvaluation("T", null, 5, 10, 50, items);
+        var a = new TestEvaluation("T", null, 5, 10, 50, null, null, items);
+        var b = new TestEvaluation("T", null, 5, 10, 50, null, null, items);
         Assert.Equal(a, b);
     }
 
@@ -132,8 +134,8 @@ public class RecruitingModelsTests
     public void TestEvaluation_ValueEquality_DiffersOnTotalPoints()
     {
         var items = Array.Empty<TestEvaluationItem>();
-        var a = new TestEvaluation("T", null, 5, 10, 50, items);
-        var b = new TestEvaluation("T", null, 6, 10, 50, items);
+        var a = new TestEvaluation("T", null, 5, 10, 50, null, null, items);
+        var b = new TestEvaluation("T", null, 6, 10, 50, null, null, items);
         Assert.NotEqual(a, b);
     }
 
@@ -177,7 +179,7 @@ public class RecruitingModelsTests
     {
         var a = new TestAnswerInput();
         Assert.Equal(string.Empty, a.QuestionId);
-        Assert.Null(a.SelectedOptionId);
+        Assert.Empty(a.SelectedOptionIds);
         Assert.Null(a.FreeText);
     }
 }

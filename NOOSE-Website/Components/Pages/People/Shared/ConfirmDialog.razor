@@ -1,11 +1,11 @@
-@* Reusable confirmation dialog. *@
+﻿@* Reusable confirmation dialog. *@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body1">@Text</MudText>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Abbrechen</MudButton>
-        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Confirm">@ConfirmText</MudButton>
+        <MudButton Color="@Colour" Variant="Variant.Filled" OnClick="Confirm">@ConfirmText</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -16,17 +16,27 @@
     [Parameter] public string Text { get; set; } = string.Empty;
     [Parameter] public string ConfirmText { get; set; } = "Löschen";
 
+    /// <summary>Colour of the confirm button; red is right for a deletion and wrong for everything else.</summary>
+    [Parameter] public Color Colour { get; set; } = Color.Error;
+
     private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog; returns true when confirmed.</summary>
-    public static async Task<bool> ShowAsync(IDialogService dialog, string title, string text, string confirmText = "Löschen")
+    /// <remarks>
+    /// The destructive default stays: 62 call sites are deletions and lean on it. Every other action passes its own
+    /// verb — a publish confirmation labelled "Löschen" is what this parameter exists to prevent
+    /// (ConfirmDialogLabelTests pins it).
+    /// </remarks>
+    public static async Task<bool> ShowAsync(IDialogService dialog, string title, string text,
+        string confirmText = "Löschen", Color colour = Color.Error)
     {
         var parameters = new DialogParameters<ConfirmDialog>
         {
             { x => x.Title, title },
             { x => x.Text, text },
             { x => x.ConfirmText, confirmText },
+            { x => x.Colour, colour },
         };
         var reference = await dialog.ShowAsync<ConfirmDialog>(title, parameters);
         var result = await reference.Result;

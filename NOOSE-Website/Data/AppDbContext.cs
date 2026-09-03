@@ -1638,6 +1638,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<BewerbungTestAssignment>(b =>
         {
             b.Property(a => a.AssignedByName).HasMaxLength(128);
+            b.Property(a => a.GradedByName).HasMaxLength(128);
             b.HasIndex(a => a.BewerbungId).IsUnique();
             b.HasOne(a => a.Bewerbung).WithMany()
                 .HasForeignKey(a => a.BewerbungId).OnDelete(DeleteBehavior.Cascade);
@@ -1648,6 +1649,8 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<BewerbungTestAnswer>(b =>
         {
             b.Property(a => a.SelectedOptionId).HasMaxLength(64);
+            // a guid list, not one id: an option-rich question would overflow a 64-char column
+            b.Property(a => a.SelectedOptionIds).HasMaxLength(2048);
             b.Property(a => a.FreeTextAnswer).HasColumnType("longtext");
             b.HasIndex(a => new { a.AssignmentId, a.QuestionId });
             b.HasOne(a => a.Assignment).WithMany()
@@ -1844,6 +1847,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<Hinweis>(b =>
         {
+            b.Property(h => h.PriorityOverrideReason).HasMaxLength(500);
             b.Property(h => h.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(h => h.CitizenProfileId).HasMaxLength(64);
             b.Property(h => h.WantedId).HasMaxLength(64);

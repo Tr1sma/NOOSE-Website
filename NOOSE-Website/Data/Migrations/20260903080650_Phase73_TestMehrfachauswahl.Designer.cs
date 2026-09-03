@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903080650_Phase73_TestMehrfachauswahl")]
+    partial class Phase73_TestMehrfachauswahl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -7061,10 +7064,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
 
-                    b.Property<DateTime?>("AgentLastReadAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("ZuletztGelesenAgentAm");
-
                     b.Property<DateTime?>("AnonymityResolvedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("AnonymitaetAufgeloestAm");
@@ -7146,15 +7145,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<int>("Priority")
                         .HasColumnType("int")
                         .HasColumnName("Prioritaet");
-
-                    b.Property<int?>("PriorityOverride")
-                        .HasColumnType("int")
-                        .HasColumnName("PrioritaetManuell");
-
-                    b.Property<string>("PriorityOverrideReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)")
-                        .HasColumnName("PrioritaetManuellGrund");
 
                     b.Property<int>("Status")
                         .HasColumnType("int")
@@ -8651,10 +8641,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("ManuellRichtig");
 
-                    b.Property<int?>("ManualPoints")
-                        .HasColumnType("int")
-                        .HasColumnName("ManuellPunkte");
-
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("GeaendertAm");
@@ -8719,23 +8705,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("DeletedById")
                         .HasColumnType("longtext")
                         .HasColumnName("GeloeschtVonId");
-
-                    b.Property<int?>("FinalMaxPoints")
-                        .HasColumnType("int")
-                        .HasColumnName("ErgebnisMaxPunkte");
-
-                    b.Property<int?>("FinalPoints")
-                        .HasColumnType("int")
-                        .HasColumnName("ErgebnisPunkte");
-
-                    b.Property<DateTime?>("GradedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("BewertetAm");
-
-                    b.Property<string>("GradedByName")
-                        .HasMaxLength(128)
-                        .HasColumnType("varchar(128)")
-                        .HasColumnName("BewertetVon");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)")

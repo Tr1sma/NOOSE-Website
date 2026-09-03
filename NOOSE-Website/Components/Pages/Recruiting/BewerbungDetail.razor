@@ -1,4 +1,4 @@
-@page "/bewerbungen/{Id}"
+﻿@page "/bewerbungen/{Id}"
 @attribute [Authorize(Policy = Policies.HrbOrLeadership)]
 @inject IBewerbungService BewerbungService
 @inject BewerbungBroadcaster Broadcaster
@@ -219,9 +219,10 @@ else
         await LoadAsync();
     }
 
+    // the spinner is for the first load only: replacing the whole page with a progress bar on every broadcast
+    // collapsed its height, and the browser scrolled back to the top under the grader's cursor
     private async Task LoadAsync()
     {
-        _load = true;
         _b = await BewerbungService.GetForHrbAsync(Id, _user);
         _load = false;
     }

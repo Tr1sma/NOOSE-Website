@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Recruiting;
@@ -18,12 +18,23 @@ public class BewerbungTestAnswer : IAuditable, ISoftDelete
     [Column("OptionId")]
     public string? SelectedOptionId { get; set; }
 
+    /// <summary>Every ticked option, comma-separated; the scalar above stays filled whenever exactly one was ticked.</summary>
+    /// <remarks>One row per question, not one per option: the grader UI and the evaluation both key on that shape.</remarks>
+    [Column("OptionIds")]
+    public string? SelectedOptionIds { get; set; }
+
     [Column("Freitext")]
     public string? FreeTextAnswer { get; set; }
 
     /// <summary>HRB manual grade override; null = auto result applies.</summary>
+    /// <remarks>Kept for rows graded before points existed; <see cref="ManualPoints"/> wins where both are set.</remarks>
     [Column("ManuellRichtig")]
     public bool? ManualCorrect { get; set; }
+
+    /// <summary>Points the grader awarded by hand; null = fall back to the automatic result.</summary>
+    /// <remarks>Clamped to the question's maximum on write and on read — the field itself is never trusted.</remarks>
+    [Column("ManuellPunkte")]
+    public int? ManualPoints { get; set; }
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

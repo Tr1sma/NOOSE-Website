@@ -1,4 +1,4 @@
-<MudDialog>
+﻿<MudDialog>
     <DialogContent>
         @if (!string.IsNullOrWhiteSpace(Text))
         {
@@ -9,7 +9,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Abbrechen</MudButton>
-        <MudButton Color="Color.Error" Variant="Variant.Filled"
+        <MudButton Color="@Colour" Variant="Variant.Filled"
                    Disabled="@(_typed.Trim() != ConfirmPhrase)"
                    OnClick="Confirm">@ConfirmText</MudButton>
     </DialogActions>
@@ -23,6 +23,9 @@
     [Parameter] public string ConfirmPhrase { get; set; } = string.Empty;
     [Parameter] public string ConfirmText { get; set; } = "Löschen";
 
+    /// <summary>Colour of the confirm button; red is right for a deletion and wrong for everything else.</summary>
+    [Parameter] public Color Colour { get; set; } = Color.Error;
+
     private string _typed = string.Empty;
 
     private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
@@ -30,7 +33,7 @@
 
     /// <summary>Shows the dialog; returns true only if the operator typed the exact confirm phrase.</summary>
     public static async Task<bool> ShowAsync(IDialogService dialog, string title, string? text,
-        string confirmPhrase, string confirmText = "Löschen")
+        string confirmPhrase, string confirmText = "Löschen", Color colour = Color.Error)
     {
         var parameters = new DialogParameters<ConfirmTypedDialog>
         {
@@ -38,6 +41,7 @@
             { x => x.Text, text },
             { x => x.ConfirmPhrase, confirmPhrase },
             { x => x.ConfirmText, confirmText },
+            { x => x.Colour, colour },
         };
         var reference = await dialog.ShowAsync<ConfirmTypedDialog>(title, parameters);
         var result = await reference.Result;

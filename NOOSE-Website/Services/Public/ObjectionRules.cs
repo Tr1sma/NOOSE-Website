@@ -1,4 +1,6 @@
+﻿using System.Globalization;
 using System.Linq.Expressions;
+using System.Text;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 
@@ -23,6 +25,55 @@ public static class ObjectionRules
     public const int PerDay = 3;
 
     public static readonly TimeSpan QuotaWindow = TimeSpan.FromHours(24);
+
+    /// <summary>Folds a name to its comparable form: trimmed, whitespace-collapsed, case- and umlaut-insensitive.</summary>
+    /// <remarks>
+    /// Deliberately not <see cref="TextSimilarity"/>: an edit distance of one turns Meier into Meyer, and those are
+    /// two people. Only spelling noise is forgiven — casing, double spaces, ä/ae and the like.
+    /// </remarks>
+    public static string NameKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+        var collapsed = string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .ToLowerInvariant()
+            .Replace("ä", "ae", StringComparison.Ordinal)
+            .Replace("ö", "oe", StringComparison.Ordinal)
+            .Replace("ü", "ue", StringComparison.Ordinal)
+            .Replace("ß", "ss", StringComparison.Ordinal);
+
+        var decomposed = collapsed.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(c);
+            }
+        }
+        return builder.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    /// <summary>True when the citizen carries the name the notice was published under.</summary>
+    /// <remarks>
+    /// Compared against the published display name only. An alias is often informant-sourced, so a coincidental
+    /// nickname would open the objection to a stranger; the internal real name is not compared either, because a
+    /// hit/miss answer would turn the form into a lookup for it.
+    /// </remarks>
+    public static bool NamesCitizen(string? firstName, string? lastName, string? displayName)
+    {
+        var citizen = NameKey($"{firstName} {lastName}");
+        return citizen.Length > 0 && citizen == NameKey(displayName);
+    }
+
+    /// <summary>Only a person notice can be disputed by the person it names; an item notice names nobody.</summary>
+    public static bool MayObject(PublicWantedKind kind) => !WantedKinds.IsItem(kind);
+
+    /// <summary>What the citizen is told when the name does not match; one sentence, in the form and on the notice.</summary>
+    public const string NotTheNamedPerson =
+        "Einspruch kann nur die ausgeschriebene Person selbst einlegen.";
 
     /// <summary>Still awaiting a decision; drives the desk tab and the "one per notice" cap.</summary>
     public static bool IsOpen(ObjectionStatus status)

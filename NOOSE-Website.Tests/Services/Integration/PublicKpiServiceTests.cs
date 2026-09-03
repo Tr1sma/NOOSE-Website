@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -286,6 +286,72 @@ public sealed class PublicKpiServiceTests
         Assert.Equal(0, tickets.Waiting);
         // two hours to the first line a human wrote; the internal note is not an answer to the citizen
         Assert.Equal(120, tickets.MedianReplyMinutes);
+    }
+
+    [Fact]
+    public async Task AnOldUnansweredTicketStillCountsAsWaiting()
+    {
+        // "still unanswered" is a statement about now, not about the window: windowed, the longest-neglected ticket
+        // in the house fell out of the figure and the panel reported an all-clear
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var opened = Now.AddDays(-400);
+        await AddAsync(ctx,
+            new Ticket
+            {
+                Id = "t1", CaseNumber = "NOOSE-T-1", CitizenProfileId = ProfileId, Subject = "Sehr altes Anliegen",
+                Status = TicketStatus.Offen, CreatedAt = opened, LastActivityAt = opened,
+            });
+
+        var tickets = (await service.GetAsync(30, Leadership())).Tickets;
+
+        // outside the 30-day cohort, so it is neither opened nor answered here
+        Assert.Equal(0, tickets.Opened);
+        Assert.Equal(1, tickets.Waiting);
+        Assert.True(tickets.OldestWaitingMinutes > 400 * 24 * 60 - 60);
+    }
+
+    [Fact]
+    public async Task AnAnsweredOpenTicketIsNotWaiting()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var opened = Now.AddDays(-200);
+        await AddAsync(ctx,
+            new Ticket
+            {
+                Id = "t1", CaseNumber = "NOOSE-T-1", CitizenProfileId = ProfileId, Subject = "Beantwortetes Anliegen",
+                Status = TicketStatus.WartetAufBuerger, CreatedAt = opened, LastActivityAt = Now,
+            },
+            new TicketNachricht
+            {
+                Id = "m1", TicketId = "t1", Audience = TicketMessageAudience.Buerger, AuthorIsCitizen = false,
+                Text = "Wir haben geprüft.", CreatedAt = opened.AddHours(3),
+            });
+
+        var tickets = (await service.GetAsync(30, Leadership())).Tickets;
+
+        Assert.Equal(0, tickets.Waiting);
+        Assert.Null(tickets.OldestWaitingMinutes);
+    }
+
+    [Fact]
+    public async Task AClosedTicketNeverWaits()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var opened = Now.AddDays(-2);
+        await AddAsync(ctx,
+            new Ticket
+            {
+                Id = "t1", CaseNumber = "NOOSE-T-1", CitizenProfileId = ProfileId, Subject = "Erledigt",
+                Status = TicketStatus.Geschlossen, CreatedAt = opened, LastActivityAt = Now,
+            });
+
+        var tickets = (await service.GetAsync(30, Leadership())).Tickets;
+
+        Assert.Equal(1, tickets.Opened);
+        Assert.Equal(0, tickets.Waiting);
     }
 
     // ---- views ----

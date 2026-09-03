@@ -1,4 +1,4 @@
-@page "/hinweise/{Id}"
+﻿@page "/hinweise/{Id}"
 @attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject ITipService Tips
 @inject ITipTakeoverService Takeover
@@ -7,6 +7,7 @@
 @inject TipsBroadcaster Broadcaster
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 @implements IDisposable
 
 <PageTitle>@(_tip?.CaseNumber ?? "Bürgerhinweis") · NOOSE</PageTitle>
@@ -52,6 +53,18 @@ else
             <MudStack Spacing="4">
                 <MudPaper Outlined="true" Class="pa-4">
                     <MudStack Spacing="3">
+                        @if (_tip.WantedCaseNumber is not null)
+                        {
+                            @* above the chips and filled, not a grey line below them: a tip that belongs to a
+                               notice was not recognisable as one at a glance *@
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true"
+                                      Icon="@Icons.Material.Filled.PersonSearch">
+                                Hinweis zur Ausschreibung <b>@_tip.WantedDisplayName</b> —
+                                <MudLink Href="@($"/gesucht/{_tip.WantedCaseNumber}")" Target="_blank"
+                                         Color="Color.Inherit"><b>@_tip.WantedCaseNumber</b></MudLink>
+                            </MudAlert>
+                        }
+
                         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                             <MudChip T="string" Size="Size.Small" Color="@StatusColour(_tip.Status)">
                                 @TipStatusDisplay.Name(_tip.Status)
@@ -61,8 +74,21 @@ else
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                                          Icon="@Icons.Material.Filled.VisibilityOff">anonym</MudChip>
                             }
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                     Icon="@Icons.Material.Filled.LowPriority">Priorität @_tip.Priority</MudChip>
+                            <MudTooltip Text="@PriorityHint()">
+                                <MudChip T="string" Size="Size.Small"
+                                         Variant="@(_tip.PriorityOverride is null ? Variant.Outlined : Variant.Filled)"
+                                         Color="@(_tip.PriorityOverride is null ? Color.Default : Color.Info)"
+                                         Icon="@Icons.Material.Filled.LowPriority"
+                                         OnClick="@(_mayPin ? PinPriorityAsync : null)">
+                                    Priorität @_tip.Priority@(_tip.PriorityOverride is null ? "" : " (manuell)")
+                                </MudChip>
+                            </MudTooltip>
+                            @if (_mayPin && _tip.PriorityOverride is not null)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                           StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                           OnClick="ResetPriorityAsync">automatisch</MudButton>
+                            }
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
                                      Icon="@Icons.Material.Filled.Verified">@TipTrust.Label(_tip.TrustTier)</MudChip>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -292,12 +318,54 @@ else
     {
         _user = (await AuthStateTask).User;
         _canWrite = _user.MayWrite();
+        // pinning the inbox order is a leadership call, not every handler
+        _mayPin = _user.IsLeadership() && _canWrite;
         if (_loadedId == Id)
         {
             return;
         }
         _loadedId = Id;
         await LoadAsync();
+    }
+
+    private bool _mayPin;
+
+    /// <summary>Why the number is what it is; the formula is not obvious from a bare figure.</summary>
+    private string PriorityHint()
+        => _tip?.PriorityOverride is not null
+            ? "Von Hand gesetzt" + (string.IsNullOrWhiteSpace(_tip.PriorityOverrideReason)
+                ? "." : $": {_tip.PriorityOverrideReason}")
+            : "Errechnet aus Kopfgeld, Gefahrenstufe und Vertrauensstufe des Hinweisgebers.";
+
+    private async Task PinPriorityAsync()
+    {
+        var entered = await PriorityDialog.ShowAsync(DialogService, _tip!.Priority, _tip.PriorityOverrideReason);
+        if (entered is null)
+        {
+            return;
+        }
+        try
+        {
+            await Tips.SetPriorityAsync(Id, entered.Priority, entered.Reason, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ResetPriorityAsync()
+    {
+        try
+        {
+            await Tips.SetPriorityAsync(Id, null, null, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task LoadAsync()
@@ -315,6 +383,11 @@ else
             _rewards = _tip is null
                 ? Array.Empty<RewardRow>()
                 : await Reward.GetForTipAsync(Id, _user);
+            if (_tip is not null)
+            {
+                // opening it is what clears the inbox badge; the service ignores a repeat
+                await Tips.MarkAgentReadAsync(Id, _user);
+            }
         }
         catch (Exception ex)
         {

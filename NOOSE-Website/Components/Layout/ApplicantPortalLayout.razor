@@ -1,57 +1,24 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @inject IBewerbungService BewerbungService
 
-@* Shell for the authenticated applicant portal; no internal nav, no maintenance wall. *@
+@* Shell for the authenticated applicant portal; same header and same tab bar as the public site. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
-    <div style="max-width:860px;margin:0 auto;">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
-            @* the wordmark is the way to the portal hub, as in the citizen and legal shells *@
-            <MudLink Href="/portal" Underline="Underline.None" Color="Color.Inherit">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                    <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
-                    <MudStack Spacing="0">
-                        <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Bewerber-Portal</MudText>
-                    </MudStack>
-                </MudStack>
-            </MudLink>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                @if (!string.IsNullOrWhiteSpace(_displayName))
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Angemeldet als <b>@_displayName</b></MudText>
-                }
-                @* the bell, because every notification addressed to an applicant was written to a surface the
-                   applicant could never see. Reading one's own needs no rank: the service keys on the agent id. *@
-                @if (_user is not null)
-                {
-                    <NotificationBell User="_user" />
-                }
-                <MudButton Href="/karriere" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.ArrowBack">Karriereseite</MudButton>
-                <form method="post" action="/Account/Logout">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="returnUrl" value="/karriere" />
-                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
-                </form>
-            </MudStack>
-        </MudStack>
+    <div style="max-width:960px;margin:0 auto;">
+        <PublicHeader HomeHref="/" Subtitle="Bewerber-Portal" DisplayName="@_displayName" />
 
-        @Body
+        <MudDivider Class="mb-2" />
+        <PublicNav />
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="mt-6">
-            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
-                     Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
-            <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
-            <MudLink Href="/nutzungsbedingungen" Typo="Typo.caption" Color="Color.Default">Nutzungsbedingungen</MudLink>
-        </MudStack>
+        <div class="mt-4">
+            @Body
+        </div>
+
+        <LegalFooter />
     </div>
 </div>
 
@@ -60,7 +27,6 @@
     private Task<AuthenticationState>? AuthState { get; set; }
 
     private string? _displayName;
-    private ClaimsPrincipal? _user;
 
     protected override async Task OnInitializedAsync()
     {
@@ -70,7 +36,6 @@
             if (AuthState is not null)
             {
                 var user = (await AuthState).User;
-                _user = user;
                 _displayName = (await BewerbungService.GetOwnAsync(user))?.Name;
             }
         }

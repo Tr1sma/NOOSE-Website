@@ -1,4 +1,4 @@
-@inject ITipService Tips
+﻿@inject ITipService Tips
 @inject TipsBroadcaster Broadcaster
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -56,6 +56,13 @@ else
                     {
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary"
                                  Icon="@Icons.Material.Filled.ContentCopy">Dublette ×@context.DuplicateCount</MudChip>
+                    }
+                    @if (context.WantedCaseNumber is not null)
+                    {
+                        @* a chip, not the plain text column: which tips belong to a notice is the first thing the
+                           desk sorts by eye *@
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                 Icon="@Icons.Material.Filled.PersonSearch">@context.WantedCaseNumber</MudChip>
                     }
                 </MudStack>
             </MudTd>

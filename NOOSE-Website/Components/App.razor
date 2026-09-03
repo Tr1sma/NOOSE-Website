@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 
 <head>
@@ -23,7 +23,8 @@
     @* host-level so print/portal layouts surface circuit failures too *@
     <div id="blazor-error-ui" data-nosnippet>
         Ein unerwarteter Fehler ist aufgetreten.
-        <a href="." class="reload">Neu laden</a>
+        @* not href=".": with <base href="/"> that resolves to the landing page instead of reloading *@
+        <a href="#" onclick="location.reload();return false;" class="reload">Neu laden</a>
         <span class="dismiss">🗙</span>
     </div>
     <script src="@Assets["_framework/blazor.web.js"]"></script>

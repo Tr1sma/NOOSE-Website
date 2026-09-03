@@ -1,4 +1,4 @@
-@* Training modules with completion status; toggling is leadership-only. *@
+﻿@* Training modules with completion status; toggling is leadership-only. *@
 @inject ITrainingModuleService ModuleService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -118,7 +118,8 @@
             else
             {
                 var ok = await ConfirmDialog.ShowAsync(DialogService, "Abschluss zurücksetzen?",
-                    $"Der Abschluss von „{status.Module.Name}“ wird entfernt.");
+                    $"Der Abschluss von „{status.Module.Name}“ wird entfernt.",
+            "Zurücksetzen", Color.Warning);
                 if (ok)
                 {
                     await ModuleService.UnmarkCompletedAsync(status.CompletionId!, _user);

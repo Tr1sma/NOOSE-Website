@@ -1,4 +1,4 @@
-using NOOSE_Website.Data.Entities.Recruiting;
+﻿using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Tests.Services;
@@ -26,6 +26,65 @@ public class TestGradingTests
         var chosen = new BewerbungTestOption { IsCorrect = false };
         Assert.Equal(false, TestGrading.GradeMultipleChoice(chosen));
     }
+
+    // ---------- GradeMultipleChoice, several ticks allowed ----------
+
+    private static BewerbungTestOption[] ThreeOptions() =>
+    [
+        new() { Id = "a", IsCorrect = true },
+        new() { Id = "b", IsCorrect = true },
+        new() { Id = "c", IsCorrect = false },
+    ];
+
+    [Fact]
+    public void GradeMultipleChoice_multi_nothingTicked_returnsNull()
+        => Assert.Null(TestGrading.GradeMultipleChoice([], ThreeOptions()));
+
+    [Fact]
+    public void GradeMultipleChoice_multi_exactSet_returnsTrue()
+        => Assert.Equal(true, TestGrading.GradeMultipleChoice(["a", "b"], ThreeOptions()));
+
+    [Fact]
+    public void GradeMultipleChoice_multi_orderDoesNotMatter()
+        => Assert.Equal(true, TestGrading.GradeMultipleChoice(["b", "a"], ThreeOptions()));
+
+    [Fact]
+    public void GradeMultipleChoice_multi_partialHit_returnsFalse()
+        => Assert.Equal(false, TestGrading.GradeMultipleChoice(["a"], ThreeOptions()));
+
+    [Fact]
+    public void GradeMultipleChoice_multi_oneWrongTickSpoilsIt()
+        => Assert.Equal(false, TestGrading.GradeMultipleChoice(["a", "b", "c"], ThreeOptions()));
+
+    [Fact]
+    public void GradeMultipleChoice_multi_withoutAKeyIsNeverCorrect()
+    {
+        // no option flagged: the question cannot be auto-graded, and "everything ticked" must not pass
+        BewerbungTestOption[] unkeyed = [new() { Id = "a" }, new() { Id = "b" }];
+        Assert.Equal(false, TestGrading.GradeMultipleChoice(["a", "b"], unkeyed));
+    }
+
+    // ---------- SplitOptionIds / JoinOptionIds ----------
+
+    [Fact]
+    public void SplitOptionIds_fallsBackToTheScalarColumnOfAnOlderRow()
+        => Assert.Equal(["o1"], TestGrading.SplitOptionIds(null, "o1"));
+
+    [Fact]
+    public void SplitOptionIds_readsTheList()
+        => Assert.Equal(["o1", "o2"], TestGrading.SplitOptionIds("o1, o2", null));
+
+    [Fact]
+    public void SplitOptionIds_unanswered_isEmpty()
+        => Assert.Empty(TestGrading.SplitOptionIds(null, null));
+
+    [Fact]
+    public void JoinOptionIds_nothingTicked_isNull()
+        => Assert.Null(TestGrading.JoinOptionIds([]));
+
+    [Fact]
+    public void JoinOptionIds_roundTrips()
+        => Assert.Equal(["o1", "o2"], TestGrading.SplitOptionIds(TestGrading.JoinOptionIds(["o1", "o2"]), null));
 
     // ---------- GradeYesNo ----------
 

@@ -4,6 +4,7 @@
 @inject IObjectionService Objections
 @inject IPublicWantedService Wanted
 @inject IPublicModuleService Modules
+@inject IBuergerService Buerger
 @inject ISnackbar Snackbar
 @using System.Security.Claims
 @using NOOSE_Website.Models.Public
@@ -15,25 +16,9 @@
 {
     @* reached from a public profile, so an anonymous visitor lands here: a bounce to the landing page would
        look like the link was broken *@
-    <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
-        <MudStack Spacing="4">
-            <MudText Typo="Typo.h4">Einspruch gegen eine Ausschreibung</MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                Melde dich mit Discord an, um Einspruch einzulegen und die Entscheidung zu verfolgen.
-            </MudAlert>
-            <div>
-                <form method="post" action="/Account/PerformExternalLogin">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="returnUrl" value="@ReturnUrl()" />
-                    <input type="hidden" name="source" value="buerger" />
-                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
-                               Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
-                        Mit Discord anmelden
-                    </MudButton>
-                </form>
-            </div>
-        </MudStack>
-    </MudPaper>
+    <CitizenSignInPanel Title="Einspruch gegen eine Ausschreibung"
+                        Text="Melde dich mit Discord an, um Einspruch einzulegen und die Entscheidung zu verfolgen."
+                        ReturnUrl="@ReturnUrl()" />
 }
 else if (_ready)
 {
@@ -68,6 +53,15 @@ else if (_ready)
                     <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
                         Ausschreibung: <b>@_notice.DisplayName</b>
                     </MudAlert>
+                    @if (!_mayObjectNotice)
+                    {
+                        @* said here rather than only after pressing send; the service refuses either way *@
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            @(ObjectionRules.MayObject(_notice.Kind)
+                                ? ObjectionRules.NotTheNamedPerson
+                                : "Gegen eine Sachfahndung kann kein Einspruch eingelegt werden.")
+                        </MudAlert>
+                    }
                 }
                 else if (!string.IsNullOrWhiteSpace(_input.WantedCaseNumber))
                 {
@@ -84,7 +78,8 @@ else if (_ready)
                               HelperText="@($"Mindestens {ObjectionRules.MinLength} Zeichen. Schildere, was an der Ausschreibung nicht stimmt.")" />
                 <div>
                     <MudButton OnClick="SubmitAsync" Variant="Variant.Filled" Color="Color.Primary"
-                               Disabled="_busy" StartIcon="@Icons.Material.Filled.Balance">Einspruch einlegen</MudButton>
+                               Disabled="@(_busy || (_notice is not null && !_mayObjectNotice))"
+                               StartIcon="@Icons.Material.Filled.Balance">Einspruch einlegen</MudButton>
                 </div>
             }
 
@@ -160,6 +155,7 @@ else
     private IReadOnlyList<CitizenObjectionRow> _rows = [];
     private bool _loadFailed;
     private PublicWantedDetail? _notice;
+    private bool _mayObjectNotice;
     private bool _moduleOn;
     private bool _ready;
     private bool _busy;
@@ -196,6 +192,18 @@ else
     {
         try { _notice = await Wanted.GetByCaseNumberAsync(_input.WantedCaseNumber?.Trim()); }
         catch { /* best effort */ _notice = null; }
+
+        _mayObjectNotice = false;
+        if (_notice is not null && ObjectionRules.MayObject(_notice.Kind))
+        {
+            try
+            {
+                var profile = await Buerger.GetOwnAsync(_user);
+                _mayObjectNotice = profile is not null
+                    && ObjectionRules.NamesCitizen(profile.FirstName, profile.LastName, _notice.DisplayName);
+            }
+            catch { /* best effort */ }
+        }
     }
 
     private async Task LoadAsync()

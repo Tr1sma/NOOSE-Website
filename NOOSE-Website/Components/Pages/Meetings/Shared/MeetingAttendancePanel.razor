@@ -1,4 +1,4 @@
-@inject IMeetingService MeetingService
+﻿@inject IMeetingService MeetingService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -236,9 +236,11 @@ else
         var ok = everyoneMissing
             ? await ConfirmDialog.ShowAsync(DialogService, "Wirklich alle als fehlend erfassen?",
                 $"Es wurde niemand als anwesend oder abgemeldet erfasst. Alle {_rows.Count} Agenten werden "
-                + "dauerhaft als unentschuldigt fehlend gespeichert und fließen so in die Auffälligkeiten ein.")
+                + "dauerhaft als unentschuldigt fehlend gespeichert und fließen so in die Auffälligkeiten ein.",
+                "Alle als fehlend erfassen", Color.Warning)
             : await ConfirmDialog.ShowAsync(DialogService, "Anwesenheit abschließen?",
-                $"{missing} Agent(en) werden als fehlend erfasst. Danach ist die Liste dauerhaft eingefroren.");
+                $"{missing} Agent(en) werden als fehlend erfasst. Danach ist die Liste dauerhaft eingefroren.",
+                "Abschließen", Color.Primary);
         if (!ok)
         {
             return;
@@ -250,7 +252,8 @@ else
     private async Task ReopenAsync()
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Anwesenheit wieder öffnen?",
-            "Die erfassten Zeilen werden verworfen und die Besprechung zählt nicht mehr in der Auswertung.");
+            "Die erfassten Zeilen werden verworfen und die Besprechung zählt nicht mehr in der Auswertung.",
+            "Wieder öffnen", Color.Primary);
         if (!ok)
         {
             return;

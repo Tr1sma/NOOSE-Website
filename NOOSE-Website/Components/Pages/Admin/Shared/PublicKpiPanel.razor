@@ -2,6 +2,7 @@
 @using NOOSE_Website.Models.Public
 @inject IPublicKpiService Kpi
 @inject ISnackbar Snackbar
+@inject ILogger<PublicKpiPanel> Log
 
 @* No AuthorizeView wrapper: /einstellungen already runs on Policies.LeadershipPage and the service guard is its
    exact twin, so a second gate here would only be a second place to get it wrong.
@@ -211,6 +212,8 @@ else
         {
             if (token == _request)
             {
+                // logged, not only shown: a snackbar disappears and the stack is the only thing that names the fault
+                Log.LogError(ex, "Public KPI panel failed to load ({Days} days)", _days);
                 Snackbar.Add(ex.Message, Severity.Error);
             }
         }

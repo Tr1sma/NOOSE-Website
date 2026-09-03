@@ -118,7 +118,7 @@ public class BewerbungTestService(
         return question;
     }
 
-    public async Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, bool keepOptionOrder, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, bool keepOptionOrder, bool allowMultiple, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireHrbOrLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -131,6 +131,7 @@ public class BewerbungTestService(
         question.Keywords = question.Type == TestQuestionType.FreeText ? Trim(keywords) : null;
         question.MinKeywordHits = question.Type == TestQuestionType.FreeText && minKeywordHits is > 0 ? minKeywordHits : null;
         question.KeepOptionOrder = question.Type == TestQuestionType.MultipleChoice && keepOptionOrder;
+        question.AllowMultiple = question.Type == TestQuestionType.MultipleChoice && allowMultiple;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -243,10 +244,13 @@ public class BewerbungTestService(
 
         var assignment = await db.BewerbungTestAssignments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken);
-        if (assignment is null)
-        {
-            return null;
-        }
+        return assignment is null ? null : await BuildEvaluationAsync(db, assignment, cancellationToken);
+    }
+
+    /// <summary>The evaluation itself; both grading transitions read it through the same path the panel does.</summary>
+    private static async Task<TestEvaluation> BuildEvaluationAsync(
+        AppDbContext db, BewerbungTestAssignment assignment, CancellationToken cancellationToken)
+    {
         var test = await db.BewerbungTests.AsNoTracking().FirstOrDefaultAsync(t => t.Id == assignment.TestId, cancellationToken);
         var questions = await db.BewerbungTestQuestions.AsNoTracking()
             .Where(q => q.TestId == assignment.TestId).OrderBy(q => q.Sorting).ToListAsync(cancellationToken);
@@ -272,10 +276,14 @@ public class BewerbungTestService(
             switch (q.Type)
             {
                 case TestQuestionType.MultipleChoice:
-                    var chosen = options.FirstOrDefault(o => o.Id == answer?.SelectedOptionId);
-                    answerText = chosen?.Label;
-                    autoCorrect = TestGrading.GradeMultipleChoice(chosen);
-                    var correct = options.Where(o => o.QuestionId == q.Id && o.IsCorrect).Select(o => o.Label).ToList();
+                    var own = options.Where(o => o.QuestionId == q.Id).ToList();
+                    var chosenIds = TestGrading.SplitOptionIds(answer?.SelectedOptionIds, answer?.SelectedOptionId);
+                    var chosen = own.Where(o => chosenIds.Contains(o.Id, StringComparer.Ordinal)).ToList();
+                    answerText = chosen.Count == 0 ? null : string.Join(", ", chosen.Select(o => o.Label));
+                    autoCorrect = q.AllowMultiple
+                        ? TestGrading.GradeMultipleChoice(chosenIds, own)
+                        : TestGrading.GradeMultipleChoice(chosen.FirstOrDefault());
+                    var correct = own.Where(o => o.IsCorrect).Select(o => o.Label).ToList();
                     correctAnswer = correct.Count > 0 ? string.Join(", ", correct) : null;
                     break;
 
@@ -292,33 +300,138 @@ public class BewerbungTestService(
             }
 
             var effective = answer?.ManualCorrect ?? autoCorrect;
-            var awarded = effective == true ? q.Points : 0;
+            // clamped on read as well as on write: the column is data, not a promise
+            var awarded = answer?.ManualPoints is int manual
+                ? Math.Clamp(manual, 0, q.Points)
+                : effective == true ? q.Points : 0;
             total += awarded;
 
             items.Add(new TestEvaluationItem(
-                answer?.Id, q.Type, q.Prompt, answerText,
-                autoCorrect, answer?.ManualCorrect, effective,
+                answer?.Id, q.Id, q.Type, q.Prompt, answerText,
+                autoCorrect, answer?.ManualCorrect, answer?.ManualPoints, effective,
                 q.Points, awarded, correctAnswer, matched, missed));
         }
 
-        return new TestEvaluation(test?.Title ?? "Test", assignment.CompletedAt, total, max, test?.PassPercent, items);
+        // once grading is closed the headline figures are the frozen ones: editing the test afterwards must not
+        // rewrite the verdict of an applicant who was already told the outcome
+        return new TestEvaluation(
+            test?.Title ?? "Test", assignment.CompletedAt,
+            assignment.GradedAt is null ? total : assignment.FinalPoints ?? total,
+            assignment.GradedAt is null ? max : assignment.FinalMaxPoints ?? max,
+            test?.PassPercent, assignment.GradedAt, assignment.GradedByName, items);
     }
 
-    public async Task SetManualGradeAsync(string answerId, bool? manualCorrect, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task SetAwardedPointsAsync(string assignmentId, string questionId, int? points,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireHrbOrLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var answer = await db.BewerbungTestAnswers.FirstOrDefaultAsync(a => a.Id == answerId, cancellationToken)
-            ?? throw new InvalidOperationException("Antwort nicht gefunden.");
-        answer.ManualCorrect = manualCorrect;
+
+        var assignment = await db.BewerbungTestAssignments.FirstOrDefaultAsync(a => a.Id == assignmentId, cancellationToken)
+            ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
+        if (assignment.GradedAt is not null)
+        {
+            throw new InvalidOperationException("Die Korrektur ist abgeschlossen. Bitte sie zuerst wieder öffnen.");
+        }
+        var question = await db.BewerbungTestQuestions.AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == questionId && q.TestId == assignment.TestId, cancellationToken)
+            ?? throw new InvalidOperationException("Frage gehört nicht zu diesem Test.");
+
+        // keyed on the question, not on an answer row: a question added after the applicant submitted has none
+        var answer = await db.BewerbungTestAnswers
+            .FirstOrDefaultAsync(a => a.AssignmentId == assignmentId && a.QuestionId == questionId, cancellationToken);
+        if (answer is null)
+        {
+            answer = new BewerbungTestAnswer { AssignmentId = assignmentId, QuestionId = questionId };
+            db.BewerbungTestAnswers.Add(answer);
+        }
+        answer.ManualPoints = points is null ? null : Math.Clamp(points.Value, 0, question.Points);
+        // "Auto" clears the old verdict too, otherwise a row graded before points existed would keep overriding
+        if (points is null)
+        {
+            answer.ManualCorrect = null;
+        }
         await db.SaveChangesAsync(cancellationToken);
 
-        var bewerbungId = await db.BewerbungTestAssignments.AsNoTracking()
-            .Where(a => a.Id == answer.AssignmentId).Select(a => a.BewerbungId).FirstOrDefaultAsync(cancellationToken);
-        if (!string.IsNullOrEmpty(bewerbungId))
+        broadcaster.Report(assignment.BewerbungId);
+    }
+
+    public async Task CompleteGradingAsync(string bewerbungId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireHrbOrLeadership(actor);
+        var evaluation = await GetEvaluationInternalAsync(bewerbungId, cancellationToken)
+            ?? throw new InvalidOperationException("Kein Test zugewiesen.");
+        if (evaluation.Assignment.CompletedAt is null)
         {
-            broadcaster.Report(bewerbungId);
+            throw new InvalidOperationException("Der Bewerber hat den Test noch nicht abgegeben.");
         }
+        if (evaluation.Report.OpenCount > 0)
+        {
+            throw new InvalidOperationException(
+                $"Noch {evaluation.Report.OpenCount} Frage(n) ohne Wertung. Bitte zuerst alle bewerten.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var assignment = await db.BewerbungTestAssignments
+            .FirstOrDefaultAsync(a => a.Id == evaluation.Assignment.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
+        assignment.GradedAt = DateTime.UtcNow;
+        assignment.GradedByName = actor.GetCodename();
+        assignment.FinalPoints = evaluation.Report.TotalPoints;
+        assignment.FinalMaxPoints = evaluation.Report.MaxPoints;
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(bewerbungId);
+
+        try
+        {
+            var recipient = await db.Bewerbungen.AsNoTracking()
+                .Where(b => b.Id == bewerbungId).Select(b => b.AssignedAgentId).FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(recipient))
+            {
+                await notifications.NotifyAsync(recipient, NotificationType.Recruiting,
+                    "Test korrigiert", $"/bewerbungen/{bewerbungId}", cancellationToken);
+            }
+        }
+        catch { /* best effort */ }
+    }
+
+    public async Task ReopenGradingAsync(string bewerbungId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireHrbOrLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var assignment = await db.BewerbungTestAssignments
+            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken)
+            ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
+        if (assignment.GradedAt is null)
+        {
+            return;
+        }
+        // the frozen figures go with it: leaving them would show a stale result next to live per-question points
+        assignment.GradedAt = null;
+        assignment.GradedByName = null;
+        assignment.FinalPoints = null;
+        assignment.FinalMaxPoints = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(bewerbungId);
+    }
+
+    /// <summary>Evaluation plus its assignment, for the two grading transitions; the guard is the caller's.</summary>
+    private async Task<(BewerbungTestAssignment Assignment, TestEvaluation Report)?> GetEvaluationInternalAsync(
+        string bewerbungId, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var assignment = await db.BewerbungTestAssignments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken);
+        if (assignment is null)
+        {
+            return null;
+        }
+        var report = await BuildEvaluationAsync(db, assignment, cancellationToken);
+        return (assignment, report);
     }
 
     public async Task<TestView?> GetAssignedForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
@@ -358,7 +471,7 @@ public class BewerbungTestService(
             .Where(o => questionIds.Contains(o.QuestionId)).OrderBy(o => o.Sorting).ToListAsync(cancellationToken);
 
         var qViews = questions.Select(q => new TestQuestionView(
-            q.Id, q.Type, q.Prompt, q.Required,
+            q.Id, q.Type, q.Prompt, q.Required, q.AllowMultiple,
             TestOptionOrder.For(assignment.Id, q.KeepOptionOrder, options.Where(o => o.QuestionId == q.Id))
                 .Select(o => new TestOptionView(o.Id, o.Label)).ToList()))
             .ToList();
@@ -391,14 +504,63 @@ public class BewerbungTestService(
             throw new InvalidOperationException("Über diese Bewerbung ist bereits entschieden.");
         }
 
-        foreach (var input in answers)
+        // the payload is never trusted: a foreign question id, an option that belongs to another question, a
+        // duplicate row and a skipped mandatory question all have to die here, not only in the form. The column
+        // carries no foreign key, so nothing downstream would catch an invented option id.
+        var questions = await db.BewerbungTestQuestions.AsNoTracking()
+            .Where(q => q.TestId == assignment.TestId)
+            .Select(q => new { q.Id, q.Type, q.Required, q.AllowMultiple })
+            .ToListAsync(cancellationToken);
+        var questionIds = questions.Select(q => q.Id).ToList();
+        var options = await db.BewerbungTestOptions.AsNoTracking()
+            .Where(o => questionIds.Contains(o.QuestionId))
+            .Select(o => new { o.Id, o.QuestionId })
+            .ToListAsync(cancellationToken);
+
+        // last wins, so a replayed payload cannot produce two rows for one question
+        var submitted = answers
+            .Where(a => !string.IsNullOrWhiteSpace(a.QuestionId))
+            .GroupBy(a => a.QuestionId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+
+        foreach (var question in questions)
         {
+            submitted.TryGetValue(question.Id, out var input);
+            var choice = new List<string>();
+            string? freeText = null;
+
+            if (question.Type == TestQuestionType.MultipleChoice)
+            {
+                var allowed = options.Where(o => o.QuestionId == question.Id)
+                    .Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+                choice = (input?.SelectedOptionIds ?? [])
+                    .Where(allowed.Contains)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                if (!question.AllowMultiple && choice.Count > 1)
+                {
+                    choice = [choice[0]];
+                }
+            }
+            else
+            {
+                freeText = Trim(input?.FreeText);
+            }
+
+            if (question.Required && choice.Count == 0 && freeText is null)
+            {
+                throw new InvalidOperationException("Bitte beantworte alle Pflichtfragen.");
+            }
+
+            // a row per question even when it stays empty: the evaluation keys on it, and a missing row reads as
+            // "question added later" rather than "left blank"
             db.BewerbungTestAnswers.Add(new BewerbungTestAnswer
             {
                 AssignmentId = assignment.Id,
-                QuestionId = input.QuestionId,
-                SelectedOptionId = string.IsNullOrWhiteSpace(input.SelectedOptionId) ? null : input.SelectedOptionId,
-                FreeTextAnswer = Trim(input.FreeText),
+                QuestionId = question.Id,
+                SelectedOptionId = choice.Count == 1 ? choice[0] : null,
+                SelectedOptionIds = TestGrading.JoinOptionIds(choice),
+                FreeTextAnswer = freeText,
             });
         }
         assignment.CompletedAt = DateTime.UtcNow;

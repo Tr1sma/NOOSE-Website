@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Public;
@@ -6,6 +6,53 @@ namespace NOOSE_Website.Tests.Services.Public;
 /// <summary>The state machine of an objection, and the quota that lives beside it.</summary>
 public class ObjectionRulesTests
 {
+    // ---- only the named person may object ----
+
+    [Theory]
+    [InlineData("Max", "Mustermann", "Max Mustermann")]
+    [InlineData("max", "mustermann", "MAX MUSTERMANN")]
+    [InlineData("Max", "Mustermann", "  Max   Mustermann  ")]
+    [InlineData("Jörg", "Müller", "Joerg Mueller")]
+    [InlineData("Joerg", "Mueller", "Jörg Müller")]
+    [InlineData("Hans", "Weiß", "Hans Weiss")]
+    public void SpellingNoiseDoesNotBlockTheNamedPerson(string first, string last, string displayName)
+        => Assert.True(ObjectionRules.NamesCitizen(first, last, displayName));
+
+    [Theory]
+    [InlineData("Anna", "Meier", "Anna Meyer")]
+    [InlineData("Max", "Mustermann", "Moritz Mustermann")]
+    [InlineData("Max", "Mustermann", "Mustermann")]
+    [InlineData("", "Mustermann", "Max Mustermann")]
+    [InlineData("Max", "", "Max Mustermann")]
+    public void ADifferentNameIsADifferentPerson(string first, string last, string displayName)
+        => Assert.False(ObjectionRules.NamesCitizen(first, last, displayName));
+
+    [Fact]
+    public void AnEmptyProfileNeverMatches()
+    {
+        // otherwise a nameless account would match a nameless notice and pass the gate
+        Assert.False(ObjectionRules.NamesCitizen(null, null, null));
+        Assert.False(ObjectionRules.NamesCitizen("  ", "  ", "  "));
+    }
+
+    [Fact]
+    public void OnlyAPersonNoticeCanBeDisputed()
+    {
+        Assert.True(ObjectionRules.MayObject(PublicWantedKind.Fahndung));
+        Assert.False(ObjectionRules.MayObject(PublicWantedKind.Fahrzeug));
+        Assert.False(ObjectionRules.MayObject(PublicWantedKind.Waffe));
+    }
+
+    [Fact]
+    public void EveryNoticeKindIsDecided()
+    {
+        // a new kind must be a decision, not an accident of the item predicate
+        foreach (var kind in Enum.GetValues<PublicWantedKind>())
+        {
+            Assert.Equal(!WantedKinds.IsItem(kind), ObjectionRules.MayObject(kind));
+        }
+    }
+
     [Theory]
     [InlineData(ObjectionStatus.Neu, true)]
     [InlineData(ObjectionStatus.InPruefung, true)]

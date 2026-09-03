@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
@@ -49,8 +49,10 @@ public class TipPriorityService(IDbContextFactory<AppDbContext> dbFactory) : ITi
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // decided tips need no order any more, so they are never re-stamped
-        var rows = await narrow(db.Hinweise.AsNoTracking().Where(TipRules.OpenRows))
+        // decided tips need no order any more, so they are never re-stamped; a hand-set priority is not touched
+        // either, otherwise the next bounty change would silently undo the leadership's decision
+        var rows = await narrow(db.Hinweise.AsNoTracking().Where(TipRules.OpenRows)
+                .Where(h => h.PriorityOverride == null))
             .Select(h => new { h.Id, h.WantedId, h.CitizenProfileId, h.Priority })
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
