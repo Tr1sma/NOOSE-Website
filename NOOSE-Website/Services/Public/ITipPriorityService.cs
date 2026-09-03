@@ -1,4 +1,5 @@
-using NOOSE_Website.Data;
+﻿using NOOSE_Website.Data;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -12,6 +13,7 @@ public interface ITipPriorityService
 {
     /// <summary>Priority for a tip that is about to be inserted; runs on the caller's context and transaction.</summary>
     Task<int> ComputeAsync(AppDbContext db, string? wantedId, int confirmedTips,
+        TipKind kind = TipKind.Beobachtung, TipHandover? handover = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Re-stamps one tip.</summary>

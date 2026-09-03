@@ -169,6 +169,25 @@
     Interceptor).
   - **`PublicTicketOpened`/`PublicTicketAnswered` sind nicht routbar** — eine Ticketmeldung im öffentlichen Kanal
     nennt einen namentlich bekannten Bürger. Beim Bürger klingelt es nur bei `WartetAufBuerger` und `Geschlossen`.
+  - **Gepingt wird trotzdem — über eine eigene Kategorie.** `PublicTicketCreated` ist routbar und pingt die
+    Rolle aus `/einstellungen?tab=discord` (Default: die generische NOOSE-Rolle), und zwar **nur beim Anlegen**:
+    der Push hängt in `NotifyDeskAsync` — dem einzigen Melder, der ausschließlich beim Öffnen läuft — und
+    nicht im `NotificationService`. Drei Folgen, die man nicht „aufräumen" darf: **(1)**
+    `PublicTicketOpened` bleibt unroutbar — würde man *sie* routen, pingte jede Bürgerantwort mit, sobald der
+    Eingang gerade gelesen war (`NotifyManyOnceAsync` pusht an die *frisch* angelegten Empfänger, still bleibt
+    nur die gefaltete Zeile — der Ping hinge also am Lesestand der Führung). **(2)** `PublicTicketCreated`
+    legt **keine Glocken-Zeile** an; sie ist reiner Routing-Schlüssel, damit Channel und Rollen-ID im
+    Admin-Panel eine eigene Zeile bekommen. **(3)** Der Push übergibt **keinen** `headline` — im Kanal steht
+    der generische Hinweis plus der anmeldepflichtige Link, nie der Betreff und nie der Bürger.
+  - **Ein Ticket klingelt einmal, nicht je Nachricht.** Alle vier Ticket-Melder gehen über
+    `INotificationService.NotifyOnceAsync`/`NotifyManyOnceAsync`: existiert für dasselbe Trio
+    (Empfänger, `NotificationType`, `Href`) noch eine **ungelesene** Zeile, wird sie überschrieben und ihr
+    `ErstelltAm` hochgesetzt, statt eine zweite anzulegen. Ein laufender Schriftwechsel füllt die Glocke damit
+    nicht Zeile für Zeile; gelesen ⇒ das nächste Ereignis legt wieder eine neue Zeile an. Zwei Folgen, die man
+    nicht „aufräumen" darf: das Sortierkriterium der Glocke ist `ErstelltAm`, ohne den Bump bliebe die
+    zusammengefasste Zeile unter neueren begraben — und der Discord-Push geht nur an die *frisch* angelegten
+    Empfänger, weil eine Zusammenfassung kein neues Ereignis ist (bei Tickets ohnehin nicht routbar, aber die
+    Methode ist allgemein). Ohne `Href` gibt es kein Faltkriterium ⇒ es wird immer angelegt.
   - **`TicketBroadcaster` trägt Zeilen-Id *und* Aktenzeichen:** der Schalter adressiert über die Id, die
     Bürgerseite nur über das Aktenzeichen — ohne das zweite Handle lädt jeder Bürger-Circuit bei jeder
     Ticketänderung im Haus neu. **`TicketArt` hat genau einen Wert**; die Spalte existiert, damit eine zweite Art
@@ -229,3 +248,86 @@
     `MergedPageSections.Settings`, `WatchlistRecordRollup` — **und in `FeedbackPageTabs`, der sechsten
     Registry**, die jeder neue `/einstellungen`-Abschnitt braucht (`FeedbackPageTabsTests` verlangt jeden
     `MergedPageSections`-Slug im Feedback-Picker).
+
+## Phase 18 — Ergreifungsmeldung (Bürger stellt eine gesuchte Person selbst)
+
+- **Phase 18 (Ergreifungsmeldung) — was daran anders ist:**
+  - **Eine Meldeart, keine eigene Tabelle.** Eine Ergreifungsmeldung ist ein `Hinweis` mit
+    `Art = TipKind.Ergreifung`, weil sie alles teilt, was zählt: Aktenzeichen als Handle, Fahndungsbezug,
+    Anhang, Triage-Priorität, den Bürger-Chat und den Auszahlungs-Endpunkt. Nachgemessen: eine zweite Tabelle
+    müsste **zwölf** Registries neu bedienen (`PublicVisibility`, `SearchCatalog` + Provider, `TrashService`,
+    `TrashProjection`, `AuditEntityDisplay` ×2, `WatchlistRecordRollup`, `TimelineService` ×2,
+    `TimelineDisplay`, `ChronikParentResolver` ×2, `RecordsReference`, `MergedPageSections`) und den ganzen
+    Chat verdoppeln — eine Spalte bedient **keine** davon neu, weil alle auf dem *Typnamen* verschlüsselt sind
+    und `PublicVisibilityCoverageTests`/`SearchCoverageTests` über `DbSet`s reflektieren, nicht über Spalten.
+    Präzedenz: `TicketArt` mit genau einem Wert.
+  - **Zwei Enums, nicht eines mit drei Werten.** `TipKind` (Beobachtung/Ergreifung) entscheidet, *welche Regeln*
+    gelten, `TipHandover` (Festgehalten/Uebergeben) *wie dringend* es ist — orthogonale Achsen, Lehre aus
+    `NavSection`/`NavArea`. Zusammengelegt müsste jede Prüfung „ist das eine Ergreifungsmeldung?" zwei Werte
+    aufzählen.
+  - **Der Prioritäts-Boden steht in der Formel, nicht im Handstempel.** `TipPriority.Floor` hebt eine Meldung
+    an, `Compute` nimmt `Math.Max`. **Festgehalten bekommt die Decke (`Max`), nicht 90** — nachgerechnet:
+    eine maximale Beobachtung ist 5 × 5 × 4 = 100 und hätte eine Meldung überholt, bei der jemand eine Person
+    festhält. Übergeben behält einen Boden **unter** `Max` (70): hoch, weil Geld daran hängt, aber niemand ist
+    mehr in Gefahr. Ausdrücklich **nicht** `PriorityOverride` — das Feld heißt in der UI „Priorität manuell",
+    trägt einen Begründungstext, und `StampWhereAsync` überspringt Zeilen mit Override *für immer*, die
+    automatische Neuberechnung wäre also dauerhaft aus. Der Stempler trägt die zwei Achsen deshalb in seiner
+    Projektion mit; er rechnet in-memory und schreibt je Gruppe einen Konstantwert, ein `Math.Max` muss also
+    nie nach SQL übersetzt werden. `TipPriority.Max` bleibt 100, weil es auch der Deckel von `SetPriorityAsync`
+    ist.
+  - **Anonymität wird vorne abgewiesen, nicht hinten festgestellt.** `CaptureRules.AllowsAnonymity` ist `false`,
+    `SubmitAsync` überschreibt ein gesetztes `WantsAnonymity`, und das Formular zeigt den Schalter gar nicht.
+    Grund: „Anonym ist unauszahlbar" gilt im Belohnungs-Pfad schon heute — eine Wahl anzubieten, die später
+    überstimmt wird, liest sich als gebrochenes Versprechen.
+  - **Nur eine `Fahndung` ist meldbar** (`CaptureRules.MayReport`), als **Positivliste**, nicht als
+    „alles außer Fahrzeug und Waffe": niemand ergreift ein Auto, aber auch keine Vermisstenmeldung und keinen
+    Zeugenaufruf — wer eine vermisste Person findet, gibt einen *Hinweis*. Heute wird nur `Fahndung`
+    ausgeschrieben, die Regel engt also nichts ein; sie verhindert, dass spätere Arten still mitqualifizieren.
+  - **Wer selbst ausgeschrieben ist, kann die eigene Ergreifung nicht melden** — verglichen wird über
+    `ObjectionRules.NamesCitizen`, also **nur** gegen den publizierten Anzeigenamen (ein Alias ist oft
+    informantengestützt, und der interne Klarname wäre über Treffer/kein-Treffer abfragbar).
+  - **Zwei getrennte Tageskontingente.** `CaptureRules.PerDay` (2, flach) steht neben dem trust-gestaffelten
+    `TipTrust.QuotaFor` (5–20), und beide zählen **nur ihre eigene Art**: eine Beobachtungs-Serie darf die echte
+    Ergreifung nicht blockieren, und eine Ergreifung darf das Hinweis-Kontingent nicht aufessen. Der Ping ist die
+    knappe Ressource, deshalb ist die Zahl klein und **nicht** an die Vertrauensstufe gekoppelt. Gezählt wird
+    mit `IgnoreQueryFilters` (Löschen kauft keinen Versuch). Den offensichtlichen Missbrauch stoppt ohnehin die
+    Regel **ein offener Bericht je Ausschreibung und Konto**.
+  - **Dubletten kreuzen keine Arten.** `GroupDuplicatesAsync` nimmt `Art` als zusätzliche Gleichheit ins
+    Kandidatenfenster: eine Beobachtung und eine Ergreifungsmeldung zur selben Ausschreibung sind zwei
+    verschiedene Aussagen, nicht zwei Erzählungen derselben.
+  - **`TipsBroadcaster` trägt jetzt Zeilen-Id *und* Aktenzeichen *und* Zielgruppe** — wörtlich der
+    `TicketBroadcaster`. Vorher trug er nur die Id, und genau deshalb war `MeineHinweise.razor` **nicht** live
+    angebunden (die Bürgerseite kennt ihren Vorgang nur über das Aktenzeichen). Das Aktenzeichen verhindert, dass
+    jeder Bürger-Circuit bei jeder Hinweisänderung im Haus neu lädt; die **Zielgruppe** verhindert, dass der
+    *Zeitpunkt* jeder internen Notiz in den Circuit des Bürgers signalisiert wird — Inhalt leckte nie, „wann die
+    Behörde über mich spricht" schon. `null` heißt „betrifft beide Fäden" (Einreichung, Status, Löschung).
+  - **Zwei `@page`-Direktiven auf `TipForm.razor`**, `/hinweis` und `/hinweis/gestellt`. Der Modus kommt aus dem
+    **Pfad**, nicht aus einem Query-Parameter: ein `Enum.Parse` auf angreifer-kontrollierter Eingabe ist auf einer
+    `[AllowAnonymous]`-Seite ein HTTP 500 (Präzedenz `?vorschau=1`, `WarnhinweisColours`). `PublicRoutes.Matches`
+    ist `path == prefix || path.StartsWith(prefix + "/")`, das **Kind**segment erbt den öffentlichen Präfix also
+    automatisch — keine neue Zeile in `PublicRoutes`, `DemoModeMiddleware` oder `robots.txt`. Das Modul-Gate trägt
+    ein **`@key`**: beide Routen binden denselben Komponententyp, Blazor recycelt die Instanz, und
+    `PublicModuleGate` entscheidet in `OnInitializedAsync` — ohne `@key` bliebe es auf dem Modul der Route stehen,
+    von der man kam.
+  - **Das Modul hat keine Nav-Route**, und hier ist der Grund mehr als der übliche: `PublicRoutes.Prefixes` leitet
+    sich aus `PublicModules.All` ab und `PublicModulesCatalogTests` verlangt eindeutige Nav-Routen (`/hinweis`
+    gehört dem Tips-Modul) — **und** ein Tab, der eine frische Meldung ohne Ausschreibung in der Hand einlädt,
+    liest sich als Aufforderung, jemanden zu stellen. Gemeldet wird vom Steckbrief aus. Präzedenz: `Reward`.
+  - **`PublicCaptureReported` ist routbar und pingt eine Rolle** (Default: NOOSE). Anders als
+    `PublicTipReceived`/`PublicTipAnswered`, und das ist kein Widerspruch: der Post trägt nur den generischen Satz
+    aus `Notice(type)` plus den anmeldepflichtigen Link, nennt also weder Bürger noch Gesuchten — und der Melder
+    ist auf diesem Weg baulich nicht anonym. `ShouldIncludeHeadline` wird **bewusst nicht** erweitert: eine
+    Überschrift schriebe das Fahndungs-Aktenzeichen in den Kanal. Webhook- und Rollen-Key entstehen aus dem
+    Enum-Namen, die Admin-Zeile also von selbst; `FallbackRoute` zeigt auf `/hinweise`, sonst landete ein
+    generischer Push auf `/dashboard`.
+  - **Ein Filter, kein vierter Reiter.** Die Abschnitte des Eingangs sind die Status-Achse (`ScopeFilter`,
+    `TipInboxCounts` mit drei status-benannten Feldern); die Meldeart ist eine zweite. Sie als vierten
+    `TipInboxScope`-Wert hineinzupressen ist genau der `NavSection`/`NavArea`-Fehler — also ein Schalter „Nur
+    Ergreifungen" neben den Reitern, client-seitig über die ohnehin geladenen ≤200 Zeilen (Muster `_collapse`).
+  - **Die Detailseite setzt die Fahndung nicht auf gefasst.** „`Gefasst` ist Vorbedingung, keine Nebenwirkung"
+    (siehe [oeffentlich-geld.md](oeffentlich-geld.md)): `PublicWantedService` behält seinen einen Schreibpfad,
+    die Seite schreibt nur hin, was als Nächstes fällig ist. Die Auszahlung läuft danach unverändert über
+    `IRewardService` — eine Ergreifungsmeldung ist auszahlbar, *weil* sie per Regel nicht anonym ist.
+  - Kind-bewusste Beschriftung gibt es nur an den zwei Stellen, die die Zeile in der Hand haben
+    (`TrashProjection.Tip`, `RecordsReference`). `AuditEntityDisplay`, `TimelineDisplay` und `SearchCatalog` sind
+    auf den Typnamen verschlüsselt und bleiben bewusst generisch bei „Bürgerhinweis".

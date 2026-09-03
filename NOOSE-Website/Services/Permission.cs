@@ -538,6 +538,37 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to change a running test attempt (extend, reset).</summary>
+    /// <remarks>
+    /// The write check stands before the rank one: RequireHrbOrLeadership alone lets the read-only supervision
+    /// and the demo principal through — the demo principal carries HRB and Director — and these paths write via
+    /// ExecuteUpdateAsync, which the ReadOnlyBarrierInterceptor never sees. One call, because every member of
+    /// IBewerbungTestService may carry exactly one guard.
+    /// </remarks>
+    public static void RequireTestAttemptWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || !actor.IsHrbOrLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist dem HRB und der Führung vorbehalten.");
+        }
+    }
+
+    /// <summary>Require the right to decide an application (accept, reject, close, security verdict).</summary>
+    /// <remarks>
+    /// The write check stands before the rank one: RequireHrbOrLeadership alone lets the read-only supervision
+    /// and the demo principal through — the demo principal carries HRB and Director — and such a decision then
+    /// imposes the recruitment ban as a follow-up write, which fails on its own and leaves a rejection unbanned.
+    /// </remarks>
+    public static void RequireRecruitingDecision(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || !actor.IsHrbOrLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist dem HRB und der Führung vorbehalten.");
+        }
+    }
+
     /// <summary>Require applicant status (portal owner actions).</summary>
     public static void RequireApplicant(ClaimsPrincipal actor)
     {

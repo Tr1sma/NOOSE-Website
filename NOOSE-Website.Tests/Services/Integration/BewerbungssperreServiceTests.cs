@@ -147,8 +147,8 @@ public sealed class BewerbungssperreServiceTests
         Assert.Equal("Warden", row.CreatedByName);
         Assert.Equal("discord-applicant-1", row.DiscordId);
         Assert.NotNull(row.BannedUntil);
-        Assert.True(row.BannedUntil > DateTime.UtcNow.AddDays(13));
-        Assert.True(row.BannedUntil < DateTime.UtcNow.AddDays(15));
+        // 14 days spelled out, not BanDuration: a test that reads the constant cannot catch a wrong constant
+        Assert.Equal(DateTime.UtcNow.AddDays(14), row.BannedUntil!.Value, TimeSpan.FromMinutes(1));
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class BewerbungssperreServiceTests
         var row = Assert.Single(check.Bewerbungssperren.ToList());
         Assert.Equal(existing.Id, row.Id);
         Assert.Equal("neu", row.Reason);
-        Assert.True(row.BannedUntil > DateTime.UtcNow.AddDays(13));
+        Assert.Equal(DateTime.UtcNow.AddDays(14), row.BannedUntil!.Value, TimeSpan.FromMinutes(1));
     }
 
     [Fact]

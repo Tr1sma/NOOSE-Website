@@ -37,8 +37,11 @@ public class TipService(
         string? originalName, ClaimsPrincipal actor, long attachmentSize = 0,
         CancellationToken cancellationToken = default)
     {
-        // module first: whether this account could submit is none of the caller's business while the desk is closed
-        await modules.RequireEnabledAsync(PublicModules.Tips, cancellationToken);
+        var isCapture = CaptureRules.IsCapture(input.Kind);
+        // module first: whether this account could submit is none of the caller's business while the desk is closed.
+        // Each kind has its own switch, so closing one leaves the other running
+        await modules.RequireEnabledAsync(
+            isCapture ? PublicModules.CaptureReports : PublicModules.Tips, cancellationToken);
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
         Permission.RequireWriteAccess(actor);
 
@@ -53,21 +56,90 @@ public class TipService(
             throw new InvalidOperationException($"Ein Hinweis fasst höchstens {TipRules.MaxLength} Zeichen.");
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-
-        // IgnoreQueryFilters on purpose: a deleted tip still spent its slot, otherwise deleting refills the quota
-        var since = DateTime.UtcNow - TipRules.QuotaWindow;
-        var recent = await db.Hinweise.IgnoreQueryFilters()
-            .CountAsync(h => h.CitizenProfileId == profile.Id && h.CreatedAt >= since, cancellationToken);
-        var quota = TipTrust.QuotaFor(profile.ConfirmedTips);
-        if (recent >= quota)
+        // anonymity is refused here rather than accepted and found unpayable at the counter: money needs a
+        // recipient, and handing a person over names one anyway
+        var wantsAnonymity = input.WantsAnonymity && (!isCapture || CaptureRules.AllowsAnonymity);
+        string? handoverLocation = null;
+        if (isCapture)
         {
-            throw new InvalidOperationException(
-                $"Du hast dein Kontingent von {quota} Hinweisen in 24 Stunden erreicht. "
-                + "Bitte versuche es später erneut.");
+            if (string.IsNullOrWhiteSpace(input.WantedCaseNumber))
+            {
+                throw new InvalidOperationException(CaptureRules.NoticeRequired);
+            }
+            if (input.Handover is null)
+            {
+                throw new InvalidOperationException("Gib an, ob du die Person festhältst oder sie übergeben hast.");
+            }
+            handoverLocation = (input.HandoverLocation ?? string.Empty).Trim();
+            if (handoverLocation.Length < CaptureRules.MinLocationLength)
+            {
+                throw new InvalidOperationException(CaptureRules.LocationRequired);
+            }
+            if (handoverLocation.Length > CaptureRules.MaxLocationLength)
+            {
+                throw new InvalidOperationException(
+                    $"Der Ort fasst höchstens {CaptureRules.MaxLocationLength} Zeichen.");
+            }
         }
 
-        var wantedId = await ResolveNoticeAsync(db, input.WantedCaseNumber, cancellationToken);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // IgnoreQueryFilters on purpose: a deleted tip still spent its slot, otherwise deleting refills the quota.
+        // The two kinds count separately - a busy tipping day must not block a real handover, and a handover must
+        // not eat the tip allowance
+        var since = DateTime.UtcNow - TipRules.QuotaWindow;
+        if (isCapture)
+        {
+            var recentCaptures = await db.Hinweise.IgnoreQueryFilters()
+                .CountAsync(h => h.CitizenProfileId == profile.Id && h.CreatedAt >= since
+                    && h.Kind == TipKind.Ergreifung, cancellationToken);
+            if (recentCaptures >= CaptureRules.PerDay)
+            {
+                throw new InvalidOperationException(
+                    $"Du hast dein Kontingent von {CaptureRules.PerDay} Ergreifungsmeldungen in 24 Stunden "
+                    + "erreicht. Nutze den Ticket-Bereich, wenn es dringend ist.");
+            }
+        }
+        else
+        {
+            var recent = await db.Hinweise.IgnoreQueryFilters()
+                .CountAsync(h => h.CitizenProfileId == profile.Id && h.CreatedAt >= since
+                    && h.Kind == TipKind.Beobachtung, cancellationToken);
+            var quota = TipTrust.QuotaFor(profile.ConfirmedTips);
+            if (recent >= quota)
+            {
+                throw new InvalidOperationException(
+                    $"Du hast dein Kontingent von {quota} Hinweisen in 24 Stunden erreicht. "
+                    + "Bitte versuche es später erneut.");
+            }
+        }
+
+        var (wantedId, notice) = await ResolveNoticeAsync(db, input.WantedCaseNumber, cancellationToken);
+        if (isCapture)
+        {
+            // notice in hand, so the three questions only it can answer
+            if (wantedId is null || notice is null)
+            {
+                throw new InvalidOperationException(CaptureRules.NoticeRequired);
+            }
+            if (!CaptureRules.MayReport(notice.Kind))
+            {
+                throw new InvalidOperationException(CaptureRules.KindRefused);
+            }
+            // the named person cannot report their own capture; against the published name only, exactly as the
+            // objection path compares it
+            if (ObjectionRules.NamesCitizen(profile.FirstName, profile.LastName, notice.DisplayName))
+            {
+                throw new InvalidOperationException(CaptureRules.SelfRefused);
+            }
+            var alreadyOpen = await db.Hinweise.AsNoTracking()
+                .Where(CaptureRules.OpenCaptureRows)
+                .AnyAsync(h => h.CitizenProfileId == profile.Id && h.WantedId == wantedId, cancellationToken);
+            if (alreadyOpen)
+            {
+                throw new InvalidOperationException(CaptureRules.AlreadyOpen);
+            }
+        }
 
         // saved before the transaction opens, exactly like a recruiting attachment: a stream copy inside a
         // transaction holds a database connection open for the length of an upload
@@ -102,14 +174,18 @@ public class TipService(
         var row = new Hinweis
         {
             CitizenProfileId = profile.Id,
-            WantsAnonymity = input.WantsAnonymity,
+            WantsAnonymity = wantsAnonymity,
             WantedId = wantedId,
+            Kind = input.Kind,
+            Handover = isCapture ? input.Handover : null,
+            HandoverLocation = isCapture ? handoverLocation : null,
             Text = text,
             AttachmentFileName = fileName,
             AttachmentOriginalName = fileName is null ? null : Trim(originalName, 255),
             AttachmentContentType = fileName is null ? null : contentType,
             Status = TipStatus.Neu,
-            Priority = await priority.ComputeAsync(db, wantedId, profile.ConfirmedTips, cancellationToken),
+            Priority = await priority.ComputeAsync(db, wantedId, profile.ConfirmedTips,
+                input.Kind, isCapture ? input.Handover : null, cancellationToken),
         };
 
         try
@@ -149,8 +225,15 @@ public class TipService(
         }
 
         await GroupDuplicatesAsync(db, row, cancellationToken);
-        await NotifyDeskAsync(db, row, cancellationToken);
-        broadcaster.Report(row.Id);
+        if (isCapture)
+        {
+            await NotifyCaptureAsync(db, row, cancellationToken);
+        }
+        else
+        {
+            await NotifyDeskAsync(db, row, cancellationToken);
+        }
+        Report(row);
         return row.CaseNumber;
     }
 
@@ -179,6 +262,8 @@ public class TipService(
                 h.CreatedAt,
                 h.Text,
                 h.CitizenLastReadAt,
+                h.Kind,
+                h.Handover,
                 WantedCaseNumber = h.Wanted!.CaseNumber,
                 WantedDisplayName = h.Wanted!.DisplayName,
                 HasAttachment = h.AttachmentFileName != null,
@@ -191,7 +276,7 @@ public class TipService(
         return rows
             .Select(r => new CitizenTipRow(r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text),
                 r.WantedCaseNumber, r.WantedDisplayName, r.HasAttachment,
-                UnreadFor(unread, r.Id, r.CitizenLastReadAt)))
+                UnreadFor(unread, r.Id, r.CitizenLastReadAt), r.Kind, r.Handover))
             .ToList();
     }
 
@@ -218,6 +303,9 @@ public class TipService(
                 h.AnonymityResolvedAt,
                 h.AttachmentFileName,
                 h.AttachmentOriginalName,
+                h.Kind,
+                h.Handover,
+                h.HandoverLocation,
                 WantedCaseNumber = h.Wanted!.CaseNumber,
                 WantedDisplayName = h.Wanted!.DisplayName,
             })
@@ -237,7 +325,8 @@ public class TipService(
         return new CitizenTipDetail(row.CaseNumber, row.Status, row.CreatedAt, row.Text, row.WantsAnonymity,
             row.AnonymityResolvedAt is not null, row.WantedCaseNumber, row.WantedDisplayName,
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
-            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, profile.IsBlocked, messages);
+            !TipRules.IsClosed(row.Status) && !profile.IsBlocked, profile.IsBlocked, messages,
+            row.Kind, row.Handover, row.HandoverLocation);
     }
 
     /// <inheritdoc />
@@ -272,7 +361,7 @@ public class TipService(
         await db.SaveChangesAsync(cancellationToken);
 
         await NotifyHandlerAsync(db, row, cancellationToken);
-        broadcaster.Report(row.Id);
+        Report(row, TipMessageAudience.Buerger);
     }
 
     public async Task MarkCitizenReadAsync(string caseNumber, ClaimsPrincipal actor,
@@ -355,6 +444,8 @@ public class TipService(
                 HandlerCodename = h.Handler!.Codename,
                 h.Priority,
                 h.DuplicateGroupId,
+                h.Kind,
+                h.Handover,
                 ConfirmedTips = h.CitizenProfile!.ConfirmedTips,
             })
             .ToListAsync(cancellationToken);
@@ -373,7 +464,8 @@ public class TipService(
                 last.TryGetValue(r.Id, out var m) ? m.At : (DateTime?)null,
                 last.TryGetValue(r.Id, out var m2) && m2.FromCitizen,
                 r.Priority, TipTrust.Tier(r.ConfirmedTips), r.DuplicateGroupId,
-                r.DuplicateGroupId is null ? 0 : duplicates.GetValueOrDefault(r.DuplicateGroupId)))
+                r.DuplicateGroupId is null ? 0 : duplicates.GetValueOrDefault(r.DuplicateGroupId),
+                r.Kind, r.Handover))
             .ToList();
     }
 
@@ -418,7 +510,8 @@ public class TipService(
             .ExecuteUpdateAsync(s => s.SetProperty(h => h.AgentLastReadAt, DateTime.UtcNow), cancellationToken);
         if (changed > 0)
         {
-            broadcaster.Report(id);
+            // no case number: this is the desk's read mark, and an Intern signal never reaches a citizen circuit
+            broadcaster.Report(id, string.Empty, TipMessageAudience.Intern);
         }
     }
 
@@ -451,7 +544,7 @@ public class TipService(
         {
             await priority.StampAsync(id, cancellationToken);
         }
-        broadcaster.Report(id);
+        Report(tip, TipMessageAudience.Intern);
     }
 
     public async Task<TipDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -483,6 +576,9 @@ public class TipService(
                 h.PriorityOverride,
                 h.PriorityOverrideReason,
                 h.DuplicateGroupId,
+                h.Kind,
+                h.Handover,
+                h.HandoverLocation,
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null)
@@ -508,7 +604,8 @@ public class TipService(
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
             row.HandlerId, row.HandlerCodename,
             row.Priority, row.PriorityOverride, row.PriorityOverrideReason,
-            TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
+            TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId,
+            row.Kind, row.Handover, row.HandoverLocation);
     }
 
     public async Task<IReadOnlyList<TipNoticeRow>> GetForNoticeAsync(string wantedId, ClaimsPrincipal actor,
@@ -620,7 +717,7 @@ public class TipService(
             row.Status = TipStatus.InPruefung;
         }
         await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(row.Id);
+        Report(row, TipMessageAudience.Intern);
     }
 
     public async Task SetStatusAsync(string id, TipStatus status, ClaimsPrincipal actor,
@@ -654,7 +751,7 @@ public class TipService(
             // off the list cap
             await priority.StampAsync(row.Id, cancellationToken);
         }
-        broadcaster.Report(row.Id);
+        Report(row);
     }
 
     public async Task PostInternalNoteAsync(string id, string text, ClaimsPrincipal actor,
@@ -672,7 +769,7 @@ public class TipService(
             AuthorAgentId = actor.GetAgentId(),
         });
         await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(row.Id);
+        Report(row, TipMessageAudience.Intern);
     }
 
     public async Task AskCitizenAsync(string id, string text, ClaimsPrincipal actor,
@@ -703,7 +800,7 @@ public class TipService(
         await db.SaveChangesAsync(cancellationToken);
 
         await NotifyCitizenAsync(db, row, cancellationToken);
-        broadcaster.Report(row.Id);
+        Report(row, TipMessageAudience.Buerger);
     }
 
     public async Task ResolveAnonymityAsync(string id, string reason, ClaimsPrincipal actor,
@@ -722,7 +819,7 @@ public class TipService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Hinweise.AsNoTracking()
             .Where(h => h.Id == id)
-            .Select(h => new { h.Id, h.WantsAnonymity, h.AnonymityResolvedAt })
+            .Select(h => new { h.Id, h.CaseNumber, h.WantsAnonymity, h.AnonymityResolvedAt })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("Hinweis nicht gefunden.");
         if (!row.WantsAnonymity)
@@ -744,7 +841,7 @@ public class TipService(
         changes["Begründung"] = [null, reason.Trim()];
         db.AuditLogs.Add(ManualAudit.Row(nameof(Hinweis), id, AuditAction.Modified, actor, changes));
         await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(id);
+        broadcaster.Report(id, row.CaseNumber);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -771,7 +868,7 @@ public class TipService(
             await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
             await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
         }
-        broadcaster.Report(id);
+        Report(row);
     }
 
     public async Task<TipAttachmentAccess?> GetAttachmentAsync(string id, ClaimsPrincipal actor,
@@ -861,7 +958,7 @@ public class TipService(
             await buerger.RecomputeConfirmedTipsAsync(target.CitizenProfileId, cancellationToken);
             await priority.StampForCitizenAsync(target.CitizenProfileId, cancellationToken);
             await NotifyRewardAsync(target, cancellationToken);
-            broadcaster.Report(target.TipId);
+            broadcaster.Report(target.TipId, target.CaseNumber);
         }
     }
 
@@ -895,28 +992,32 @@ public class TipService(
             await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
             await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
         }
-        broadcaster.Report(id);
+        Report(row);
     }
 
     // ---- helpers ----
 
     // the reference is verified through the published read path, never taken as an id: accepting a raw id would
     // turn the form into an existence oracle for drafts and retracted notices
-    private async Task<string?> ResolveNoticeAsync(AppDbContext db, string? caseNumber, CancellationToken ct)
+    private async Task<(string? Id, PublicWantedDetail? Notice)> ResolveNoticeAsync(AppDbContext db,
+        string? caseNumber, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(caseNumber))
         {
-            return null;
+            return (null, null);
         }
         var notice = await wanted.GetByCaseNumberAsync(caseNumber, ct);
         if (notice is null)
         {
             throw new InvalidOperationException("Zu diesem Aktenzeichen gibt es keine laufende Ausschreibung.");
         }
-        return await db.OeffentlicheFahndungen.AsNoTracking()
+        // the detail travels back so a capture report can check kind and published name without a second read;
+        // the id still comes from the row behind the snapshot
+        var id = await db.OeffentlicheFahndungen.AsNoTracking()
             .Where(f => f.CaseNumber == notice.CaseNumber)
             .Select(f => f.Id)
             .FirstOrDefaultAsync(ct);
+        return (id, notice);
     }
 
     private static async Task<Hinweis> GetOrThrowAsync(AppDbContext db, string id, CancellationToken ct)
@@ -954,7 +1055,10 @@ public class TipService(
         try
         {
             var since = DateTime.UtcNow.AddDays(-TipDuplicates.CandidateDays);
-            var query = db.Hinweise.AsNoTracking().Where(h => h.Id != row.Id && h.CreatedAt >= since);
+            // same kind only: an observation and a capture report on one notice are two different statements,
+            // not two tellings of the same one
+            var query = db.Hinweise.AsNoTracking()
+                .Where(h => h.Id != row.Id && h.CreatedAt >= since && h.Kind == row.Kind);
             // spelled out: comparing a column to a null variable translates to SQL NULL and would find nothing
             query = row.WantedId is null
                 ? query.Where(h => h.WantedId == null)
@@ -997,6 +1101,10 @@ public class TipService(
 
     private static bool IsHidden(bool wantsAnonymity, DateTime? resolvedAt)
         => TipAnonymity.IsHidden(wantsAnonymity, resolvedAt);
+
+    // both handles at once: the desk addresses a tip by row id, the citizen page only by case number
+    private void Report(Hinweis row, TipMessageAudience? audience = null)
+        => broadcaster.Report(row.Id, row.CaseNumber, audience);
 
     private static string? Name(string? first, string? last)
     {
@@ -1083,6 +1191,23 @@ public class TipService(
             var recipients = await DeskRecipientsAsync(db, ct);
             await notifications.NotifyManyAsync(recipients, NotificationType.PublicTipReceived,
                 $"Neuer Bürgerhinweis {row.CaseNumber}", $"/hinweise/{row.Id}", null, ct);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    // its own category, so the bell says what it is and the routing can put the role ping in its own channel.
+    // The title carries the report's case number only - naming who holds a wanted person, in a channel players
+    // read, invites revenge
+    private async Task NotifyCaptureAsync(AppDbContext db, Hinweis row, CancellationToken ct)
+    {
+        try
+        {
+            var recipients = await DeskRecipientsAsync(db, ct);
+            await notifications.NotifyManyAsync(recipients, NotificationType.PublicCaptureReported,
+                $"Ergreifungsmeldung {row.CaseNumber}", $"/hinweise/{row.Id}", null, ct);
         }
         catch
         {

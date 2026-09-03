@@ -1,4 +1,4 @@
-﻿@page "/portal/test"
+@page "/portal/test"
 @layout ApplicantPortalLayout
 @attribute [AllowAnonymous]
 @inject IBewerbungTestService TestService
@@ -47,35 +47,114 @@
         white-space: nowrap;
         color: var(--mud-palette-text-primary);
     }
+    /* Sibling of .noose-pruefung, never a child: that div is overflow:hidden, which breaks position:sticky. */
+    .noose-pruefung-leiste {
+        position: sticky;
+        /* not 0: the portal shell has no app bar, and flush against the edge the bar reads as detached */
+        top: 8px;
+        /* above the watermark layer */
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 8px 12px;
+        flex-wrap: wrap;
+        padding: 8px 12px;
+        /* opaque, or the questions scroll through it */
+        background: var(--mud-palette-surface);
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 8px;
+        box-shadow: var(--mud-elevation-4);
+    }
+    .noose-nur-vorlesen {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        border: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+    .noose-restzeit-kritisch { animation: noose-restzeit-puls 1s ease-in-out infinite; }
+    @@keyframes noose-restzeit-puls { 50% { opacity: 0.55; } }
+    @@media (prefers-reduced-motion: reduce) {
+        /* colour, fill and the mm:ss value carry the state; the pulse is redundancy */
+        .noose-restzeit-kritisch { animation: none; }
+    }
     .noose-pruefung-druckhinweis { display: none; }
     @@media print {
         .noose-pruefung { display: none !important; }
+        .noose-pruefung-leiste { display: none !important; }
         .noose-pruefung-druckhinweis { display: block !important; }
     }
 </style>
 
-@if (_ready && _test is not null)
+@if (_ready)
 {
     <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="4">
-            <MudText Typo="Typo.h4">@_test.Title</MudText>
-            @if (!string.IsNullOrWhiteSpace(_test.Description))
+            <MudText Typo="Typo.h4">@Title</MudText>
+            @if (!string.IsNullOrWhiteSpace(Description))
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_test.Description</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Description</MudText>
             }
 
-            @if (_test.Completed)
+            @if (Completed)
             {
-                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
-                    Du hast diesen Test bereits abgeschlossen.
-                </MudAlert>
+                @if (TimedOut)
+                {
+                    @* Info, never Warning: running out of time is a neutral fact, and a louder colour would
+                       read as a verdict the applicant is not allowed to learn *@
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" role="status">
+                        Deine Bearbeitungszeit ist abgelaufen. Was du bis dahin eingetragen hattest, wurde
+                        automatisch abgegeben. Wir melden uns.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                        Du hast diesen Test bereits abgeschlossen.
+                    </MudAlert>
+                }
                 <MudButton Variant="Variant.Outlined" Href="/portal/status" StartIcon="@Icons.Material.Filled.ArrowBack">Zurück</MudButton>
+            }
+            else if (_test is null)
+            {
+                @* the start gate: the clock starts with the click, not with a curious tap from the status page *@
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                    Bearbeitungszeit: <b>@_status!.TimeLimitMinutes Minuten</b>. Die Uhr startet, sobald du auf
+                    „Test jetzt starten“ klickst, und läuft dann durchgehend weiter — auch wenn du das Fenster
+                    schließt. Bei Ablauf wird automatisch abgegeben, was du bis dahin eingetragen hast.
+                </MudAlert>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Href="/portal/status"
+                               StartIcon="@Icons.Material.Filled.ArrowBack">Zurück zur Bewerbung</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="StartAsync" Disabled="_busy">Test jetzt starten</MudButton>
+                </MudStack>
             }
             else
             {
                 <MudText Typo="Typo.body2" Class="noose-pruefung-druckhinweis">
                     Der Fragebogen wird nicht gedruckt. Bitte beantworte den Test online.
                 </MudText>
+
+                @if (_test.DeadlineAt is not null)
+                {
+                    <div class="noose-pruefung-leiste">
+                        <PruefungStatusBar DeadlineAt="_test.DeadlineAt" Dirty="IsDirty" Save="SaveDraftAsync"
+                                           OnExpired="OnExpiredAsync" OnFiveMinutes="OnFiveMinutes" />
+                    </div>
+                    @if (_warned)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            Noch weniger als 5 Minuten. Wenn die Zeit abläuft, wird automatisch abgegeben, was du
+                            bis dahin eingetragen hast.
+                        </MudAlert>
+                    }
+                }
+
                 <div id="@ContainerId" class="noose-pruefung"
                      @oncopy:preventDefault="true" @oncut:preventDefault="true"
                      @oncontextmenu:preventDefault="true" @ondragstart:preventDefault="true">
@@ -103,7 +182,7 @@
                                     foreach (var o in q.Options)
                                     {
                                         var optionId = o.OptionId;
-                                        <MudCheckBox T="bool" Dense="true" Label="@o.Label"
+                                        <MudCheckBox T="bool" Dense="true" Label="@o.Label" Disabled="_expiring"
                                                      Value="@Ticked(q.QuestionId).Contains(optionId)"
                                                      ValueChanged="@(v => Tick(q.QuestionId, optionId, v))" />
                                     }
@@ -111,10 +190,10 @@
                                 else
                                 {
                                     <MudRadioGroup T="string" Value="@_choice.GetValueOrDefault(q.QuestionId)"
-                                                   ValueChanged="@(v => _choice[q.QuestionId] = v)">
+                                                   ValueChanged="@(v => Set(_choice, q.QuestionId, v))">
                                         @foreach (var o in q.Options)
                                         {
-                                            <MudRadio T="string" Value="@o.OptionId">@o.Label</MudRadio>
+                                            <MudRadio T="string" Value="@o.OptionId" Disabled="_expiring">@o.Label</MudRadio>
                                         }
                                     </MudRadioGroup>
                                 }
@@ -122,15 +201,19 @@
 
                             case TestQuestionType.YesNo:
                                 <MudRadioGroup T="string" Value="@_text.GetValueOrDefault(q.QuestionId)"
-                                               ValueChanged="@(v => _text[q.QuestionId] = v)">
-                                    <MudRadio T="string" Value="@("Ja")">Ja</MudRadio>
-                                    <MudRadio T="string" Value="@("Nein")">Nein</MudRadio>
+                                               ValueChanged="@(v => Set(_text, q.QuestionId, v))">
+                                    <MudRadio T="string" Value="@("Ja")" Disabled="_expiring">Ja</MudRadio>
+                                    <MudRadio T="string" Value="@("Nein")" Disabled="_expiring">Nein</MudRadio>
                                 </MudRadioGroup>
                                 break;
 
                             default:
+                                @* Immediate with a debounce, and the debounce is load-bearing: without Immediate
+                                   the field only updates on blur, so text typed and never left would be lost at
+                                   the deadline. Without the interval it would write on every keystroke. *@
                                 <MudTextField T="string" Value="@_text.GetValueOrDefault(q.QuestionId)"
-                                              ValueChanged="@(v => _text[q.QuestionId] = v)"
+                                              ValueChanged="@(v => Set(_text, q.QuestionId, v))"
+                                              Immediate="true" DebounceInterval="1500" Disabled="_expiring"
                                               Variant="Variant.Outlined" Lines="3" />
                                 break;
                         }
@@ -138,13 +221,21 @@
                 }
                 </div>
 
+                @if (_expiring)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true" role="status">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        Die Zeit ist abgelaufen. Deine Antworten werden abgegeben …
+                    </MudAlert>
+                }
+
                 @* a way back while the test is unfinished: the completed branch has one, this one had none, so a
                    half-answered test was a trap *@
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    <MudButton Variant="Variant.Text" Color="Color.Default" Href="/portal/status"
-                               StartIcon="@Icons.Material.Filled.ArrowBack">Zurück zur Bewerbung</MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="LeaveAsync"
+                               StartIcon="@Icons.Material.Filled.ArrowBack" Disabled="_expiring">Zurück zur Bewerbung</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                               OnClick="SubmitAsync" Disabled="_busy">Test absenden</MudButton>
+                               OnClick="@(() => SubmitAsync(false))" Disabled="@(_busy || _expiring)">Test absenden</MudButton>
                 </MudStack>
             }
         </MudStack>
@@ -158,13 +249,30 @@
     private ClaimsPrincipal _user = default!;
     private bool _ready;
     private bool _busy;
+    private bool _expiring;
+    private bool _warned;
+    private bool _dirty;
+    private TestStatusView? _status;
     private TestView? _test;
     private readonly Dictionary<string, string> _choice = new();
     private readonly Dictionary<string, HashSet<string>> _ticked = new();
     private readonly Dictionary<string, string> _text = new();
 
+    private string Title => _test?.Title ?? _status?.Title ?? string.Empty;
+    private string? Description => _test?.Description ?? _status?.Description;
+    private bool Completed => _test?.Completed ?? _status?.Completed ?? false;
+    private bool TimedOut => _test?.TimedOut ?? _status?.TimedOut ?? false;
+
+    private bool IsDirty() => _dirty;
+
     private HashSet<string> Ticked(string questionId)
         => _ticked.TryGetValue(questionId, out var set) ? set : [];
+
+    private void Set(Dictionary<string, string> target, string questionId, string value)
+    {
+        target[questionId] = value;
+        _dirty = true;
+    }
 
     private void Tick(string questionId, string optionId, bool on)
     {
@@ -181,11 +289,13 @@
         {
             set.Remove(optionId);
         }
+        _dirty = true;
     }
 
     private const string ContainerId = "noose-pruefung-bogen";
     private IJSObjectReference? _module;
     private bool _guarded;
+    private bool _protectionTried;
 
     /// <summary>Traceability, not prevention: a leaked screenshot points back at one applicant.</summary>
     private string Watermark => _test is null
@@ -200,21 +310,150 @@
             Nav.NavigateTo("/karriere", forceLoad: true);
             return;
         }
-        _test = await TestService.GetAssignedForApplicantAsync(_user);
-        if (_test is null)
+        // the summary first, because it starts nothing: only the questionnaire call stamps the clock
+        _status = await TestService.GetTestStatusForApplicantAsync(_user);
+        if (_status is null)
         {
             Nav.NavigateTo("/portal/status");
             return;
         }
+        // an attempt already running is resumed, and one without a limit needs no gate at all
+        if (!_status.Completed && (_status.StartedAt is not null || _status.TimeLimitMinutes is null))
+        {
+            await LoadTestAsync();
+            if (_test is null)
+            {
+                // the test vanished under the assignment; the status page explains the state, this page cannot
+                Nav.NavigateTo("/portal/status");
+                return;
+            }
+        }
         _ready = true;
+    }
+
+    private async Task LoadTestAsync()
+    {
+        _test = await TestService.GetAssignedForApplicantAsync(_user);
+        if (_test is null)
+        {
+            return;
+        }
+        _choice.Clear();
+        _ticked.Clear();
+        _text.Clear();
+        foreach (var q in _test.Questions)
+        {
+            if (q.Type == TestQuestionType.MultipleChoice)
+            {
+                if (q.AllowMultiple)
+                {
+                    _ticked[q.QuestionId] = q.SavedOptionIds.ToHashSet(StringComparer.Ordinal);
+                }
+                else if (q.SavedOptionIds.FirstOrDefault() is { Length: > 0 } one)
+                {
+                    _choice[q.QuestionId] = one;
+                }
+            }
+            else if (q.SavedFreeText is { Length: > 0 } saved)
+            {
+                _text[q.QuestionId] = saved;
+            }
+        }
+        _dirty = false;
+        _protectionTried = false;
+    }
+
+    private async Task StartAsync()
+    {
+        _busy = true;
+        try
+        {
+            await LoadTestAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        _busy = false;
+    }
+
+    private void OnFiveMinutes()
+    {
+        _warned = true;
+        Snackbar.Add("Noch 5 Minuten. Danach wird automatisch abgegeben.", Severity.Warning);
+        StateHasChanged();
+    }
+
+    /// <summary>Flushes the draft; the status bar re-reads the deadline from the result.</summary>
+    private async Task<TestDraftResult> SaveDraftAsync()
+    {
+        _dirty = false;
+        TestDraftResult result;
+        try
+        {
+            result = await TestService.SaveDraftAsync(_test!.AssignmentId, Collect(), _user);
+        }
+        catch
+        {
+            // still unsaved, so the next flush must carry these edits again
+            _dirty = true;
+            throw;
+        }
+        if (result.Outcome == TestDraftOutcome.Closed)
+        {
+            await ReloadClosedAsync();
+        }
+        return result;
+    }
+
+    private async Task OnExpiredAsync()
+    {
+        if (_expiring)
+        {
+            return;
+        }
+        _expiring = true;
+        StateHasChanged();
+        await SubmitAsync(auto: true);
+    }
+
+    /// <summary>Saves before leaving, so the last edits are not lost to the ten-second cadence.</summary>
+    private async Task LeaveAsync()
+    {
+        if (_test?.DeadlineAt is not null && _dirty)
+        {
+            try { await SaveDraftAsync(); } catch { /* best effort */ }
+        }
+        Nav.NavigateTo("/portal/status");
+    }
+
+    private List<TestAnswerInput> Collect()
+    {
+        var answers = new List<TestAnswerInput>();
+        foreach (var q in _test!.Questions)
+        {
+            var input = new TestAnswerInput { QuestionId = q.QuestionId };
+            if (q.Type == TestQuestionType.MultipleChoice)
+            {
+                input.SelectedOptionIds = q.AllowMultiple
+                    ? Ticked(q.QuestionId).ToList()
+                    : _choice.GetValueOrDefault(q.QuestionId) is { Length: > 0 } one ? [one] : [];
+            }
+            else
+            {
+                input.FreeText = _text.GetValueOrDefault(q.QuestionId);
+            }
+            answers.Add(input);
+        }
+        return answers;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _test is null || _test.Completed)
+        // deliberately NOT gated on firstRender: behind the start gate the questionnaire first appears on a
+        // later render, and gating on the first one left every timed test without its anti-copy guard
+        if (_protectionTried || _module is not null || _test is null || _test.Completed)
         {
             return;
         }
+        _protectionTried = true;
         try
         {
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/pruefung.js?v=2");
@@ -242,46 +481,69 @@
         catch { /* ignore */ }
     }
 
-    private async Task SubmitAsync()
+    private async Task SubmitAsync(bool auto)
     {
         if (_test is null)
         {
             return;
         }
-        var answers = new List<TestAnswerInput>();
-        foreach (var q in _test.Questions)
+        if (!auto)
         {
-            var input = new TestAnswerInput { QuestionId = q.QuestionId };
-            if (q.Type == TestQuestionType.MultipleChoice)
+            // the applicant's own safety net; the automatic hand-in must never be stopped by it
+            foreach (var q in _test.Questions.Where(q => q.Required))
             {
-                input.SelectedOptionIds = q.AllowMultiple
-                    ? Ticked(q.QuestionId).ToList()
-                    : _choice.GetValueOrDefault(q.QuestionId) is { Length: > 0 } one ? [one] : [];
+                var answered = q.Type == TestQuestionType.MultipleChoice
+                    ? (q.AllowMultiple ? Ticked(q.QuestionId).Count > 0 : _choice.ContainsKey(q.QuestionId))
+                    : !string.IsNullOrWhiteSpace(_text.GetValueOrDefault(q.QuestionId));
+                if (!answered)
+                {
+                    Snackbar.Add("Bitte beantworte alle Pflichtfragen.", Severity.Warning);
+                    return;
+                }
             }
-            else
-            {
-                input.FreeText = _text.GetValueOrDefault(q.QuestionId);
-            }
-
-            if (q.Required && input.SelectedOptionIds.Count == 0 && string.IsNullOrWhiteSpace(input.FreeText))
-            {
-                Snackbar.Add("Bitte beantworte alle Pflichtfragen.", Severity.Warning);
-                return;
-            }
-            answers.Add(input);
         }
 
         _busy = true;
         try
         {
-            await TestService.SubmitAnswersAsync(_test.AssignmentId, answers, _user);
+            var outcome = await TestService.SubmitAnswersAsync(_test.AssignmentId, Collect(), _user);
+            if (auto || outcome == TestSubmitOutcome.ClosedByTimeout)
+            {
+                // shown in place rather than by redirecting: after an involuntary hand-in the applicant needs
+                // to read why the form vanished
+                await ReloadClosedAsync();
+                _busy = false;
+                _expiring = false;
+                return;
+            }
             Snackbar.Add("Test übermittelt.", Severity.Success);
             Nav.NavigateTo("/portal/status");
         }
         catch (Exception ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            if (auto)
+            {
+                await ReloadClosedAsync();
+                _expiring = false;
+            }
+            else
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
             _busy = false;
         }
+    }
+
+    /// <summary>Re-reads the attempt after the clock closed it, so the page shows the expiry screen.</summary>
+    private async Task ReloadClosedAsync()
+    {
+        try
+        {
+            _status = await TestService.GetTestStatusForApplicantAsync(_user);
+            _test = null;
+            _expiring = false;
+        }
+        catch { /* best effort */ }
+        StateHasChanged();
     }
 }

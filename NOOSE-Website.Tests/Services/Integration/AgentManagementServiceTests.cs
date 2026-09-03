@@ -769,6 +769,28 @@ public class AgentManagementServiceTests
 
         await f.Svc.TerminateAsync("t", "weg", createNote: false, postDiscord: false, Admin());
 
+        await f.Discord.DidNotReceiveWithAnyArgs().PushTerminationAsync(
+            default!, default!, default, default, default, default!, default);
+    }
+
+    [Fact]
+    public async Task TerminateAsync_PostsToTheTerminationChannelNotThePersonnelOne()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, cfg: a => a.RealName = "David Kowalski"));
+
+        await f.Svc.TerminateAsync("t", "Eigenwunsch", createNote: false, postDiscord: true, Admin());
+
+        await f.Discord.Received(1).PushTerminationAsync(
+            "t",
+            Arg.Is<string>(s => s.Contains("David Kowalski")),
+            "admin",
+            "Chief",
+            Arg.Any<DateTime>(),
+            "Eigenwunsch",
+            "/personal/t",
+            Arg.Any<CancellationToken>());
+        // the generic personnel embed stays for the other note kinds
         await f.Discord.DidNotReceiveWithAnyArgs().PushPersonnelEntryAsync(
             default!, default!, default!, default, default!, default!, default);
     }

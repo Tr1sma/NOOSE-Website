@@ -98,10 +98,45 @@ public class AppointmentService(
                 $"Du bist als Teilnehmer eingetragen: „{appointment.Title}“.", $"/kalender/{appointment.Id}", cancellationToken);
         }
 
+        await LeadershipNotifyAsync(db, appointment, creatorId, cancellationToken);
+
         await MentionNotify.DeltaAsync(notifications, null, appointment.Description, "einem Termin",
             nameof(Appointment), appointment.Id, actor, cancellationToken);
 
         return appointment;
+    }
+
+    /// <summary>Best effort; announces a new appointment to leadership and their Discord channel.</summary>
+    /// <remarks>
+    /// Every visibility level is announced: leadership already sees any appointment via
+    /// <see cref="AppointmentVisibility"/>, so withholding the restricted ones would only hide them from the
+    /// people entitled to see them. Location and description stay out of the title.
+    /// </remarks>
+    private async Task LeadershipNotifyAsync(AppDbContext db, Appointment appointment, string? creatorId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recipients = await db.Users.AsNoTracking().OnlySelectable()
+                .Where(u => u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+
+            var title = $"Neuer Termin: „{appointment.Title}“ am {When(appointment)} "
+                      + $"({AppointmentCategoryDisplay.Name(appointment.Category)}).";
+
+            await notifications.NotifyManyAsync(recipients, NotificationType.AppointmentScheduled,
+                title.Length > 300 ? title[..297] + "…" : title,
+                $"/kalender/{appointment.Id}", creatorId, cancellationToken);
+        }
+        catch { /* best effort */ }
+    }
+
+    // all-day appointments carry no meaningful clock time
+    private static string When(Appointment appointment)
+    {
+        var local = appointment.Start.ToLocalTime();
+        return appointment.AllDay ? local.ToString("dd.MM.yyyy") : $"{local:dd.MM.yyyy HH:mm} Uhr";
     }
 
     public async Task RefreshAsync(string id, AppointmentInput input, ClaimsPrincipal actor,

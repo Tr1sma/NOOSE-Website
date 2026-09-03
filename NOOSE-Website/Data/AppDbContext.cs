@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
@@ -1642,6 +1642,9 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AssignedByName).HasMaxLength(128);
             b.Property(a => a.GradedByName).HasMaxLength(128);
             b.HasIndex(a => a.BewerbungId).IsUnique();
+            // the expiry sweep's predicate, null-check first and the range last
+            b.HasIndex(a => new { a.CompletedAt, a.DeadlineAt });
+            b.Property(a => a.AttemptCount).HasDefaultValue(1);
             b.HasOne(a => a.Bewerbung).WithMany()
                 .HasForeignKey(a => a.BewerbungId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(a => a.Test).WithMany()
@@ -1850,6 +1853,8 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<Hinweis>(b =>
         {
             b.Property(h => h.PriorityOverrideReason).HasMaxLength(500);
+            // kept in step with CaptureRules.MaxLocationLength; Data does not reach into Services
+            b.Property(h => h.HandoverLocation).HasMaxLength(200);
             b.Property(h => h.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(h => h.CitizenProfileId).HasMaxLength(64);
             b.Property(h => h.WantedId).HasMaxLength(64);

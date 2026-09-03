@@ -247,6 +247,13 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
 - **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=10`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
+- **Ablehnen, Schließen und eine nicht bestandene Sicherheitsüberprüfung sperren 14 Tage.** Die Dauer, das
+  Aktiv-Prädikat (`IstBlacklist || GesperrtBis > jetzt`, es gibt keine `IstAktiv`-Spalte) und die
+  Lokal→UTC-Umrechnung des `MudDatePicker` liegen zusammen in `Services/BewerbungssperreRules.cs`. Die Sperre
+  hängt am **Discord-Konto**, nicht am Namen. Es gibt keinen Interceptor dafür: ein **neuer Abschlusspfad muss
+  `IBewerbungssperreService.BanAsync` selbst rufen** — und zwar vor `broadcaster.Report`, sonst liest das
+  Sperr-Panel den Zustand davor. Entscheidungs-Methoden tragen `Permission.RequireRecruitingDecision`
+  (Schreib- **vor** Rang-Prüfung), weil die Sperre ein Folge-Write ist, dessen Fehlschlag nur geloggt wird.
 - **Bewerbungs-Platzhalter sind groß-/kleinschreibungsabhängig.** `BewerbungTemplateRenderer` matcht `\bNAME\b`
   case-sensitiv; aus `NAME` ein `Name` zu machen schaltet die `███████`-Schwärzung für jede daraus gebaute
   Nachricht still ab. `TextAssistService` lehnt eine NOOSEI-Korrektur deshalb hart ab, wenn Anzahl **oder**
@@ -293,10 +300,11 @@ identisch. **Echtes Geld sieht ausschließlich der KI-Eigner**, alle anderen rec
 
 ## Öffentlicher Bereich
 
-Vollständig gebaut, Phase 1–16 aus `PublicPlan.md`: Bürgerkonten, Modulgerüst, redaktionelle Seiten,
+Vollständig gebaut, Phase 1–18 aus `PublicPlan.md`: Bürgerkonten, Modulgerüst, redaktionelle Seiten,
 Fahndung samt Ausbau und Sachfahndung, Kopfgeld, Bürgerhinweise mit Triage/Übernahme, Belohnung,
 Ticket-Chat, Bürger-Vorlagen, Organisationsprofile, Einspruch, Presse, Warnungen, Gesetzesauszüge,
-Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen und die Suchanbindung.
+Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führungsprofile und die
+**Ergreifungsmeldung** (ein Bürger meldet, dass er eine gesuchte Person selbst gestellt hat).
 
 **Vier Regeln gelten überall dort — der Rest steht in `claude-memory/oeffentlich-*.md`:**
 

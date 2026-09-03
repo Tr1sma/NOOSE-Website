@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Common;
+﻿using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Tests.Models;
@@ -20,10 +20,14 @@ public class DiscordWebhookModelsTests
         NotificationType.JobDueSoon,
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
+        NotificationType.AppointmentScheduled,
         NotificationType.PersonnelEntry,
+        NotificationType.AgentTerminated,
         NotificationType.PublicWantedPublished,
         NotificationType.PublicWantedBountyRaised,
+        NotificationType.PublicTicketCreated,
         NotificationType.PublicPressPublished,
+        NotificationType.PublicCaptureReported,
     };
 
     // Enum members NOT in the routable list.
@@ -51,8 +55,10 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.JobDueSoon)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.AppointmentScheduled)]
     [InlineData(NotificationType.PublicWantedPublished)]
     [InlineData(NotificationType.PublicWantedBountyRaised)]
+    [InlineData(NotificationType.PublicTicketCreated)]
     public void IsRoutable_forRoutableTypes_returnsTrue(NotificationType type)
     {
         Assert.True(DiscordRouting.IsRoutable(type));
@@ -97,7 +103,9 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.Recruiting)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.AppointmentScheduled)]
     [InlineData(NotificationType.PublicWantedPublished)]
+    [InlineData(NotificationType.PublicTicketCreated)]
     public void PingsRecipients_forRoutableRoleCategories_returnsFalse(NotificationType type)
     {
         Assert.False(DiscordRouting.PingsRecipients(type));
@@ -130,7 +138,9 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.Recruiting)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.AppointmentScheduled)]
     [InlineData(NotificationType.PublicWantedPublished)]
+    [InlineData(NotificationType.PublicTicketCreated)]
     public void PingsRole_forRoutableRoleCategories_returnsTrue(NotificationType type)
     {
         Assert.True(DiscordRouting.PingsRole(type));
@@ -167,6 +177,39 @@ public class DiscordWebhookModelsTests
         Assert.False(DiscordRouting.PingsRole((NotificationType)999));
     }
 
+    // ----- PingsNobody: the announcement-only bucket -----
+
+    [Fact]
+    public void PingsNobody_forTermination_returnsTrue()
+    {
+        Assert.True(DiscordRouting.PingsNobody(NotificationType.AgentTerminated));
+    }
+
+    [Theory]
+    [InlineData(NotificationType.Announcement)]
+    [InlineData(NotificationType.Mention)]
+    [InlineData(NotificationType.PersonnelEntry)]
+    [InlineData(NotificationType.AppointmentScheduled)]
+    [InlineData(NotificationType.AbsenceFiled)]
+    public void PingsNobody_forEveryOtherCategory_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.PingsNobody(type));
+    }
+
+    [Fact]
+    public void PingsNobody_forUndefinedEnumValue_returnsFalse()
+    {
+        Assert.False(DiscordRouting.PingsNobody((NotificationType)999));
+    }
+
+    [Fact]
+    public void PingsRole_forTermination_returnsFalse()
+    {
+        // the no-ping bucket must not fall through into the role branch, or the panel would offer a role field
+        Assert.False(DiscordRouting.PingsRole(NotificationType.AgentTerminated));
+        Assert.DoesNotContain(NotificationType.AgentTerminated, DiscordRouting.RoleRoutableTypes);
+    }
+
     // ----- PingsRole / PingsRecipients partition invariant -----
 
     [Fact]
@@ -181,14 +224,18 @@ public class DiscordWebhookModelsTests
     }
 
     [Fact]
-    public void RoutableTypes_partitionIntoRoleAndRecipientExactlyOnce()
+    public void RoutableTypes_partitionIntoRoleRecipientAndNobodyExactlyOnce()
     {
         foreach (NotificationType type in RoutableTypesList)
         {
-            // Every routable type pings exactly one of role or recipients.
-            Assert.True(
-                DiscordRouting.PingsRole(type) ^ DiscordRouting.PingsRecipients(type),
-                $"{type} should ping exactly one target");
+            // Every routable type falls in exactly one ping bucket: role, recipients or nobody.
+            var buckets = new[]
+            {
+                DiscordRouting.PingsRole(type),
+                DiscordRouting.PingsRecipients(type),
+                DiscordRouting.PingsNobody(type),
+            };
+            Assert.Equal(1, buckets.Count(hit => hit));
         }
     }
 
@@ -213,6 +260,9 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.Account)]
     [InlineData(NotificationType.RecordModified)]
     [InlineData(NotificationType.AppointmentAssigned)]
+    // the leadership role id is admin-configured; the default stays the generic fallback
+    [InlineData(NotificationType.AppointmentScheduled)]
+    [InlineData(NotificationType.PublicTicketCreated)]
     [InlineData(NotificationType.AbsenceFiled)]
     public void DefaultRole_forNonRecruiting_returnsNooseRole(NotificationType type)
     {
@@ -251,9 +301,12 @@ public class DiscordWebhookModelsTests
             NotificationType.Recruiting,
             NotificationType.MeetingScheduled,
             NotificationType.MeetingReminder,
+            NotificationType.AppointmentScheduled,
             NotificationType.PublicWantedPublished,
             NotificationType.PublicWantedBountyRaised,
+            NotificationType.PublicTicketCreated,
             NotificationType.PublicPressPublished,
+            NotificationType.PublicCaptureReported,
         };
 
         Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);
@@ -268,6 +321,18 @@ public class DiscordWebhookModelsTests
             Assert.True(DiscordRouting.PingsRole(type));
             Assert.False(DiscordRouting.PingsRecipients(type));
         }
+    }
+
+    [Fact]
+    public void CaptureReport_pingsTheAgencyRoleAndNotTheReporter()
+    {
+        Assert.True(DiscordRouting.IsRoutable(NotificationType.PublicCaptureReported));
+        Assert.True(DiscordRouting.PingsRole(NotificationType.PublicCaptureReported));
+        Assert.False(DiscordRouting.PingsRecipients(NotificationType.PublicCaptureReported));
+        Assert.False(DiscordRouting.PingsNobody(NotificationType.PublicCaptureReported));
+        // the fallback role, i.e. NOOSE - a capture concerns the whole house, not one branch
+        Assert.Equal(DiscordRouting.DefaultRole(NotificationType.Announcement),
+            DiscordRouting.DefaultRole(NotificationType.PublicCaptureReported));
     }
 
     // ----- DiscordWebhookConfig record -----

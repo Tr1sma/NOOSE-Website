@@ -7131,9 +7131,22 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(64)")
                         .HasColumnName("BearbeiterId");
 
+                    b.Property<int?>("Handover")
+                        .HasColumnType("int")
+                        .HasColumnName("Uebergabe");
+
+                    b.Property<string>("HandoverLocation")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Uebergabeort");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int")
+                        .HasColumnName("Art");
 
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime(6)")
@@ -8741,6 +8754,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("Sortierung");
 
+                    b.Property<int?>("TimeLimitMinutes")
+                        .HasColumnType("int")
+                        .HasColumnName("BearbeitungszeitMinuten");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -8836,6 +8853,12 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(128)")
                         .HasColumnName("ZugewiesenVon");
 
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1)
+                        .HasColumnName("Versuch");
+
                     b.Property<string>("BewerbungId")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
@@ -8852,6 +8875,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("ErstelltVonId");
 
+                    b.Property<DateTime?>("DeadlineAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("FristBis");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("GeloeschtAm");
@@ -8859,6 +8886,10 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("DeletedById")
                         .HasColumnType("longtext")
                         .HasColumnName("GeloeschtVonId");
+
+                    b.Property<int>("ExtraMinutes")
+                        .HasColumnType("int")
+                        .HasColumnName("ZusatzMinuten");
 
                     b.Property<int?>("FinalMaxPoints")
                         .HasColumnType("int")
@@ -8893,9 +8924,21 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("GeaendertVonId");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GestartetAm");
+
                     b.Property<string>("TestId")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("TimeLimitMinutes")
+                        .HasColumnType("int")
+                        .HasColumnName("BearbeitungszeitMinuten");
+
+                    b.Property<bool>("TimedOut")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("ZeitAbgelaufen");
 
                     b.HasKey("Id");
 
@@ -8903,6 +8946,8 @@ namespace NOOSE_Website.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("TestId");
+
+                    b.HasIndex("CompletedAt", "DeadlineAt");
 
                     b.ToTable("BewerbungTestZuweisungen");
                 });

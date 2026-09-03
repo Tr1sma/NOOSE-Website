@@ -28,6 +28,28 @@ public static class TipPriority
     /// <summary>Published hazard level to a band 1..5; the raw score never enters this.</summary>
     public static int HazardBand(HazardLevel? hazard) => (int)(hazard ?? HazardLevel.No) + 1;
 
-    public static int Compute(decimal bountyTotal, HazardLevel? hazard, int confirmedTips)
-        => BountyBand(bountyTotal) * HazardBand(hazard) * TipTrust.Tier(confirmedTips);
+    /// <summary>Lowest order a capture report may end up with.</summary>
+    /// <remarks>
+    /// A floor rather than a fixed value, so the capture of a high-bounty target still outranks the capture of a
+    /// nobody — except while someone is holding the person, where it is the ceiling outright. Anything less lets a
+    /// maximal observation (5 × 5 × 4) overtake a handover in progress, and a handover does not become less urgent
+    /// because nobody put a bounty on the notice. Among those the inbox falls back to age, which is the right
+    /// tie-break for people standing next to a suspect.
+    /// <para>
+    /// A handed-over report keeps a floor below <see cref="Max"/>: it is high because money hangs off it, but nobody
+    /// is at risk any more. <see cref="Max"/> itself never moves — it is also the cap of a hand-set priority.
+    /// </para>
+    /// </remarks>
+    public static int Floor(TipKind kind, TipHandover? handover) => (kind, handover) switch
+    {
+        (TipKind.Ergreifung, TipHandover.Festgehalten) => Max,
+        (TipKind.Ergreifung, _) => 70,
+        _ => 0,
+    };
+
+    public static int Compute(decimal bountyTotal, HazardLevel? hazard, int confirmedTips,
+        TipKind kind = TipKind.Beobachtung, TipHandover? handover = null)
+        => Math.Max(
+            BountyBand(bountyTotal) * HazardBand(hazard) * TipTrust.Tier(confirmedTips),
+            Floor(kind, handover));
 }

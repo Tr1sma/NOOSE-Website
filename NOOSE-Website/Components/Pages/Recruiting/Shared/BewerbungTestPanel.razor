@@ -1,7 +1,8 @@
-﻿@implements IDisposable
+@implements IDisposable
 @inject IBewerbungTestService TestService
 @inject BewerbungBroadcaster Broadcaster
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <MudPaper Elevation="2" Class="pa-4">
     <MudText Typo="Typo.h6" Class="mb-2">Eignungstest</MudText>
@@ -19,7 +20,7 @@
                            Margin="Margin.Dense" Style="min-width:240px;">
                     @foreach (var t in _tests)
                     {
-                        <MudSelectItem T="string" Value="@t.Id">@t.Title</MudSelectItem>
+                        <MudSelectItem T="string" Value="@t.Id">@t.Title@(t.TimeLimitMinutes is int m ? $" · {m} Min" : "")</MudSelectItem>
                     }
                 </MudSelect>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AssignmentInd"
@@ -39,9 +40,26 @@
     }
     else if (_assignment.CompletedAt is null)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-            Test wurde zugewiesen und wartet auf die Beantwortung durch den Bewerber.
-        </MudAlert>
+        @if (_assignment.StartedAt is null)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Test wurde zugewiesen und wartet auf die Beantwortung durch den Bewerber.
+            </MudAlert>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">@Zeitbudget</MudText>
+        }
+        else if (!Ueberfaellig)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Der Bewerber bearbeitet den Test seit
+                @_assignment.StartedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")@Restzeittext@Zusatztext
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Zeit abgelaufen. Die Abgabe wird gerade abgeschlossen; die Auswertung erscheint in Kürze.
+            </MudAlert>
+        }
     }
     else if (_eval is not null)
     {
@@ -49,6 +67,23 @@
             <MudText Typo="Typo.subtitle2">
                 @_eval.Title · abgeschlossen am @_assignment.CompletedAt!.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
             </MudText>
+            @if (_assignment.TimedOut)
+            {
+                @* Warning, never Error: Error is already the failed-verdict colour two chips along *@
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                         Icon="@Icons.Material.Filled.TimerOff">Zeit abgelaufen</MudChip>
+            }
+            @if (Bearbeitungsdauer is { Length: > 0 } dauer)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                         Icon="@Icons.Material.Filled.Timer">@dauer</MudChip>
+            }
+            @if (_assignment.AttemptCount > 1)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                    @_assignment.AttemptCount. Versuch
+                </MudChip>
+            }
             <MudSpacer />
             @if (_eval.GradedAt is null && _eval.OpenCount > 0)
             {
@@ -68,6 +103,14 @@
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Cancel">Nicht bestanden (≥@_eval.PassPercent %)</MudChip>
             }
         </MudStack>
+
+        @if (_assignment.TimedOut)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-2">
+                Die Bearbeitungszeit war abgelaufen. Abgegeben wurde automatisch, was der Bewerber bis dahin
+                eingetragen hatte — leere Antworten sind hier nicht zwingend Wissenslücken.
+            </MudAlert>
+        }
 
         @if (_eval.GradedAt is not null)
         {
@@ -176,6 +219,34 @@
         }
         }
     }
+
+    @if (_assignment is not null && _canWrite)
+    {
+        <MudDivider Class="my-3" />
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            @if (_assignment.GradedAt is null && Verlaengerbar)
+            {
+                @* additive and in the applicant's favour, so no confirmation; fixed steps beat a free field
+                   that invites a typo'd 100 *@
+                <MudMenu Label="Zeit verlängern" Icon="@Icons.Material.Filled.MoreTime" Dense="true"
+                         Variant="Variant.Outlined" Size="Size.Small" Disabled="_busy">
+                    <MudMenuItem OnClick="@(() => ExtendAsync(5))">+ 5 Minuten</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExtendAsync(10))">+ 10 Minuten</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExtendAsync(15))">+ 15 Minuten</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExtendAsync(30))">+ 30 Minuten</MudMenuItem>
+                </MudMenu>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetAsync"
+                       Disabled="@(_busy || _assignment.GradedAt is not null)">
+                Test neu freigeben
+            </MudButton>
+            @if (_assignment.GradedAt is not null)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Korrektur zuerst wieder öffnen.</MudText>
+            }
+        </MudStack>
+    }
 </MudPaper>
 
 @code {
@@ -188,6 +259,7 @@
     private string? _selectedTestId;
     private List<BewerbungTest> _tests = new();
     private BewerbungTestAssignment? _assignment;
+    private int? _testMinutes;
     private TestEvaluation? _eval;
 
     protected override async Task OnInitializedAsync()
@@ -202,11 +274,15 @@
     private async Task LoadAsync()
     {
         _assignment = await TestService.GetAssignmentAsync(BewerbungId, User);
-        if (_assignment is null)
-        {
-            _tests = (await TestService.GetTestsAsync(User)).Where(t => t.IsActive).ToList();
-        }
-        else if (_assignment.CompletedAt is not null)
+        // dropped first: an extension reopens the attempt, and a stale report would keep rendering
+        _eval = null;
+        // always loaded: before the start the minutes still live on the test, not on the assignment
+        var all = await TestService.GetTestsAsync(User);
+        _tests = all.Where(x => x.IsActive).ToList();
+        _testMinutes = _assignment is null
+            ? null
+            : all.FirstOrDefault(x => x.Id == _assignment.TestId)?.TimeLimitMinutes;
+        if (_assignment is { CompletedAt: not null })
         {
             _eval = await TestService.GetEvaluationAsync(BewerbungId, User);
         }
@@ -238,6 +314,78 @@
     private Task CompleteAsync() => RunAsync(() => TestService.CompleteGradingAsync(BewerbungId, User));
 
     private Task ReopenAsync() => RunAsync(() => TestService.ReopenGradingAsync(BewerbungId, User));
+
+    private Task ExtendAsync(int minutes) => RunAsync(async () =>
+    {
+        await TestService.ExtendAttemptAsync(BewerbungId, minutes, User);
+        Snackbar.Add($"Bearbeitungszeit um {minutes} Minuten verlängert.", Severity.Success);
+    });
+
+    private async Task ResetAsync()
+    {
+        // destructive but scoped and repeatable, so a mandatory reason rather than a type-the-name dialog:
+        // it produces a useful audit line instead of pure friction
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Test neu freigeben?",
+            "Die bisherigen Antworten und der Zwischenstand dieses Bewerbers werden verworfen. Der Test gilt "
+            + "wieder als nicht begonnen; die Bearbeitungszeit startet erneut, sobald der Bewerber ihn startet. "
+            + "Eine bereits erfolgte Korrektur wird verworfen.",
+            confirmText: "Neu freigeben", label: "Begründung", mandatoryReason: true, colour: Color.Warning);
+        if (reason is null)
+        {
+            return;
+        }
+        await RunAsync(() => TestService.ResetAttemptAsync(BewerbungId, null, User));
+    }
+
+    /// <summary>Time can be granted while the attempt is open, and as a rescue once the clock closed it.</summary>
+    /// <remarks>Never after a hand-in that beat the clock: that attempt is finished, and reopening it would
+    /// let the applicant edit answers they already submitted.</remarks>
+    private bool Verlaengerbar => _assignment is not null
+        && TestDeadline.AllowedMinutes(_assignment, _testMinutes) is not null
+        && _assignment is not { CompletedAt: not null, TimedOut: false };
+
+    /// <summary>Derived from the deadline, not only from the flag: it can pass while the applicant is offline.</summary>
+    private bool Ueberfaellig => _assignment is { CompletedAt: null }
+        && TestDeadline.IsExpired(_assignment.DeadlineAt, DateTime.UtcNow);
+
+    private string Zeitbudget
+    {
+        get
+        {
+            var minutes = _assignment is null ? null : TestDeadline.AllowedMinutes(_assignment, _testMinutes);
+            if (minutes is null)
+            {
+                return "Bearbeitungszeit: unbegrenzt.";
+            }
+            var extra = _assignment!.ExtraMinutes > 0 ? $" Verlängert um {_assignment.ExtraMinutes} Min." : "";
+            return $"Bearbeitungszeit: {minutes} Minuten. Die Uhr startet, sobald der Bewerber den Test startet.{extra}";
+        }
+    }
+
+    /// <summary>"ca." on purpose: the panel reloads on a broadcast, not on a ticker.</summary>
+    private string Restzeittext => TestAttemptLogic.RemainingMinutes(_assignment?.DeadlineAt, DateTime.UtcNow) is { } left
+        ? $" · Restzeit ca. {left} Min"
+        : _assignment?.DeadlineAt is null ? " (ohne Bearbeitungszeit)" : string.Empty;
+
+    private string Zusatztext => _assignment is { ExtraMinutes: > 0 }
+        ? $" · verlängert um {_assignment.ExtraMinutes} Min"
+        : string.Empty;
+
+    /// <summary>No data, no chip: an attempt assigned before the clock existed has no start.</summary>
+    private string Bearbeitungsdauer
+    {
+        get
+        {
+            if (_assignment is null
+                || TestDeadline.UsedMinutes(_assignment.StartedAt, _assignment.CompletedAt) is not { } used)
+            {
+                return string.Empty;
+            }
+            return TestDeadline.AllowedMinutes(_assignment) is { } allowed
+                ? $"Bearbeitungsdauer: {used} von {allowed} Min"
+                : $"Bearbeitungsdauer: {used} Min";
+        }
+    }
 
     private async Task RunAsync(Func<Task> action)
     {

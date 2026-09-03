@@ -196,9 +196,10 @@
         return IsInternal ? message.AuthorCodename ?? "NOOSE" : "NOOSE";
     }
 
-    private void OnModified(string tipId)
+    private void OnModified(string tipId, string caseNumber, TipMessageAudience? audience)
     {
-        if (tipId != TipId)
+        // a signal about the other thread is none of this panel's business; null concerns both
+        if (tipId != TipId || (audience is { } only && only != Audience))
         {
             return;
         }

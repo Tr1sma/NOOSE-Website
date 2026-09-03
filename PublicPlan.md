@@ -123,6 +123,8 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 15a | Gefahrenlage-Ampel und `/lage` | keine | 2 | **fertig** |
 | 15b | Öffentliche Zahlen und der Startseiten-Umbau | keine | 4, 5, 7, 9, 14a, 15a | **fertig** |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10, 12, 13b, 14a–14c | **fertig** |
+| 17 | Öffentliche Führungsprofile | `Oeffentlich17_Fuehrungsprofil` | 3 | **fertig** |
+| 18 | Ergreifungsmeldung: Bürger stellt eine gesuchte Person selbst | `Oeffentlich18_Ergreifungsmeldung` | 4, 7, 9 | **fertig** |
 
 > **Migrations-Präfix `Oeffentlich<Phase>_`.** Die interne Phasen-Zählung des Projekts steht schon bei
 > `Phase69_*`; die ursprünglich geplanten Namen `Phase61`–`Phase74` hätten sechs bestehende Migrationen
@@ -2427,3 +2429,44 @@ Hälften des `Available`-Filters, seit der Katalog kein unfertiges Nav-Modul meh
   scheitert das Speichern der Zivil-Identität mit Meldung statt mit einer Schleife.
 - Zeitstrahl der Personenakte enthält Publizieren, Depublizieren und Kopfgeld-Änderung.
 - `App_Data` bleibt beim Deploy unberührt; `?v=` bei JS-Änderungen gebumpt.
+
+---
+
+## Phase 18 — Ergreifungsmeldung ✅
+
+**Problem.** Auf der Fahndung gab es genau einen Bürgerweg: `/hinweis` — „Beobachtung melden", mit dem
+ausdrücklichen Satz *„Greife niemals selbst ein"*. Der Fall, der auf einem RP-Server tatsächlich vorkommt —
+**der Bürger hat die Person schon gestellt** und braucht jetzt die Behörde — hatte keinen: die Meldung lag als
+gewöhnlicher Hinweis zwischen Beobachtungen in der Triage, alarmierte niemanden und kannte keinen Übergabeweg.
+
+**Gebaut.**
+
+1. `/hinweis/gestellt?fahndung={Aktenzeichen}` — zweite `@page` auf `TipForm.razor`. Der Bürger wählt
+   „ich halte die Person fest" oder „bereits übergeben" und nennt den Ort.
+2. **@NOOSE-Ping über Discord** (`NotificationType.PublicCaptureReported`, routbar, eigene Webhook-Adresse in
+   `/einstellungen?tab=discord`), Text generisch und identitätsfrei.
+3. **Bürger-Chat**, der jetzt auch für den Bürger live ist — `TipsBroadcaster` trägt dafür Zeilen-Id,
+   Aktenzeichen und Zielgruppe.
+4. **Kopfgeld** unverändert über den bestehenden Belohnungs-Pfad: `FuehrteZurErgreifung` → `IRewardService`
+   → Kasse + Beleg.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+Die Begründungen hinter jeder Einzelregel stehen in
+[`claude-memory/oeffentlich-buergerkontakt.md`](claude-memory/oeffentlich-buergerkontakt.md), Abschnitt
+„Phase 18". Kurz:
+
+- **Eine Meldeart (`Hinweis.Art`), keine eigene Tabelle** — eine zweite Tabelle hätte zwölf Registries neu
+  bedienen und den Chat verdoppeln müssen; eine Spalte bedient keine davon neu.
+- **Zwei Enums** (`TipKind`, `TipHandover`) statt eines mit drei Werten: „welche Regeln" und „wie dringend"
+  sind orthogonale Achsen.
+- **Prioritäts-Boden in der Formel** (`TipPriority.Floor`), nicht `PriorityOverride`. Festgehalten bekommt die
+  **Decke**, weil eine maximale Beobachtung (5 × 5 × 4 = 100) sonst eine laufende Übergabe überholt.
+- **Keine Anonymität auf diesem Weg** — vorne abgewiesen, nicht hinten als „unauszahlbar" festgestellt.
+- **Nur eine `Fahndung` ist meldbar**, als Positivliste: niemand ergreift ein Fahrzeug, eine Vermisstenmeldung
+  oder einen Zeugenaufruf. Und wer selbst ausgeschrieben ist, kann die eigene Ergreifung nicht melden.
+- **Zwei getrennte Tageskontingente** plus „ein offener Bericht je Ausschreibung und Konto".
+- **Modul ohne Nav-Route** — gemeldet wird vom Steckbrief aus; ein Tab wäre eine Aufforderung.
+- **Filter statt vierter Reiter** im Eingang (Status ist die eine Achse, Meldeart die andere).
+- **Die Detailseite setzt die Fahndung nicht selbst auf gefasst** — `Gefasst` bleibt Vorbedingung.
+

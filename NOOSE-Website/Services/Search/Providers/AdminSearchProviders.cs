@@ -177,7 +177,8 @@ public sealed class BewerbungssperreSearchProvider(IDbContextFactory<AppDbContex
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var q = db.Bewerbungssperren.AsQueryable();
+        // active only: an expired ban is gone from /bewerbungen?tab=sperren, so a hit there leads nowhere
+        var q = db.Bewerbungssperren.Where(BewerbungssperreRules.Active(DateTime.UtcNow));
         if (query.HasText)
         {
             var s = query.Text;

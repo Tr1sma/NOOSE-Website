@@ -12,6 +12,8 @@
     <MudSwitch T="bool" @bind-Value="_onlyMine" Color="Color.Primary" Label="Nur meine"
                @bind-Value:after="ReloadAsync" />
     <MudSwitch T="bool" @bind-Value="_collapse" Color="Color.Primary" Label="Dubletten zusammenfassen" />
+    <MudSwitch T="bool" @bind-Value="_onlyCaptures" Color="Color.Error"
+               Label="Nur Ergreifungen" />
 </MudStack>
 
 @if (_load)
@@ -44,6 +46,15 @@ else
             <MudTd DataLabel="Aktenzeichen">
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                     @context.CaseNumber
+                    @if (context.Kind == TipKind.Ergreifung)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                 Icon="@TipKindDisplay.Icon(TipKind.Ergreifung)">
+                            @(context.Handover is { } state
+                                ? TipHandoverDisplay.ShortName(state)
+                                : TipKindDisplay.Name(TipKind.Ergreifung))
+                        </MudChip>
+                    }
                     @if (context.HasAttachment)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Small" Color="Color.Default" />
@@ -104,13 +115,24 @@ else
     private string? _search;
     private bool _onlyMine;
     private bool _collapse;
+    // client-side, on the rows already loaded: a second axis next to the status tabs, not a fourth tab
+    private bool _onlyCaptures;
     private bool _load = true;
 
     // collapsing is client-side over the rows already fetched: the group is a display decision, and the service
     // order (priority, then age) already decides which row speaks for its group
-    private IReadOnlyList<TipRow> Displayed => _collapse
-        ? _rows.GroupBy(r => r.DuplicateGroupId ?? r.Id).Select(g => g.First()).ToList()
-        : _rows;
+    private IReadOnlyList<TipRow> Displayed
+    {
+        get
+        {
+            var rows = _onlyCaptures
+                ? _rows.Where(r => r.Kind == TipKind.Ergreifung).ToList()
+                : _rows;
+            return _collapse
+                ? rows.GroupBy(r => r.DuplicateGroupId ?? r.Id).Select(g => g.First()).ToList()
+                : rows;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -144,7 +166,7 @@ else
         }
     }
 
-    private void OnModified(string _)
+    private void OnModified(string tipId, string caseNumber, TipMessageAudience? audience)
         => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
 
     public void Dispose() => Broadcaster.Modified -= OnModified;

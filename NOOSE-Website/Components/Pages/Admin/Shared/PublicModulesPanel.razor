@@ -81,11 +81,11 @@ else
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
                             <MudTextField @bind-Value="row.Input.LabelOverride" Label="Eigene Bezeichnung"
                                           Placeholder="@row.DefaultLabel" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                          Disabled="@(!_mayEdit)" Style="flex:0 1 240px;max-width:240px;" />
+                                          Disabled="@(!_mayEdit)" Style="max-width:240px;" />
                             <MudTextField @bind-Value="row.Input.OfflineText" Label="Offline-Text"
                                           Placeholder="@row.DefaultOfflineText" Variant="Variant.Outlined"
                                           Margin="Margin.Dense" Disabled="@(!_mayEdit)"
-                                          Style="flex:1 1 360px;max-width:520px;" />
+                                          Style="max-width:520px;" />
                         </MudStack>
                     </MudStack>
                 </MudPaper>

@@ -89,7 +89,7 @@
     [Parameter]
     public string? CaseNumber { get; set; }
 
-    /// <summary>Fills the BUERGER token; a ticket always has a name behind it.</summary>
+    /// <summary>Fills the BUERGER token and names the citizen rows; a ticket always has a name behind it.</summary>
     [Parameter]
     public string? CitizenName { get; set; }
 
@@ -180,7 +180,8 @@
     {
         if (message.FromCitizen)
         {
-            return "Bürger";
+            // a ticket is never anonymous, so the known name beats the generic label
+            return string.IsNullOrWhiteSpace(CitizenName) ? "Bürger" : CitizenName;
         }
         return IsInternal ? message.AuthorCodename ?? TicketRules.AgencySender : TicketRules.AgencySender;
     }

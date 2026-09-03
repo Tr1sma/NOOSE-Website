@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
@@ -94,6 +94,74 @@ public class DiscordWebhookService(
         }
     }
 
+    // official "KÜNDIGUNG" notice to its own channel; mention chips inside the embed, so nobody is pinged
+    public async Task PushTerminationAsync(string subjectAgentId, string subjectDisplay, string? executorAgentId,
+        string? executorDisplay, DateTime terminatedAt, string reasonPlain, string? href,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var config = await GetCachedConfigAsync(cancellationToken);
+            if (!config.Enabled
+                || !config.Webhooks.TryGetValue(NotificationType.AgentTerminated, out var url)
+                || string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            var subjectMention = await ResolveMentionChipAsync(subjectAgentId, cancellationToken);
+            var executorMention = await ResolveMentionChipAsync(executorAgentId, cancellationToken);
+            var stamp = Local(terminatedAt);
+            var link = Link(config.SiteBaseUrl, href);
+            var description = new StringBuilder(
+                "> Hiermit wird die **Kündigung** des folgenden Mitglieds offiziell bekannt gegeben.");
+            if (link is not null)
+            {
+                description.Append('\n').Append(link);
+            }
+            var embed = new
+            {
+                author = new { name = "National Office of Security Enforcement" },
+                title = "⚠️ KÜNDIGUNG",
+                description = description.ToString(),
+                color = 0xE53935, // termination red
+                timestamp = stamp.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+                footer = new { text = "National Office of Security Enforcement" },
+                fields = new object[]
+                {
+                    new
+                    {
+                        name = "👤 Name",
+                        value = subjectMention is null
+                            ? Field($"**{subjectDisplay}**")
+                            : $"**{subjectDisplay}** ( {subjectMention} )",
+                        inline = false,
+                    },
+                    new
+                    {
+                        name = "📅 Datum",
+                        value = $"`{stamp.ToString("dddd, d. MMMM yyyy HH:mm")}`",
+                        inline = true,
+                    },
+                    new
+                    {
+                        name = "👮 Ausgeführt von",
+                        value = Field(executorMention ?? executorDisplay),
+                        inline = true,
+                    },
+                    new { name = "📋 Begründung", value = Field(Truncate(reasonPlain, 1024)), inline = false },
+                },
+            };
+            // no ping: MentionSpec.None still carries the empty allow-list, so the chips stay inert
+            await SendEmbedAsync(url, MentionSpec.None, embed, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            logger.LogWarning(ex, "Discord termination embed failed.");
+        }
+    }
+
     // app-authored broadcast (e.g. the top-agent post): custom content + the category ping + optional link
     public async Task<bool> PushCustomAsync(NotificationType type, string content, string? href = null, CancellationToken cancellationToken = default)
     {
@@ -126,6 +194,21 @@ public class DiscordWebhookService(
 
     private static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..(max - 1)] + "…";
+
+    // UtcNow-stamped dates render in the server's zone (TZ=Europe/Berlin); anything else is already local
+    private static DateTime Local(DateTime value)
+        => value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
+
+    // single agent -> "<@snowflake>" for use inside an embed field, or null when unpingable
+    private async Task<string?> ResolveMentionChipAsync(string? agentId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            return null;
+        }
+        var ids = await ResolveDiscordIdsAsync(new[] { agentId }, cancellationToken);
+        return ids.Count > 0 ? $"<@{ids[0]}>" : null;
+    }
 
     // personal categories ping the recipients; broadcast categories ping the configured role
     private async Task<MentionSpec> ResolveMentionAsync(NotificationType type,
@@ -293,7 +376,8 @@ public class DiscordWebhookService(
     // categories whose role-ping post may carry the record header/title (opt-in, admin-toggleable)
     private static bool ShouldIncludeHeadline(NotificationType type, DiscordWebhookConfig config, string? headline)
         => config.IncludeHeadline && !string.IsNullOrWhiteSpace(headline)
-            && type is NotificationType.Announcement or NotificationType.Recruiting;
+            && type is NotificationType.Announcement or NotificationType.Recruiting
+                or NotificationType.AppointmentScheduled;
 
     // app-authored header + login-gated link; single-line, capped, mentions stay inert via allowed_mentions
     private static string ComposeHeadline(string headline, string baseUrl, string? href)
@@ -317,11 +401,16 @@ public class DiscordWebhookService(
         NotificationType.JobDueSoon => "/aufgaben",
         NotificationType.MeetingScheduled => "/besprechungen",
         NotificationType.MeetingReminder => "/besprechungen",
+        NotificationType.AppointmentScheduled => "/kalender",
         NotificationType.PersonnelEntry => "/personal",
+        NotificationType.AgentTerminated => "/personal",
         // the one outward category: its fallback must stay outside, or a generic push would post an internal
         // destination into the public channel
         NotificationType.PublicWantedPublished => "/gesucht",
         NotificationType.PublicPressPublished => "/presse",
+        // the internal desk, not the citizen portal: the ping goes to leadership
+        NotificationType.PublicTicketCreated => "/tickets",
+        NotificationType.PublicCaptureReported => "/hinweise",
         _ => "/dashboard",
     };
 
@@ -336,9 +425,13 @@ public class DiscordWebhookService(
         NotificationType.JobDueSoon => "⏰ Eine Aufgabe wird bald fällig.",
         NotificationType.MeetingScheduled => "📅 Eine neue Besprechung wurde angesetzt.",
         NotificationType.MeetingReminder => "⏰ Eine Besprechung beginnt bald.",
+        NotificationType.AppointmentScheduled => "📅 Ein neuer Termin wurde angelegt.",
         NotificationType.PersonnelEntry => "📝 Neuer Personalakten-Eintrag.",
+        NotificationType.AgentTerminated => "⚠️ Eine Kündigung wurde ausgesprochen.",
         NotificationType.PublicWantedPublished => "🔎 Neue öffentliche Fahndung.",
         NotificationType.PublicPressPublished => "📰 Neue Pressemitteilung.",
+        NotificationType.PublicTicketCreated => "📨 Ein neues Ticket liegt im Eingang.",
+        NotificationType.PublicCaptureReported => "🚨 Ein Bürger meldet die Ergreifung einer gesuchten Person.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

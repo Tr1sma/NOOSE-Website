@@ -21,6 +21,18 @@ public class Hinweis : IAuditable, ISoftDelete
     [Column("Aktenzeichen")]
     public string CaseNumber { get; set; } = string.Empty;
 
+    /// <summary>Observation or capture report; the limits and gates read this, everything else is shared.</summary>
+    [Column("Art")]
+    public TipKind Kind { get; set; } = TipKind.Beobachtung;
+
+    /// <summary>Whether the person is still held; null on an observation.</summary>
+    [Column("Uebergabe")]
+    public TipHandover? Handover { get; set; }
+
+    /// <summary>Where the person is, or whom they were handed to; the operative fact of a capture report.</summary>
+    [Column("Uebergabeort")]
+    public string? HandoverLocation { get; set; }
+
     [Column("BuergerProfilId")]
     public string CitizenProfileId { get; set; } = string.Empty;
     public BuergerProfil? CitizenProfile { get; set; }

@@ -1,0 +1,209 @@
+@implements IDisposable
+
+@* Countdown and save state of a running attempt. The deadline lives in the database and this only derives
+   from it, so a reconnect needs no resynchronisation. Isolated from the page on purpose: the page renders
+   forty watermark spans, and re-diffing those once a second for half an hour is pure waste. *@
+
+<MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Timer" Color="@Colour"
+         Variant="@(Critical ? Variant.Filled : Variant.Outlined)"
+         Class="@(Critical ? "noose-restzeit-kritisch" : null)">
+    Restzeit @Clock
+</MudChip>
+<span class="noose-nur-vorlesen" aria-live="polite" aria-atomic="true">@Ansage</span>
+<MudSpacer />
+@if (SaveText is { Length: > 0 } text)
+{
+    <MudText Typo="Typo.caption" Class="@(_failed ? "mud-warning-text" : "mud-text-secondary")">
+        <MudIcon Icon="@SaveIcon" Size="Size.Small" Class="mr-1" />@text
+    </MudText>
+}
+
+@code {
+    /// <summary>End of the attempt in UTC; a new value arrives when HRB grants extra time.</summary>
+    [Parameter, EditorRequired]
+    public DateTime? DeadlineAt { get; set; }
+
+    /// <summary>Whether the page holds unsaved input. A plain delegate, so asking costs no parent render.</summary>
+    [Parameter, EditorRequired]
+    public Func<bool> Dirty { get; set; } = default!;
+
+    /// <summary>Flushes the draft and reports the deadline the server holds. Pass a method group, not a lambda.</summary>
+    [Parameter, EditorRequired]
+    public Func<Task<TestDraftResult>> Save { get; set; } = default!;
+
+    /// <summary>Fired once when the time is up; the page hands in what it has.</summary>
+    [Parameter]
+    public EventCallback OnExpired { get; set; }
+
+    /// <summary>Warned once at five minutes, so the page can say it out loud.</summary>
+    [Parameter]
+    public EventCallback OnFiveMinutes { get; set; }
+
+    private static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(10);
+    private static readonly int[] Marken = [20, 10, 5, 2, 1];
+
+    private CancellationTokenSource? _cts;
+    private DateTime? _deadline;
+    private DateTime? _parameterDeadline;
+    private DateTime? _savedAt;
+    private DateTime _lastSave = DateTime.MinValue;
+    private bool _saving;
+    private bool _failed;
+    private bool _fired;
+    private bool _warned;
+
+    private TimeSpan Remaining
+    {
+        get
+        {
+            if (_deadline is not { } due)
+            {
+                return TimeSpan.MaxValue;
+            }
+            var left = due - DateTime.UtcNow;
+            return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+        }
+    }
+
+    private string Clock => Remaining >= TimeSpan.FromHours(1)
+        ? Remaining.ToString(@"h\:mm\:ss")
+        : $"{(int)Remaining.TotalMinutes:00}:{Remaining.Seconds:00}";
+
+    private bool Critical => Remaining <= TimeSpan.FromMinutes(1);
+
+    private Color Colour => Remaining <= TimeSpan.FromMinutes(1)
+        ? Color.Error
+        : Remaining <= TimeSpan.FromMinutes(10) ? Color.Warning : Color.Default;
+
+    private string SaveIcon => _failed
+        ? Icons.Material.Filled.CloudOff
+        : _saving ? Icons.Material.Filled.CloudSync : Icons.Material.Filled.CloudDone;
+
+    /// <summary>Empty until something happened: "not saved" before the first keystroke is a false alarm.</summary>
+    private string SaveText => _failed
+        ? "Zwischenstand nicht gespeichert"
+        : _saving
+            ? "Speichere Zwischenstand …"
+            : _savedAt is { } t ? $"Zwischenstand gespeichert · {t:HH:mm}" : string.Empty;
+
+    /// <summary>Only the bucket changes, so the live region speaks at the milestones and stays quiet between them.</summary>
+    private string Ansage
+    {
+        get
+        {
+            if (_deadline is null)
+            {
+                return string.Empty;
+            }
+            if (Remaining == TimeSpan.Zero)
+            {
+                return "Die Zeit ist abgelaufen.";
+            }
+            var minutes = (int)Math.Ceiling(Remaining.TotalMinutes);
+            var mark = Marken.FirstOrDefault(m => minutes <= m);
+            return mark == 0 ? string.Empty : $"Restzeit {mark} Minuten.";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // only a CHANGED parameter wins. The page re-renders on every answer edit, and blindly reassigning
+        // would throw away the later deadline this component just learned from a save - the next keystroke
+        // would wind the clock back and fire the hand-in.
+        if (DeadlineAt != _parameterDeadline)
+        {
+            _parameterDeadline = DeadlineAt;
+            _deadline = DeadlineAt;
+        }
+        if (Remaining > TimeSpan.Zero)
+        {
+            // an extension reopened the attempt, so the hand-in may fire again later
+            _fired = false;
+        }
+        if (_cts is not null)
+        {
+            return;
+        }
+        _cts = new CancellationTokenSource();
+        _ = TickAsync(_cts.Token);
+    }
+
+    /// <summary>One tick source for the display, the autosave and the hand-in.</summary>
+    private async Task TickAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (Remaining > TimeSpan.Zero)
+                {
+                    await MaybeWarnAsync();
+                    if (Dirty() && DateTime.UtcNow - _lastSave >= SaveInterval)
+                    {
+                        await InvokeAsync(FlushAsync);
+                    }
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+                if (_fired)
+                {
+                    continue;
+                }
+                // the last word belongs to the server: an extension granted seconds ago must win, and the
+                // flush also re-delivers the authoritative deadline
+                await InvokeAsync(FlushAsync);
+                if (Remaining > TimeSpan.Zero)
+                {
+                    continue;
+                }
+                _fired = true;
+                await InvokeAsync(() => OnExpired.InvokeAsync());
+                return;
+            }
+        }
+        catch (OperationCanceledException) { /* expected */ }
+        catch (ObjectDisposedException) { /* circuit gone */ }
+    }
+
+    private async Task MaybeWarnAsync()
+    {
+        if (_warned || Remaining > TimeSpan.FromMinutes(5))
+        {
+            return;
+        }
+        _warned = true;
+        await InvokeAsync(() => OnFiveMinutes.InvokeAsync());
+    }
+
+    private async Task FlushAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+        _saving = true;
+        _lastSave = DateTime.UtcNow;
+        StateHasChanged();
+        try
+        {
+            var result = await Save();
+            // the server's deadline wins; this is how an extension reaches a running countdown with no push
+            _deadline = result.DeadlineAt;
+            _savedAt = DateTime.Now;
+            _failed = false;
+        }
+        // no snackbar: one every ten seconds would bury the questionnaire under toasts
+        catch { _failed = true; }
+        _saving = false;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        // a torn-down circuit must not leave the ticker running
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
+}

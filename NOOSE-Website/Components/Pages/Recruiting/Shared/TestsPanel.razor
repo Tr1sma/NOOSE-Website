@@ -27,10 +27,16 @@ else
 {
     <MudTable Items="_tests" Dense="true" Hover="true">
         <HeaderContent>
-            <MudTh>Titel</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
+            <MudTh>Titel</MudTh><MudTh>Zeit</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Titel">@context.Title</MudTd>
+            @* a value, not a chip: the Aktiv chip sits in the next cell and two would compete *@
+            <MudTd DataLabel="Zeit">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @(context.TimeLimitMinutes is int m ? $"{m} Min" : "—")
+                </MudText>
+            </MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
                     @(context.IsActive ? "Aktiv" : "Inaktiv")

@@ -1,3 +1,4 @@
+@implements IDisposable
 @inject NavigationManager Nav
 @inject IPublicModuleService ModuleService
 
@@ -65,6 +66,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // the shell survives navigation, so the active tab only follows the URL via re-render
+        Nav.LocationChanged += OnLocationChanged;
         try
         {
             foreach (var entry in await ModuleService.NavEntriesAsync())
@@ -77,6 +80,11 @@
             /* best effort */
         }
     }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+        => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 
     // case-insensitive, like PublicRoutes.Matches: a typed /Gesucht highlighted nothing. And a module's sibling
     // page keeps the tab lit by matching on the nav route's FIRST segment, so /gefahr/personen no longer leaves

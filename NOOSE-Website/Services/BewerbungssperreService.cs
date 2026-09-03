@@ -10,8 +10,6 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IBewerbungssperreService" />
 public class BewerbungssperreService(IDbContextFactory<AppDbContext> dbFactory) : IBewerbungssperreService
 {
-    private static readonly TimeSpan BanDuration = TimeSpan.FromDays(14);
-
     public async Task<BewerbungssperreInfo?> GetActiveAsync(string agentId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(agentId))
@@ -21,7 +19,7 @@ public class BewerbungssperreService(IDbContextFactory<AppDbContext> dbFactory) 
         var now = DateTime.UtcNow;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var sperre = await db.Bewerbungssperren.AsNoTracking()
-            .Where(s => s.AgentId == agentId && (s.IsBlacklist || s.BannedUntil > now))
+            .Where(s => s.AgentId == agentId).Where(BewerbungssperreRules.Active(now))
             .OrderByDescending(s => s.IsBlacklist)
             .ThenByDescending(s => s.BannedUntil)
             .FirstOrDefaultAsync(cancellationToken);
@@ -34,7 +32,7 @@ public class BewerbungssperreService(IDbContextFactory<AppDbContext> dbFactory) 
         var now = DateTime.UtcNow;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Bewerbungssperren.AsNoTracking()
-            .Where(s => s.IsBlacklist || s.BannedUntil > now)
+            .Where(BewerbungssperreRules.Active(now))
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(cancellationToken);
         return rows.Select(Map).ToList();
@@ -51,11 +49,11 @@ public class BewerbungssperreService(IDbContextFactory<AppDbContext> dbFactory) 
         }
 
         var now = DateTime.UtcNow;
-        var until = now + BanDuration;
+        var until = BewerbungssperreRules.BannedUntil(now);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var active = await db.Bewerbungssperren
-            .Where(s => s.AgentId == agentId && (s.IsBlacklist || s.BannedUntil > now))
+            .Where(s => s.AgentId == agentId).Where(BewerbungssperreRules.Active(now))
             .ToListAsync(cancellationToken);
 
         // a permanent blacklist already covers the applicant — nothing stronger to do
@@ -101,7 +99,7 @@ public class BewerbungssperreService(IDbContextFactory<AppDbContext> dbFactory) 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var active = await db.Bewerbungssperren
-            .Where(s => s.AgentId == agentId && (s.IsBlacklist || s.BannedUntil > now))
+            .Where(s => s.AgentId == agentId).Where(BewerbungssperreRules.Active(now))
             .ToListAsync(cancellationToken);
 
         if (active.Any(s => s.IsBlacklist))

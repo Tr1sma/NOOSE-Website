@@ -167,7 +167,7 @@ else
             </MudPaper>
 
             <div class="mb-4">
-                <BewerbungssperrePanel ApplicantUserId="@_b.ApplicantUserId" BewerbungId="@_b.Id"
+                <BewerbungssperrePanel @ref="_sperrePanel" ApplicantUserId="@_b.ApplicantUserId" BewerbungId="@_b.Id"
                                        ApplicantName="@_b.Name" User="_user" />
             </div>
 
@@ -210,6 +210,7 @@ else
     private bool _canWrite;
     private Bewerbung? _b;
     private string? _note;
+    private BewerbungssperrePanel? _sperrePanel;
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,6 +226,11 @@ else
     {
         _b = await BewerbungService.GetForHrbAsync(Id, _user);
         _load = false;
+        // the ban is a follow-up write by the service, so the panel would otherwise still say "keine Sperre"
+        if (_sperrePanel is not null)
+        {
+            await _sperrePanel.RefreshAsync();
+        }
     }
 
     private static bool IsImage(string? contentType)

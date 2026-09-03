@@ -186,7 +186,8 @@ public class BewerbungService(
 
     public async Task SetStatusAsync(string id, BewerbungStatus target, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireHrbOrLeadership(actor);
+        // write access before the rank check: the ban below is a second write that would fail on its own
+        Permission.RequireRecruitingDecision(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bewerbung = await GetOrThrow(db, id, cancellationToken);
 
@@ -206,12 +207,12 @@ public class BewerbungService(
             bewerbung.DecisionNote = Trim(note);
         }
         await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(id);
 
+        // the ban runs before the broadcast: a listener refreshed by Report must not read the state in between
         if (target is BewerbungStatus.Abgelehnt or BewerbungStatus.Geschlossen)
         {
             try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, Trim(note), actor, cancellationToken); }
-            catch { /* best effort: the rejection itself is already saved */ }
+            catch (Exception ex) { logger.LogError(ex, "Ban after closing application {Id} failed; the decision stands.", id); }
         }
 
         if (target is BewerbungStatus.Angenommen)
@@ -224,8 +225,9 @@ public class BewerbungService(
                     await sperren.LiftAsync(ban.Id, actor, cancellationToken); // lift only the temp ban
                 }
             }
-            catch { /* best effort */ }
+            catch (Exception ex) { logger.LogError(ex, "Lifting the ban after accepting application {Id} failed.", id); }
         }
+        broadcaster.Report(id);
 
         try
         {
@@ -240,7 +242,8 @@ public class BewerbungService(
 
     public async Task SetSecurityResultAsync(string id, bool passed, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireHrbOrLeadership(actor);
+        // write access before the rank check: a failed check rejects, and the ban below is a second write
+        Permission.RequireRecruitingDecision(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bewerbung = await GetOrThrow(db, id, cancellationToken);
         if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
@@ -261,13 +264,14 @@ public class BewerbungService(
             bewerbung.DecisionNote = "Sicherheitsüberprüfung nicht bestanden.";
         }
         await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(id);
 
+        // ban first, then broadcast: the detail page refreshes its ban panel off Report
         if (!passed)
         {
             try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, bewerbung.DecisionNote, actor, cancellationToken); }
-            catch { /* best effort: the rejection itself is already saved */ }
+            catch (Exception ex) { logger.LogError(ex, "Ban after a failed security check on application {Id} failed; the rejection stands.", id); }
         }
+        broadcaster.Report(id);
 
         try
         {

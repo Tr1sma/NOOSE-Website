@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -38,6 +38,7 @@ using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
 using NOOSE_Website.Infrastructure.Public;
+using NOOSE_Website.Infrastructure.Recruiting;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Public;
@@ -344,6 +345,8 @@ builder.Services.AddScoped<IRecruitingAutomationService, RecruitingAutomationSer
 builder.Services.AddScoped<ICareerRequirementsService, CareerRequirementsService>();
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
+builder.Services.AddScoped<IBewerbungTestExpiryService, BewerbungTestExpiryService>();
+builder.Services.AddHostedService<BewerbungTestExpiryWorker>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
 
 // ---- public area (citizen accounts, module switches) ----

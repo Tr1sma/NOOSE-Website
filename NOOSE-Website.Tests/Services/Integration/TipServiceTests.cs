@@ -90,15 +90,20 @@ public sealed class TipServiceTests
 
     /// <summary>Seeds module switches, one person file and one complete citizen profile.</summary>
     private static async Task<SqliteTestContext> SeededAsync(
-        bool tipsOn = true, Action<BuergerProfil>? profile = null)
+        bool tipsOn = true, Action<BuergerProfil>? profile = null, bool capturesOn = true)
     {
         var ctx = new SqliteTestContext();
         await using var db = ctx.NewContext();
         await PublicModuleSeeder.SeedAsync(db);
-        foreach (var key in new[] { PublicModules.Wanted, PublicModules.Tips })
+        foreach (var key in new[] { PublicModules.Wanted, PublicModules.Tips, PublicModules.CaptureReports })
         {
             var row = await db.OeffentlicheModule.SingleAsync(m => m.Key == key);
-            row.IsEnabled = key != PublicModules.Tips || tipsOn;
+            row.IsEnabled = key switch
+            {
+                PublicModules.Tips => tipsOn,
+                PublicModules.CaptureReports => capturesOn,
+                _ => true,
+            };
         }
 
         db.People.Add(Seed.Person(PersonId, "Max Mustermann", p =>
@@ -130,6 +135,39 @@ public sealed class TipServiceTests
                 WantedCaseNumber = reference,
             },
             null, null, null, actor ?? Citizen());
+
+    private static Task<string> ReportCaptureAsync(Host host, string? reference, string? location = "Tankstelle Sandy Shores",
+        TipHandover? handover = TipHandover.Festgehalten, ClaimsPrincipal? actor = null, bool anonymous = false)
+        => host.Service.SubmitAsync(
+            new TipInput
+            {
+                Text = "Ich habe die gesuchte Person an der Tankstelle gestellt und halte sie hier fest.",
+                Kind = TipKind.Ergreifung,
+                Handover = handover,
+                HandoverLocation = location,
+                WantsAnonymity = anonymous,
+                WantedCaseNumber = reference,
+            },
+            null, null, null, actor ?? Citizen());
+
+    /// <summary>Publishes a notice for a person file of its own; one notice per file is the rule.</summary>
+    private static async Task<string> ExtraNoticeAsync(Host host, int index)
+    {
+        var personId = $"extra-person-{index}";
+        await using (var db = host.Factory.CreateDbContext())
+        {
+            db.People.Add(Seed.Person(personId, $"Gesuchter {index}", p =>
+            {
+                p.CaseNumber = $"NOOSE-P-2026-90{index:00}";
+                p.WantedReason = "Verdacht auf Raub";
+            }));
+            await db.SaveChangesAsync();
+        }
+        var id = await host.Wanted.CreateDraftFromPersonAsync(personId, Leader());
+        await host.Wanted.PublishAsync(id, null, Leader());
+        await using var read = host.Factory.CreateDbContext();
+        return await read.OeffentlicheFahndungen.Where(f => f.Id == id).Select(f => f.CaseNumber!).SingleAsync();
+    }
 
     /// <summary>Publishes a notice for the seeded person and returns its public case number.</summary>
     private static async Task<string> PublishedNoticeAsync(Host host)
@@ -1030,5 +1068,223 @@ public sealed class TipServiceTests
 
         var after = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader());
         Assert.True(after[0].AwaitingAnswer);
+    }
+
+    // ---- capture reports ----
+
+    [Fact]
+    public async Task ACaptureReport_needsTheNotice()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, null));
+        Assert.Equal(CaptureRules.NoticeRequired, error.Message);
+    }
+
+    [Fact]
+    public async Task ACaptureReport_isNeverAnonymous()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        // the form does not offer the switch; this asserts the service overrules it anyway
+        var caseNumber = await ReportCaptureAsync(host, notice, anonymous: true);
+
+        await using var db = host.Factory.CreateDbContext();
+        var row = await db.Hinweise.SingleAsync(h => h.CaseNumber == caseNumber);
+        Assert.False(row.WantsAnonymity);
+        Assert.Equal(TipKind.Ergreifung, row.Kind);
+    }
+
+    [Fact]
+    public async Task ACaptureReport_needsAHandoverStateAndALocation()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice, handover: null));
+
+        var missing = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice, location: "  "));
+        Assert.Equal(CaptureRules.LocationRequired, missing.Message);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice, location: new string('x', CaptureRules.MaxLocationLength + 1)));
+    }
+
+    [Fact]
+    public async Task ACaptureReport_storesWhatWasReported()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        var caseNumber = await ReportCaptureAsync(host, notice, location: "Hinter der Wache",
+            handover: TipHandover.Uebergeben);
+
+        await using var db = host.Factory.CreateDbContext();
+        var row = await db.Hinweise.SingleAsync(h => h.CaseNumber == caseNumber);
+        Assert.Equal(TipHandover.Uebergeben, row.Handover);
+        Assert.Equal("Hinter der Wache", row.HandoverLocation);
+    }
+
+    [Fact]
+    public async Task ACaptureReport_outranksEveryObservationInTheInbox()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await SubmitAsync(host, reference: notice);
+        var capture = await ReportCaptureAsync(host, notice);
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader());
+        Assert.Equal(capture, rows[0].CaseNumber);
+        Assert.Equal(TipKind.Ergreifung, rows[0].Kind);
+        Assert.Equal(TipHandover.Festgehalten, rows[0].Handover);
+    }
+
+    [Fact]
+    public async Task TheSecondOpenReportOnOneNotice_isRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await ReportCaptureAsync(host, notice);
+        var again = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice));
+        Assert.Equal(CaptureRules.AlreadyOpen, again.Message);
+    }
+
+    [Fact]
+    public async Task TheTwoQuotas_doNotSpendEachOther()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        // tier 1 allows TipRules.PerDay observations; spend every one of them
+        for (var i = 0; i < TipRules.PerDay; i++)
+        {
+            await SubmitAsync(host, text: $"Beobachtung Nummer {i} am Hafen, die Person stieg in einen Van ein.");
+        }
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SubmitAsync(host));
+
+        // and the capture path is still open
+        var caseNumber = await ReportCaptureAsync(host, notice);
+        Assert.False(string.IsNullOrWhiteSpace(caseNumber));
+    }
+
+    [Fact]
+    public async Task TheCaptureQuota_isCountedOnItsOwn()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        // one report per notice AND one notice per person file, so the quota needs its own people to spend on
+        for (var i = 0; i < CaptureRules.PerDay; i++)
+        {
+            await ReportCaptureAsync(host, await ExtraNoticeAsync(host, i));
+        }
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice));
+        Assert.Contains($"{CaptureRules.PerDay}", refused.Message);
+
+        // an ordinary tip is unaffected
+        Assert.False(string.IsNullOrWhiteSpace(await SubmitAsync(host)));
+    }
+
+    [Fact]
+    public async Task TheCaptureModule_gatesOnlyTheCapturePath()
+    {
+        using var ctx = await SeededAsync(capturesOn: false);
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ReportCaptureAsync(host, notice));
+        // tips are a separate switch and stay open
+        Assert.False(string.IsNullOrWhiteSpace(await SubmitAsync(host, reference: notice)));
+    }
+
+    [Fact]
+    public async Task TheTipModule_gatesOnlyTheObservationPath()
+    {
+        using var ctx = await SeededAsync(tipsOn: false);
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SubmitAsync(host));
+        Assert.False(string.IsNullOrWhiteSpace(await ReportCaptureAsync(host, notice)));
+    }
+
+    [Fact]
+    public async Task AnObservationAndACaptureReport_areNeverGroupedAsDuplicates()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+        const string same = "Ich habe die gesuchte Person an der Tankstelle Sandy Shores angetroffen und festgehalten.";
+
+        await SubmitAsync(host, text: same, reference: notice);
+        var capture = await host.Service.SubmitAsync(
+            new TipInput
+            {
+                Text = same,
+                Kind = TipKind.Ergreifung,
+                Handover = TipHandover.Festgehalten,
+                HandoverLocation = "Tankstelle Sandy Shores",
+                WantedCaseNumber = notice,
+            },
+            null, null, null, Citizen());
+
+        await using var db = host.Factory.CreateDbContext();
+        var rows = await db.Hinweise.ToListAsync();
+        var captureRow = rows.Single(h => h.CaseNumber == capture);
+        Assert.Null(captureRow.DuplicateGroupId);
+        Assert.All(rows, r => Assert.Null(r.DuplicateGroupId));
+    }
+
+    [Fact]
+    public async Task TheNamedPerson_cannotReportTheirOwnCapture()
+    {
+        // the profile carries the published display name of the notice
+        using var ctx = await SeededAsync(profile: p =>
+        {
+            p.FirstName = "Max";
+            p.LastName = "Mustermann";
+        });
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ReportCaptureAsync(host, notice));
+        Assert.Equal(CaptureRules.SelfRefused, error.Message);
+    }
+
+    [Fact]
+    public async Task TheCitizensOwnView_carriesTheKindAndTheHandover()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+        var caseNumber = await ReportCaptureAsync(host, notice, location: "Am Pier");
+
+        var rows = await host.Service.GetOwnAsync(Citizen());
+        var row = rows.Single(r => r.CaseNumber == caseNumber);
+        Assert.Equal(TipKind.Ergreifung, row.Kind);
+        Assert.Equal(TipHandover.Festgehalten, row.Handover);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        Assert.NotNull(detail);
+        Assert.Equal(TipKind.Ergreifung, detail!.Kind);
+        Assert.Equal("Am Pier", detail.HandoverLocation);
     }
 }

@@ -1,8 +1,8 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Which notification categories mirror to a shared Discord channel, and how each pings: personal categories ping the recipients, broadcast categories ping a configured role.</summary>
+/// <summary>Which notification categories mirror to a shared Discord channel, and how each pings: personal categories ping the recipients, broadcast categories ping a configured role, announcement-only categories ping nobody.</summary>
 public static class DiscordRouting
 {
     public static readonly IReadOnlyList<NotificationType> RoutableTypes = new[]
@@ -16,14 +16,30 @@ public static class DiscordRouting
         NotificationType.JobDueSoon,
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
+        // the scheduling event, not AppointmentAssigned: that one is the personal "you are a participant"
+        // notice and would post one channel message per participant
+        NotificationType.AppointmentScheduled,
         NotificationType.PersonnelEntry,
+        // its own channel, separate from PersonnelEntry: a termination is announced to the whole agency, the
+        // other personnel entries are house bookkeeping
+        NotificationType.AgentTerminated,
         // PublicWantedExpired is deliberately absent: NotificationService.NotifyManyAsync pushes every routable
         // category on its own, so a routable operating category would post each expiry into the public channel
         NotificationType.PublicWantedPublished,
         NotificationType.PublicWantedBountyRaised,
+        // the citizen desk's one routable category, and it stays generic: the post says a ticket arrived and
+        // links to it, never the subject and never the citizen. Deliberately not PublicTicketOpened — that one
+        // is the desk bell and folds a running thread onto itself, so routing it would ping again on a reply
+        // whenever the desk happened to be caught up
+        NotificationType.PublicTicketCreated,
         // the one public category that is routable without a caveat: an official statement, no citizen named, and the
         // link is a permanent public address
         NotificationType.PublicPressPublished,
+        // the second citizen category with a channel, and it earns it for a sharper reason than a ticket does:
+        // somebody is holding a wanted person and the house has to hear it now. The post carries the report's own
+        // case number and nothing else - naming who is holding a wanted criminal, in a channel players read,
+        // invites revenge, and the reporter is not anonymous on this path
+        NotificationType.PublicCaptureReported,
         // PublicTipReceived/PublicTipAnswered are absent for the same reason and a sharper one: a tip is a
         // citizen's submission, and its arrival in a public channel would out the person who filed it.
         // PublicObjectionReceived/PublicObjectionDecided likewise: the first names a citizen disputing a public
@@ -40,9 +56,15 @@ public static class DiscordRouting
                 or NotificationType.JobAssigned or NotificationType.JobDueSoon
                 or NotificationType.PersonnelEntry;
 
+    /// <summary>Category whose Discord post pings nobody: the embed carries inert mention chips instead.</summary>
+    public static bool PingsNobody(NotificationType type)
+        // an official announcement, not a summons: the terminated agent is named in the embed and rendered as a
+        // mention chip, but nobody gets a notification about someone else's dismissal
+        => type is NotificationType.AgentTerminated;
+
     /// <summary>Category whose Discord post pings a configured role instead of individuals.</summary>
     public static bool PingsRole(NotificationType type)
-        => IsRoutable(type) && !PingsRecipients(type);
+        => IsRoutable(type) && !PingsRecipients(type) && !PingsNobody(type);
 
     /// <summary>Routable categories that ping a role (need a configurable role id).</summary>
     public static readonly IReadOnlyList<NotificationType> RoleRoutableTypes =
@@ -79,6 +101,6 @@ public sealed class DiscordWebhookConfigInput
     /// <summary>Role id to ping per broadcast category; empty/null falls back to the default role.</summary>
     public Dictionary<NotificationType, string?> Roles { get; set; } = new();
 
-    /// <summary>Include the record header/title in role-ping posts (Announcement, Recruiting).</summary>
+    /// <summary>Include the record header/title in role-ping posts (Announcement, Recruiting, AppointmentScheduled).</summary>
     public bool IncludeHeadline { get; set; } = true;
 }

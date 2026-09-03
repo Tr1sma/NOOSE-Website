@@ -98,6 +98,22 @@ public enum NotificationType
     /// <summary>An internal note on a ticket, or being attached to one. Not routable: it is house correspondence,
     /// and the citizen thread it sits next to names a citizen.</summary>
     PublicTicketInternal = 30,
+
+    /// <summary>A new appointment was scheduled. Routable — the leadership channel, not the participants.</summary>
+    AppointmentScheduled = 31,
+
+    /// <summary>A ticket was opened. Routable — the leadership channel; the only citizen-desk category that is.
+    /// Rings no bell of its own: <see cref="PublicTicketOpened"/> is the desk notice, this one exists so the
+    /// opening pings and a reply on a running ticket does not.</summary>
+    PublicTicketCreated = 32,
+
+    /// <summary>An agent was terminated. Routable — its own channel, with a rich embed; rings no bell of its own,
+    /// the personnel note is the in-app record.</summary>
+    AgentTerminated = 33,
+
+    /// <summary>A citizen reported catching a wanted person. Routable, and the one citizen submission that is:
+    /// somebody is holding a wanted person right now. The post stays generic and names nobody.</summary>
+    PublicCaptureReported = 34,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -113,6 +129,8 @@ public static class NotificationTypeDisplay
         NotificationType.Announcement => "Ankündigung",
         NotificationType.Followup => "Wiedervorlage fällig",
         NotificationType.AppointmentAssigned => "Termin",
+        NotificationType.AppointmentScheduled => "Neuer Termin",
+        NotificationType.PublicCaptureReported => "Ergreifungsmeldung",
         NotificationType.SituationReport => "Lagebericht",
         NotificationType.Recruiting => "Bewerbung",
         NotificationType.JobDueSoon => "Aufgabe fällig",
@@ -120,6 +138,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingReminder => "Besprechung beginnt bald",
         NotificationType.AbsenceFiled => "Abmeldung",
         NotificationType.PersonnelEntry => "Personalakte-Eintrag",
+        NotificationType.AgentTerminated => "Kündigung",
         NotificationType.ThreatSpike => "Bedrohungs-Score gestiegen",
         NotificationType.AbductionFiled => "Agenten-Entführung",
         NotificationType.Financing => "Finanzierung",
@@ -131,6 +150,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicTipAnswered => "Antwort zu deinem Hinweis",
         NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
         NotificationType.PublicTicketOpened => "Neues Bürger-Ticket",
+        NotificationType.PublicTicketCreated => "Neues Ticket",
         NotificationType.PublicTicketAnswered => "Antwort zu deinem Ticket",
         NotificationType.PublicTicketInternal => "Internes zum Ticket",
         NotificationType.PublicObjectionReceived => "Einspruch gegen eine Ausschreibung",
@@ -150,6 +170,8 @@ public static class NotificationTypeDisplay
         NotificationType.Announcement => Icons.Material.Filled.Campaign,
         NotificationType.Followup => Icons.Material.Filled.EventRepeat,
         NotificationType.AppointmentAssigned => Icons.Material.Filled.Event,
+        NotificationType.AppointmentScheduled => Icons.Material.Filled.EventAvailable,
+        NotificationType.PublicCaptureReported => Icons.Material.Filled.LocalPolice,
         NotificationType.SituationReport => Icons.Material.Filled.Assessment,
         NotificationType.Recruiting => Icons.Material.Filled.HowToReg,
         NotificationType.JobDueSoon => Icons.Material.Filled.AssignmentLate,
@@ -157,6 +179,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingReminder => Icons.Material.Filled.NotificationsActive,
         NotificationType.AbsenceFiled => Icons.Material.Filled.EventBusy,
         NotificationType.PersonnelEntry => Icons.Material.Filled.Description,
+        NotificationType.AgentTerminated => Icons.Material.Filled.PersonRemove,
         NotificationType.ThreatSpike => Icons.Material.Filled.TrendingUp,
         NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
         NotificationType.Financing => Icons.Material.Filled.RequestQuote,
@@ -168,6 +191,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicTipAnswered => Icons.Material.Filled.MarkEmailUnread,
         NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
         NotificationType.PublicTicketOpened => Icons.Material.Filled.Forum,
+        NotificationType.PublicTicketCreated => Icons.Material.Filled.QuestionAnswer,
         NotificationType.PublicTicketAnswered => Icons.Material.Filled.MarkChatUnread,
         NotificationType.PublicTicketInternal => Icons.Material.Filled.Lock,
         NotificationType.PublicObjectionReceived => Icons.Material.Filled.Balance,

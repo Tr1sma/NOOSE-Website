@@ -1,6 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
@@ -124,6 +125,83 @@ public sealed class MySqlTranslationTests : IDisposable
             .ToQueryString();
 
         Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>Mirrors the states BewerbungTestExpiryService skips.</summary>
+    private static readonly BewerbungStatus[] Decided =
+        [BewerbungStatus.Angenommen, BewerbungStatus.Abgelehnt, BewerbungStatus.Geschlossen];
+
+    [Fact]
+    public void TheTestAttemptExpirySweep_Translates()
+    {
+        // the sweep hands in an abandoned attempt; untranslatable it would throw in a background worker, where
+        // nobody watches, and every timed-out applicant would sit unclosed until someone opened the page
+        var now = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.CompletedAt == null && a.DeadlineAt != null && a.DeadlineAt <= now)
+            .OrderBy(a => a.DeadlineAt)
+            .Take(100)
+            .ToQueryString();
+
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+        Assert.Contains("FristBis", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSweepsDecidedFilter_TranslatesToAnInClause()
+    {
+        var ids = new[] { "b1", "b2" };
+        var sql = _db.Bewerbungen
+            .Where(b => ids.Contains(b.Id) && !Decided.Contains(b.Status))
+            .ToQueryString();
+
+        Assert.Contains("IN (", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAttemptStartClaim_Translates()
+    {
+        // the compare-and-swap that stamps the clock exactly once despite prerender, a second tab and F5.
+        // ExecuteUpdate cannot be compiled without a connection, so the Where clause is what is checked.
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.Id == "a1" && a.StartedAt == null)
+            .ToQueryString();
+
+        Assert.Contains("GestartetAm", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAttemptCloseClaim_Translates()
+    {
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.Id == "a1" && a.CompletedAt == null)
+            .ToQueryString();
+
+        Assert.Contains("AbgeschlossenAm", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheLiveAttemptGuard_Translates()
+    {
+        // the guard that refuses a structural edit while a timed attempt runs
+        var now = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.TestId == "t1" && a.StartedAt != null && a.CompletedAt == null
+                && a.DeadlineAt != null && a.DeadlineAt > now)
+            .ToQueryString();
+
+        Assert.Contains("SELECT", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheDraftUpsertLookup_Translates()
+    {
+        var questionIds = new[] { "q1", "q2" };
+        var sql = _db.BewerbungTestAnswers
+            .Where(a => a.AssignmentId == "a1" && questionIds.Contains(a.QuestionId))
+            .ToQueryString();
+
+        Assert.Contains("IN (", sql, StringComparison.Ordinal);
     }
 
     [Fact]

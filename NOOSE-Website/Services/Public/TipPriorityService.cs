@@ -23,16 +23,17 @@ namespace NOOSE_Website.Services.Public;
 public class TipPriorityService(IDbContextFactory<AppDbContext> dbFactory) : ITipPriorityService
 {
     public async Task<int> ComputeAsync(AppDbContext db, string? wantedId, int confirmedTips,
+        TipKind kind = TipKind.Beobachtung, TipHandover? handover = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(wantedId))
         {
-            return TipPriority.Compute(0m, null, confirmedTips);
+            return TipPriority.Compute(0m, null, confirmedTips, kind, handover);
         }
 
         var notices = await NoticesAsync(db, [wantedId], cancellationToken);
         var notice = notices.GetValueOrDefault(wantedId);
-        return TipPriority.Compute(notice.Bounty, notice.Hazard, confirmedTips);
+        return TipPriority.Compute(notice.Bounty, notice.Hazard, confirmedTips, kind, handover);
     }
 
     public Task StampAsync(string tipId, CancellationToken cancellationToken = default)
@@ -53,7 +54,7 @@ public class TipPriorityService(IDbContextFactory<AppDbContext> dbFactory) : ITi
         // either, otherwise the next bounty change would silently undo the leadership's decision
         var rows = await narrow(db.Hinweise.AsNoTracking().Where(TipRules.OpenRows)
                 .Where(h => h.PriorityOverride == null))
-            .Select(h => new { h.Id, h.WantedId, h.CitizenProfileId, h.Priority })
+            .Select(h => new { h.Id, h.WantedId, h.CitizenProfileId, h.Priority, h.Kind, h.Handover })
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
         {
@@ -70,7 +71,8 @@ public class TipPriorityService(IDbContextFactory<AppDbContext> dbFactory) : ITi
                      var notice = r.WantedId is null
                          ? default
                          : notices.GetValueOrDefault(r.WantedId);
-                     return TipPriority.Compute(notice.Bounty, notice.Hazard, trust.GetValueOrDefault(r.CitizenProfileId));
+                     return TipPriority.Compute(notice.Bounty, notice.Hazard,
+                         trust.GetValueOrDefault(r.CitizenProfileId), r.Kind, r.Handover);
                  }))
         {
             var ids = group.Where(r => r.Priority != group.Key).Select(r => r.Id).ToList();

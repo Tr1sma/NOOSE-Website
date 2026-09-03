@@ -117,7 +117,7 @@ else
         _busy = true;
         try
         {
-            await SperreService.ShortenAsync(entry.Id, until, _user);
+            await SperreService.ShortenAsync(entry.Id, BewerbungssperreRules.PickedDateToUtc(until), _user);
             Snackbar.Add("Sperre angepasst.", Severity.Success);
             await LoadAsync();
         }

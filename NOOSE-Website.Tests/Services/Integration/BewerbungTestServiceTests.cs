@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Chat;
@@ -195,7 +195,7 @@ public sealed class BewerbungTestServiceTests
         AddTest(ctx, "t1", "Alt", sorting: 1, isActive: true);
         var (svc, _, _) = Build(ctx);
 
-        await svc.UpdateTestAsync("t1", "  Neu  ", "  info  ", isActive: false, passPercent: 150, Hrb());
+        await svc.UpdateTestAsync("t1", "  Neu  ", "  info  ", isActive: false, passPercent: 150, timeLimitMinutes: null, Hrb());
 
         using var check = ctx.NewContext();
         var stored = await check.BewerbungTests.SingleAsync(t => t.Id == "t1");
@@ -212,7 +212,7 @@ public sealed class BewerbungTestServiceTests
         AddTest(ctx, "t1", "Alt", sorting: 1, passPercent: 60);
         var (svc, _, _) = Build(ctx);
 
-        await svc.UpdateTestAsync("t1", "Neu", null, isActive: true, passPercent: null, Hrb());
+        await svc.UpdateTestAsync("t1", "Neu", null, isActive: true, passPercent: null, timeLimitMinutes: null, Hrb());
 
         using var check = ctx.NewContext();
         Assert.Null((await check.BewerbungTests.SingleAsync(t => t.Id == "t1")).PassPercent);
@@ -225,7 +225,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.UpdateTestAsync("nope", "Neu", null, true, null, Hrb()));
+            () => svc.UpdateTestAsync("nope", "Neu", null, true, null, null, Hrb()));
     }
 
     [Fact]
@@ -236,7 +236,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.UpdateTestAsync("t1", "  ", null, true, null, Hrb()));
+            () => svc.UpdateTestAsync("t1", "  ", null, true, null, null, Hrb()));
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.UpdateTestAsync("t1", "Neu", null, true, null, NonHrb()));
+            () => svc.UpdateTestAsync("t1", "Neu", null, true, null, null, NonHrb()));
     }
 
     // ---------- DeleteTestAsync ----------
@@ -947,7 +947,7 @@ public sealed class BewerbungTestServiceTests
         await svc.CompleteGradingAsync("b1", Hrb());
         Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);
 
-        await svc.UpdateTestAsync("t1", "Test", null, isActive: true, passPercent: 90, Hrb());
+        await svc.UpdateTestAsync("t1", "Test", null, isActive: true, passPercent: 90, timeLimitMinutes: null, Hrb());
 
         // the applicant was already told the outcome; raising the bar afterwards must not turn it around
         Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);

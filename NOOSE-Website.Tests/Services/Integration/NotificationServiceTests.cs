@@ -338,6 +338,132 @@ public class NotificationServiceTests
             Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    // ---- NotifyOnceAsync / NotifyManyOnceAsync -----------------------------
+
+    [Fact]
+    public async Task NotifyOnceAsync_SecondEvent_FoldsIntoTheUnreadRow()
+    {
+        using var ctx = new SqliteTestContext();
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "Erste Notiz", "/tickets/t1");
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "Zweite Notiz", "/tickets/t1");
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "Dritte Notiz", "/tickets/t1");
+
+        using var db = ctx.NewContext();
+        var row = db.Notifications.Single();
+        // the newest event owns the headline, and the bump keeps the folded row at the top of the bell
+        Assert.Equal("Dritte Notiz", row.Title);
+        Assert.Null(row.ReadAt);
+        Assert.True(row.CreatedAt > DateTime.UtcNow.AddMinutes(-5));
+        // the bell still refreshes on every event, even though no row was added
+        Assert.Equal(3, broadcasts.Count);
+    }
+
+    [Fact]
+    public async Task NotifyOnceAsync_AfterTheRowWasRead_StartsANewOne()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var actor = ClaimsPrincipalBuilder.Agent("agent-1").Build();
+
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "Erste Notiz", "/tickets/t1");
+        await svc.AllAsReadAsync(actor);
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "Zweite Notiz", "/tickets/t1");
+
+        using var db = ctx.NewContext();
+        var rows = db.Notifications.ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(1, await svc.GetUnreadCountAsync(actor));
+    }
+
+    [Fact]
+    public async Task NotifyOnceAsync_OtherTargetOrCategoryOrRecipient_StaysItsOwnRow()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "a", "/tickets/t1");
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "b", "/tickets/t2");
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketOpened, "c", "/tickets/t1");
+        await svc.NotifyOnceAsync("agent-2", NotificationType.PublicTicketInternal, "d", "/tickets/t1");
+
+        using var db = ctx.NewContext();
+        Assert.Equal(4, db.Notifications.Count());
+    }
+
+    [Fact]
+    public async Task NotifyOnceAsync_WithoutAnHref_AlwaysAddsARow()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        // no target, no identity to fold on
+        await svc.NotifyOnceAsync("agent-1", NotificationType.Account, "a", null);
+        await svc.NotifyOnceAsync("agent-1", NotificationType.Account, "b", null);
+
+        using var db = ctx.NewContext();
+        Assert.Equal(2, db.Notifications.Count());
+    }
+
+    [Fact]
+    public async Task NotifyOnceAsync_EmptyRecipient_IsNoOp()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        await svc.NotifyOnceAsync("   ", NotificationType.Account, "x", "/tickets/t1");
+        await svc.NotifyOnceAsync(null, NotificationType.Account, "x", "/tickets/t1");
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
+    }
+
+    [Fact]
+    public async Task NotifyManyOnceAsync_FoldsPerRecipient_AndPushesOnlyTheFreshOnes()
+    {
+        using var ctx = new SqliteTestContext();
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+
+        await svc.NotifyManyOnceAsync(new[] { "r1" }, NotificationType.Announcement, "Neu", "/brett", null);
+        discord.ClearReceivedCalls();
+
+        await svc.NotifyManyOnceAsync(new[] { "r1", "r2" }, NotificationType.Announcement, "Nachtrag", "/brett", null);
+
+        using var db = ctx.NewContext();
+        var rows = db.Notifications.ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("Nachtrag", rows.Single(r => r.RecipientId == "r1").Title);
+        // r1 was already announced; only r2 is news to the channel
+        await discord.Received(1).PushAsync(
+            NotificationType.Announcement, "/brett",
+            Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 1 && c.Contains("r2")),
+            Arg.Is<string>(h => h == "Nachtrag"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NotifyManyOnceAsync_AllFolded_KeepsTheChannelQuiet()
+    {
+        using var ctx = new SqliteTestContext();
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+
+        await svc.NotifyManyOnceAsync(new[] { "r1", "r2" }, NotificationType.Announcement, "Neu", "/brett", null);
+        discord.ClearReceivedCalls();
+
+        await svc.NotifyManyOnceAsync(new[] { "r1", "r2" }, NotificationType.Announcement, "Nachtrag", "/brett", null);
+
+        using var db = ctx.NewContext();
+        Assert.Equal(2, db.Notifications.Count());
+        await discord.DidNotReceive().PushAsync(
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     // ---- GetOwnAsync -------------------------------------------------------
 
     [Fact]

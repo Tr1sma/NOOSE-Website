@@ -15,6 +15,11 @@ public interface IDiscordWebhookService
         DateTime entryDate, string reasonPlain, IReadOnlyList<string> executorDisplays,
         string? href, CancellationToken cancellationToken = default);
 
+    /// <summary>Post a termination as a rich "KÜNDIGUNG" embed to the AgentTerminated channel. Pings nobody — the subject and the executor appear as inert mention chips inside the embed. Best-effort; no-op if disabled or no URL configured.</summary>
+    Task PushTerminationAsync(string subjectAgentId, string subjectDisplay, string? executorAgentId,
+        string? executorDisplay, DateTime terminatedAt, string reasonPlain, string? href,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Current routing config (fresh read) for the admin page.</summary>
     Task<DiscordWebhookConfig> GetConfigAsync(CancellationToken cancellationToken = default);
 

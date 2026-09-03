@@ -38,6 +38,7 @@ public static class PublicModules
     public const string Tips = "Hinweise";
     public const string Reward = "Belohnung";
     public const string Tickets = "Tickets";
+    public const string CaptureReports = "Ergreifungsmeldung";
     public const string Objection = "Einspruch";
     public const string CitizenRegistration = "BuergerRegistrierung";
     public const string PublicSearch = "OeffentlicheSuche";
@@ -109,6 +110,13 @@ public static class PublicModules
         // a public tab of its own
         new(Objection, "Einspruch", "Widerspruch gegen eine öffentliche Ausschreibung.",
             Icons.Material.Filled.Balance, null, PublicModuleGroup.Service, 230, false, true, OffGeneric),
+        // no nav route, and here that is more than the usual reason: a report is filed from the notice it
+        // concerns, and a tab inviting a fresh one with no notice in hand would read as an invitation to go and
+        // catch somebody. The board keeps telling people not to intervene; this only records what already happened
+        new(CaptureReports, "Person gestellt melden",
+            "Meldung eines Bürgers, dass eine gesuchte Person bereits gestellt ist.",
+            Icons.Material.Filled.LocalPolice, null, PublicModuleGroup.Service, 235, false, true,
+            "Ergreifungsmeldungen nehmen wir derzeit nicht über die Website an."),
         new(CitizenRegistration, "Bürger-Registrierung", "Neuanmeldung eines Bürgerkontos über Discord. Bestehende Konten behalten ihren Zugang.",
             Icons.Material.Filled.Person, null, PublicModuleGroup.Service, 240, true, true,
             "Neue Bürgerkonten können derzeit nicht angelegt werden."),

@@ -1,4 +1,4 @@
-﻿using NOOSE_Website.Models.Abstractions;
+using NOOSE_Website.Models.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Recruiting;
@@ -17,6 +17,31 @@ public class BewerbungTestAssignment : IAuditable, ISoftDelete
 
     [Column("ZugewiesenVon")]
     public string? AssignedByName { get; set; }
+
+    /// <summary>When the applicant started the attempt; the clock runs from here, not from the assignment.</summary>
+    /// <remarks>Stamped exactly once by a compare-and-swap: prerender, a second tab and F5 all race for it.</remarks>
+    [Column("GestartetAm")]
+    public DateTime? StartedAt { get; set; }
+
+    /// <summary>The authoritative deadline in UTC; null means this attempt carries no limit.</summary>
+    [Column("FristBis")]
+    public DateTime? DeadlineAt { get; set; }
+
+    /// <summary>Minutes frozen at the start; without it a later edit to the test shortens a running attempt.</summary>
+    [Column("BearbeitungszeitMinuten")]
+    public int? TimeLimitMinutes { get; set; }
+
+    /// <summary>Extra minutes granted by HRB; kept as the lasting evidence that time was given.</summary>
+    [Column("ZusatzMinuten")]
+    public int ExtraMinutes { get; set; }
+
+    /// <summary>Closed by the clock rather than by the applicant; the marker the grading panel shows.</summary>
+    [Column("ZeitAbgelaufen")]
+    public bool TimedOut { get; set; }
+
+    /// <summary>Which attempt this is; a reset keeps the row, so this also reseeds the option shuffle.</summary>
+    [Column("Versuch")]
+    public int AttemptCount { get; set; } = 1;
 
     [Column("AbgeschlossenAm")]
     public DateTime? CompletedAt { get; set; }

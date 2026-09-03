@@ -1,4 +1,5 @@
 ﻿@page "/hinweis"
+@page "/hinweis/gestellt"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @using NOOSE_Website.Models.Public
@@ -6,21 +7,43 @@
 @inject ITipService Tips
 @inject IBuergerService BuergerService
 @inject IPublicWantedService Wanted
+@inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
 @* interactive on purpose: this is a form. The wanted profile that links here stays static and only carries a link *@
+@* two routes, one component: /hinweis is the observation, /hinweis/gestellt the capture report. The mode comes from
+   the PATH, never from a query parameter - parsing an attacker-supplied enum on an [AllowAnonymous] page is an
+   HTTP 500 waiting to happen (precedent ?vorschau=1, WarnhinweisColours) *@
 
-<PageTitle>Hinweis geben · NOOSE</PageTitle>
+<PageTitle>@(_capture ? "Person gestellt melden" : "Hinweis geben") · NOOSE</PageTitle>
 
-<PublicModuleGate Module="@PublicModules.Tips" Title="Hinweis geben">
+@* keyed: both routes bind the same component type, so Blazor reuses the instance and the gate - which decides in
+   OnInitializedAsync - would keep answering for the module of the route we came from *@
+<PublicModuleGate @key="_module" Module="@_module" Title="@(_capture ? "Person gestellt melden" : "Hinweis geben")">
 <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
     <MudStack Spacing="4">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerhinweis</MudText>
-            <MudText Typo="Typo.h4">Beobachtung melden</MudText>
+            <MudText Typo="Typo.overline" Color="Color.Primary">
+                @(_capture ? "Ergreifungsmeldung" : "Bürgerhinweis")
+            </MudText>
+            <MudText Typo="Typo.h4">@(_capture ? "Person gestellt melden" : "Beobachtung melden")</MudText>
             <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:680px;">
-                Jeder Hinweis wird von einem Agenten gelesen und bewertet. Greife niemals selbst ein und
-                halte Abstand zu gesuchten Personen.
+                @if (_capture)
+                {
+                    @* the standing advice is not repeated here and not reversed either: this form records what
+                       already happened, it does not invite anyone to go and do it *@
+                    <text>
+                        Dieses Formular ist für den Fall, dass du eine gesuchte Person <b>bereits</b> gestellt hast.
+                        NOOSE übernimmt ab hier — halte sie nur so lange fest, wie es für dich sicher ist.
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        Jeder Hinweis wird von einem Agenten gelesen und bewertet. Greife niemals selbst ein und
+                        halte Abstand zu gesuchten Personen.
+                    </text>
+                }
             </MudText>
         </MudStack>
 
@@ -28,7 +51,14 @@
         {
             <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
                 <MudStack Spacing="2">
-                    <div>Dein Hinweis wurde unter dem Aktenzeichen <b>@_caseNumber</b> aufgenommen.</div>
+                    <div>
+                        @(_capture ? "Deine Ergreifungsmeldung" : "Dein Hinweis") wurde unter dem Aktenzeichen
+                        <b>@_caseNumber</b> aufgenommen.
+                        @if (_capture)
+                        {
+                            <text>Ein Agent meldet sich im Schriftwechsel — lass die Seite offen.</text>
+                        }
+                    </div>
                     <div>
                         <MudButton Href="/buerger/hinweise" Variant="Variant.Filled" Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.TipsAndUpdates">Meine Hinweise</MudButton>
@@ -86,6 +116,22 @@
                                 Bezug: <b>@_reference.DisplayName</b> (@_reference.CaseNumber)
                             </MudAlert>
                         }
+                        else if (_capture)
+                        {
+                            @* no notice, nothing to report against: the way out is the board, not an empty form *@
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                                <MudStack Spacing="2">
+                                    <div>
+                                        Eine Ergreifungsmeldung braucht die Ausschreibung, um die es geht. Öffne die
+                                        Person auf der Fahndungsliste und melde von dort.
+                                    </div>
+                                    <div>
+                                        <MudButton Href="/gesucht" Variant="Variant.Filled" Color="Color.Primary"
+                                                   StartIcon="@Icons.Material.Filled.PersonSearch">Zur Fahndung</MudButton>
+                                    </div>
+                                </MudStack>
+                            </MudAlert>
+                        }
                         else if (!string.IsNullOrWhiteSpace(Fahndung))
                         {
                             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
@@ -93,7 +139,28 @@
                             </MudAlert>
                         }
 
-                        <MudTextField @bind-Value="_input.Text" Label="Deine Beobachtung" Lines="8"
+                        @if (_capture && _reference is not null)
+                        {
+                            <MudRadioGroup T="TipHandover?" @bind-Value="_input.Handover">
+                                @foreach (var state in TipHandoverDisplay.All)
+                                {
+                                    <MudRadio T="TipHandover?" Value="@((TipHandover?)state)" Color="Color.Primary">
+                                        @TipHandoverDisplay.Name(state)
+                                    </MudRadio>
+                                }
+                            </MudRadioGroup>
+                            <MudTextField @bind-Value="_input.HandoverLocation"
+                                          Label="@(_input.Handover is { } h
+                                              ? TipHandoverDisplay.LocationLabel(h)
+                                              : "Ort")"
+                                          Variant="Variant.Outlined" Immediate="true"
+                                          MaxLength="@CaptureRules.MaxLocationLength"
+                                          Counter="@CaptureRules.MaxLocationLength"
+                                          HelperText="Straße, Gebäude oder Wache — je genauer, desto schneller ist jemand da." />
+                        }
+
+                        <MudTextField @bind-Value="_input.Text"
+                                      Label="@(_capture ? "Was ist passiert?" : "Deine Beobachtung")" Lines="8"
                                       Variant="Variant.Outlined" Immediate="true"
                                       MaxLength="@TipRules.MaxLength" Counter="@TipRules.MaxLength"
                                       HelperText="@($"Wann, wo, wer, was — mindestens {TipRules.MinLength} Zeichen.")" />
@@ -120,28 +187,49 @@
                         </MudStack>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
                             Optional: ein Bild (JPG, PNG, WEBP, GIF), maximal @(TipUploadLimit / (1024 * 1024)) MB.
-                            @if (_quota is { } quota)
+                            @if (_capture)
+                            {
+                                <text>Du kannst @CaptureRules.PerDay Ergreifungsmeldungen in 24 Stunden abgeben.</text>
+                            }
+                            else if (_quota is { } quota)
                             {
                                 <text>Du kannst @quota Hinweise in 24 Stunden einreichen.</text>
                             }
                         </MudText>
 
-                        <MudCheckBox T="bool" @bind-Value="_input.WantsAnonymity" Color="Color.Primary"
-                                     Label="Meinen Namen gegenüber den Bearbeitern nicht anzeigen" />
-                        @if (_input.WantsAnonymity)
+                        @if (_capture)
                         {
+                            @* no anonymity switch at all: the service refuses it on this path, and offering a
+                               choice that is then overruled reads as a broken promise *@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:680px;">
-                                Anonym heißt: die Bearbeiter sehen deinen Namen nicht. Für eine Belohnung muss die
-                                Führungsebene die Anonymität später ausdrücklich aufheben — ohne diesen Schritt ist
-                                keine Auszahlung möglich.
+                                Diese Meldung ist nicht anonym — für die Übergabe und eine mögliche Belohnung müssen
+                                wir wissen, mit wem wir es zu tun haben.
                             </MudText>
                         }
+                        else
+                        {
+                            <MudCheckBox T="bool" @bind-Value="_input.WantsAnonymity" Color="Color.Primary"
+                                         Label="Meinen Namen gegenüber den Bearbeitern nicht anzeigen" />
+                            @if (_input.WantsAnonymity)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:680px;">
+                                    Anonym heißt: die Bearbeiter sehen deinen Namen nicht. Für eine Belohnung muss die
+                                    Führungsebene die Anonymität später ausdrücklich aufheben — ohne diesen Schritt ist
+                                    keine Auszahlung möglich.
+                                </MudText>
+                            }
+                        }
 
-                        <div>
-                            <MudButton OnClick="SubmitAsync" Disabled="_busy" Variant="Variant.Filled"
-                                       Color="Color.Primary" Size="Size.Large"
-                                       StartIcon="@Icons.Material.Filled.Send">Hinweis absenden</MudButton>
-                        </div>
+                        @if (!_capture || _reference is not null)
+                        {
+                            <div>
+                                <MudButton OnClick="SubmitAsync" Disabled="_busy" Variant="Variant.Filled"
+                                           Color="@(_capture ? Color.Error : Color.Primary)" Size="Size.Large"
+                                           StartIcon="@Icons.Material.Filled.Send">
+                                    @(_capture ? "Ergreifung melden" : "Hinweis absenden")
+                                </MudButton>
+                            </div>
+                        }
                     }
                 </Authorized>
             </AuthorizeView>
@@ -176,8 +264,28 @@
     private string? _caseNumber;
     private string? _loadedReference;
 
+    // read off the path, not off a query parameter: there is no user input to parse, so there is nothing to
+    // reject and no 500 to trigger
+    private bool _capture;
+    private string _module = PublicModules.Tips;
+
     protected override async Task OnParametersSetAsync()
     {
+        // before anything else: the gate above is keyed on _module, and the header reads _capture
+        var path = Nav.ToBaseRelativePath(Nav.Uri);
+        var query = path.IndexOf('?');
+        // exact, not EndsWith: the route is known, and a looser match would answer for paths that do not exist
+        _capture = string.Equals((query < 0 ? path : path[..query]).Trim('/'),
+            "hinweis/gestellt", StringComparison.OrdinalIgnoreCase);
+        _module = _capture ? PublicModules.CaptureReports : PublicModules.Tips;
+        _input.Kind = _capture ? TipKind.Ergreifung : TipKind.Beobachtung;
+        if (_capture)
+        {
+            // the switch is not rendered here; clearing it keeps the input honest when someone ticked it on the
+            // observation route and then switched. The service refuses it either way
+            _input.WantsAnonymity = false;
+        }
+
         _user = (await AuthStateTask).User;
         if (_user.MayUseCitizenPortal() && !_ready)
         {
@@ -255,5 +363,10 @@
     private const long TipUploadLimit = 10 * 1024 * 1024;
 
     private string ReturnUrl()
-        => string.IsNullOrWhiteSpace(Fahndung) ? "/hinweis" : $"/hinweis?fahndung={Uri.EscapeDataString(Fahndung)}";
+    {
+        var route = _capture ? "/hinweis/gestellt" : "/hinweis";
+        return string.IsNullOrWhiteSpace(Fahndung)
+            ? route
+            : $"{route}?fahndung={Uri.EscapeDataString(Fahndung)}";
+    }
 }

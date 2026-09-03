@@ -12,7 +12,7 @@ public interface IBewerbungssperreService
     /// <summary>All active bans and blacklist entries, newest first. HRB/leadership only.</summary>
     Task<List<BewerbungssperreInfo>> ListActiveAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Impose (or refresh) the 14-day temporary ban after a rejection. HRB/leadership, write access.</summary>
+    /// <summary>Impose (or refresh) the temporary ban after a rejection; the length is <see cref="BewerbungssperreRules.BanDuration"/>. HRB/leadership, write access.</summary>
     Task BanAsync(string agentId, string? bewerbungId, string? applicantName, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Put the applicant on the permanent blacklist. HRB/leadership, write access.</summary>

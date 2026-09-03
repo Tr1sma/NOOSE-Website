@@ -23,6 +23,8 @@ public class EnumDisplayTests_B
     [InlineData(NotificationType.Announcement, "Ankündigung")]
     [InlineData(NotificationType.Followup, "Wiedervorlage fällig")]
     [InlineData(NotificationType.AppointmentAssigned, "Termin")]
+    [InlineData(NotificationType.AppointmentScheduled, "Neuer Termin")]
+    [InlineData(NotificationType.AgentTerminated, "Kündigung")]
     [InlineData(NotificationType.SituationReport, "Lagebericht")]
     [InlineData(NotificationType.Recruiting, "Bewerbung")]
     [InlineData(NotificationType.JobDueSoon, "Aufgabe fällig")]
@@ -31,6 +33,7 @@ public class EnumDisplayTests_B
     [InlineData(NotificationType.AbsenceFiled, "Abmeldung")]
     [InlineData(NotificationType.PublicWantedPublished, "Öffentliche Ausschreibung")]
     [InlineData(NotificationType.PublicWantedExpired, "Ausschreibung abgelaufen")]
+    [InlineData(NotificationType.PublicTicketCreated, "Neues Ticket")]
     public void NotificationTypeName_definedValue_mapsToLabel(NotificationType type, string expected)
         => Assert.Equal(expected, NotificationTypeDisplay.Name(type));
 
@@ -49,6 +52,8 @@ public class EnumDisplayTests_B
         Assert.Equal(Icons.Material.Filled.Campaign, NotificationTypeDisplay.Icon(NotificationType.Announcement));
         Assert.Equal(Icons.Material.Filled.EventRepeat, NotificationTypeDisplay.Icon(NotificationType.Followup));
         Assert.Equal(Icons.Material.Filled.Event, NotificationTypeDisplay.Icon(NotificationType.AppointmentAssigned));
+        Assert.Equal(Icons.Material.Filled.EventAvailable, NotificationTypeDisplay.Icon(NotificationType.AppointmentScheduled));
+        Assert.Equal(Icons.Material.Filled.PersonRemove, NotificationTypeDisplay.Icon(NotificationType.AgentTerminated));
         Assert.Equal(Icons.Material.Filled.Assessment, NotificationTypeDisplay.Icon(NotificationType.SituationReport));
         Assert.Equal(Icons.Material.Filled.HowToReg, NotificationTypeDisplay.Icon(NotificationType.Recruiting));
         Assert.Equal(Icons.Material.Filled.AssignmentLate, NotificationTypeDisplay.Icon(NotificationType.JobDueSoon));
@@ -56,6 +61,7 @@ public class EnumDisplayTests_B
         Assert.Equal(Icons.Material.Filled.NotificationsActive, NotificationTypeDisplay.Icon(NotificationType.MeetingReminder));
         Assert.Equal(Icons.Material.Filled.EventBusy, NotificationTypeDisplay.Icon(NotificationType.AbsenceFiled));
         Assert.Equal(Icons.Material.Filled.PersonSearch, NotificationTypeDisplay.Icon(NotificationType.PublicWantedPublished));
+        Assert.Equal(Icons.Material.Filled.QuestionAnswer, NotificationTypeDisplay.Icon(NotificationType.PublicTicketCreated));
         Assert.Equal(Icons.Material.Filled.TimerOff, NotificationTypeDisplay.Icon(NotificationType.PublicWantedExpired));
     }
 
@@ -450,6 +456,40 @@ public class EnumDisplayTests_B
     [Fact]
     public void TestQuestionTypeName_undefinedValue_returnsDash()
         => Assert.Equal("—", TestQuestionTypeDisplay.Name((TestQuestionType)99));
+
+    // ---------------------------------------------------------------------
+    // TestAttemptStateDisplay
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(TestAttemptState.NotStarted, "Nicht begonnen")]
+    [InlineData(TestAttemptState.Running, "Läuft")]
+    [InlineData(TestAttemptState.Expired, "Zeit abgelaufen")]
+    [InlineData(TestAttemptState.Submitted, "Abgegeben")]
+    public void TestAttemptStateName_definedValue_mapsToLabel(TestAttemptState state, string expected)
+        => Assert.Equal(expected, TestAttemptStateDisplay.Name(state));
+
+    [Fact]
+    public void TestAttemptStateName_undefinedValue_returnsDash()
+        => Assert.Equal("—", TestAttemptStateDisplay.Name((TestAttemptState)99));
+
+    [Fact]
+    public void TestAttemptStateName_everyValue_nonEmpty()
+    {
+        foreach (var value in Enum.GetValues<TestAttemptState>())
+        {
+            Assert.False(string.IsNullOrEmpty(TestAttemptStateDisplay.Name(value)));
+        }
+    }
+
+    [Theory]
+    [InlineData(TestAttemptState.NotStarted, Color.Default)]
+    [InlineData(TestAttemptState.Running, Color.Info)]
+    // Warning, never Error: Error is the failed-verdict colour in the grading panel
+    [InlineData(TestAttemptState.Expired, Color.Warning)]
+    [InlineData(TestAttemptState.Submitted, Color.Success)]
+    public void TestAttemptStateChipColor_definedValue_mapsToColour(TestAttemptState state, Color expected)
+        => Assert.Equal(expected, TestAttemptStateDisplay.ChipColor(state));
 
     // ---------------------------------------------------------------------
     // AbsenceCategoryDisplay

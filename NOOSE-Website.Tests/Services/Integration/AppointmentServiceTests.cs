@@ -246,6 +246,125 @@ public sealed class AppointmentServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_AnnouncesToLeadership_ExceptCreator()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", configure: a => a.Rank = Rank.Director));
+            db.Users.Add(Seed.Agent("admin", configure: a => a.IsAdmin = true));
+            db.Users.Add(Seed.Agent("junior", configure: a => a.Rank = Rank.JuniorAgent));
+            db.Users.Add(Seed.Agent("tl", configure: a =>
+            {
+                a.Rank = Rank.Director;
+                a.IsTeamLead = true;
+            }));
+            db.Users.Add(Seed.Agent("partner", configure: a =>
+            {
+                a.Rank = Rank.Director;
+                a.PartnerAgency = PartnerAgency.LSPD;
+            }));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        await svc.CreateAsync(Input(title: "Gerichtstermin"), Array.Empty<string>(), Leader("boss"));
+
+        // leadership and admin only; team lead and partner are never selectable, the creator is the trigger
+        await notifications.Received(1).NotifyManyAsync(
+            Arg.Is<IReadOnlyCollection<string>>(r =>
+                r.Contains("boss") && r.Contains("admin")
+                && !r.Contains("junior") && !r.Contains("tl") && !r.Contains("partner")),
+            NotificationType.AppointmentScheduled,
+            Arg.Any<string>(), Arg.Any<string>(), "boss", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAsync_LeadershipTitle_CarriesTitleTimeAndCategory()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", configure: a => a.Rank = Rank.Director));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        var created = await svc.CreateAsync(
+            Input(title: "Razzia", start: new DateTime(2026, 8, 1, 14, 30, 0)),
+            Array.Empty<string>(), NonLeader("creator-1"));
+
+        await notifications.Received(1).NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(),
+            NotificationType.AppointmentScheduled,
+            Arg.Is<string>(t => t.Contains("Razzia") && t.Contains("01.08.2026 14:30") && t.Contains("Interner Termin")),
+            $"/kalender/{created.Id}", "creator-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAsync_LeadershipTitle_OmitsClockTime_ForAllDay()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", configure: a => a.Rank = Rank.Director));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        await svc.CreateAsync(
+            Input(title: "Feiertag", start: new DateTime(2026, 8, 1, 14, 30, 0), allDay: true),
+            Array.Empty<string>(), NonLeader("creator-1"));
+
+        await notifications.Received(1).NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(),
+            NotificationType.AppointmentScheduled,
+            Arg.Is<string>(t => t.Contains("01.08.2026") && !t.Contains("Uhr")),
+            Arg.Any<string>(), "creator-1", Arg.Any<CancellationToken>());
+    }
+
+    // leadership sees every appointment anyway, so no visibility level is withheld from them
+    [Theory]
+    [InlineData(AppointmentVisibilityLevel.Public)]
+    [InlineData(AppointmentVisibilityLevel.Restricted)]
+    [InlineData(AppointmentVisibilityLevel.Private)]
+    public async Task CreateAsync_AnnouncesToLeadership_ForEveryVisibility(AppointmentVisibilityLevel visibility)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", configure: a => a.Rank = Rank.Director));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        await svc.CreateAsync(Input(visibility: visibility), Array.Empty<string>(), NonLeader("creator-1"));
+
+        await notifications.Received(1).NotifyManyAsync(
+            Arg.Is<IReadOnlyCollection<string>>(r => r.Contains("boss")), NotificationType.AppointmentScheduled,
+            Arg.Any<string>(), Arg.Any<string>(), "creator-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_DoesNotAnnounceToLeadership()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("boss", configure: a => a.Rank = Rank.Director));
+            db.Appointments.Add(MakeAppointment("a1", createdById: "creator-1"));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        await svc.RefreshAsync("a1", Input(title: "Verschoben"), Leader("boss"));
+
+        await notifications.DidNotReceive().NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(), NotificationType.AppointmentScheduled,
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task CreateAsync_NoAssignments_WhenAgentIdsEmpty()
     {
         using var ctx = new SqliteTestContext();

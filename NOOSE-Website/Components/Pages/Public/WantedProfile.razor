@@ -145,6 +145,19 @@
                         }
                     </MudStack>
 
+                    @if (_mayCapture)
+                    {
+                        @* deliberately a text link below the row, not a fourth equal button: see the note above
+                           about three flat labels reading as a tab bar. A link, not a dialog - this page renders
+                           statically and has no circuit *@
+                        <MudText Typo="Typo.body2">
+                            <MudLink Href="@($"/hinweis/gestellt?fahndung={_entry.CaseNumber}")"
+                                     Color="Color.Error" Typo="Typo.body2">
+                                Du hast diese Person bereits gestellt? Hier melden →
+                            </MudLink>
+                        </MudText>
+                    }
+
                     @if (!_mayObject && _objectionOffered)
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -172,6 +185,7 @@
     private PublicBounty? _bounty;
     private bool _mayPrint;
     private bool _mayTip;
+    private bool _mayCapture;
     private bool _mayObject;
     private bool _objectionOffered;
     private string? _loadedKey;
@@ -206,6 +220,10 @@
                 var snapshot = await Modules.GetAsync();
                 _mayPrint = snapshot.IsEnabled(PublicModules.WantedPrint);
                 _mayTip = snapshot.IsEnabled(PublicModules.Tips);
+                // the switch and the kind: nobody apprehends a vehicle, a missing person or a witness appeal.
+                // The service refuses either way; this only keeps the page honest
+                _mayCapture = snapshot.IsEnabled(PublicModules.CaptureReports)
+                    && CaptureRules.MayReport(_entry.Kind);
                 // the switch alone is not enough any more: only the person a notice names may dispute it, and an
                 // item notice names nobody. The service refuses either way; this only keeps the page honest.
                 _objectionOffered = snapshot.IsEnabled(PublicModules.Objection)

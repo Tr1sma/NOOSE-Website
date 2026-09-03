@@ -52,6 +52,7 @@ public sealed class TicketServiceTests
         TicketService Service,
         PublicModuleService Modules,
         INotificationService Notifications,
+        IDiscordWebhookService Discord,
         TestDbContextFactory Factory);
 
     /// <summary>The service with the audit interceptor attached, as in production.</summary>
@@ -76,9 +77,10 @@ public sealed class TicketServiceTests
             .Returns(ci => $"NOOSE-{ci.ArgAt<string>(1)}-2026-{++seq:0000}");
 
         var notifications = Substitute.For<INotificationService>();
+        var discord = Substitute.For<IDiscordWebhookService>();
         var service = new TicketService(factory, modules, new BuergerService(factory), caseNumbers,
-            notifications, new PublicTemplateService(factory), new TicketBroadcaster());
-        return new Host(service, modules, notifications, factory);
+            notifications, new PublicTemplateService(factory), discord, new TicketBroadcaster());
+        return new Host(service, modules, notifications, discord, factory);
     }
 
     /// <summary>Seeds the module switch and two complete citizen profiles.</summary>
@@ -151,6 +153,35 @@ public sealed class TicketServiceTests
         Assert.Equal(TicketMessageAudience.Buerger, message.Audience);
         Assert.True(message.AuthorIsCitizen);
         Assert.Null(message.AuthorAgentId);
+    }
+
+    [Fact]
+    public async Task Opening_pings_the_leadership_role_on_Discord_without_naming_the_citizen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+
+        // no headline argument: the channel gets the generic notice plus the link, never subject or name
+        await host.Discord.Received(1).PushAsync(NotificationType.PublicTicketCreated, $"/tickets/{id}",
+            null, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_citizen_reply_pings_nobody_on_Discord()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        host.Discord.ClearReceivedCalls();
+
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Ich habe den Kaufvertrag gefunden.", Citizen());
+
+        // only the opening is an event for the channel; a running thread would turn the ping into noise
+        await host.Discord.DidNotReceive().PushAsync(Arg.Any<NotificationType>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -507,6 +538,26 @@ public sealed class TicketServiceTests
     }
 
     [Fact]
+    public async Task AnInternalTicketOpensAtTheDesk()
+    {
+        // no citizen behind it, so the detail projection must survive the LEFT JOIN coming back empty
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+        var id = await IdAsync(host, caseNumber);
+
+        var detail = await host.Service.GetAsync(id, Junior());
+
+        Assert.NotNull(detail);
+        Assert.Equal(TicketArt.Intern, detail!.Kind);
+        Assert.Equal("Wren", detail.OpenedByCodename);
+        Assert.Equal(string.Empty, detail.CitizenName);
+        Assert.False(detail.CitizenIsBlocked);
+    }
+
+    [Fact]
     public async Task ACitizenCannotOpenAnInternalTicket()
     {
         using var ctx = await SeededAsync();
@@ -682,12 +733,12 @@ public sealed class TicketServiceTests
 
         // taking the ticket on is news to the desk, not to the citizen
         await host.Service.AssignSelfAsync(id, Leader());
-        await host.Notifications.DidNotReceive().NotifyAsync(Arg.Any<string>(),
+        await host.Notifications.DidNotReceive().NotifyOnceAsync(Arg.Any<string>(),
             NotificationType.PublicTicketAnswered, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
 
         await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
-        await host.Notifications.Received(1).NotifyAsync(CitizenUserId,
+        await host.Notifications.Received(1).NotifyOnceAsync(CitizenUserId,
             NotificationType.PublicTicketAnswered, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
@@ -882,7 +933,7 @@ public sealed class TicketServiceTests
         Assert.Equal(TicketStatus.Offen, ticket!.Status);
         // the unread counter shows the confirmation by itself
         Assert.Equal(1, await host.Service.GetOwnUnreadCountAsync(Citizen()));
-        await host.Notifications.DidNotReceive().NotifyManyAsync(
+        await host.Notifications.DidNotReceive().NotifyManyOnceAsync(
             Arg.Any<IReadOnlyList<string>>(), NotificationType.PublicTicketAnswered, Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }

@@ -686,9 +686,9 @@ public class AgentManagementService(
         {
             try
             {
-                await discord.PushPersonnelEntryAsync(agent.Id, subjectDisplay,
-                    AgentNoteKindDisplay.Name(AgentNoteKind.Termination), agent.TerminatedAt.Value,
-                    trimmed, new[] { actorName ?? string.Empty }, $"/personal/{agent.Id}", cancellationToken);
+                // the termination channel, not the personnel one: its own embed, and no double post
+                await discord.PushTerminationAsync(agent.Id, subjectDisplay, agent.TerminatedById,
+                    actorName, agent.TerminatedAt.Value, trimmed, $"/personal/{agent.Id}", cancellationToken);
             }
             catch { /* best effort */ }
         }
@@ -729,7 +729,7 @@ public class AgentManagementService(
     {
         var now = DateTime.UtcNow;
         var active = await db.Bewerbungssperren
-            .Where(s => s.AgentId == agent.Id && (s.IsBlacklist || s.BannedUntil > now))
+            .Where(s => s.AgentId == agent.Id).Where(BewerbungssperreRules.Active(now))
             .ToListAsync(cancellationToken);
 
         if (active.Any(s => s.IsBlacklist))

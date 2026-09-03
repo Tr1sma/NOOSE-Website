@@ -1,4 +1,4 @@
-﻿@page "/bewerbungs-tests/{Id}"
+@page "/bewerbungs-tests/{Id}"
 @attribute [Authorize(Policy = Policies.HrbOrLeadership)]
 @inject IBewerbungTestService TestService
 @inject NavigationManager Nav
@@ -18,8 +18,16 @@
             <MudCheckBox T="bool" @bind-Value="_model.Test.IsActive" Label="Aktiv" />
             <MudNumericField T="int?" @bind-Value="_model.Test.PassPercent" Label="Bestehensgrenze % (leer = keine)" Min="0" Max="100"
                              Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:240px;" />
+            <MudNumericField T="int?" @bind-Value="_model.Test.TimeLimitMinutes" Label="Bearbeitungszeit Min. (leer = unbegrenzt)" Min="1" Max="@TestDeadline.MaxMinutes"
+                             Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:270px;" />
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTestAsync">Speichern</MudButton>
         </MudStack>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+            Die Uhr startet, sobald der Bewerber den Test startet, und läuft durchgehend weiter — auch wenn er das
+            Fenster schließt. Bei Ablauf wird automatisch abgegeben, was er bis dahin eingetragen hat, und die
+            Zuweisung als „Zeit abgelaufen“ markiert. Eine Änderung hier wirkt erst auf Versuche, die danach
+            gestartet werden. Solange ein Bewerber den Test bearbeitet, sind Fragen und Antwortoptionen gesperrt.
+        </MudText>
     </MudPaper>
 
     @foreach (var (qe, qi) in _model.Questions.Select((q, i) => (q, i + 1)))
@@ -143,7 +151,8 @@
     {
         try
         {
-            await TestService.UpdateTestAsync(_model!.Test.Id, _model.Test.Title, _model.Test.Description, _model.Test.IsActive, _model.Test.PassPercent, _user);
+            await TestService.UpdateTestAsync(_model!.Test.Id, _model.Test.Title, _model.Test.Description, _model.Test.IsActive,
+                _model.Test.PassPercent, _model.Test.TimeLimitMinutes, _user);
             Snackbar.Add("Gespeichert.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }

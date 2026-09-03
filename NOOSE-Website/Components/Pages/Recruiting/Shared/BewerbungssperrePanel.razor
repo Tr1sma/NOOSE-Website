@@ -80,10 +80,11 @@
     protected override async Task OnInitializedAsync()
     {
         _canWrite = User.MayWrite();
-        await LoadAsync();
+        await RefreshAsync();
     }
 
-    private async Task LoadAsync()
+    /// <summary>Re-read the ban; public because the detail page calls it after every decision.</summary>
+    public async Task RefreshAsync()
     {
         _load = true;
         try
@@ -98,6 +99,7 @@
         finally
         {
             _load = false;
+            StateHasChanged();
         }
     }
 
@@ -109,7 +111,7 @@
             await SperreService.BlacklistAsync(ApplicantUserId, BewerbungId, ApplicantName, _reason, User);
             _reason = null;
             Snackbar.Add("Bewerber auf die Blacklist gesetzt.", Severity.Success);
-            await LoadAsync();
+            await RefreshAsync();
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
         finally { _busy = false; }
@@ -125,9 +127,9 @@
         _busy = true;
         try
         {
-            await SperreService.ShortenAsync(_info!.Id, until, User);
+            await SperreService.ShortenAsync(_info!.Id, BewerbungssperreRules.PickedDateToUtc(until), User);
             Snackbar.Add("Sperre angepasst.", Severity.Success);
-            await LoadAsync();
+            await RefreshAsync();
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
         finally { _busy = false; }
@@ -140,7 +142,7 @@
         {
             await SperreService.LiftAsync(_info!.Id, User);
             Snackbar.Add("Sperre aufgehoben.", Severity.Success);
-            await LoadAsync();
+            await RefreshAsync();
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
         finally { _busy = false; }

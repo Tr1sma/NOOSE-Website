@@ -35,6 +35,57 @@ public class NotificationService(
         broadcaster.Report(recipientId);
     }
 
+    public async Task NotifyOnceAsync(string? recipientId, NotificationType type, string title, string? href,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(recipientId))
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await TryFoldAsync(db, recipientId, type, title, href, cancellationToken))
+        {
+            db.Notifications.Add(new Notification
+            {
+                RecipientId = recipientId,
+                Type = type,
+                Title = title,
+                Href = href,
+            });
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(recipientId);
+    }
+
+    /// <summary>Refreshes the recipient's still-unread notice for the same target; false when there is none to fold onto.</summary>
+    /// <remarks>A thread that runs for a while must not fill the bell line by line; the unread notice IS the summary.</remarks>
+    private static async Task<bool> TryFoldAsync(AppDbContext db, string recipientId, NotificationType type,
+        string title, string? href, CancellationToken cancellationToken)
+    {
+        // without a target there is no identity to fold on
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return false;
+        }
+
+        var open = await db.Notifications
+            .Where(n => n.RecipientId == recipientId && n.Type == type && n.Href == href && n.ReadAt == null)
+            .OrderByDescending(n => n.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (open is null)
+        {
+            return false;
+        }
+
+        open.Title = title;
+        // the bell sorts by CreatedAt, so an unbumped fold would stay buried under newer rows;
+        // the audit interceptor stamps ModifiedAt on an update and leaves CreatedAt alone
+        open.CreatedAt = DateTime.UtcNow;
+        return true;
+    }
+
     public Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
         ClaimsPrincipal trigger, CancellationToken cancellationToken = default)
         => FanOutMentionsAsync(MentionedAgentIds(text, trigger), title, href, targetType, targetId, cancellationToken);
@@ -143,6 +194,51 @@ public class NotificationService(
         // one channel post per broadcast event; role categories ping their role, personal categories ping these recipients.
         // the in-app title is forwarded as an optional headline (used only for header-eligible categories when enabled)
         await discord.PushAsync(type, href, targets, title, cancellationToken);
+    }
+
+    public async Task NotifyManyOnceAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
+        string title, string? href, string? triggerId, CancellationToken cancellationToken = default)
+    {
+        // exclude trigger, dedupe, drop empties
+        var targets = recipientIds
+            .Where(id => !string.IsNullOrWhiteSpace(id) && id != triggerId)
+            .Distinct()
+            .ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var fresh = new List<string>();
+        foreach (var id in targets)
+        {
+            if (await TryFoldAsync(db, id, type, title, href, cancellationToken))
+            {
+                continue;
+            }
+            db.Notifications.Add(new Notification
+            {
+                RecipientId = id,
+                Type = type,
+                Title = title,
+                Href = href,
+            });
+            fresh.Add(id);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        // a fold changes the headline and the order, so every recipient's bell is refreshed
+        foreach (var id in targets)
+        {
+            broadcaster.Report(id);
+        }
+
+        // a fold is a refresh of something already announced; only a genuinely new notice reaches the channel
+        if (fresh.Count > 0)
+        {
+            await discord.PushAsync(type, href, fresh, title, cancellationToken);
+        }
     }
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)

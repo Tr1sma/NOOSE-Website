@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -39,7 +39,7 @@ public class BewerbungTestService(
         return test;
     }
 
-    public async Task UpdateTestAsync(string id, string title, string? description, bool isActive, int? passPercent, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task UpdateTestAsync(string id, string title, string? description, bool isActive, int? passPercent, int? timeLimitMinutes, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireHrbOrLeadership(actor);
         if (string.IsNullOrWhiteSpace(title))
@@ -53,6 +53,8 @@ public class BewerbungTestService(
         test.Description = Trim(description);
         test.IsActive = isActive;
         test.PassPercent = passPercent is null ? null : Math.Clamp(passPercent.Value, 0, 100);
+        // a running attempt keeps the deadline frozen at its start, so this only reaches later attempts
+        test.TimeLimitMinutes = TestDeadline.Clamp(timeLimitMinutes);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -103,6 +105,7 @@ public class BewerbungTestService(
     {
         Permission.RequireHrbOrLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await RequireNoLiveAttemptAsync(db, testId, cancellationToken);
         var max = await db.BewerbungTestQuestions.Where(q => q.TestId == testId)
             .MaxAsync(q => (int?)q.Sorting, cancellationToken) ?? 0;
         var question = new BewerbungTestQuestion
@@ -124,6 +127,7 @@ public class BewerbungTestService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var question = await db.BewerbungTestQuestions.FirstOrDefaultAsync(q => q.Id == questionId, cancellationToken)
             ?? throw new InvalidOperationException("Frage nicht gefunden.");
+        await RequireNoLiveAttemptAsync(db, question.TestId, cancellationToken);
         question.Prompt = (prompt ?? string.Empty).Trim();
         question.Required = required;
         question.Points = Math.Max(0, points);
@@ -144,6 +148,7 @@ public class BewerbungTestService(
         {
             return;
         }
+        await RequireNoLiveAttemptAsync(db, question.TestId, cancellationToken);
         db.BewerbungTestQuestions.Remove(question);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -152,6 +157,7 @@ public class BewerbungTestService(
     {
         Permission.RequireHrbOrLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await RequireNoLiveAttemptForQuestionAsync(db, questionId, cancellationToken);
         var max = await db.BewerbungTestOptions.Where(o => o.QuestionId == questionId)
             .MaxAsync(o => (int?)o.Sorting, cancellationToken) ?? 0;
         var option = new BewerbungTestOption
@@ -172,6 +178,7 @@ public class BewerbungTestService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var option = await db.BewerbungTestOptions.FirstOrDefaultAsync(o => o.Id == optionId, cancellationToken)
             ?? throw new InvalidOperationException("Antwortoption nicht gefunden.");
+        await RequireNoLiveAttemptForQuestionAsync(db, option.QuestionId, cancellationToken);
         option.Label = (label ?? string.Empty).Trim();
         option.IsCorrect = isCorrect;
         await db.SaveChangesAsync(cancellationToken);
@@ -186,6 +193,7 @@ public class BewerbungTestService(
         {
             return;
         }
+        await RequireNoLiveAttemptForQuestionAsync(db, option.QuestionId, cancellationToken);
         db.BewerbungTestOptions.Remove(option);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -244,7 +252,11 @@ public class BewerbungTestService(
 
         var assignment = await db.BewerbungTestAssignments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken);
-        return assignment is null ? null : await BuildEvaluationAsync(db, assignment, cancellationToken);
+        // an open attempt has draft answers in those rows: reading them would let HRB watch the applicant type,
+        // and would let a grade be frozen mid-attempt
+        return assignment is { CompletedAt: not null }
+            ? await BuildEvaluationAsync(db, assignment, cancellationToken)
+            : null;
     }
 
     /// <summary>The evaluation itself; both grading transitions read it through the same path the panel does.</summary>
@@ -259,6 +271,7 @@ public class BewerbungTestService(
             .Where(o => questionIds.Contains(o.QuestionId)).ToListAsync(cancellationToken);
         var answers = await db.BewerbungTestAnswers.AsNoTracking()
             .Where(a => a.AssignmentId == assignment.Id).ToListAsync(cancellationToken);
+        var byQuestion = PickAnswers(answers);
 
         var items = new List<TestEvaluationItem>();
         var total = 0;
@@ -266,7 +279,7 @@ public class BewerbungTestService(
         foreach (var q in questions)
         {
             max += q.Points;
-            var answer = answers.FirstOrDefault(a => a.QuestionId == q.Id);
+            byQuestion.TryGetValue(q.Id, out var answer);
             string? answerText = null;
             bool? autoCorrect = null;
             string? correctAnswer = null;
@@ -349,9 +362,13 @@ public class BewerbungTestService(
             .FirstOrDefaultAsync(q => q.Id == questionId && q.TestId == assignment.TestId, cancellationToken)
             ?? throw new InvalidOperationException("Frage gehört nicht zu diesem Test.");
 
-        // keyed on the question, not on an answer row: a question added after the applicant submitted has none
-        var answer = await db.BewerbungTestAnswers
-            .FirstOrDefaultAsync(a => a.AssignmentId == assignmentId && a.QuestionId == questionId, cancellationToken);
+        // keyed on the question, not on an answer row: a question added after the applicant submitted has none.
+        // Picked the same way the evaluation picks, so a duplicate row cannot make the grader edit the row the
+        // evaluation ignores.
+        var rows = await db.BewerbungTestAnswers
+            .Where(a => a.AssignmentId == assignmentId && a.QuestionId == questionId)
+            .ToListAsync(cancellationToken);
+        PickAnswers(rows).TryGetValue(questionId, out var answer);
         if (answer is null)
         {
             answer = new BewerbungTestAnswer { AssignmentId = assignmentId, QuestionId = questionId };
@@ -448,7 +465,7 @@ public class BewerbungTestService(
         return (assignment, report);
     }
 
-    public async Task<TestView?> GetAssignedForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    public async Task<TestStatusView?> GetTestStatusForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
         var userId = applicant.GetAgentId();
@@ -458,69 +475,440 @@ public class BewerbungTestService(
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var own = await db.Bewerbungen.AsNoTracking()
-            .Where(b => b.ApplicantUserId == userId)
-            .OrderByDescending(b => b.SubmittedAt)
-            .Select(b => new { b.Id, b.CaseNumber }).FirstOrDefaultAsync(cancellationToken);
-        if (own is null)
+        var (bewerbung, assignment) = await FindOwnAssignmentAsync(db, userId, cancellationToken);
+        if (bewerbung is null || assignment is null)
         {
             return null;
         }
-        var bewerbungId = own.Id;
-        var assignment = await db.BewerbungTestAssignments.AsNoTracking()
-            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken);
-        if (assignment is null)
-        {
-            return null;
-        }
-        var test = await db.BewerbungTests.AsNoTracking().FirstOrDefaultAsync(t => t.Id == assignment.TestId, cancellationToken);
+        var test = await db.BewerbungTests.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == assignment.TestId, cancellationToken);
         if (test is null)
         {
             return null;
         }
-        var questions = await db.BewerbungTestQuestions.AsNoTracking()
-            .Where(q => q.TestId == assignment.TestId).OrderBy(q => q.Sorting).ToListAsync(cancellationToken);
-        var questionIds = questions.Select(q => q.Id).ToList();
-        var options = await db.BewerbungTestOptions.AsNoTracking()
-            .Where(o => questionIds.Contains(o.QuestionId)).OrderBy(o => o.Sorting).ToListAsync(cancellationToken);
-
-        var qViews = questions.Select(q => new TestQuestionView(
-            q.Id, q.Type, q.Prompt, q.Required, q.AllowMultiple,
-            TestOptionOrder.For(assignment.Id, q.KeepOptionOrder, options.Where(o => o.QuestionId == q.Id))
-                .Select(o => new TestOptionView(o.Id, o.Label)).ToList()))
-            .ToList();
-
-        return new TestView(assignment.Id, own.CaseNumber, test.Title, test.Description, assignment.CompletedAt is not null, qViews);
+        // never stamps anything: the status page reads this, and reading a status must not start the clock
+        return new TestStatusView(assignment.Id, test.Title, test.Description,
+            assignment.CompletedAt is not null, assignment.StartedAt, assignment.DeadlineAt,
+            assignment.TimedOut, TestDeadline.AllowedMinutes(assignment, test.TimeLimitMinutes));
     }
 
-    public async Task SubmitAnswersAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    public async Task<TestView?> GetAssignedForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
+        var now = DateTime.UtcNow;
+        var userId = applicant.GetAgentId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return null;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var (bewerbung, assignment) = await FindOwnAssignmentAsync(db, userId, cancellationToken);
+        if (bewerbung is null || assignment is null)
+        {
+            return null;
+        }
+        var test = await db.BewerbungTests.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == assignment.TestId, cancellationToken);
+        if (test is null)
+        {
+            return null;
+        }
+
+        var decided = BewerbungStatusDisplay.IsTerminal(bewerbung.Status);
+        if (assignment is { StartedAt: null, CompletedAt: null } && !decided)
+        {
+            var minutes = TestDeadline.Clamp(test.TimeLimitMinutes);
+            // the base is frozen, a grant made before the first open is added on top of it
+            var deadline = minutes is null ? null : TestDeadline.For(now, minutes + assignment.ExtraMinutes);
+            // claim first, and only the version just read: the prerender pass, the interactive pass, a second
+            // tab and F5 all race here, and the clock must be stamped exactly once
+            var claimed = await db.BewerbungTestAssignments
+                .Where(a => a.Id == assignment.Id && a.StartedAt == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.StartedAt, now)
+                    .SetProperty(a => a.TimeLimitMinutes, minutes)
+                    .SetProperty(a => a.DeadlineAt, deadline), cancellationToken);
+            if (claimed == 1)
+            {
+                // ExecuteUpdate bypasses the interceptors, so this row is written by hand. RequireApplicant
+                // already carries the write check: an applicant is never read-only supervision, partner or demo.
+                db.AuditLogs.Add(ManualAudit.Row(nameof(BewerbungTestAssignment), assignment.Id,
+                    AuditAction.Modified, applicant,
+                    ManualAudit.Change("Bearbeitungszeit gestartet", null, minutes)));
+                await db.SaveChangesAsync(cancellationToken);
+                broadcaster.Report(bewerbung.Id);
+            }
+            // re-read either way: the loser must serve the winning deadline, not its own
+            assignment = await db.BewerbungTestAssignments.AsNoTracking()
+                .FirstAsync(a => a.Id == assignment.Id, cancellationToken);
+        }
+        else if (assignment.CompletedAt is null && !decided && TestDeadline.IsExpired(assignment.DeadlineAt, now))
+        {
+            // the read path closes it itself rather than trusting the sweep: a closed browser plus a dead
+            // worker must not hand the questionnaire back out with the clock already at zero
+            await CloseExpiredAsync(db, assignment, bewerbung, now, cancellationToken);
+            assignment = await db.BewerbungTestAssignments.AsNoTracking()
+                .FirstAsync(a => a.Id == assignment.Id, cancellationToken);
+        }
+
+        // a decided application gets a closed view rather than a questionnaire that only fails on submit
+        var completed = assignment.CompletedAt is not null || decided;
+        var questions = completed
+            ? (IReadOnlyList<TestQuestionView>)Array.Empty<TestQuestionView>()
+            : await BuildQuestionViewsAsync(db, assignment, cancellationToken);
+
+        return new TestView(assignment.Id, bewerbung.CaseNumber, test.Title, test.Description,
+            completed, assignment.DeadlineAt, assignment.TimedOut,
+            TestDeadline.AllowedMinutes(assignment, test.TimeLimitMinutes), questions);
+    }
+
+    public async Task<TestDraftResult> SaveDraftAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers,
+        ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireApplicant(applicant);
+        var now = DateTime.UtcNow;
         var userId = applicant.GetAgentId();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var assignment = await db.BewerbungTestAssignments.FirstOrDefaultAsync(a => a.Id == assignmentId, cancellationToken)
+        var (assignment, bewerbung) = await LoadOwnAttemptAsync(db, assignmentId, userId, cancellationToken);
+        // a stale circuit must not rewrite what the clock already handed in and HRB may already be grading
+        if (assignment.CompletedAt is not null)
+        {
+            return new TestDraftResult(TestDraftOutcome.Closed, assignment.DeadlineAt);
+        }
+        if (TestDeadline.IsExpired(assignment.DeadlineAt, now))
+        {
+            await CloseExpiredAsync(db, assignment, bewerbung, now, cancellationToken);
+            return new TestDraftResult(TestDraftOutcome.Closed, assignment.DeadlineAt);
+        }
+
+        await UpsertAnswersAsync(db, assignment, answers, requireMandatory: false, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        // no broadcast: a draft is not news, and one every few seconds would reload every open HRB panel
+        return new TestDraftResult(TestDraftOutcome.Saved, assignment.DeadlineAt);
+    }
+
+    public async Task<TestSubmitOutcome> SubmitAnswersAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers,
+        ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireApplicant(applicant);
+        var now = DateTime.UtcNow;
+        var userId = applicant.GetAgentId();
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var (assignment, bewerbung) = await LoadOwnAttemptAsync(db, assignmentId, userId, cancellationToken);
+
+        if (assignment.CompletedAt is not null)
+        {
+            // the sweep or another tab got there microseconds earlier; these are still the last keystrokes of
+            // the owner of this attempt, and nobody has started grading
+            if (assignment.TimedOut && assignment.GradedAt is null
+                && !TestDeadline.GraceOver(assignment.DeadlineAt, now))
+            {
+                await UpsertAnswersAsync(db, assignment, answers, requireMandatory: false, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                return TestSubmitOutcome.ClosedByTimeout;
+            }
+            throw new InvalidOperationException("Dieser Test wurde bereits abgeschlossen.");
+        }
+
+        // past the deadline the answers still count - the decision was auto-submit, not discard - and the
+        // attempt carries the marker so the grading panel can see why it is thin
+        var expired = TestDeadline.IsExpired(assignment.DeadlineAt, now);
+        // the mandatory check is a safety net for the applicant, not a gate: in the closing seconds the
+        // countdown may already have fired, and refusing a blank then throws away everything that was filled in
+        var closing = TestDeadline.IsClosing(assignment.DeadlineAt, now);
+
+        await UpsertAnswersAsync(db, assignment, answers, requireMandatory: !closing, cancellationToken);
+        // answers first, then the claim: unlike a reminder bell these rows are idempotent, and they must
+        // survive even when another writer closed the attempt in between
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, expired, cancellationToken))
+        {
+            return TestSubmitOutcome.ClosedByTimeout;
+        }
+        db.AuditLogs.Add(ManualAudit.Row(nameof(BewerbungTestAssignment), assignment.Id,
+            AuditAction.Modified, applicant, ManualAudit.Change("Test abgegeben", null, now)));
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(bewerbung.Id);
+
+        try
+        {
+            var recipient = bewerbung.AssignedAgentId;
+            if (!string.IsNullOrEmpty(recipient))
+            {
+                await notifications.NotifyAsync(recipient, NotificationType.Recruiting,
+                    $"Test abgeschlossen ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", cancellationToken);
+            }
+        }
+        catch { /* best effort */ }
+        return TestSubmitOutcome.Submitted;
+    }
+
+    public async Task ExtendAttemptAsync(string bewerbungId, int minutes, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTestAttemptWrite(actor);
+        var now = DateTime.UtcNow;
+        var granted = TestDeadline.Clamp(minutes)
+            ?? throw new InvalidOperationException("Bitte gib die zusätzliche Zeit in Minuten an.");
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var assignment = await db.BewerbungTestAssignments
+            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken)
             ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
-        var bewerbung = await db.Bewerbungen.FirstOrDefaultAsync(b => b.Id == assignment.BewerbungId, cancellationToken)
+        var bewerbung = await db.Bewerbungen.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bewerbungId, cancellationToken)
+            ?? throw new InvalidOperationException("Bewerbung nicht gefunden.");
+        if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
+        {
+            throw new InvalidOperationException("Über diese Bewerbung ist bereits entschieden.");
+        }
+        if (assignment.GradedAt is not null)
+        {
+            throw new InvalidOperationException("Die Korrektur ist abgeschlossen. Bitte sie zuerst wieder öffnen.");
+        }
+        // an attempt handed in on time is finished; granting time would silently reopen it and let the
+        // applicant edit answers they had already submitted. Only the clock may reopen what the clock closed.
+        if (assignment is { CompletedAt: not null, TimedOut: false })
+        {
+            throw new InvalidOperationException(
+                "Der Bewerber hat den Test regulär abgegeben. Nutze „Test neu freigeben“, wenn er einen "
+                + "neuen Versuch bekommen soll.");
+        }
+        var testMinutes = await db.BewerbungTests.AsNoTracking()
+            .Where(x => x.Id == assignment.TestId).Select(x => x.TimeLimitMinutes)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (TestDeadline.AllowedMinutes(assignment, testMinutes) is null)
+        {
+            throw new InvalidOperationException(
+                "Für diesen Test ist keine Bearbeitungszeit hinterlegt, es gibt also keine Frist zu verlängern.");
+        }
+
+        // only the grant column grows; the base stays frozen so the two never add up twice
+        assignment.ExtraMinutes += granted;
+        if (assignment.DeadlineAt is { } due)
+        {
+            // measured from now when the old deadline is long gone, otherwise the grant buys no time at all
+            assignment.DeadlineAt = (due > now ? due : now).AddMinutes(granted);
+            // the grant reopens the attempt: the flag describes the outcome, and time was given
+            assignment.CompletedAt = null;
+            assignment.TimedOut = false;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        // a partial grade goes stale the moment the applicant edits an answer again
+        await db.BewerbungTestAnswers
+            .Where(a => a.AssignmentId == assignment.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.ManualCorrect, (bool?)null)
+                .SetProperty(a => a.ManualPoints, (int?)null), cancellationToken);
+        db.AuditLogs.Add(ManualAudit.Row(nameof(BewerbungTestAssignment), assignment.Id,
+            AuditAction.Modified, actor, ManualAudit.Change("Zusatzminuten", null, granted)));
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(bewerbungId);
+        try
+        {
+            await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
+                "Deine Bearbeitungszeit wurde verlängert.", "/portal/test", cancellationToken);
+        }
+        catch { /* best effort */ }
+    }
+
+    public async Task ResetAttemptAsync(string bewerbungId, string? testId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTestAttemptWrite(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var assignment = await db.BewerbungTestAssignments
+            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbungId, cancellationToken)
+            ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
+        var bewerbung = await db.Bewerbungen.FirstOrDefaultAsync(b => b.Id == bewerbungId, cancellationToken)
+            ?? throw new InvalidOperationException("Bewerbung nicht gefunden.");
+        if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
+        {
+            throw new InvalidOperationException("Über diese Bewerbung ist bereits entschieden.");
+        }
+        var target = testId ?? assignment.TestId;
+        if (!await db.BewerbungTests.AnyAsync(t => t.Id == target && t.IsActive, cancellationToken))
+        {
+            throw new InvalidOperationException("Der Test ist nicht mehr aktiv oder wurde gelöscht.");
+        }
+
+        // soft-deleted, not overwritten: the interceptor keeps the old values in the audit log, so the
+        // previous attempt stays readable. A hard delete would destroy exactly that.
+        var answers = await db.BewerbungTestAnswers
+            .Where(a => a.AssignmentId == assignment.Id).ToListAsync(cancellationToken);
+        db.BewerbungTestAnswers.RemoveRange(answers);
+
+        // in place on this one row: the unique index on BewerbungId is still held by a soft-deleted row, and
+        // the global filter would hide it from the pre-check, so delete-and-recreate fails with a raw 1062
+        assignment.TestId = target;
+        assignment.StartedAt = null;
+        assignment.DeadlineAt = null;
+        assignment.TimeLimitMinutes = null;
+        assignment.ExtraMinutes = 0;
+        assignment.TimedOut = false;
+        assignment.CompletedAt = null;
+        assignment.AttemptCount += 1;
+        // the frozen figures go with it, same reason as reopening a grading
+        assignment.GradedAt = null;
+        assignment.GradedByName = null;
+        assignment.FinalPoints = null;
+        assignment.FinalMaxPoints = null;
+        assignment.FinalPassPercent = null;
+
+        // entering the test phase, the same nudge the assignment makes
+        if (bewerbung.Status is BewerbungStatus.Eingereicht or BewerbungStatus.InSicherheitspruefung)
+        {
+            bewerbung.Status = BewerbungStatus.ImTest;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(bewerbungId);
+        try
+        {
+            await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
+                "Dein Test wurde neu freigegeben.", "/portal/test", cancellationToken);
+        }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>One answer row per question, chosen the same way by every reader.</summary>
+    /// <remarks>The index on (Zuweisung, Frage) is not unique, so a duplicate row is possible. Ordering it
+    /// away means the grader always edits the row the evaluation reads.</remarks>
+    private static Dictionary<string, BewerbungTestAnswer> PickAnswers(IEnumerable<BewerbungTestAnswer> answers)
+        => answers
+            .OrderBy(a => a.CreatedAt).ThenBy(a => a.Id, StringComparer.Ordinal)
+            .GroupBy(a => a.QuestionId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+    /// <summary>The newest own application and its single assignment; read-only, stamps nothing.</summary>
+    private static async Task<(Bewerbung? Bewerbung, BewerbungTestAssignment? Assignment)> FindOwnAssignmentAsync(
+        AppDbContext db, string userId, CancellationToken cancellationToken)
+    {
+        var bewerbung = await db.Bewerbungen.AsNoTracking()
+            .Where(b => b.ApplicantUserId == userId)
+            .OrderByDescending(b => b.SubmittedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (bewerbung is null)
+        {
+            return (null, null);
+        }
+        var assignment = await db.BewerbungTestAssignments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.BewerbungId == bewerbung.Id, cancellationToken);
+        return (bewerbung, assignment);
+    }
+
+    /// <summary>Loads a tracked attempt and proves it belongs to this applicant and is still decidable.</summary>
+    /// <remarks>Bundled so a new applicant write path cannot forget one of the three checks. Answers arriving
+    /// after the decision change nothing and read as if it were still open.</remarks>
+    private static async Task<(BewerbungTestAssignment Assignment, Bewerbung Bewerbung)> LoadOwnAttemptAsync(
+        AppDbContext db, string assignmentId, string? userId, CancellationToken cancellationToken)
+    {
+        var assignment = await db.BewerbungTestAssignments
+            .FirstOrDefaultAsync(a => a.Id == assignmentId, cancellationToken)
+            ?? throw new InvalidOperationException("Testzuweisung nicht gefunden.");
+        var bewerbung = await db.Bewerbungen
+            .FirstOrDefaultAsync(b => b.Id == assignment.BewerbungId, cancellationToken)
             ?? throw new InvalidOperationException("Bewerbung nicht gefunden.");
         if (bewerbung.ApplicantUserId != userId)
         {
             throw new UnauthorizedAccessException("Das ist nicht dein Test.");
         }
-        if (assignment.CompletedAt is not null)
-        {
-            throw new InvalidOperationException("Dieser Test wurde bereits abgeschlossen.");
-        }
-        // and not after the application itself is decided: answers arriving then change nothing and read as if
-        // the decision were still open
         if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
         {
             throw new InvalidOperationException("Über diese Bewerbung ist bereits entschieden.");
         }
+        return (assignment, bewerbung);
+    }
 
-        // the payload is never trusted: a foreign question id, an option that belongs to another question, a
-        // duplicate row and a skipped mandatory question all have to die here, not only in the form. The column
-        // carries no foreign key, so nothing downstream would catch an invented option id.
+    /// <summary>The questionnaire with the saved draft folded in; the guard is the caller's.</summary>
+    private static async Task<IReadOnlyList<TestQuestionView>> BuildQuestionViewsAsync(
+        AppDbContext db, BewerbungTestAssignment assignment, CancellationToken cancellationToken)
+    {
+        var questions = await db.BewerbungTestQuestions.AsNoTracking()
+            .Where(q => q.TestId == assignment.TestId).OrderBy(q => q.Sorting).ToListAsync(cancellationToken);
+        var questionIds = questions.Select(q => q.Id).ToList();
+        var options = await db.BewerbungTestOptions.AsNoTracking()
+            .Where(o => questionIds.Contains(o.QuestionId)).OrderBy(o => o.Sorting).ToListAsync(cancellationToken);
+        var draft = await db.BewerbungTestAnswers.AsNoTracking()
+            .Where(a => a.AssignmentId == assignment.Id)
+            // only the applicant input crosses; the two grading columns on the same row stay in the house
+            .Select(a => new BewerbungTestAnswer
+            {
+                Id = a.Id,
+                CreatedAt = a.CreatedAt,
+                QuestionId = a.QuestionId,
+                SelectedOptionId = a.SelectedOptionId,
+                SelectedOptionIds = a.SelectedOptionIds,
+                FreeTextAnswer = a.FreeTextAnswer,
+            })
+            .ToListAsync(cancellationToken);
+        var saved = PickAnswers(draft);
+
+        // seeded on the attempt as well as the assignment: a reset keeps the row, so without the counter the
+        // second attempt would show the identical shuffle
+        var seed = $"{assignment.Id}:{assignment.AttemptCount}";
+        return questions.Select(q =>
+        {
+            saved.TryGetValue(q.Id, out var own);
+            return new TestQuestionView(
+                q.Id, q.Type, q.Prompt, q.Required, q.AllowMultiple,
+                TestGrading.SplitOptionIds(own?.SelectedOptionIds, own?.SelectedOptionId),
+                own?.FreeTextAnswer,
+                TestOptionOrder.For(seed, q.KeepOptionOrder, options.Where(o => o.QuestionId == q.Id))
+                    .Select(o => new TestOptionView(o.Id, o.Label)).ToList());
+        }).ToList();
+    }
+
+    /// <summary>Hands in the draft as it stands and stamps the marker; true when this caller won the claim.</summary>
+    private async Task<bool> CloseExpiredAsync(AppDbContext db, BewerbungTestAssignment assignment,
+        Bewerbung bewerbung, DateTime now, CancellationToken cancellationToken)
+    {
+        // the draft rows ARE the submission: nothing is rewritten, only the untouched questions get the
+        // empty row the evaluation keys on
+        await TestAttemptClose.FillMissingAnswersAsync(db, assignment, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, timedOut: true, cancellationToken))
+        {
+            return false;
+        }
+        db.AuditLogs.Add(ManualAudit.SystemRow(nameof(BewerbungTestAssignment), assignment.Id,
+            AuditAction.Modified, ManualAudit.Change("Zeit abgelaufen", null, now)));
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(bewerbung.Id);
+
+        try
+        {
+            // wrapped so a failed bell cannot roll the stamp back
+            if (!string.IsNullOrEmpty(bewerbung.AssignedAgentId))
+            {
+                await notifications.NotifyAsync(bewerbung.AssignedAgentId, NotificationType.Recruiting,
+                    $"Testzeit abgelaufen ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", cancellationToken);
+            }
+            await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
+                "Deine Bearbeitungszeit ist abgelaufen.", "/portal/status", cancellationToken);
+        }
+        catch { /* best effort */ }
+        return true;
+    }
+
+    /// <summary>Writes one answer row per question, creating what is missing; the guard is the caller's.</summary>
+    /// <remarks>
+    /// Shared by the draft and the submission: two write paths, one revalidation. The payload is never trusted
+    /// here either - a foreign question id, an option belonging to another question and a duplicate row all
+    /// have to die in this method, because the columns carry no foreign key that would catch an invented id.
+    /// Upsert, not insert: the draft already left a row per question, and a second row would let the grader
+    /// award points on a row the evaluation ignores. The two grading columns are never touched.
+    /// </remarks>
+    private static async Task UpsertAnswersAsync(AppDbContext db, BewerbungTestAssignment assignment,
+        IReadOnlyList<TestAnswerInput> answers, bool requireMandatory, CancellationToken cancellationToken)
+    {
         var questions = await db.BewerbungTestQuestions.AsNoTracking()
             .Where(q => q.TestId == assignment.TestId)
             .Select(q => new { q.Id, q.Type, q.Required, q.AllowMultiple })
@@ -530,6 +918,8 @@ public class BewerbungTestService(
             .Where(o => questionIds.Contains(o.QuestionId))
             .Select(o => new { o.Id, o.QuestionId })
             .ToListAsync(cancellationToken);
+        var existing = await db.BewerbungTestAnswers
+            .Where(a => a.AssignmentId == assignment.Id).ToListAsync(cancellationToken);
 
         // last wins, so a replayed payload cannot produce two rows for one question
         var submitted = answers
@@ -561,36 +951,61 @@ public class BewerbungTestService(
                 freeText = Trim(input?.FreeText);
             }
 
-            if (question.Required && choice.Count == 0 && freeText is null)
+            if (requireMandatory && question.Required && choice.Count == 0 && freeText is null)
             {
                 throw new InvalidOperationException("Bitte beantworte alle Pflichtfragen.");
             }
 
-            // a row per question even when it stays empty: the evaluation keys on it, and a missing row reads as
-            // "question added later" rather than "left blank"
-            db.BewerbungTestAnswers.Add(new BewerbungTestAnswer
+            // a row per question even when it stays empty: the evaluation keys on it, and a missing row reads
+            // as "question added later" rather than "left blank"
+            var rows = existing.Where(a => a.QuestionId == question.Id).ToList();
+            if (rows.Count == 0)
             {
-                AssignmentId = assignment.Id,
-                QuestionId = question.Id,
-                SelectedOptionId = choice.Count == 1 ? choice[0] : null,
-                SelectedOptionIds = TestGrading.JoinOptionIds(choice),
-                FreeTextAnswer = freeText,
-            });
-        }
-        assignment.CompletedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-        broadcaster.Report(bewerbung.Id);
-
-        try
-        {
-            var recipient = bewerbung.AssignedAgentId;
-            if (!string.IsNullOrEmpty(recipient))
+                var fresh = new BewerbungTestAnswer { AssignmentId = assignment.Id, QuestionId = question.Id };
+                db.BewerbungTestAnswers.Add(fresh);
+                rows = [fresh];
+            }
+            // every row of the group, so a duplicate cannot drift away from the one that is read
+            foreach (var row in rows)
             {
-                await notifications.NotifyAsync(recipient, NotificationType.Recruiting,
-                    $"Test abgeschlossen ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", cancellationToken);
+                row.SelectedOptionId = choice.Count == 1 ? choice[0] : null;
+                row.SelectedOptionIds = TestGrading.JoinOptionIds(choice);
+                row.FreeTextAnswer = freeText;
             }
         }
-        catch { /* best effort */ }
+    }
+
+    /// <summary>Refuse a structural edit while a timed attempt on that test is running.</summary>
+    /// <remarks>
+    /// Otherwise an applicant is graded on a question they never saw, or an option they already ticked
+    /// disappears. Deliberately bounded by the deadline: an attempt without a limit is never live here,
+    /// because a started but never submitted one would block the questions forever.
+    /// </remarks>
+    private static async Task RequireNoLiveAttemptAsync(AppDbContext db, string testId,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var live = await db.BewerbungTestAssignments.AsNoTracking()
+            .AnyAsync(a => a.TestId == testId && a.StartedAt != null && a.CompletedAt == null
+                && a.DeadlineAt != null && a.DeadlineAt > now, cancellationToken);
+        if (live)
+        {
+            throw new InvalidOperationException(
+                "Ein Bewerber bearbeitet diesen Test gerade. Fragen und Antwortoptionen sind bis zum Ablauf "
+                + "seiner Bearbeitungszeit gesperrt; Titel, Bestehensgrenze und Bearbeitungszeit gehen weiter.");
+        }
+    }
+
+    /// <summary>Same guard, reached from a question or option id.</summary>
+    private static async Task RequireNoLiveAttemptForQuestionAsync(AppDbContext db, string questionId,
+        CancellationToken cancellationToken)
+    {
+        var testId = await db.BewerbungTestQuestions.AsNoTracking()
+            .Where(q => q.Id == questionId).Select(q => q.TestId).FirstOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrEmpty(testId))
+        {
+            await RequireNoLiveAttemptAsync(db, testId, cancellationToken);
+        }
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

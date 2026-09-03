@@ -1,4 +1,4 @@
-﻿using NOOSE_Website.Models.Recruiting;
+using NOOSE_Website.Models.Recruiting;
 using NOOSE_Website.Services;
 using System.Collections;
 using System.Reflection;
@@ -64,6 +64,10 @@ public class RecruitingTestVisibilityTests
         // site, so both are scanned here rather than trusted
         Path.Combine("Common", "Shared", "PublicHeader.razor"),
         Path.Combine("Layout", "PublicNav.razor"),
+        // the countdown bar of a running attempt: it renders the remaining time and the save state, both of
+        // which are the applicant's own clock and their own input. Declared rather than inert, so it is
+        // scanned like everything else on the surface.
+        Path.Combine("Pages", "Portal", "Shared", "PruefungStatusBar.razor"),
     ];
 
     /// <summary>Framework and inert tags that need no decision.</summary>
@@ -120,11 +124,21 @@ public class RecruitingTestVisibilityTests
     // ---------- Layer A: the applicant DTOs cannot carry a verdict ----------
 
     [Theory]
-    [InlineData(typeof(TestView), "AssignmentId,CaseNumber,Completed,Description,Questions,Title")]
+    // DeadlineAt/TimedOut/TimeLimitMinutes are the applicant's OWN attempt clock. They cannot encode a
+    // verdict: when the deadline is written no answer exists yet, and running out of time is orthogonal to
+    // being right — a timed-out applicant may have answered everything correctly.
+    [InlineData(typeof(TestView),
+        "AssignmentId,CaseNumber,Completed,DeadlineAt,Description,Questions,TimeLimitMinutes,TimedOut,Title")]
     // AllowMultiple is the shape of the form control, an author switch — it says nothing about the key: a
     // single-choice question can have one correct option and a multi-choice one can have several, or none.
-    [InlineData(typeof(TestQuestionView), "AllowMultiple,Options,Prompt,QuestionId,Required,Type")]
+    // SavedOptionIds/SavedFreeText are the applicant's own draft answer echoed back so a reload loses
+    // nothing; both were already delivered to them, so no new information crosses.
+    [InlineData(typeof(TestQuestionView),
+        "AllowMultiple,Options,Prompt,QuestionId,Required,SavedFreeText,SavedOptionIds,Type")]
     [InlineData(typeof(TestOptionView), "Label,OptionId")]
+    // the summary the status page reads; it deliberately carries no questions and no answers
+    [InlineData(typeof(TestStatusView),
+        "AssignmentId,Completed,DeadlineAt,Description,StartedAt,TimeLimitMinutes,TimedOut,Title")]
     public void TheApplicantFacingTestDtos_HaveExactlyTheseMembers(Type dto, string expected)
     {
         var actual = string.Join(",", dto.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -305,7 +319,12 @@ public class RecruitingTestVisibilityTests
         Assert.True(File.Exists(path), $"Dienst nicht gefunden: {path}");
         var text = File.ReadAllText(path);
 
-        string[] applicantMembers = ["GetAssignedForApplicantAsync", "SubmitAnswersAsync"];
+        string[] applicantMembers =
+            ["GetAssignedForApplicantAsync", "GetTestStatusForApplicantAsync", "SaveDraftAsync", "SubmitAnswersAsync"];
+        // extending or resetting a running attempt writes via ExecuteUpdateAsync, which the read-only barrier
+        // never sees, so the rank check alone would let the read-only supervision and the demo principal
+        // through. One combined guard, because every member may carry exactly one.
+        string[] attemptWriteMembers = ["ExtendAttemptAsync", "ResetAttemptAsync"];
         var members = typeof(IBewerbungTestService).GetMethods()
             .Select(m => m.Name).Distinct(StringComparer.Ordinal).ToArray();
         Assert.True(members.Length >= 17, $"Unerwartet wenige Schnittstellen-Methoden: {members.Length}");
@@ -318,7 +337,9 @@ public class RecruitingTestVisibilityTests
         {
             var expected = applicantMembers.Contains(name, StringComparer.Ordinal)
                 ? "Permission.RequireApplicant("
-                : "Permission.RequireHrbOrLeadership(";
+                : attemptWriteMembers.Contains(name, StringComparer.Ordinal)
+                    ? "Permission.RequireTestAttemptWrite("
+                    : "Permission.RequireHrbOrLeadership(";
 
             var regions = new List<string>();
             for (var i = 0; i < starts.Length - 1; i++)

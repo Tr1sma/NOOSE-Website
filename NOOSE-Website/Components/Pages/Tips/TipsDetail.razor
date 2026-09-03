@@ -65,10 +65,46 @@ else
                             </MudAlert>
                         }
 
+                        @if (_tip.Kind == TipKind.Ergreifung)
+                        {
+                            <MudAlert Severity="@(CaptureRules.IsUrgent(_tip.Kind, _tip.Handover)
+                                          ? Severity.Error
+                                          : Severity.Warning)"
+                                      Variant="Variant.Filled"
+                                      Icon="@TipKindDisplay.Icon(TipKind.Ergreifung)">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.subtitle2">
+                                        @(_tip.Handover is { } state
+                                            ? TipHandoverDisplay.Name(state)
+                                            : TipKindDisplay.Name(TipKind.Ergreifung))
+                                    </MudText>
+                                    @if (!string.IsNullOrWhiteSpace(_tip.HandoverLocation))
+                                    {
+                                        <MudText Typo="Typo.body2">
+                                            Ort: <b>@_tip.HandoverLocation</b>
+                                        </MudText>
+                                    }
+                                    @* the notice keeps its single write path: this only says what is missing,
+                                       it does not offer to flip it from here *@
+                                    <MudText Typo="Typo.caption">
+                                        Nach der Übergabe die Ausschreibung auf „gefasst" setzen — erst danach
+                                        lässt sich das Kopfgeld auszahlen.
+                                    </MudText>
+                                </MudStack>
+                            </MudAlert>
+                        }
+
                         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                             <MudChip T="string" Size="Size.Small" Color="@StatusColour(_tip.Status)">
                                 @TipStatusDisplay.Name(_tip.Status)
                             </MudChip>
+                            @if (_tip.Kind == TipKind.Ergreifung)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                         Icon="@TipKindDisplay.Icon(TipKind.Ergreifung)">
+                                    @TipKindDisplay.Name(TipKind.Ergreifung)
+                                </MudChip>
+                            }
                             @if (_tip.WantsAnonymity && !_tip.AnonymityResolved)
                             {
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
@@ -517,7 +553,7 @@ else
         }
     }
 
-    private void OnModified(string tipId)
+    private void OnModified(string tipId, string caseNumber, TipMessageAudience? audience)
     {
         if (tipId != Id)
         {

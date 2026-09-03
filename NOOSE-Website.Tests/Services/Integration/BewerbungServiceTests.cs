@@ -48,6 +48,10 @@ public sealed class BewerbungServiceTests
     private static ClaimsPrincipal Junior(string id = "me")
         => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.JuniorAgent).Build();
 
+    // Leadership-by-rank team lead (not admin) = read-only supervision: passes the rank check, may not write.
+    private static ClaimsPrincipal OnlyReader(string id = "reader")
+        => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.Director).AsTeamLead().Build();
+
     // Public applicant (status Applicant).
     private static ClaimsPrincipal Applicant(string id = "u1")
         => ClaimsPrincipalBuilder.Agent(id).WithStatus(AgentStatus.Applicant).Build();
@@ -434,6 +438,48 @@ public sealed class BewerbungServiceTests
     }
 
     [Fact]
+    public async Task SetStatusAsync_Close_Bans_LikeARejection()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, sperren, _, _, _) = Build(ctx);
+
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1", status: BewerbungStatus.Eingereicht));
+            db.SaveChanges();
+        }
+
+        await svc.SetStatusAsync("b1", BewerbungStatus.Geschlossen, "Doppelbewerbung", Hrb());
+
+        using var check = ctx.NewContext();
+        Assert.Equal(BewerbungStatus.Geschlossen, check.Bewerbungen.Single(b => b.Id == "b1").Status);
+        await sperren.Received(1).BanAsync("u1", "b1", Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_OnlyReader_Throws_BeforeDecidingOrBanning()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, sperren, _, _, _) = Build(ctx);
+
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1", status: BewerbungStatus.Eingereicht));
+            db.SaveChanges();
+        }
+
+        // leadership by rank but read-only: used to reject fine and lose the ban inside a swallowed catch
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.SetStatusAsync("b1", BewerbungStatus.Abgelehnt, null, OnlyReader()));
+
+        using var check = ctx.NewContext();
+        Assert.Equal(BewerbungStatus.Eingereicht, check.Bewerbungen.Single(b => b.Id == "b1").Status);
+        await sperren.DidNotReceive().BanAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<string?>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SetStatusAsync_TerminalSource_Throws()
     {
         using var ctx = new SqliteTestContext();
@@ -507,6 +553,29 @@ public sealed class BewerbungServiceTests
         Assert.False(string.IsNullOrEmpty(stored.DecisionNote));
         await sperren.Received(1).BanAsync("u1", "b1", Arg.Any<string?>(), Arg.Any<string?>(),
             Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetSecurityResultAsync_OnlyReader_Throws_BeforeRejectingOrBanning()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, sperren, _, _, _) = Build(ctx);
+
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1", status: BewerbungStatus.InSicherheitspruefung));
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.SetSecurityResultAsync("b1", passed: false, OnlyReader()));
+
+        using var check = ctx.NewContext();
+        var stored = check.Bewerbungen.Single(b => b.Id == "b1");
+        Assert.Equal(BewerbungStatus.InSicherheitspruefung, stored.Status);
+        Assert.Null(stored.SecurityCheckPassed);
+        await sperren.DidNotReceive().BanAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<string?>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

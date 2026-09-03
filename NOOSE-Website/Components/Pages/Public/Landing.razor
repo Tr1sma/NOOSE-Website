@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -188,7 +188,7 @@
             @if (_careersEnabled)
             {
                 <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
-                    <MudStack Spacing="2">
+                    <MudStack Spacing="2" Style="height:100%">
                         <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Size="Size.Large" />
                         <MudText Typo="Typo.h6">Karriere beim NOOSE</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -196,13 +196,13 @@
                             Bewerbung vertraulich über das Portal ein.
                         </MudText>
                         <MudButton Href="/karriere" Variant="Variant.Filled" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-2">Zur Karriere-Seite</MudButton>
+                                   StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-auto">Zur Karriere-Seite</MudButton>
                     </MudStack>
                 </MudPaper>
             }
 
             <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
-                <MudStack Spacing="2">
+                <MudStack Spacing="2" Style="height:100%">
                     <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Large" />
                     <MudText Typo="Typo.h6">Bürgerkonto</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -213,12 +213,12 @@
                         <Authorized Context="citizenCtx">
                             @* open to every account: an agent, partner or applicant has a civilian identity too *@
                             <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
-                                       StartIcon="@Icons.Material.Filled.Person" Class="mt-2">Zum Bürgerbereich</MudButton>
+                                       StartIcon="@Icons.Material.Filled.Person" Class="mt-auto">Zum Bürgerbereich</MudButton>
                         </Authorized>
                         <NotAuthorized>
                             @if (_registrationEnabled)
                             {
-                                <form method="post" action="/Account/PerformExternalLogin" class="mt-2">
+                                <form method="post" action="/Account/PerformExternalLogin" class="mt-auto">
                                     <AntiforgeryToken />
                                     <input type="hidden" name="returnUrl" value="/buerger" />
                                     <input type="hidden" name="source" value="buerger" />
@@ -228,7 +228,7 @@
                             }
                             else
                             {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@_registrationOfflineText</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-auto">@_registrationOfflineText</MudText>
                             }
                         </NotAuthorized>
                     </AuthorizeView>
@@ -242,7 +242,7 @@
                     @if (!agentCtx.User.IsCitizen())
                     {
                         <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
-                            <MudStack Spacing="2">
+                            <MudStack Spacing="2" Style="height:100%">
                                 <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
                                 <MudText Typo="Typo.h6">Dienstzugang</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -251,12 +251,12 @@
                                 @if (agentCtx.User.IsApplicant())
                                 {
                                     <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary"
-                                               StartIcon="@Icons.Material.Filled.Badge" Class="mt-2">Zum Bewerber-Portal</MudButton>
+                                               StartIcon="@Icons.Material.Filled.Badge" Class="mt-auto">Zum Bewerber-Portal</MudButton>
                                 }
                                 else
                                 {
                                     <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
-                                               StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Zum Agent-Portal</MudButton>
+                                               StartIcon="@Icons.Material.Filled.Login" Class="mt-auto">Zum Agent-Portal</MudButton>
                                 }
                             </MudStack>
                         </MudPaper>

@@ -21,6 +21,7 @@ public class TicketService(
     ICaseNumberService caseNumbers,
     INotificationService notifications,
     IPublicTemplateService templates,
+    IDiscordWebhookService discord,
     TicketBroadcaster broadcaster) : ITicketService
 {
     private const string CaseNumberPrefix = "T";
@@ -287,7 +288,7 @@ public class TicketService(
         try
         {
             // one notice, or the added agent never learns that they are on it
-            await notifications.NotifyAsync(agentId, NotificationType.PublicTicketInternal,
+            await notifications.NotifyOnceAsync(agentId, NotificationType.PublicTicketInternal,
                 $"Du wurdest am Ticket {row.CaseNumber} beteiligt", $"/tickets/{row.Id}", cancellationToken);
         }
         catch
@@ -468,9 +469,10 @@ public class TicketService(
         Permission.RequireTicketRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // rooted for the same reason as the tip inbox: the projection dereferences the REQUIRED CitizenProfile
-        // navigation, so a ticket whose citizen profile was removed vanished from the desk while the tab counter
-        // kept counting it
+        // rooted for the same reason as the tip inbox: the projection dereferences the CitizenProfile navigation,
+        // so a ticket whose citizen profile was removed lost its name on the desk while the tab counter kept
+        // counting it. The navigation is optional since internal tickets exist, so nothing here may read a
+        // non-nullable value type through it
         var query = db.Tickets.IgnoreQueryFilters().AsNoTracking()
             .Where(t => !t.IsDeleted)
             .Where(TicketRules.ScopeFilter(scope));
@@ -558,7 +560,8 @@ public class TicketService(
                 t.LastActivityAt,
                 FirstName = t.CitizenProfile!.FirstName,
                 LastName = t.CitizenProfile!.LastName,
-                Blocked = t.CitizenProfile!.IsBlocked,
+                // nullable: an internal ticket has no citizen, and EF unwraps the empty LEFT JOIN into bool
+                Blocked = (bool?)t.CitizenProfile!.IsBlocked,
                 t.HandlerId,
                 HandlerCodename = t.Handler!.Codename,
                 OpenedByCodename = t.OpenedByAgent!.Codename,
@@ -581,8 +584,8 @@ public class TicketService(
                 .FirstOrDefaultAsync(cancellationToken);
 
         return new TicketDetail(row.Id, row.CaseNumber, row.Subject, row.Status, row.Kind, row.CreatedAt,
-            row.LastActivityAt, Name(row.FirstName, row.LastName), row.Blocked, row.HandlerId, row.HandlerCodename,
-            row.OpenedByCodename, row.ClosedAt, closedBy);
+            row.LastActivityAt, Name(row.FirstName, row.LastName), row.Blocked ?? false, row.HandlerId,
+            row.HandlerCodename, row.OpenedByCodename, row.ClosedAt, closedBy);
     }
 
     /// <inheritdoc />
@@ -895,13 +898,23 @@ public class TicketService(
             ? stamps.Count(s => readAt is null || s > readAt)
             : 0;
 
+    /// <summary>Rings the desk on a newly opened ticket and pings the leadership role on Discord.</summary>
+    /// <remarks>
+    /// All four notifiers go through the folding variants: one bell entry per ticket and category until it is
+    /// read, so a running thread is announced once instead of once per line. The Discord ping sits here and not
+    /// in the notification service because this notifier runs on the opening only — the desk category itself is
+    /// unroutable, so the role is pinged through the category that carries no citizen data: a generic notice plus
+    /// the login-gated link, never the subject.
+    /// </remarks>
     private async Task NotifyDeskAsync(AppDbContext db, Ticket row, string title, CancellationToken ct)
     {
         try
         {
             var recipients = await DeskRecipientsAsync(db, ct);
-            await notifications.NotifyManyAsync(recipients, NotificationType.PublicTicketOpened, title,
+            await notifications.NotifyManyOnceAsync(recipients, NotificationType.PublicTicketOpened, title,
                 $"/tickets/{row.Id}", null, ct);
+            await discord.PushAsync(NotificationType.PublicTicketCreated, $"/tickets/{row.Id}", null,
+                cancellationToken: ct);
         }
         catch
         {
@@ -916,7 +929,7 @@ public class TicketService(
             var recipients = row.HandlerId is { Length: > 0 } handler
                 ? new List<string> { handler }
                 : await DeskRecipientsAsync(db, ct);
-            await notifications.NotifyManyAsync(recipients, NotificationType.PublicTicketOpened,
+            await notifications.NotifyManyOnceAsync(recipients, NotificationType.PublicTicketOpened,
                 $"Antwort zum Ticket {row.CaseNumber}", $"/tickets/{row.Id}", null, ct);
         }
         catch
@@ -947,7 +960,7 @@ public class TicketService(
             {
                 return;
             }
-            await notifications.NotifyManyAsync(targets, NotificationType.PublicTicketInternal,
+            await notifications.NotifyManyOnceAsync(targets, NotificationType.PublicTicketInternal,
                 $"Interne Notiz zum Ticket {row.CaseNumber}", $"/tickets/{row.Id}", null, ct);
         }
         catch
@@ -964,7 +977,7 @@ public class TicketService(
                 .Where(p => p.Id == row.CitizenProfileId)
                 .Select(p => p.UserId)
                 .FirstOrDefaultAsync(ct);
-            await notifications.NotifyAsync(userId, NotificationType.PublicTicketAnswered,
+            await notifications.NotifyOnceAsync(userId, NotificationType.PublicTicketAnswered,
                 $"Neues zu deinem Ticket {row.CaseNumber}", $"/buerger/tickets/{row.CaseNumber}", ct);
         }
         catch

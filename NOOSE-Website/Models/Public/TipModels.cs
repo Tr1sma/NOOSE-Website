@@ -17,7 +17,9 @@ public record CitizenTipRow(
     string? WantedCaseNumber,
     string? WantedDisplayName,
     bool HasAttachment,
-    int UnreadCount);
+    int UnreadCount,
+    TipKind Kind,
+    TipHandover? Handover);
 
 /// <summary>One of the citizen's own tips, opened.</summary>
 public record CitizenTipDetail(
@@ -34,7 +36,10 @@ public record CitizenTipDetail(
     bool MayReply,
     /// <summary>Kept apart from <paramref name="MayReply"/>, same reason as on a ticket.</summary>
     bool IsBlocked,
-    IReadOnlyList<CitizenTipMessage> Messages);
+    IReadOnlyList<CitizenTipMessage> Messages,
+    TipKind Kind,
+    TipHandover? Handover,
+    string? HandoverLocation);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>
 public record CitizenTipMessage(DateTime CreatedAt, string Text, bool FromCitizen);
@@ -64,7 +69,9 @@ public record TipRow(
     int Priority,
     int TrustTier,
     string? DuplicateGroupId,
-    int DuplicateCount);
+    int DuplicateCount,
+    TipKind Kind,
+    TipHandover? Handover);
 
 /// <summary>One tip, opened by a handler.</summary>
 /// <remarks>
@@ -93,7 +100,10 @@ public record TipDetail(
     int? PriorityOverride,
     string? PriorityOverrideReason,
     int TrustTier,
-    string? DuplicateGroupId);
+    string? DuplicateGroupId,
+    TipKind Kind,
+    TipHandover? Handover,
+    string? HandoverLocation);
 
 /// <summary>One tip of a citizen tied to a person file, as that file's tipster section shows it.</summary>
 /// <remarks>
@@ -144,4 +154,13 @@ public class TipInput
 
     /// <summary>Public case number of the notice the tip refers to; resolved and verified by the service.</summary>
     public string? WantedCaseNumber { get; set; }
+
+    /// <summary>Observation or capture report; the service re-checks every rule that hangs off it.</summary>
+    public TipKind Kind { get; set; } = TipKind.Beobachtung;
+
+    /// <summary>Required on a capture report, ignored otherwise.</summary>
+    public TipHandover? Handover { get; set; }
+
+    /// <summary>Required on a capture report, ignored otherwise.</summary>
+    public string? HandoverLocation { get; set; }
 }

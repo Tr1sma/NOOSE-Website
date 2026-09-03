@@ -2,11 +2,14 @@
 @page "/buerger/hinweise/{CaseNumber}"
 @layout BuergerLayout
 @attribute [AllowAnonymous]
+@implements IDisposable
+@using NOOSE_Website.Infrastructure.Chat
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 @inject ITipService Tips
 @inject IRewardService Reward
 @inject IPublicModuleService Modules
+@inject TipsBroadcaster Broadcaster
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -41,6 +44,13 @@ else if (_ready)
 
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_detail.CaseNumber</MudChip>
+                    @if (_detail.Kind == TipKind.Ergreifung)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                 Icon="@TipKindDisplay.Icon(TipKind.Ergreifung)">
+                            @TipKindDisplay.Name(TipKind.Ergreifung)
+                        </MudChip>
+                    }
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(_detail.Status)">
                         @TipStatusDisplay.CitizenName(_detail.Status)
                     </MudChip>
@@ -54,6 +64,19 @@ else if (_ready)
                     <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
                               Icon="@Icons.Material.Filled.PersonSearch">
                         Bezug: <b>@_detail.WantedDisplayName</b> (@_detail.WantedCaseNumber)
+                    </MudAlert>
+                }
+                @if (_detail.Kind == TipKind.Ergreifung && _detail.Handover is { } handover)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true"
+                              Icon="@TipHandoverDisplay.Icon(handover)">
+                        <MudStack Spacing="0">
+                            <div>@TipHandoverDisplay.Name(handover)</div>
+                            @if (!string.IsNullOrWhiteSpace(_detail.HandoverLocation))
+                            {
+                                <div class="mud-text-secondary">@_detail.HandoverLocation</div>
+                            }
+                        </MudStack>
                     </MudAlert>
                 }
                 @if (_detail.WantsAnonymity)
@@ -178,6 +201,13 @@ else if (_ready)
                             <MudStack Spacing="2">
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@row.CaseNumber</MudChip>
+                                    @if (row.Kind == TipKind.Ergreifung)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                                 Icon="@TipKindDisplay.Icon(TipKind.Ergreifung)">
+                                            @TipKindDisplay.Name(TipKind.Ergreifung)
+                                        </MudChip>
+                                    }
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(row.Status)">
                                         @TipStatusDisplay.CitizenName(row.Status)
                                     </MudChip>
@@ -225,6 +255,53 @@ else if (_ready)
     private bool _moduleOn;
     private bool _anonymous;
     private string? _loadedKey;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    // the case number is what this page knows; the row id in the same signal belongs to the desk. Comparing it is
+    // what keeps every citizen circuit from reloading on every tip in the house
+    private void OnModified(string tipId, string caseNumber, TipMessageAudience? audience)
+    {
+        // an internal note is signalled too, and the citizen circuit must not learn WHEN the desk talks about them
+        if (audience == TipMessageAudience.Intern)
+        {
+            return;
+        }
+        if (_anonymous || !_ready)
+        {
+            return;
+        }
+        var mine = string.IsNullOrWhiteSpace(CaseNumber)
+            ? _rows.Any(r => r.CaseNumber == caseNumber)
+            : CaseNumber == caseNumber;
+        if (!mine)
+        {
+            return;
+        }
+        InvokeAsync(async () =>
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(CaseNumber))
+                {
+                    _rows = await Tips.GetOwnAsync(_user);
+                }
+                else
+                {
+                    _detail = await Tips.GetOwnDetailAsync(CaseNumber, _user);
+                    // an answer arriving while the thread is open has been read
+                    await Tips.MarkCitizenReadAsync(CaseNumber, _user);
+                }
+                StateHasChanged();
+            }
+            catch
+            {
+                /* best effort: a live refresh must never topple the page */
+            }
+        });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
 
     private string ReturnUrl()
         => string.IsNullOrWhiteSpace(CaseNumber) ? "/buerger/hinweise" : $"/buerger/hinweise/{CaseNumber}";

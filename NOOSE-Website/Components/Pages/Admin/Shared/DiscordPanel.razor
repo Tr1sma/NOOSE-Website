@@ -11,6 +11,11 @@
     betroffene(n) Person(en) direkt, Broadcast-Kategorien die je Kategorie konfigurierte Rolle. Der Ping verrät
     nur <i>wer</i> bzw. <i>welche Rolle</i> gemeint ist – nicht den Inhalt.
 </MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Zwei Kategorien sind bewusst ausführlicher, weil sie <b>Bekanntmachungen</b> sind und keine Hinweise auf eine
+    Akte: <b>Personalakte-Eintrag</b> und <b>Kündigung</b> posten ein Embed mit Name, Datum und Begründung.
+    Die Kündigung geht in ihren eigenen Channel und pingt niemanden.
+</MudText>
 
 @if (_load)
 {
@@ -25,7 +30,7 @@ else
                           Class="mt-2" Placeholder="@DiscordWebhookConfig.DefaultBaseUrl"
                           HelperText="Vorangestellt bei relativen Links in den Discord-Nachrichten." />
             <MudSwitch T="bool" @bind-Value="_input.IncludeHeadline" Color="Color.Primary" Class="mt-2"
-                       Label="Header/Inhalt mitsenden (Ankündigung, Bewerbung inkl. Name)" />
+                       Label="Header/Inhalt mitsenden (Ankündigung, Bewerbung inkl. Name, Terminkopf)" />
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Aus: nur generischer Hinweis. An: Ankündigungs-Titel bzw. Bewerbername stehen direkt in der Discord-Nachricht
                 (nur diese Kategorien; Besprechungen/Lageberichte bleiben generisch).
@@ -60,6 +65,13 @@ else
                             <MudTextField @bind-Value="_roles[type]" Label="Rollen-ID" Placeholder="@DiscordRouting.DefaultRole(type)"
                                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;"
                                           HelperText="Rolle, die bei diesem Ereignis gepingt wird." />
+                        }
+                        else if (DiscordRouting.PingsNobody(type))
+                        {
+                            <MudTooltip Text="Diese Kategorie pingt niemanden – die Namen stehen als Mention im Embed, lösen aber keine Benachrichtigung aus.">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.NotificationsOff">ohne Ping</MudChip>
+                            </MudTooltip>
                         }
                         else
                         {
