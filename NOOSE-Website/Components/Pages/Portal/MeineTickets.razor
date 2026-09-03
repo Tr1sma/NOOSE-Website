@@ -3,6 +3,7 @@
 @layout BuergerLayout
 @attribute [AllowAnonymous]
 @inject ITicketService Tickets
+@inject IBuergerService Buerger
 @inject IPublicModuleService Modules
 @inject TicketBroadcaster Broadcaster
 @inject IDialogService Dialog
@@ -28,7 +29,7 @@ else if (_ready)
                     <MudText Typo="Typo.h4">Meine Tickets</MudText>
                 </MudStack>
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                    @if (_moduleOn && _detail is null)
+                    @if (_moduleOn && _detail is null && !_needsIdentity)
                     {
                         <MudButton OnClick="OpenNewAsync" Variant="Variant.Filled" Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Add">Neues Ticket</MudButton>
@@ -46,6 +47,16 @@ else if (_ready)
             {
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                     Der Ticket-Chat ist derzeit geschlossen. Bestehende Tickets kannst du weiterhin lesen.
+                </MudAlert>
+            }
+
+            @* a citizen has a name by the time they get here; every other account may not, and the desk needs one
+               behind the ticket. Without this the button led straight into a red toast *@
+            @if (_needsIdentity && _moduleOn && _detail is null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Für ein Ticket brauchst du zuerst eine Zivil-Identität: Lege unter
+                    <MudLink Href="/buerger/profil">Mein Konto</MudLink> Vor- und Nachnamen fest.
                 </MudAlert>
             }
 
@@ -173,6 +184,7 @@ else if (_ready)
     private bool _moduleOn;
     private bool _anonymous;
     private bool _isAgent;
+    private bool _needsIdentity;
     private string? _loadedKey;
 
     private string ReturnUrl()
@@ -207,6 +219,10 @@ else if (_ready)
     private async Task LoadAsync()
     {
         try { _moduleOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Tickets); }
+        catch { /* best effort */ }
+
+        // fails open: a lookup error leaves the button in place rather than claiming an identity is missing
+        try { _needsIdentity = _user.MayCitizenSubmit() && !await Buerger.HasCompleteProfileAsync(_user); }
         catch { /* best effort */ }
 
         try

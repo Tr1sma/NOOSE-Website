@@ -308,8 +308,9 @@ Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führu
 
 **Vier Regeln gelten überall dort — der Rest steht in `claude-memory/oeffentlich-*.md`:**
 
-- **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten. Zugang (`MayUseCitizenPortal()`)
-  und Status (`IsCitizen()`) sind zwei verschiedene Fragen.
+- **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten. Zugang (`MayUseCitizenPortal()`),
+  Status (`IsCitizen()`) und Einreichen (`MayCitizenSubmit()`) sind drei verschiedene Fragen — **Partner und
+  Nur-Lese-Aufsicht dürfen einreichen** (Zivil-Identität, Ticket, Hinweis), nur der Demo-Besucher nicht.
 - **Modul-Aus wirkt im Service, nicht in der UI** (`RequireEnabledAsync` wirft); der Not-Aus schlägt jedes
   Einzelmodul, ohne eine gespeicherte Wahl zu verändern. Publizieren braucht ein lebendes Modul,
   ***De*publizieren nie.**
@@ -345,9 +346,9 @@ dann die Themendatei aus der Tabelle oben.
 ## Weiterführende Docs
 
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
-- `Features.md` — kompakte Funktionsübersicht
+- `README.md` — Funktionsübersicht (Features-Sektion, intern + öffentlich), Schnellstart, Deployment
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **alle gebaut**
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 18 Phasen; **alle gebaut**
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

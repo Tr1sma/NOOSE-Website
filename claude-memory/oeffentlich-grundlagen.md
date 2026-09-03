@@ -21,15 +21,27 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
   Führungs-Gate. `AgentSelection` schließt `Civilian` überall aus.
-- **Zugang und Status sind zwei Fragen.** Den Bürgerbereich betreten darf **jedes angemeldete Konto**
-  (`MayUseCitizenPortal()`, `Policies.CitizenPortal`, `Permission.RequireCitizenPortal`) — Agent, Partner,
-  Nur-Lese-Aufsicht und Bewerber haben auch eine Zivil-Identität. `IsCitizen()` beantwortet nur noch, ob das
-  Konto ein Profil haben **muss**: `BuergerLayout` erzwingt Vor-/Nachname zentral in `OnParametersSetAsync`
-  (nicht `OnInitializedAsync`: die Layout-Instanz überlebt die Navigation zwischen Bürgerseiten) — aber **nur
-  für `IsCitizen()`**. Sonst liefe eine Nur-Lese-Aufsicht in eine Umleitungsschleife auf ein Profil, das sie
-  gar nicht anlegen darf: `SaveOwnAsync` ist ein Schreibpfad und hält zusätzlich `RequireWriteAccess`.
-  Wer kein Profil hat, sieht die Seiten ohne eigene Zeilen; jeder Einreichungspfad geht über
-  `RequireSubmittingCitizenAsync` (vollständig + nicht gesperrt).
+- **Zugang, Status und Einreichen sind drei Fragen.** Den Bürgerbereich *betreten* darf **jedes angemeldete
+  Konto** (`MayUseCitizenPortal()`, `Policies.CitizenPortal`, `Permission.RequireCitizenPortal`) — Agent,
+  Partner, Nur-Lese-Aufsicht und Bewerber haben auch eine Zivil-Identität. `IsCitizen()` beantwortet nur noch,
+  ob das Konto ein Profil haben **muss**: `BuergerLayout` erzwingt Vor-/Nachname zentral in
+  `OnParametersSetAsync` (nicht `OnInitializedAsync`: die Layout-Instanz überlebt die Navigation zwischen
+  Bürgerseiten) — aber **nur für `IsCitizen()`**. Sonst liefe eine Nur-Lese-Aufsicht in eine
+  Umleitungsschleife auf ein Profil, das sie gar nicht anlegen darf. Wer kein Profil hat, sieht die Seiten
+  ohne eigene Zeilen; jeder Einreichungspfad geht über `RequireSubmittingCitizenAsync` (vollständig + nicht
+  gesperrt).
+- **Wer aus der Zivil-Identität heraus etwas einreichen darf, entscheidet `MayCitizenSubmit()`**
+  (`Permission.RequireCitizenSubmission`) — **nicht** `MayWrite()`. Seit 2026-09-04 legen **Partner *und*
+  Nur-Lese-Aufsicht** ein `BuergerProfil` an (`SaveOwnAsync`), eröffnen Tickets und geben Hinweise ab, genau
+  wie ein Bürger. Begründung: hinter beiden Konten sitzt eine Person, die auf dem Server einen Zivilisten
+  spielt, und was aus dieser Identität kommt, ist keine Schreiboperation am Aktenbestand. **Draußen bleibt nur
+  der Demo-Besucher** — der synthetische Principal gehört jedem anonymen Gast gleichzeitig, seine „eigenen"
+  Tickets wären die aller. Der `ReadOnlyBarrierInterceptor` führt das auf **zwei Achsen**: `PartnerAuthorable`
+  (`Document`/`Source`/`TaskforceMessage`, nur Partner — Aktenmaterial) und `CitizenAuthorable`
+  (`BuergerProfil`, `Ticket`/`TicketNachricht`, `Hinweis`/`HinweisNachricht`, **auch die Aufsicht**); dazu
+  `PartnerEditableOwn`/`CitizenEditableOwn` für die **selbst angelegte** Zeile. Die Desk-Seite bleibt davon
+  unberührt: Antworten, Schließen und interne Notiz hängen weiter an `MayWrite()`. **Der Einspruch bleibt bei
+  `RequireWriteAccess`** — er ist ein Rechtsbehelf gegen eine Ausschreibung, die den Bürger namentlich nennt.
 - **Bürger → Bewerber ist der einzige erlaubte Statuswechsel aus `Civilian` heraus** — und er ist
   Selbstbedienung, kein Rechtezuwachs. Früher lag der `source=bewerbung`-Zweig **innerhalb** von
   `if (agent is null)`: wer einmal ein Bürgerkonto hatte, konnte sich nie mehr bewerben, weil der

@@ -2,13 +2,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Notifications;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Infrastructure.Authorization;
 
 /// <summary>Blocks all writes for read-only supervisors and partners; registered first in the interceptor chain.</summary>
+/// <remarks>
+/// Two carve-outs, on two different axes: a partner authors agency content (create only), and every account here
+/// except the demo visitor files what belongs to its own civilian identity. Editing again is limited to the row the
+/// account created itself, so neither carve-out reaches a stranger's row.
+/// </remarks>
 public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
     private static readonly HashSet<Type> Whitelist =
@@ -18,12 +25,35 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
         typeof(Notification),
     ];
 
-    // Content a partner may author; create only — modify/delete of existing rows stays blocked.
+    // Agency content a partner may author; create only — modify/delete of existing rows stays blocked. The
+    // read-only supervision writes none of this: it is record material, whoever the account belongs to.
     private static readonly HashSet<Type> PartnerAuthorable =
     [
         typeof(Document),
         typeof(Source),
         typeof(TaskforceMessage),
+    ];
+
+    // What an account files out of its own CIVILIAN identity — the identity itself, its tickets and its tips.
+    // The supervision is in as well: behind the account sits a private person, and none of this is record material.
+    private static readonly HashSet<Type> CitizenAuthorable =
+    [
+        typeof(BuergerProfil),
+        typeof(Ticket),
+        typeof(TicketNachricht),
+        typeof(Hinweis),
+        typeof(HinweisNachricht),
+    ];
+
+    // Rows either side may change again afterwards — their own only; the create side is handled above.
+    private static readonly HashSet<Type> PartnerEditableOwn = [typeof(Document)];
+
+    private static readonly HashSet<Type> CitizenEditableOwn =
+    [
+        // a reply in the citizen thread moves the status and the activity stamp of the ticket carrying it
+        typeof(Ticket),
+        // only the insert race in SaveOwnAsync lands here; from the first save the name is locked
+        typeof(BuergerProfil),
     ];
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -48,8 +78,10 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             return;
         }
 
-        // partners may author content (create only); read-only supervision and demo stay fully read-only
+        // partners may author agency content (create only); the supervision may not
         bool partnerMayAuthor = user.IsPartner && !user.IsOnlyReader && !user.IsDemo;
+        // the civilian identity behind the account is open to both — only the demo visitor is nobody
+        bool mayActAsCitizen = !user.IsDemo;
 
         context.ChangeTracker.DetectChanges();
         foreach (var entry in context.ChangeTracker.Entries())
@@ -63,13 +95,17 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             {
                 continue;
             }
-            if (partnerMayAuthor && entry.State == EntityState.Added && PartnerAuthorable.Contains(type))
+            if (entry.State == EntityState.Added
+                && ((partnerMayAuthor && PartnerAuthorable.Contains(type))
+                    || (mayActAsCitizen && CitizenAuthorable.Contains(type))))
             {
                 continue;
             }
-            // a partner may edit a document they authored themselves (create handled above)
-            if (partnerMayAuthor && entry.State == EntityState.Modified
-                && entry.Entity is Document editDoc && editDoc.CreatedById == user.Id)
+            // a row they created themselves may be changed again (create handled above)
+            if (entry.State == EntityState.Modified
+                && ((partnerMayAuthor && PartnerEditableOwn.Contains(type))
+                    || (mayActAsCitizen && CitizenEditableOwn.Contains(type)))
+                && entry.Entity is IAuditable own && own.CreatedById == user.Id)
             {
                 continue;
             }

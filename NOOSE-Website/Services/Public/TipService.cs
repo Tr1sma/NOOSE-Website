@@ -43,7 +43,9 @@ public class TipService(
         await modules.RequireEnabledAsync(
             isCapture ? PublicModules.CaptureReports : PublicModules.Tips, cancellationToken);
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
-        Permission.RequireWriteAccess(actor);
+        // not the plain write guard: a partner and the supervision file a tip the way a citizen does, out of their
+        // own civilian identity
+        Permission.RequireCitizenSubmission(actor);
 
         var text = (input.Text ?? string.Empty).Trim();
         if (text.Length < TipRules.MinLength)
@@ -339,7 +341,8 @@ public class TipService(
         CancellationToken cancellationToken = default)
     {
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
-        Permission.RequireWriteAccess(actor);
+        // same set that may file one: whoever holds the thread may answer in it
+        Permission.RequireCitizenSubmission(actor);
 
         var body = CleanMessage(text);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -368,9 +371,10 @@ public class TipService(
         CancellationToken cancellationToken = default)
     {
         var profile = await buerger.GetOwnAsync(actor, cancellationToken);
-        if (profile is null || !actor.MayWrite())
+        if (profile is null || !actor.MayCitizenSubmit())
         {
-            // a read mark is a write; the read-only supervision browsing the citizen area may not set one
+            // a read mark is a write, but on the reader's own tip: whoever may hold the thread moves it, or their
+            // unread badge never clears. Only the shared demo principal is out
             return;
         }
 

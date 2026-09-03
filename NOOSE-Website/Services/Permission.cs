@@ -588,4 +588,20 @@ public static class Permission
                 "Der Bürgerbereich steht nur angemeldeten Konten zur Verfügung.");
         }
     }
+
+    /// <summary>Require the right to act as a private person in the citizen area: every signed-in account except the demo visitor.</summary>
+    /// <remarks>
+    /// Deliberately looser than <see cref="RequireWriteAccess"/>: what an account files out of its own civilian
+    /// identity — the identity itself, its tickets and its tips — is not a write into the record stock, so the
+    /// partner and the read-only supervision are both in. The objection keeps the write guard, because it is a
+    /// remedy against a notice naming the citizen.
+    /// </remarks>
+    public static void RequireCitizenSubmission(ClaimsPrincipal actor)
+    {
+        if (!actor.MayCitizenSubmit())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Einreichungen sind in dieser Rolle nicht möglich.");
+        }
+    }
 }

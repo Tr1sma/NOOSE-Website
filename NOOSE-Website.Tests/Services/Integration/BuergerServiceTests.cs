@@ -26,6 +26,9 @@ public sealed class BuergerServiceTests
     private static ClaimsPrincipal OnlyReader()
         => ClaimsPrincipalBuilder.Agent("aufsicht").WithRank(Rank.Director).AsTeamLead().Build();
 
+    private static ClaimsPrincipal Partner()
+        => ClaimsPrincipalBuilder.Agent("partner").AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build();
+
     private static async Task<SqliteTestContext> SeededAsync()
     {
         var ctx = new SqliteTestContext();
@@ -38,6 +41,8 @@ public sealed class BuergerServiceTests
         // accounts that may also hold a civilian identity
         db.Users.Add(Seed.Agent("agent-1", rank: Rank.SpecialAgent));
         db.Users.Add(Seed.Agent("bew", status: AgentStatus.Applicant));
+        db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+        db.Users.Add(Seed.Agent("aufsicht", rank: Rank.Director, configure: a => a.IsTeamLead = true));
         await db.SaveChangesAsync();
         return ctx;
     }
@@ -306,17 +311,31 @@ public sealed class BuergerServiceTests
     }
 
     [Fact]
-    public async Task SaveOwnAsync_DeniedForOnlyReaderPartnerAndAnonymous()
+    public async Task SaveOwnAsync_AllowedForPartnersAndTheReadOnlySupervision()
     {
+        // both file tickets and tips the way a citizen does, and the desk needs a name behind them — the civilian
+        // identity is the one write these two accounts get anywhere
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
-        var partner = ClaimsPrincipalBuilder.Agent("partner")
-            .AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build();
+
+        await service.SaveOwnAsync("Trevor", "Ward", Partner());
+        await service.SaveOwnAsync("Nora", "Kessler", OnlyReader());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal("Ward", (await db.BuergerProfile.SingleAsync(p => p.UserId == "partner")).LastName);
+        Assert.Equal("Kessler", (await db.BuergerProfile.SingleAsync(p => p.UserId == "aufsicht")).LastName);
+    }
+
+    [Fact]
+    public async Task SaveOwnAsync_DeniedForDemoAndAnonymous()
+    {
+        // the demo principal is shared by every anonymous guest; an identity of its own would be everyone's
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var demo = ClaimsPrincipalBuilder.Agent("demo").AsDemo().Build();
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => service.SaveOwnAsync("Max", "Mustermann", OnlyReader()));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => service.SaveOwnAsync("Max", "Mustermann", partner));
+            () => service.SaveOwnAsync("Max", "Mustermann", demo));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => service.SaveOwnAsync("Max", "Mustermann", ClaimsPrincipalBuilder.Anonymous()));
     }

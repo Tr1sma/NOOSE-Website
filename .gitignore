@@ -388,3 +388,4 @@ noose-publish.tgz
 # live secrets (untracked); commit appsettings.json.template instead
 NOOSE-Website/appsettings.json
 /count_lines.ps1
+Fraktionsankuendigung-Oeffentlicher-Bereich.txt

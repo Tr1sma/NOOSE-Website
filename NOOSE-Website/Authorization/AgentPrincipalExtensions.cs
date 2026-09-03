@@ -137,6 +137,16 @@ public static class AgentPrincipalExtensions
     /// <summary>May enter the citizen area = every signed-in account; Civilian only means the account has nothing else.</summary>
     public static bool MayUseCitizenPortal(this ClaimsPrincipal user) => user.Identity?.IsAuthenticated == true;
 
+    /// <summary>May act as a private person in the citizen area (civilian identity, ticket, tip) = every signed-in account; only the synthetic demo visitor is out. Sole source of this rule.</summary>
+    /// <remarks>
+    /// Partner and read-only supervision are in on purpose, unlike <see cref="MayWrite"/>: behind both accounts sits
+    /// a person who plays a civilian on the server, and what they file out of that identity is not a write into the
+    /// record stock. The demo visitor is the one exclusion, because it is nobody: a synthetic principal shared by
+    /// every anonymous guest, so its "own" tickets would be everyone's.
+    /// </remarks>
+    public static bool MayCitizenSubmit(this ClaimsPrincipal user)
+        => user.MayUseCitizenPortal() && !user.IsDemo();
+
     /// <summary>An in-house account: released, not external. The read-only supervision is one, a partner is not.</summary>
     /// <remarks>
     /// Active alone does the work of four exclusions — Pending, Blocked, Applicant and Civilian all fail it — so a

@@ -70,7 +70,7 @@
                 _returnLabel = "Interner Bereich";
             }
             // only a citizen is pushed into the form: for everyone else the area is readable without a civilian
-            // identity, and a read-only account could not create one anyway
+            // identity, and whoever wants to submit is sent to it from the ticket page or the tip form
             _mustComplete = user.IsCitizen();
             profile = await BuergerService.GetOwnAsync(user);
         }

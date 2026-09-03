@@ -40,8 +40,9 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
         CancellationToken cancellationToken = default)
     {
         Permission.RequireCitizenPortal(actor);
-        // a civilian identity is a write like any other: read-only supervision and partners stay read-only here too
-        Permission.RequireWriteAccess(actor);
+        // not the plain write guard: a ticket or a tip needs a name, and the person behind a partner or supervision
+        // account plays a civilian too. Only the demo visitor gets none — it is a principal, not a person
+        Permission.RequireCitizenSubmission(actor);
 
         var userId = actor.GetAgentId()
             ?? throw new InvalidOperationException("Kein angemeldetes Konto.");

@@ -11,6 +11,10 @@
 ## Phase 7 — Bürgerhinweise
 
 - **Phase 7 (Bürgerhinweise) — was daran anders ist:**
+  - **Ein Partner darf abgeben, die Nur-Lese-Aufsicht nicht.** `SubmitAsync`, `ReplyAsCitizenAsync` und
+    `MarkCitizenReadAsync` halten `Permission.RequireCitizenSubmission` statt `RequireWriteAccess`; die
+    Begründung und die Interceptor-Seite stehen einmal bei Phase 10. Für die Ergreifungsmeldung (Phase 18) gilt
+    dasselbe — es ist dieselbe Methode, nur eine andere `TipKind`.
   - **`/hinweis` ist das öffentliche Formular, `/hinweise` der interne Eingang** — ein Buchstabe Unterschied,
     getrennt durch die Segmentgrenze in `PublicRoutes.Matches` (Präzedenz `/fahndung` vs. `/gesucht`, mit Test).
     Der **NavCatalog-Key ist `buergerhinweise`**: `hinweise` gehört den algorithmischen *Ermittlungs*hinweisen
@@ -138,6 +142,19 @@
 ## Phase 10 — Ticket-Chat an die Führungsebene
 
 - **Phase 10 (Ticket-Chat) — was daran anders ist:**
+  - **Partner und Nur-Lese-Aufsicht sind hier keine Nur-Leser** (seit 2026-09-04). `OpenAsync`,
+    `ReplyAsCitizenAsync` und `MarkCitizenReadAsync` hängen an
+    `MayCitizenSubmit()`/`Permission.RequireCitizenSubmission`, nicht an `MayWrite()`; dasselbe gilt für den
+    Hinweis-Pfad (Phase 7) und für `BuergerService.SaveOwnAsync`, ohne das keins der beiden Konten eine
+    Zivil-Identität hätte. Der `ReadOnlyBarrierInterceptor` führt `BuergerProfil`, `Ticket`, `TicketNachricht`,
+    `Hinweis` und `HinweisNachricht` unter `CitizenAuthorable` (**beide** Rollen) und lässt über
+    `CitizenEditableOwn` **nur die selbst angelegte Zeile** wieder ändern — die Bürger-Antwort schiebt Status
+    und `LetzteAktivitaetAm` des eigenen Tickets. Ein fremdes Ticket, ein Löschen und jedes Aktenmaterial
+    (`PartnerAuthorable`, für die Aufsicht gesperrt) scheitern weiterhin am Interceptor
+    (`ReadOnlyBarrierInterceptorTests`). **Die Desk-Seite ändert sich nicht**: `ReplyToCitizenAsync`,
+    `SetStatusAsync` und `PostInternalNoteAsync` prüfen weiter `MayWrite()`, die Aufsicht kann ihr eigenes
+    Ticket also nicht selbst beantworten. Die Führungsebene sieht es als **ganz normales Bürger-Ticket** unter
+    dem Zivilnamen; wer dahintersteckt, steht am Bürgerkonto, nicht am Ticket.
   - **Ein Ticket hängt an keiner Akte.** Es ist Schriftwechsel, kein Aktenmaterial: **kein** Eintrag in
     `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `ChronikParentResolver`, `RecordsReference`
     oder `LinkService` — es gibt keinen Elternteil, auf den es fan-in könnte. Registriert ist es in

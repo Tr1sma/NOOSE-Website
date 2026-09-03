@@ -665,4 +665,34 @@ public sealed class PermissionTests
     [Fact]
     public void RequireCitizenPortal_anonymous_throws()
         => AssertDenied(() => Permission.RequireCitizenPortal(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ------------------------------------------------------------ RequireCitizenSubmission
+
+    [Theory]
+    [InlineData(AgentStatus.Civilian)]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Applicant)]
+    public void RequireCitizenSubmission_anySignedInStatus_passes(AgentStatus status)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
+        AssertAllowed(() => Permission.RequireCitizenSubmission(actor));
+    }
+
+    [Fact]
+    public void RequireCitizenSubmission_partnerAndOnlyReader_pass()
+    {
+        // looser than RequireWriteAccess on purpose: both open a ticket the way a citizen does
+        AssertAllowed(() => Permission.RequireCitizenSubmission(
+            ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Chief)));
+        AssertAllowed(() => Permission.RequireCitizenSubmission(
+            ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director)));
+    }
+
+    [Fact]
+    public void RequireCitizenSubmission_demoAndAnonymous_throw()
+    {
+        // the demo principal is shared by every anonymous guest, so its "own" ticket would be everyone's
+        AssertDenied(() => Permission.RequireCitizenSubmission(ClaimsPrincipalBuilder.Agent().AsDemo()));
+        AssertDenied(() => Permission.RequireCitizenSubmission(ClaimsPrincipalBuilder.Anonymous()));
+    }
 }

@@ -763,7 +763,7 @@ public class AgentPrincipalExtensionsTests
     [Fact]
     public void MayUseCitizenPortal_partnerAndReadOnlySupervision_returnTrue()
     {
-        // the area is readable for them; writing a civilian identity is still barred by the write guard
+        // the area is readable for both; what separates them is MayCitizenSubmit below
         Assert.True(ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build()
             .MayUseCitizenPortal());
         Assert.True(ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director).Build()
@@ -773,6 +773,45 @@ public class AgentPrincipalExtensionsTests
     [Fact]
     public void MayUseCitizenPortal_anonymous_returnsFalse()
         => Assert.False(ClaimsPrincipalBuilder.Anonymous().MayUseCitizenPortal());
+
+    // ---------- MayCitizenSubmit (signed in, but no supervision and no demo) ----------
+
+    [Theory]
+    [InlineData(AgentStatus.Civilian)]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Applicant)]
+    public void MayCitizenSubmit_anySignedInAccount_returnsTrue(AgentStatus status)
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithStatus(status).Build();
+        Assert.True(user.MayCitizenSubmit());
+    }
+
+    [Fact]
+    public void MayCitizenSubmit_partner_returnsTrue()
+    {
+        // the one write an external account gets in the citizen area: its own identity and its own ticket
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent()
+            .AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build();
+        Assert.True(user.MayCitizenSubmit());
+        Assert.False(user.MayWrite());
+    }
+
+    [Fact]
+    public void MayCitizenSubmit_onlyReader_returnsTrue()
+    {
+        // the supervision writes nothing in the house, but the person behind it holds a civilian identity
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director).Build();
+        Assert.True(user.MayCitizenSubmit());
+        Assert.False(user.MayWrite());
+    }
+
+    [Fact]
+    public void MayCitizenSubmit_demo_returnsFalse()
+        => Assert.False(ClaimsPrincipalBuilder.Agent().AsDemo().Build().MayCitizenSubmit());
+
+    [Fact]
+    public void MayCitizenSubmit_anonymous_returnsFalse()
+        => Assert.False(ClaimsPrincipalBuilder.Anonymous().MayCitizenSubmit());
 
     // ---------- IsHrbOrLeadership (IsHRB || IsLeadership) ----------
 

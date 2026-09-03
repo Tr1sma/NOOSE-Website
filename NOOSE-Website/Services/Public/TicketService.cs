@@ -35,7 +35,9 @@ public class TicketService(
         // module first: while the desk is closed, whether this account could open one is nobody else's business
         await modules.RequireEnabledAsync(PublicModules.Tickets, cancellationToken);
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
-        Permission.RequireWriteAccess(actor);
+        // not the plain write guard: a partner and the supervision reach the desk the same way a citizen does, and
+        // a ticket is correspondence rather than a write into the record stock
+        Permission.RequireCitizenSubmission(actor);
 
         var subject = CleanSubject(input.Subject);
         var text = (input.Text ?? string.Empty).Trim();
@@ -393,7 +395,8 @@ public class TicketService(
         CancellationToken cancellationToken = default)
     {
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
-        Permission.RequireWriteAccess(actor);
+        // same set that may open one: whoever holds the thread may answer in it
+        Permission.RequireCitizenSubmission(actor);
 
         var body = CleanMessage(text);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -429,9 +432,10 @@ public class TicketService(
         CancellationToken cancellationToken = default)
     {
         var profile = await buerger.GetOwnAsync(actor, cancellationToken);
-        if (profile is null || !actor.MayWrite())
+        if (profile is null || !actor.MayCitizenSubmit())
         {
-            // a read mark is a write; the read-only supervision browsing the citizen area may not set one
+            // a read mark is a write, but on the reader's own ticket: whoever may hold the thread moves it, or
+            // their unread badge never clears. Only the shared demo principal is out
             return;
         }
 

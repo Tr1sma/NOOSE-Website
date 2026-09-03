@@ -33,6 +33,13 @@ public sealed class TipServiceTests
     private static ClaimsPrincipal Citizen(string id = CitizenUserId)
         => ClaimsPrincipalBuilder.Agent(id).WithStatus(AgentStatus.Civilian).Build();
 
+    private static ClaimsPrincipal Partner()
+        => ClaimsPrincipalBuilder.Agent("partner").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build();
+
+    /// <summary>Read-only supervision: leadership rank but no admin flag plus the team-lead marker.</summary>
+    private static ClaimsPrincipal Supervision()
+        => ClaimsPrincipalBuilder.Agent("aufsicht").WithRank(Rank.Director).WithCodename("Owl").AsTeamLead().Build();
+
     private sealed class FixedUser : ICurrentUserService
     {
         public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
@@ -123,6 +130,20 @@ public sealed class TipServiceTests
         db.BuergerProfile.Add(row2);
         await db.SaveChangesAsync();
         return ctx;
+    }
+
+    /// <summary>Gives one more account a complete civilian identity; the seed only carries the one citizen.</summary>
+    private static async Task ProfileAsync(SqliteTestContext ctx, string userId, string profileId)
+    {
+        await using var db = ctx.NewContext();
+        db.BuergerProfile.Add(new BuergerProfil
+        {
+            Id = profileId,
+            UserId = userId,
+            FirstName = "Trevor",
+            LastName = "Ward",
+        });
+        await db.SaveChangesAsync();
     }
 
     private static Task<string> SubmitAsync(Host host, string? text = null, bool anonymous = false,
@@ -374,6 +395,54 @@ public sealed class TipServiceTests
         var host = NewHost(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => SubmitAsync(host));
+    }
+
+    [Fact]
+    public async Task A_partner_files_and_answers_a_tip_like_a_citizen()
+    {
+        // an external agency observes the same city; what it files out of a civilian identity is a tip like any
+        // other, and the guard here is RequireCitizenSubmission rather than the write guard
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "partner", "partner-profil");
+        var host = NewHost(ctx);
+
+        var caseNumber = await SubmitAsync(host, actor: Partner());
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Der Van hatte ein Kennzeichen aus Blaine County.",
+            Partner());
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Partner());
+        Assert.NotNull(detail);
+        await using var db = ctx.NewContext();
+        Assert.Equal("partner-profil", (await db.Hinweise.SingleAsync()).CitizenProfileId);
+        Assert.Equal(1, await db.HinweisNachrichten.CountAsync(m => m.AuthorIsCitizen));
+    }
+
+    [Fact]
+    public async Task A_partner_reading_their_own_tip_moves_the_read_mark()
+    {
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "partner", "partner-profil");
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host, actor: Partner());
+
+        await host.Service.MarkCitizenReadAsync(caseNumber, Partner());
+
+        await using var db = ctx.NewContext();
+        Assert.NotNull((await db.Hinweise.SingleAsync()).CitizenLastReadAt);
+    }
+
+    [Fact]
+    public async Task The_read_only_supervision_files_a_tip_of_its_own()
+    {
+        // the civilian behind the supervision account observes the same city; working the tip still needs MayWrite
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "aufsicht", "aufsicht-profil");
+        var host = NewHost(ctx);
+
+        var caseNumber = await SubmitAsync(host, actor: Supervision());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal("aufsicht-profil", (await db.Hinweise.SingleAsync(h => h.CaseNumber == caseNumber)).CitizenProfileId);
     }
 
     // ---- the quota ----

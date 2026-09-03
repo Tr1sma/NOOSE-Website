@@ -127,6 +127,20 @@ public sealed class TicketServiceTests
             },
             actor ?? Citizen());
 
+    /// <summary>Gives one more account a complete civilian identity; the seed only carries the two citizens.</summary>
+    private static async Task ProfileAsync(SqliteTestContext ctx, string userId, string profileId)
+    {
+        await using var db = ctx.NewContext();
+        db.BuergerProfile.Add(new BuergerProfil
+        {
+            Id = profileId,
+            UserId = userId,
+            FirstName = "Trevor",
+            LastName = "Ward",
+        });
+        await db.SaveChangesAsync();
+    }
+
     private static async Task<string> IdAsync(Host host, string caseNumber)
     {
         await using var db = host.Factory.CreateDbContext();
@@ -227,6 +241,59 @@ public sealed class TicketServiceTests
         var host = NewHost(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => OpenAsync(host, actor: Citizen("fremd")));
+    }
+
+    [Fact]
+    public async Task A_partner_opens_and_answers_a_ticket_like_a_citizen()
+    {
+        // an external agency reaches the desk the same way a citizen does: their own correspondence is not a write
+        // into the record stock, and the guard here is RequireCitizenSubmission rather than the write guard
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "partner", "partner-profil");
+        var host = NewHost(ctx);
+
+        var caseNumber = await OpenAsync(host, actor: Partner());
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Wir hängen den Vorgang an unsere Akte an.", Partner());
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Partner());
+        Assert.NotNull(detail);
+        Assert.Equal(2, detail!.Messages.Count(m => m.FromCitizen));
+        await using var db = ctx.NewContext();
+        Assert.Equal("partner-profil", (await db.Tickets.SingleAsync()).CitizenProfileId);
+    }
+
+    [Fact]
+    public async Task The_read_only_supervision_opens_a_citizen_ticket_of_its_own()
+    {
+        // it writes nothing in the house, but the person behind the account plays a civilian and reaches the desk
+        // like any other. Its desk role is untouched: answering, closing and noting still need MayWrite
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "aufsicht", "aufsicht-profil");
+        var host = NewHost(ctx);
+
+        var caseNumber = await OpenAsync(host, actor: Supervision());
+
+        Assert.NotNull(await host.Service.GetOwnDetailAsync(caseNumber, Supervision()));
+        await using var db = ctx.NewContext();
+        Assert.Equal("aufsicht-profil", (await db.Tickets.SingleAsync()).CitizenProfileId);
+    }
+
+    [Fact]
+    public async Task A_partner_reading_their_own_ticket_moves_the_read_mark()
+    {
+        // the mark is a write too, and it used to be gated on MayWrite: without this the partner's unread badge
+        // would never clear. The stamp itself is asserted, not the derived count — SQLite rounds its own clock
+        using var ctx = await SeededAsync();
+        await ProfileAsync(ctx, "partner", "partner-profil");
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host, actor: Partner());
+        var id = await IdAsync(host, caseNumber);
+        await host.Service.ReplyToCitizenAsync(id, "Wir prüfen das.", Leader());
+
+        await host.Service.MarkCitizenReadAsync(caseNumber, Partner());
+
+        await using var db = ctx.NewContext();
+        Assert.NotNull((await db.Tickets.SingleAsync()).CitizenLastReadAt);
     }
 
     [Fact]
