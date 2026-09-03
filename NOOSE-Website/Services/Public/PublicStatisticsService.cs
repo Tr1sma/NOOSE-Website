@@ -15,6 +15,16 @@ public class PublicStatisticsService(
     private const string CacheKey = "OeffentlicheZahlen";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
+    // The agency's record from before this site went live. Roleplay backdrop, not counted rows: the site is the
+    // agency's new file room, not the day it opened, and a start page reading "0 $ paid out" would date it. The
+    // four figures move together — a payout total without the tips behind it reads as invented. Kept in the public
+    // service only: the internal reward views, the KPI panel and every cash booking stay on the real rows.
+    // public so the tests can name the offset instead of restating it, and tuning it stays a one-line edit
+    public const int TipsReceivedBaseline = 1_147;
+    public const int TipsConfirmedBaseline = 372;
+    public const int TipsCaptureBaseline = 94;
+    public const decimal RewardsPaidBaseline = 1_236_500m;
+
     /// <summary>The counted rows, cached; the module switches are read outside and decide what is shown.</summary>
     private sealed record Counts(int TipsReceived, int TipsConfirmed, int TipsLedToCapture, decimal RewardsPaid);
 
@@ -69,7 +79,10 @@ public class PublicStatisticsService(
             // no soft-delete filter to weaken here: money history is append-only, so every row is a real payout
             var paid = await db.HinweisBelohnungen.AsNoTracking().SumAsync(r => r.Amount, cancellationToken);
 
-            counts = new Counts(received, confirmed, ledToCapture, paid);
+            // folded in here, not at the call site, so the baseline inherits both rules the counts already answer to:
+            // an unreadable database publishes nothing, and a switched-off module publishes nothing
+            counts = new Counts(TipsReceivedBaseline + received, TipsConfirmedBaseline + confirmed,
+                TipsCaptureBaseline + ledToCapture, RewardsPaidBaseline + paid);
         }
         catch (Exception)
         {

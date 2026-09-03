@@ -383,6 +383,25 @@
     bei der Gefahrenlage, hier sechsmal. Die Schalter werden **außerhalb** des Zahlen-Caches gelesen.
   - **Die Fahndungszahlen kommen aus dem Board-Snapshot, nie aus einer zweiten Abfrage** — die müsste den
     Unterdrückungsgürtel wiederholen (Phase-4-Falle, Präzedenz `/gefahr/personen` aus Phase 12).
+  - **Vier der sechs Zahlen tragen einen festen RP-Sockel — das ist kein Zählfehler.** Die drei Hinweis-Zähler
+    und die Belohnungssumme werden in `LoadAsync` um `PublicStatisticsService.*Baseline` erhöht
+    (1.147 / 372 / 94 Hinweise, 1.236.500 $), weil die Seite das *neue Aktenzimmer* einer Behörde ist, die es
+    im RP schon länger gibt: „0 $ ausgezahlt" auf der Startseite datiert die Behörde auf den Tag des Deploys.
+    Drei Punkte hängen daran und dürfen nicht auseinanderfallen:
+    - **Der Sockel steht in `LoadAsync`, nicht in `GetPublishedAsync`.** Nur so erbt er die beiden Regeln, die
+      für die gezählten Zeilen schon gelten: unerreichbare Datenbank ⇒ `null` (der nackte Sockel wäre eine
+      Zahl, wo „wir können es nicht sagen" die Wahrheit ist), Modul aus ⇒ `null`. `AnUnreachableDatabase_…`
+      und `TheRewardModuleOff_…` prüfen genau das.
+    - **Alle vier bewegen sich zusammen, und die Trichter-Ordnung bleibt erhalten** (empfangen ≥ bestätigt ≥
+      zur Ergreifung geführt) — eine Auszahlungssumme ohne die Hinweise dahinter liest sich als erfunden.
+      Deshalb drei getrennte Sockel statt eines geteilten.
+    - **Nur diese eine Oberfläche.** `IPublicKpiService` (Admin-Panel), die Belohnungs-Ansichten und jede
+      Kassenbuchung stehen weiter auf den echten Zeilen; NOOSEI liest über `IStatisticsService`. Nichts
+      Internes darf gegen die Startseiten-Zahlen abgeglichen werden.
+    Die Tests benennen den Sockel über `Received()`/`Confirmed()`/`Captures()`/`Paid()` statt ihn abzuschreiben
+    — Nachjustieren bleibt eine Zeile. **`CapturedNotices` hat bewusst keinen Sockel** (beschreibt weiterhin
+    das Board, siehe nächster Punkt), was den Zähler „… führten zu einer Festnahme" über der Kachel
+    „Abgeschlossen" stehen lässt; wer das angleichen will, muss den Board-Bezug aufgeben.
   - **Der Gefasst-Zähler steht auf dem Snapshot, nicht in der Archivliste.** `Archive` ist seit Phase 5 auf
     die 100 jüngsten gedeckelt; `Archive.Count` als Kennzahl wäre dort stehengeblieben und hätte sich als
     Vollständigkeit gelesen. `LoadAsync` zählt die Gefassten deshalb in einer eigenen, **ungedeckelten**

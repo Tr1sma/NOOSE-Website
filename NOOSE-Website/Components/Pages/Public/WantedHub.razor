@@ -13,7 +13,7 @@
         <MudText Typo="Typo.h4">Öffentliche Fahndung</MudText>
         <MudText Typo="Typo.body1" Class="mud-text-secondary">
             Das National Office of Security Enforcement sucht die hier ausgeschriebenen Personen, Fahrzeuge und
-            Waffen. Nicht selbst eingreifen — Beobachtungen bitte der nächsten Dienststelle melden.
+            Waffen. Vorsicht ist geboten — Beobachtungen und Ergreifungen bitte der nächsten Dienststelle melden.
         </MudText>
 
         @* static render, no circuit: the filters are links that rewrite the query, not interactive controls *@
@@ -89,10 +89,15 @@
                                     </MudStack>
                                     @if (_board.BountyFor(card.CaseNumber) is { } bounty)
                                     {
-                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning"
-                                                 Icon="@Icons.Material.Filled.Paid">
-                                            @BountyText(bounty)
-                                        </MudChip>
+                                        @* louder than the chips around it: on a board of tiles the amount is what
+                                           makes someone open the card *@
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudIcon Icon="@Icons.Material.Filled.Paid" Color="Color.Warning"
+                                                     Size="Size.Small" />
+                                            <MudText Typo="Typo.h5" Color="Color.Warning" Style="font-weight:700;">
+                                                @BountyText(bounty)
+                                            </MudText>
+                                        </MudStack>
                                     }
                                     <WarnhinweisChips Hints="@card.Hints" />
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@card.CaseNumber</MudText>

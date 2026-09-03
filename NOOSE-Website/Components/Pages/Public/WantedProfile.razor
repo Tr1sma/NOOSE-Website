@@ -67,17 +67,34 @@
 
                     @if (_bounty is { } bounty)
                     {
-                        <MudAlert Severity="Severity.Normal" Variant="Variant.Filled" Dense="true"
-                                  Icon="@Icons.Material.Filled.Paid">
-                            Belohnung: <b>@(bounty.IsCap ? "bis " : string.Empty)@bounty.Total.ToString("N0") $</b>
-                        </MudAlert>
+                        @* the money is why a stranger reads this page at all, so it gets its own block and the
+                           largest figure on it. Still the one number the outside may see - "bis" moves into the
+                           label rather than shrinking the amount *@
+                        <MudPaper Outlined="true" Class="pa-4"
+                                  Style="border-color:var(--mud-palette-warning);background:var(--mud-palette-warning-hover);">
+                            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Paid" Color="Color.Warning" Size="Size.Large" />
+                                <div>
+                                    <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                                        @(bounty.IsCap ? "Belohnung bis zu" : "Belohnung")
+                                    </MudText>
+                                    <MudText Typo="Typo.h3" Color="Color.Warning"
+                                             Style="font-weight:700;line-height:1.05;">
+                                        @bounty.Total.ToString("N0") $
+                                    </MudText>
+                                </div>
+                            </MudStack>
+                        </MudPaper>
                     }
 
                     <WarnhinweisChips Hints="@_entry.Hints" />
 
-                    @* stays even without curated warnings: it holds for every notice *@
+                    @* stays even without curated warnings: it holds for every notice, so it stays generic - this
+                       page carries vehicle and weapon notices too, and "armed" is what the curated chips above say.
+                       Caution, not a ban: the report link below only works if the way there is open *@
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                        Nicht selbst eingreifen. Beobachtungen bitte der nächsten Dienststelle melden.
+                        Vorsicht ist geboten. Beobachtungen und Ergreifungen bitte umgehend der nächsten
+                        Dienststelle melden.
                     </MudAlert>
 
                     <MudDivider />
@@ -153,7 +170,7 @@
                         <MudText Typo="Typo.body2">
                             <MudLink Href="@($"/hinweis/gestellt?fahndung={_entry.CaseNumber}")"
                                      Color="Color.Error" Typo="Typo.body2">
-                                Du hast diese Person bereits gestellt? Hier melden →
+                                Wer diese Person selbst stellt, meldet die Ergreifung hier →
                             </MudLink>
                         </MudText>
                     }

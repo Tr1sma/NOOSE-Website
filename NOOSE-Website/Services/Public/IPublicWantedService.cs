@@ -91,7 +91,7 @@ public interface IPublicWantedService
     /// <summary>Mark a published notice as captured.</summary>
     Task CapturedAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Recompute the published hazard level from the file's current score.</summary>
+    /// <summary>Recompute the published hazard level from the file's current score, dropping a manual choice.</summary>
     Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Soft-delete a notice; refused while it is published.</summary>

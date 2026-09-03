@@ -115,7 +115,6 @@
     [Inject] private TipsBroadcaster TipsBroadcaster { get; set; } = default!;
     [Inject] private IFinancingService FinancingService { get; set; } = default!;
     [Inject] private NOOSE_Website.Services.Public.ITipService TipService { get; set; } = default!;
-    [Inject] private NOOSE_Website.Services.Public.ITicketService TicketService { get; set; } = default!;
     [Inject] private IPartnerVisibilityPolicyService PartnerPolicy { get; set; } = default!;
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
@@ -126,7 +125,6 @@
     private int _openAcknowledgments;
     private int _openFinancing;
     private int _openTips;
-    private int _openTickets;
     private IReadOnlySet<string>? _allowedPartnerTypes;
     private IReadOnlyList<NavEntry> _partnerEntries = [];
     private string? _filter;
@@ -207,10 +205,6 @@
         @if (entry.BadgeKey == "financing" && _openFinancing > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Class="ml-2">@_openFinancing</MudChip>
-        }
-        @if (entry.BadgeKey == "tickets" && _openTickets > 0)
-        {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openTickets</MudChip>
         }
         @if (entry.BadgeKey == "tips" && _openTips > 0)
         {
@@ -361,7 +355,6 @@
         await LoadAcknowledgmentsAsync();
         await LoadFinancingAsync();
         await LoadTipsAsync();
-        await LoadTicketsAsync();
     }
 
     // partners get one runtime area; internal agents get the areas holding at least one permitted entry
@@ -499,25 +492,6 @@
         {
             /* best effort */
             Logger.LogWarning(ex, "Hinweis-Badge konnte nicht geladen werden.");
-        }
-    }
-
-    // the ticket desk is leadership only, and so is its count
-    private async Task LoadTicketsAsync()
-    {
-        if (_user is null || !_user.IsInternalAgent() || !_user.MayClassifiedRead())
-        {
-            _openTickets = 0;
-            return;
-        }
-        try
-        {
-            _openTickets = await TicketService.GetOpenCountAsync();
-        }
-        catch (Exception ex)
-        {
-            /* best effort */
-            Logger.LogWarning(ex, "Ticket-Badge konnte nicht geladen werden.");
         }
     }
 

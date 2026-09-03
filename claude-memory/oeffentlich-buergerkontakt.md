@@ -328,6 +328,12 @@
     (siehe [oeffentlich-geld.md](oeffentlich-geld.md)): `PublicWantedService` behält seinen einen Schreibpfad,
     die Seite schreibt nur hin, was als Nächstes fällig ist. Die Auszahlung läuft danach unverändert über
     `IRewardService` — eine Ergreifungsmeldung ist auszahlbar, *weil* sie per Regel nicht anonym ist.
+  - **Der öffentliche Ton lädt seit 2026-09-03 leise zum Selbst-Stellen ein.** „Nicht selbst eingreifen" ist auf
+    Board, Steckbrief und Poster zu „Vorsicht ist geboten — Beobachtungen **und Ergreifungen** melden" geworden,
+    und der Link am Steckbrief heißt „Wer diese Person selbst stellt, meldet die Ergreifung hier". Ausdrücklich
+    **kein** Aufruf, jemanden zu stellen: die Erlaubnis steckt in der Formulierung, nicht in einer Aufforderung.
+    Wer die alte Warnung zurückschreibt, macht den Link daneben unglaubwürdig — beides gehört zusammen geändert.
+    Die Nav bleibt trotzdem ohne Route (Grund darüber): gemeldet wird weiter **vom Steckbrief aus**.
   - Kind-bewusste Beschriftung gibt es nur an den zwei Stellen, die die Zeile in der Hand haben
     (`TrashProjection.Tip`, `RecordsReference`). `AuditEntityDisplay`, `TimelineDisplay` und `SearchCatalog` sind
     auf den Typnamen verschlüsselt und bleiben bewusst generisch bei „Bürgerhinweis".

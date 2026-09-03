@@ -94,6 +94,19 @@ else
                 <MudDatePicker @bind-Date="_input.ExpiresAt" Label="Ablaufdatum (optional)" Variant="Variant.Outlined"
                                Clearable="true" />
             </MudItem>
+            <MudItem xs="12" md="6">
+                @* the score only proposes: without a picker here the poster carried whatever the sweep computed,
+                   and nothing in the house could correct it *@
+                @* ToStringFunc, or the closed field falls back to the enum name and reads "Critical" in a German UI *@
+                <MudSelect T="HazardLevel" @bind-Value="_hazard" Label="Gefahrenstufe" Variant="Variant.Outlined"
+                           ToStringFunc="@(l => HazardLevelLogic.Name(l))"
+                           HelperText="Steht nach außen auf dem Steckbrief. Vorbelegt aus dem Bedrohungs-Score; „Stufe aktualisieren“ setzt sie darauf zurück.">
+                    @foreach (var level in HazardLevelLogic.All)
+                    {
+                        <MudSelectItem T="HazardLevel" Value="@level">@HazardLevelLogic.Name(level)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
         </MudGrid>
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
@@ -190,6 +203,7 @@ else
     private IReadOnlyList<Warnhinweis> _hintCatalog = [];
     private List<string> _hintIds = [];
     private readonly PublicWantedInput _input = new();
+    private HazardLevel _hazard = HazardLevel.No;
     private RichTextEditor? _editor;
     private bool _load = true;
     private bool _busy;
@@ -233,6 +247,7 @@ else
                 _input.VehicleText = _draft.VehicleText;
                 _input.PhotoSourceId = _draft.PhotoSourceId;
                 _input.ExpiresAt = _draft.ExpiresAt;
+                _hazard = _draft.HazardLevel;
             }
         }
         catch (Exception ex)
@@ -250,6 +265,7 @@ else
     {
         // null would tell the service to keep the stored accusation; the editor always has the current text
         _input.ChargeHtml = _editor is null ? _draft?.ChargeHtml : await _editor.GetHtmlAsync();
+        _input.HazardLevel = _hazard;
         await Wanted.UpdateSnapshotAsync(_input, User);
         return true;
     }

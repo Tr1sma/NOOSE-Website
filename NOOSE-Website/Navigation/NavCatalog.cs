@@ -111,7 +111,7 @@ public static class NavCatalog
         new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),
         new NavEntry("tickets", "/tickets", Icons.Material.Filled.Forum, "Bürger-Tickets",
-            NavSection.VerwaltungFuehrung, NavArea.Verwaltung, BadgeKey: "tickets",
+            NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss"),
         // the same page, a different section: without an entry of their own an attached agent could only ever
         // reach their tickets through a notification link

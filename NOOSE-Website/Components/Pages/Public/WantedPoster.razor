@@ -74,7 +74,8 @@ else
         @if (_bounty is { } bounty)
         {
             <p class="druck-poster-belohnung">
-                <b>Belohnung:</b> @(bounty.IsCap ? "bis " : string.Empty)@bounty.Total.ToString("N0") $
+                <span class="druck-poster-belohnung-titel">@(bounty.IsCap ? "Belohnung bis zu" : "Belohnung")</span>
+                <span class="druck-poster-belohnung-betrag">@bounty.Total.ToString("N0") $</span>
             </p>
         }
 
@@ -102,7 +103,7 @@ else
         }
 
         <footer class="druck-fusszeile">
-            Nicht selbst eingreifen. Beobachtungen der nächsten Dienststelle melden.<br />
+            Vorsicht ist geboten. Beobachtungen und Ergreifungen der nächsten Dienststelle melden.<br />
             @* plain text, not a link: a printed sheet cannot be clicked *@
             noose.info/gesucht/@_entry.CaseNumber
         </footer>

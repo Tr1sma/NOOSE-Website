@@ -197,7 +197,9 @@ public sealed record PublicWantedDraft(
     string? PhotoSourceId,
     DateTime? ExpiresAt,
     string? ChargeHtml,
-    bool BountyIsCap);
+    bool BountyIsCap,
+    /// <summary>What the editor shows in the level picker; derived from the score until an author overrules it.</summary>
+    HazardLevel HazardLevel);
 
 /// <summary>One selectable file photo, labelled by upload date rather than by file name.</summary>
 public sealed record PublicWantedPhotoOption(string Id, string Label);
@@ -255,4 +257,7 @@ public class PublicWantedInput
 
     /// <summary>Null leaves the stored accusation untouched, "" clears it.</summary>
     public string? ChargeHtml { get; set; }
+
+    /// <summary>Null leaves the stored level alone; a different value makes it the author's, not the score's.</summary>
+    public HazardLevel? HazardLevel { get; set; }
 }

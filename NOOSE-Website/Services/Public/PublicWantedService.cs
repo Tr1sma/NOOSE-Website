@@ -274,7 +274,7 @@ public class PublicWantedService(
             .Where(f => f.Id == id)
             .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Kind, f.Status,
                 f.DisplayName, f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml,
-                f.BountyIsCap) })
+                f.BountyIsCap, f.PublicHazardLevel) })
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is not null && await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken)
@@ -584,6 +584,15 @@ public class PublicWantedService(
         row.VehicleText = CutOrNull(input.VehicleText, MaxVehicleText);
         row.ExpiresAt = PublicExpiry.From(input.ExpiresAt);
 
+        // only a real change flips the flag: saving an untouched editor must leave the level on the score, while an
+        // author who picks one keeps it through every later publication
+        var levelChanged = input.HazardLevel is { } level && level != row.PublicHazardLevel;
+        if (levelChanged)
+        {
+            row.PublicHazardLevel = input.HazardLevel!.Value;
+            row.HazardLevelIsManual = true;
+        }
+
         // refused rather than quietly nulled: the editor offers no picker for an item notice, so a value here can
         // only come from a manipulated post — and the only photo store in the house holds the owner's mugshots
         if (WantedKinds.IsItem(row.Kind) && !string.IsNullOrEmpty(input.PhotoSourceId))
@@ -630,6 +639,13 @@ public class PublicWantedService(
         }
 
         await SaveAndInvalidateAsync(db, cancellationToken);
+
+        // the level is a factor of the inbox order of every tip on this notice, so changing it here has to reach
+        // the same stamp the publish body and the refresh action call
+        if (levelChanged)
+        {
+            await tipPriority.StampForNoticeAsync(row.Id, cancellationToken);
+        }
 
         // after the save, for the same reason as in the publish body. Gefasst counts as outside, so its stale
         // copy has to go too.
@@ -758,7 +774,9 @@ public class PublicWantedService(
             ?? throw new InvalidOperationException(NotFound);
         var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
 
+        // the one action that overrules the author again — that is what the button is for
         row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
+        row.HazardLevelIsManual = false;
         await SaveAndInvalidateAsync(db, cancellationToken);
         await tipPriority.StampForNoticeAsync(row.Id, cancellationToken);
     }
@@ -1167,7 +1185,12 @@ public class PublicWantedService(
         await PhotoCopyAsync(db, row, cancellationToken);
         var freshPhoto = row.PhotoFileName != previousPhoto ? row.PhotoFileName : null;
 
-        row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
+        // the score is the default, not the verdict: an author who set the level keeps it, or every publication
+        // would silently pull the poster back to whatever the sweep last computed
+        if (!row.HazardLevelIsManual)
+        {
+            row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
+        }
         row.Status = PublicWantedStatus.Veroeffentlicht;
         row.PublishedAt = DateTime.UtcNow;
         row.PublishedById = actor.GetAgentId();

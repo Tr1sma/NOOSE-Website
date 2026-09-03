@@ -98,6 +98,16 @@ public sealed class PublicStatisticsServiceTests
         return row;
     }
 
+    // The published tip and payout figures sit on a fixed roleplay baseline. These tests are about what gets counted
+    // on top of it, so they name the offset rather than restating it — retuning the baseline must not rewrite them.
+    private static int Received(int counted) => PublicStatisticsService.TipsReceivedBaseline + counted;
+
+    private static int Confirmed(int counted) => PublicStatisticsService.TipsConfirmedBaseline + counted;
+
+    private static int Captures(int counted) => PublicStatisticsService.TipsCaptureBaseline + counted;
+
+    private static decimal Paid(decimal counted) => PublicStatisticsService.RewardsPaidBaseline + counted;
+
     private static async Task AddAsync(SqliteTestContext ctx, params object[] rows)
     {
         await using var db = ctx.NewContext();
@@ -160,7 +170,7 @@ public sealed class PublicStatisticsServiceTests
 
         // "0 laufende Fahndungen" would be a claim the agency has not made; a switched-off module makes none
         Assert.Null(numbers.OpenNotices);
-        Assert.Equal(1, numbers.TipsReceived);
+        Assert.Equal(Received(1), numbers.TipsReceived);
     }
 
     [Fact]
@@ -255,7 +265,7 @@ public sealed class PublicStatisticsServiceTests
         await AddAsync(ctx, Tip(TipStatus.Neu), Tip(TipStatus.Neu, h => h.IsDeleted = true));
 
         // a submission the agency removed is not a submission it received
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
     }
 
     // --- the figures themselves ------------------------------------------------------------------------------------
@@ -272,10 +282,13 @@ public sealed class PublicStatisticsServiceTests
 
         var numbers = await host.Service.GetPublishedAsync();
 
-        Assert.Equal(6, numbers.TipsReceived);
-        // the band labels it "davon", so the smaller figure has to be contained in the larger one
-        Assert.Equal(3, numbers.TipsConfirmed);
-        Assert.Equal(1, numbers.TipsLedToCapture);
+        Assert.Equal(Received(6), numbers.TipsReceived);
+        // the band labels it "davon", so the smaller figure has to be contained in the larger one — which also has to
+        // survive the baseline, hence three offsets that keep the funnel in order rather than one shared number
+        Assert.Equal(Confirmed(3), numbers.TipsConfirmed);
+        Assert.Equal(Captures(1), numbers.TipsLedToCapture);
+        Assert.True(numbers.TipsReceived >= numbers.TipsConfirmed);
+        Assert.True(numbers.TipsConfirmed >= numbers.TipsLedToCapture);
     }
 
     [Fact]
@@ -289,17 +302,21 @@ public sealed class PublicStatisticsServiceTests
             new HinweisBelohnung { ReceiptNumber = "BEL-1", TipId = tip.Id, ShareId = "s1", Amount = 2500m },
             new HinweisBelohnung { ReceiptNumber = "BEL-1", TipId = tip.Id, ShareId = "s2", Amount = 1500m });
 
-        Assert.Equal(4000m, (await host.Service.GetPublishedAsync()).RewardsPaid);
+        Assert.Equal(Paid(4000m), (await host.Service.GetPublishedAsync()).RewardsPaid);
     }
 
     [Fact]
-    public async Task NoPayout_IsZeroRatherThanSilence()
+    public async Task NoPayout_IsTheBaselineRatherThanSilence()
     {
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
 
-        // the module is on, so the agency is saying it: nothing has been paid out yet
-        Assert.Equal(0m, (await host.Service.GetPublishedAsync()).RewardsPaid);
+        var numbers = await host.Service.GetPublishedAsync();
+
+        // the module is on, so a figure is published rather than withheld; nothing counted on top leaves the baseline
+        Assert.Equal(Paid(0m), numbers.RewardsPaid);
+        // the point of the baseline: a fresh installation still shows a seven-figure record on the start page
+        Assert.True(numbers.RewardsPaid >= 1_000_000m, $"Sockelbetrag unter einer Million: {numbers.RewardsPaid}");
     }
 
     [Fact]
@@ -353,13 +370,15 @@ public sealed class PublicStatisticsServiceTests
         var host = NewHost(ctx);
         await AddAsync(ctx, Tip(TipStatus.Bestaetigt));
         // warm the module snapshot so the failure lands on the counting, not on the switch board
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
         host.Cache.Remove("OeffentlicheZahlen");
         host.Cache.Remove("OeffentlicheFahndungen");
 
         ctx.Dispose();
 
         var numbers = await host.Service.GetPublishedAsync();
+        // the baseline must not survive on its own here: a figure nobody could count is still a figure nobody knows,
+        // and publishing the bare offset would turn "we cannot say" into a number
         Assert.Null(numbers.TipsReceived);
         Assert.Null(numbers.RewardsPaid);
         // the wanted figures describe what the board is showing, and an unreadable board shows nothing
@@ -386,7 +405,7 @@ public sealed class PublicStatisticsServiceTests
         }
 
         // a hole must not survive a cache window: the next visitor counts again rather than reading the failure
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
         ctx.Dispose();
     }
 
@@ -409,7 +428,7 @@ public sealed class PublicStatisticsServiceTests
         // only the switch snapshot, deliberately not the figures: the warm counts must still answer
         host.Cache.Remove("OeffentlicheModule");
 
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
     }
 
     [Fact]
@@ -418,12 +437,12 @@ public sealed class PublicStatisticsServiceTests
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
         await AddAsync(ctx, Tip(TipStatus.Neu));
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
 
         await AddAsync(ctx, Tip(TipStatus.Neu));
-        Assert.Equal(1, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(1), (await host.Service.GetPublishedAsync()).TipsReceived);
 
         host.Cache.Remove("OeffentlicheZahlen");
-        Assert.Equal(2, (await host.Service.GetPublishedAsync()).TipsReceived);
+        Assert.Equal(Received(2), (await host.Service.GetPublishedAsync()).TipsReceived);
     }
 }

@@ -73,6 +73,10 @@ public class OeffentlicheFahndung : IAuditable, ISoftDelete
     [Column("OeffentlicheGefahrenstufe")]
     public HazardLevel PublicHazardLevel { get; set; } = HazardLevel.No;
 
+    /// <summary>The author picked the level, so publishing must not overwrite it with the score.</summary>
+    [Column("GefahrenstufeManuell")]
+    public bool HazardLevelIsManual { get; set; }
+
     /// <summary>Filtered out on the read side; the sweep that flips the status arrives with the archive phase.</summary>
     [Column("AblaufDatum")]
     public DateTime? ExpiresAt { get; set; }

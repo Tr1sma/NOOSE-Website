@@ -275,7 +275,8 @@
     /// <summary>The two shares of the tip figure, in the tile they belong to instead of two tiles of their own.</summary>
     private string TipsHint(int received)
     {
-        var parts = new List<string> { $"{received:N0} über diese Seite eingegangen" };
+        // not "über diese Seite": the figure carries the agency's record from before this site existed
+        var parts = new List<string> { $"{received:N0} insgesamt eingegangen" };
         if (_numbers.TipsConfirmed is { } confirmed)
         {
             parts.Add($"{confirmed:N0} davon bestätigt");

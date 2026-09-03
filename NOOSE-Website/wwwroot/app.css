@@ -506,9 +506,26 @@ html, body {
     text-transform: uppercase;
 }
 
-/* the one figure on the sheet that has to carry across a room */
+/* the one figure on the sheet that has to carry across a room, so the amount gets the size and the label steps
+   back out of its way */
 .druck-poster-belohnung {
-    font-size: 18px;
+    margin: 14px 0;
+}
+
+.druck-poster-belohnung-titel {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+    color: #444;
+}
+
+.druck-poster-belohnung-betrag {
+    display: block;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.05;
     letter-spacing: .02em;
 }
 

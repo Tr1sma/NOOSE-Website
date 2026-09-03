@@ -77,6 +77,14 @@
     Grund, `Personen` für Inhalt zu lesen, und die Score-Konfiguration steht in `NeverPublic` als „Anleitung
     zur Umgehung". `PublicWantedModelTests` hält das als **positive** Allowlist der Nach-außen-Typen fest —
     eine Ausnahmeliste wird pro Datei erteilt und weitet sich still.
+  - **Der Score schlägt die Stufe nur vor.** Seit `Oeffentlich04_GefahrenstufeManuell` wählt der Autor sie im
+    Editor; `GefahrenstufeManuell` merkt sich das, und `PublishRowAsync` rechnet **nur ohne** dieses Flag aus
+    `person.ThreatScore` neu. Ohne das stand auf jedem Steckbrief die Stufe, die der Sweep zuletzt errechnet hat
+    (in der Praxis „Niedrig"), und nichts im Haus konnte sie korrigieren — jedes Veröffentlichen hätte eine
+    Korrektur still zurückgedreht. `RefreshHazardLevelAsync` („Stufe aktualisieren") ist der eine Weg zurück auf
+    den Score und löscht das Flag. `UpdateSnapshotAsync` setzt es **nur bei echter Änderung** (sonst friert das
+    bloße Speichern eines unberührten Editors die Stufe ein) und ruft dann `StampForNoticeAsync` — die Stufe ist
+    ein Faktor der Posteingangs-Reihenfolge jedes Hinweises an dieser Ausschreibung.
   - **Publizieren schreibt kein `ManualAudit.Row` gegen die Personenakte** (entgegen Leitsatz 9 in
     `PublicPlan.md`): die Zeile ist `IAuditable`, und eine zweite, `Person`-getypte Zeile fiele in
     `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als „Akte geändert". Der Zeitstrahl kommt über
