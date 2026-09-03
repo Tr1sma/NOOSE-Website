@@ -1,0 +1,7 @@
+/* Gefährdungslisten (Fraktionen/Personen): Top 5 sichtbar, der Rest scrollt intern.
+   Höhe deckt 5 Dense-Items ab; der 6. Eintrag blinzelt als Scroll-Hinweis hervor.
+   Liegt am HazardList-Scope: aus Home.razor.css greift Scoped-CSS nicht in die Kindkomponente. */
+.dashboard-fraktionsliste {
+    max-height: 16rem;
+    overflow-y: auto;
+}
