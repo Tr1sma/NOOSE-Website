@@ -20,10 +20,10 @@ public class PublicStatisticsService(
     // four figures move together — a payout total without the tips behind it reads as invented. Kept in the public
     // service only: the internal reward views, the KPI panel and every cash booking stay on the real rows.
     // public so the tests can name the offset instead of restating it, and tuning it stays a one-line edit
-    public const int TipsReceivedBaseline = 1_147;
-    public const int TipsConfirmedBaseline = 372;
-    public const int TipsCaptureBaseline = 94;
-    public const decimal RewardsPaidBaseline = 1_236_500m;
+    public const int TipsReceivedBaseline = 21;
+    public const int TipsConfirmedBaseline = 18;
+    public const int TipsCaptureBaseline = 3;
+    public const decimal RewardsPaidBaseline = 1_250_000m;
 
     /// <summary>The counted rows, cached; the module switches are read outside and decide what is shown.</summary>
     private sealed record Counts(int TipsReceived, int TipsConfirmed, int TipsLedToCapture, decimal RewardsPaid);
