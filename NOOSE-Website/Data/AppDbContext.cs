@@ -252,6 +252,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
     public DbSet<TicketParticipant> TicketBeteiligte => Set<TicketParticipant>();
+    public DbSet<OeffentlichesFuehrungsprofil> OeffentlicheFuehrungsprofile => Set<OeffentlichesFuehrungsprofil>();
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
     public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
     public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
@@ -1913,6 +1914,24 @@ public class AppDbContext : IdentityDbContext<Agent>
             // both caps of the quota read these
             b.HasIndex(t => new { t.CitizenProfileId, t.Status });
             b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+        });
+
+        modelBuilder.Entity<OeffentlichesFuehrungsprofil>(b =>
+        {
+            b.Property(p => p.PublicKey).HasMaxLength(64).IsRequired();
+            b.Property(p => p.AgentId).HasMaxLength(64);
+            b.Property(p => p.DisplayName).HasMaxLength(128).IsRequired();
+            b.Property(p => p.Title).HasMaxLength(128).IsRequired();
+            b.Property(p => p.RoleText).HasMaxLength(160);
+            b.Property(p => p.PhotoFileName).HasMaxLength(256);
+            b.Property(p => p.PhotoContentType).HasMaxLength(128);
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // Restrict: a released entry outlives the account it was made from, and it carries its own copy of
+            // every value anyway
+            b.HasOne(p => p.Agent).WithMany()
+                .HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(p => p.PublicKey).IsUnique();
+            b.HasIndex(p => new { p.PublishedAt, p.SortOrder });
         });
 
         modelBuilder.Entity<TicketParticipant>(b =>

@@ -55,6 +55,7 @@ public static class AuditEntityDisplay
         "Ticket" => "Bürger-Ticket",
         "TicketNachricht" => "Ticket-Nachricht",
         "TicketParticipant" => "Ticket-Beteiligter",
+        "OeffentlichesFuehrungsprofil" => "Öffentliches Führungsprofil",
         "OeffentlicheVorlage" => "Öffentliche Vorlage",
         "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
         "FahndungEinspruch" => "Einspruch gegen eine Ausschreibung",
@@ -111,6 +112,7 @@ public static class AuditEntityDisplay
         // the id is the assignment's, not the ticket's, so the route stops at the desk — same as the message
         "TicketNachricht" => "/tickets",
         "TicketParticipant" => "/tickets",
+        "OeffentlichesFuehrungsprofil" => "/einstellungen?tab=oeffentliche-fuehrung",
         "OeffentlicheVorlage" => "/einstellungen?tab=oeffentliche-vorlagen",
         "OeffentlichesFraktionsprofil" => "/fahndung?tab=organisationen",
         "FahndungEinspruch" => "/fahndung?tab=einsprueche",

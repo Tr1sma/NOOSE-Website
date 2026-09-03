@@ -29,6 +29,11 @@ public static class PublicVisibility
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
+            ["OeffentlichesFuehrungsprofil"] = "Die eine Ausnahme von der Anonymität nach außen, und zwar eine "
+                + "redaktionelle: freigegebener Klarname, Dienstgradbezeichnung, Funktion und ein KOPIERTES Foto "
+                + "einer Führungskraft ab Supervisory Special Agent. Jeder Eintrag wird einzeln von Hand "
+                + "freigegeben; nichts davon wird zur Lesezeit aus `Agent` projiziert, und `Agent` selbst bleibt "
+                + "in NeverPublic. Weder Codename noch Dienstgrad-Wert, Kennungen oder Flags gehen mit.",
             ["SystemSetting"] = "Sechs Zeilen, nicht mehr: die vier der Gefahrenlage (Stufe, Einschätzung, "
                 + "Seit-Datum, zuvor gesetzte Stufe), die Anforderungsliste der Karriereseite "
                 + "(KarriereAnforderungen) und die Logo-Metadaten (LogoFileName, LogoContentType), die der "

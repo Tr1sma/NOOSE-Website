@@ -1,0 +1,214 @@
+﻿@* Editorial control of the public leadership chart. Nothing goes live without a release per entry. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@inject IPublicLeadershipService Leadership
+@inject IPublicLeadershipPhotoStorageService PhotoStorage
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<PublicLeadershipPanel> Log
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Dies ist die einzige Stelle, an der die Behörde nach außen Namen nennt. Jeder Eintrag wird einzeln
+    freigegeben; das Einschalten des Moduls allein veröffentlicht nichts. Das Foto wird als Kopie unter dem
+    öffentlichen Pfad abgelegt — das Profilbild des Agenten selbst verlässt das Haus nie.
+</MudText>
+
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+               OnClick="@(() => EditAsync(null))" Disabled="@(!_mayEdit)">Eintrag anlegen</MudButton>
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.AccountTree" Title="Keine Einträge"
+                Text="Lege einen Eintrag für jede Führungskraft an, die öffentlich genannt werden soll." />
+}
+else
+{
+    <MudStack Spacing="2">
+        @foreach (var row in _rows)
+        {
+            <MudPaper Outlined="true" Class="pa-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                    @if (row.HasPhoto)
+                    {
+                        <MudImage Src="@($"/fuehrung/{row.Key}/foto")" Alt="@row.DisplayName" Width="48" Height="48"
+                                  ObjectFit="ObjectFit.Cover" Class="rounded-circle" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Large" Color="Color.Default" />
+                    }
+                    <MudStack Spacing="0" Style="flex:1 1 260px;">
+                        <MudText Typo="Typo.body1"><b>@row.DisplayName</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @row.Title@(string.IsNullOrWhiteSpace(row.RoleText) ? "" : " · " + row.RoleText)
+                            @(string.IsNullOrWhiteSpace(row.AgentCodename) ? "" : $" · aus {row.AgentCodename}")
+                        </MudText>
+                    </MudStack>
+                    @if (row.PublishedAt is { } at)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
+                                 Icon="@Icons.Material.Filled.CloudDone">
+                            seit @at.ToLocalTime().ToString("dd.MM.yyyy")
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                            Entwurf
+                        </MudChip>
+                    }
+                    @if (_mayEdit)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => EditAsync(row))" aria-label="Bearbeiten" />
+                            @if (row.PublishedAt is null)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Success"
+                                               Size="Size.Small" OnClick="@(() => PublishAsync(row))"
+                                               aria-label="Veröffentlichen" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Color="Color.Warning"
+                                               Size="Size.Small" OnClick="@(() => RetractAsync(row))"
+                                               aria-label="Zurückziehen" />
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(row))" aria-label="Löschen" />
+                        </MudStack>
+                    }
+                </MudStack>
+
+                @if (_mayEdit)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadAsync(row, f))"
+                                       Accept=".jpg,.jpeg,.png,.webp,.gif">
+                            <ActivatorContent>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                                           StartIcon="@Icons.Material.Filled.Image">
+                                    @(row.HasPhoto ? "Foto ersetzen" : "Foto hochladen")
+                                </MudButton>
+                            </ActivatorContent>
+                        </MudFileUpload>
+                    </MudStack>
+                }
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<PublicLeadershipEdit> _rows = [];
+    private bool _load = true;
+    private bool _mayEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _rows = await Leadership.GetAllAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Log.LogError(ex, "Leadership panel failed to load");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _load = false;
+    }
+
+    private async Task EditAsync(PublicLeadershipEdit? row)
+    {
+        var saved = await PublicLeadershipDialog.ShowAsync(DialogService, _user, row);
+        if (saved)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task UploadAsync(PublicLeadershipEdit row, IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+        try
+        {
+            await using var stream = file.OpenReadStream(PhotoStorage.MaxBytes);
+            await Leadership.SetPhotoAsync(row.Id, stream, file.ContentType, _user);
+            Snackbar.Add("Foto gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task PublishAsync(PublicLeadershipEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag veröffentlichen?",
+            $"„{row.DisplayName}“ wird mit Name, Dienstgrad und Foto unter /fuehrung öffentlich sichtbar.",
+            "Veröffentlichen", Color.Success);
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Leadership.PublishAsync(row.Id, _user), "Eintrag veröffentlicht.");
+    }
+
+    private async Task RetractAsync(PublicLeadershipEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag zurückziehen?",
+            $"„{row.DisplayName}“ ist danach öffentlich nicht mehr sichtbar. Der Eintrag bleibt erhalten.",
+            "Zurückziehen", Color.Warning);
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Leadership.RetractAsync(row.Id, _user), "Eintrag zurückgezogen.");
+    }
+
+    private async Task DeleteAsync(PublicLeadershipEdit row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag löschen?",
+            $"„{row.DisplayName}“ wird samt Foto entfernt. Das lässt sich nicht rückgängig machen.");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Leadership.DeleteAsync(row.Id, _user), "Eintrag gelöscht.");
+    }
+
+    private async Task RunAsync(Func<Task> action, string done)
+    {
+        try
+        {
+            await action();
+            Snackbar.Add(done, Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

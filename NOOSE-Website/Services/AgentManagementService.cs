@@ -822,6 +822,11 @@ public class AgentManagementService(
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.OpenedByAgentId, (string?)null), cancellationToken);
         // deleted, not nulled: the row IS the permission to read that ticket, and a nameless one would grant nothing
         await db.TicketBeteiligte.Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        // the released chart entry keeps its own copy of every value, so removing the pointer costs nothing
+        await db.OeffentlicheFuehrungsprofile.Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.OeffentlicheFuehrungsprofile.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PublishedById, (string?)null), cancellationToken);
         await db.KassenBuchungen.IgnoreQueryFilters().Where(x => x.BookedById == agentId)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.BookedById, (string?)null), cancellationToken);
         await db.OeffentlicheFahndungen.IgnoreQueryFilters().Where(x => x.PublishedById == agentId)

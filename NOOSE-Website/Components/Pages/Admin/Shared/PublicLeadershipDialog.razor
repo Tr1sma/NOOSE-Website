@@ -1,0 +1,127 @@
+﻿@* One entry of the public leadership chart; the values are copies, not a live projection of the roster. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@inject IPublicLeadershipService Leadership
+@inject IAgentManagementService Agents
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Name, Dienstgradbezeichnung und Funktion sind redaktionelle Angaben. Eine spätere Beförderung
+                ändert diesen Eintrag nicht von selbst.
+            </MudText>
+
+            <MudSelect T="string" @bind-Value="_input.AgentId" Label="Agent" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Disabled="@(_existing is not null)">
+                @foreach (var a in _candidates)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@Label(a)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_input.DisplayName" Label="Öffentlicher Name" Variant="Variant.Outlined"
+                          MaxLength="128" Immediate="true" />
+            <MudTextField @bind-Value="_input.Title" Label="Dienstgradbezeichnung" Variant="Variant.Outlined"
+                          MaxLength="128" Immediate="true" />
+            <MudTextField @bind-Value="_input.RoleText" Label="Funktion (optional)" Variant="Variant.Outlined"
+                          MaxLength="160" />
+            <MudNumericField T="int" @bind-Value="_input.SortOrder" Label="Reihenfolge" Min="0" Max="9999"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_busy || !MaySave)"
+                   OnClick="SaveAsync">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public PublicLeadershipEdit? Existing { get; set; }
+
+    private readonly PublicLeadershipInput _input = new();
+    private PublicLeadershipEdit? _existing;
+    private List<Agent> _candidates = new();
+    private bool _busy;
+
+    private bool MaySave => !string.IsNullOrWhiteSpace(_input.AgentId)
+                            && _input.DisplayName.Trim().Length > 0
+                            && _input.Title.Trim().Length > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _existing = Existing;
+        if (_existing is not null)
+        {
+            _input.Id = _existing.Id;
+            _input.AgentId = _existing.AgentId;
+            _input.DisplayName = _existing.DisplayName;
+            _input.Title = _existing.Title;
+            _input.RoleText = _existing.RoleText;
+            _input.SortOrder = _existing.SortOrder;
+        }
+
+        try
+        {
+            // the picker offers what AgentSelection allows, narrowed by the chart's own rank floor
+            var roster = await Agents.GetSelectableAsync();
+            _candidates = roster
+                .Where(a => a.Rank is { } rank && rank >= LeadershipChart.RankFloor)
+                .OrderByDescending(a => a.Rank)
+                .ThenBy(a => a.Codename)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private string Label(Agent a)
+    {
+        var rank = RankDisplay.Name(a.Rank);
+        return User.MayRealNameSee() && !string.IsNullOrWhiteSpace(a.RealName)
+            ? $"{a.Codename} · {a.RealName} · {rank}"
+            : $"{a.Codename} · {rank}";
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Leadership.SaveAsync(_input, User);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the form; true when something was saved.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, ClaimsPrincipal user, PublicLeadershipEdit? existing)
+    {
+        var parameters = new DialogParameters<PublicLeadershipDialog>
+        {
+            { x => x.User, user },
+            { x => x.Existing, existing },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var title = existing is null ? "Eintrag anlegen" : "Eintrag bearbeiten";
+        var reference = await dialog.ShowAsync<PublicLeadershipDialog>(title, parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}
