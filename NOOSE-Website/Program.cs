@@ -170,6 +170,7 @@ builder.Services.AddScoped<IPartyPhotoStorageService, PartyPhotoStorageService>(
 builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
 builder.Services.AddScoped<IAgentAvatarStorageService, AgentAvatarStorageService>();
 builder.Services.AddScoped<IPublicWantedPhotoStorageService, PublicWantedPhotoStorageService>();
+builder.Services.AddScoped<IPublicLeadershipPhotoStorageService, PublicLeadershipPhotoStorageService>();
 builder.Services.AddScoped<ITipAttachmentStorageService, TipAttachmentStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
@@ -357,6 +358,7 @@ builder.Services.AddScoped<IPublicSituationService, PublicSituationService>();
 builder.Services.AddScoped<IPublicStatisticsService, PublicStatisticsService>();
 builder.Services.AddScoped<IPublicSearchService, PublicSearchService>();
 builder.Services.AddScoped<IPublicKpiService, PublicKpiService>();
+builder.Services.AddScoped<IPublicLeadershipService, PublicLeadershipService>();
 builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
@@ -489,6 +491,7 @@ app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
 app.MapNooseRecruitingFileEndpoints();
 app.MapNoosePublicWantedFileEndpoints();
+app.MapNoosePublicLeadershipFileEndpoints();
 app.MapNooseTipFileEndpoints();
 
 // apply pending migrations on startup

@@ -49,6 +49,13 @@ public interface ITipService
     /// <summary>Open tips for the navigation badge.</summary>
     Task<int> GetOpenCountAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Stamps the desk-side read mark the badge counts; the first agent to open a tip clears it.</summary>
+    Task MarkAgentReadAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Pins the inbox order by hand, or hands the tip back to the automatic computation with null.</summary>
+    Task SetPriorityAsync(string id, int? pinned, string? reason, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     Task<TipDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>The tips filed against one public notice, most urgent first and capped. Carries no citizen field.</summary>

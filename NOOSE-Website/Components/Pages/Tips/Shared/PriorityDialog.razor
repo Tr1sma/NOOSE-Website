@@ -1,0 +1,57 @@
+﻿@* Pins the inbox order of one tip by hand; the automatic computation then leaves the row alone. *@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Normalerweise errechnet sich die Priorität aus Kopfgeld, Gefahrenstufe und Vertrauensstufe des
+                Hinweisgebers. Ein von Hand gesetzter Wert bleibt stehen, bis er zurückgenommen wird.
+            </MudText>
+            <MudNumericField T="int" @bind-Value="_priority" Label="Priorität" Min="MinValue" Max="MaxValue"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" />
+            <MudTextField T="string" @bind-Value="_reason" Label="Begründung (optional)" Lines="2"
+                          MaxLength="500" Variant="Variant.Outlined" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int Priority { get; set; }
+    [Parameter] public string? Reason { get; set; }
+
+    private int MinValue => TipPriority.Min;
+    private int MaxValue => TipPriority.Max;
+
+    private int _priority;
+    private string? _reason;
+
+    protected override void OnInitialized()
+    {
+        _priority = Math.Clamp(Priority, TipPriority.Min, TipPriority.Max);
+        _reason = Reason;
+    }
+
+    /// <summary>What the dialog hands back; a named type, because a tuple does not survive DialogResult.</summary>
+    public sealed record Pinned(int Priority, string? Reason);
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(new Pinned(_priority, _reason)));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the dialog; null when the handler cancelled.</summary>
+    public static async Task<Pinned?> ShowAsync(IDialogService dialog, int current, string? reason)
+    {
+        var parameters = new DialogParameters<PriorityDialog>
+        {
+            { x => x.Priority, current },
+            { x => x.Reason, reason },
+        };
+        var reference = await dialog.ShowAsync<PriorityDialog>("Priorität setzen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Pinned data } ? data : null;
+    }
+}

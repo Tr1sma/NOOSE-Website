@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Recruiting;
@@ -20,6 +20,24 @@ public class BewerbungTestAssignment : IAuditable, ISoftDelete
 
     [Column("AbgeschlossenAm")]
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>When the grading was declared finished; null while questions are still being marked.</summary>
+    [Column("BewertetAm")]
+    public DateTime? GradedAt { get; set; }
+
+    [Column("BewertetVon")]
+    public string? GradedByName { get; set; }
+
+    /// <summary>Result frozen at that moment; without it a later edit to the test rewrites an old verdict.</summary>
+    [Column("ErgebnisPunkte")]
+    public int? FinalPoints { get; set; }
+
+    [Column("ErgebnisMaxPunkte")]
+    public int? FinalMaxPoints { get; set; }
+
+    /// <summary>Threshold at the moment of freezing; the verdict is derived from it, so it is frozen with it.</summary>
+    [Column("ErgebnisBestehensgrenze")]
+    public int? FinalPassPercent { get; set; }
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

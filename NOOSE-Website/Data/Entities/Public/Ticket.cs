@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using NOOSE_Website.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -24,9 +24,15 @@ public class Ticket : IAuditable, ISoftDelete
     [Column("Art")]
     public TicketArt Kind { get; set; } = TicketArt.Fuehrungsebene;
 
+    /// <summary>Null for an internal ticket; an agent's own concern has no citizen behind it.</summary>
     [Column("BuergerProfilId")]
-    public string CitizenProfileId { get; set; } = string.Empty;
+    public string? CitizenProfileId { get; set; }
     public BuergerProfil? CitizenProfile { get; set; }
+
+    /// <summary>Set for an internal ticket: who opened it. A citizen ticket leaves it null.</summary>
+    [Column("EroeffnetVonAgentId")]
+    public string? OpenedByAgentId { get; set; }
+    public Agent? OpenedByAgent { get; set; }
 
     [Column("Betreff")]
     public string Subject { get; set; } = string.Empty;

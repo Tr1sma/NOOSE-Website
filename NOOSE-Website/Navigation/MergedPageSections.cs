@@ -14,6 +14,7 @@ public static class MergedPageSections
         "partner",
         "oeffentliche-module", "oeffentliche-seiten", "presse", "lage", "warnungen", "berichte", "recht",
         "oeffentliche-kennzahlen",
+        "oeffentliche-fuehrung",
         "warnhinweise",
         "oeffentliche-vorlagen", "buerger",
         "basisdaten",

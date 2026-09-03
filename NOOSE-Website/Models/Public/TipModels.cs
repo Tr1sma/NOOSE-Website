@@ -90,6 +90,8 @@ public record TipDetail(
     string? HandlerId,
     string? HandlerCodename,
     int Priority,
+    int? PriorityOverride,
+    string? PriorityOverrideReason,
     int TrustTier,
     string? DuplicateGroupId);
 

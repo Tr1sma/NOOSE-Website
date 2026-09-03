@@ -1,4 +1,4 @@
-@page "/bewerbungs-tests/{Id}"
+﻿@page "/bewerbungs-tests/{Id}"
 @attribute [Authorize(Policy = Policies.HrbOrLeadership)]
 @inject IBewerbungTestService TestService
 @inject NavigationManager Nav
@@ -56,6 +56,14 @@
             {
                 <MudDivider Class="my-2" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Antwortoptionen (richtige markieren)</MudText>
+                <MudCheckBox T="bool" @bind-Value="qe.Question.AllowMultiple" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))"
+                             Label="Mehrfachauswahl erlauben"
+                             Dense="true" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">
+                    Der Bewerber darf dann mehrere Optionen ankreuzen. Die automatische Wertung ist
+                    alles-oder-nichts: die angekreuzte Menge muss der markierten Menge exakt entsprechen.
+                    Teilpunkte vergibt die Korrektur von Hand.
+                </MudText>
                 <MudCheckBox T="bool" @bind-Value="qe.Question.KeepOptionOrder" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))"
                              Label="Reihenfolge festhalten"
                              Dense="true" />
@@ -152,7 +160,7 @@
         try
         {
             var q = qe.Question;
-            await TestService.UpdateQuestionAsync(q.Id, q.Prompt, q.Required, q.Points, q.CorrectYesNo, q.Keywords, q.MinKeywordHits, q.KeepOptionOrder, _user);
+            await TestService.UpdateQuestionAsync(q.Id, q.Prompt, q.Required, q.Points, q.CorrectYesNo, q.Keywords, q.MinKeywordHits, q.KeepOptionOrder, q.AllowMultiple, _user);
             foreach (var o in qe.Options)
             {
                 await TestService.UpdateOptionAsync(o.Id, o.Label, o.IsCorrect, _user);

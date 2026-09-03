@@ -32,6 +32,7 @@ public static class PublicModules
     public const string Law = "Recht";
     public const string HazardLevel = "Gefahrenlage";
     public const string Statistics = "Statistik";
+    public const string Leadership = "Fuehrung";
 
     // --- service ---
     public const string Tips = "Hinweise";
@@ -73,6 +74,11 @@ public static class PublicModules
             "Die Informationsseiten sind derzeit nicht verfügbar."),
         new(Press, "Presse", "Pressemitteilungen der Behörde.",
             Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, true, OffGeneric),
+        // the ONE outward surface that names agents. Off by default like everything else, and every single entry
+        // still has to be released by hand — switching the module on publishes nothing on its own.
+        new(Leadership, "Führung", "Organigramm der Behördenleitung mit Namen und Foto.",
+            Icons.Material.Filled.AccountTree, "/fuehrung", PublicModuleGroup.Behoerde, 125, false, true,
+            OffGeneric),
         // /berichte, not /lageberichte: that route is internal (the legacy redirect and the leadership-only print page
         // with the classified aggregates). Because Prefixes collects the nav routes without asking Available, naming it
         // here declared an internal page indexable

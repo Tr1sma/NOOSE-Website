@@ -5,6 +5,7 @@
 @using NOOSE_Website.Models.Public
 @inject IPublicWantedService Wanted
 @inject IPublicModuleService Modules
+@inject IBuergerService Buerger
 
 <PageTitle>@(_entry?.DisplayName ?? "Gesucht") · NOOSE</PageTitle>
 
@@ -109,14 +110,14 @@
                         </MudText>
                     }
 
-                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-                        <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.ArrowBack">Zur Fahndungsübersicht</MudButton>
+                    @* one filled primary and two outlined: three flat labels in a row read as a tab bar, which is
+                       exactly how they were reported *@
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                         @if (_mayTip)
                         {
                             @* a link, not a dialog: this page is statically rendered and has no circuit *@
                             <MudButton Href="@($"/hinweis?fahndung={_entry.CaseNumber}")" Variant="Variant.Filled"
-                                       Color="Color.Primary" Size="Size.Small"
+                                       Color="Color.Primary"
                                        StartIcon="@Icons.Material.Filled.TipsAndUpdates">Hinweis geben</MudButton>
                         }
                         @if (_mayObject)
@@ -125,16 +126,37 @@
                                into the citizen area, which greets an anonymous visitor with the login instead of
                                bouncing them *@
                             <MudButton Href="@($"/buerger/einspruch?fahndung={_entry.CaseNumber}")"
-                                       Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       Variant="Variant.Outlined" Color="Color.Default"
+                                       StartIcon="@Icons.Material.Filled.Balance">Einspruch erheben</MudButton>
+                        }
+                        else if (_objectionOffered)
+                        {
+                            @* greyed out with the reason rather than absent: the person it does concern has to be
+                               able to see that the way exists. Written out, not a tooltip: this page renders
+                               statically, so a MudTooltip would never open. *@
+                            <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true"
                                        StartIcon="@Icons.Material.Filled.Balance">Einspruch erheben</MudButton>
                         }
                         @if (_mayPrint)
                         {
-                            <MudButton Href="@($"/gesucht/{_entry.CaseNumber}/druck")" Variant="Variant.Text"
-                                       Color="Color.Default" Size="Size.Small"
+                            <MudButton Href="@($"/gesucht/{_entry.CaseNumber}/druck")" Variant="Variant.Outlined"
+                                       Color="Color.Default"
                                        StartIcon="@Icons.Material.Filled.Print">Poster drucken</MudButton>
                         }
                     </MudStack>
+
+                    @if (!_mayObject && _objectionOffered)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @ObjectionRules.NotTheNamedPerson
+                        </MudText>
+                    }
+
+                    <MudDivider Class="my-2" />
+                    <div>
+                        <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.ArrowBack">Zur Fahndungsübersicht</MudButton>
+                    </div>
                 </MudStack>
             </MudItem>
         </MudGrid>
@@ -151,7 +173,11 @@
     private bool _mayPrint;
     private bool _mayTip;
     private bool _mayObject;
+    private bool _objectionOffered;
     private string? _loadedKey;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
 
     // navigating from one case number to another stays on this route template, so Blazor reuses the instance and
     // OnInitializedAsync would not run again
@@ -180,7 +206,11 @@
                 var snapshot = await Modules.GetAsync();
                 _mayPrint = snapshot.IsEnabled(PublicModules.WantedPrint);
                 _mayTip = snapshot.IsEnabled(PublicModules.Tips);
-                _mayObject = snapshot.IsEnabled(PublicModules.Objection);
+                // the switch alone is not enough any more: only the person a notice names may dispute it, and an
+                // item notice names nobody. The service refuses either way; this only keeps the page honest.
+                _objectionOffered = snapshot.IsEnabled(PublicModules.Objection)
+                    && ObjectionRules.MayObject(_entry.Kind);
+                _mayObject = _objectionOffered && await NamesViewerAsync();
             }
             catch { /* best effort */ }
 
@@ -198,6 +228,31 @@
     }
 
     /// <summary>A licence plate reads as a plate, not as a name.</summary>
+    /// <summary>True when the signed-in visitor carries the name this notice was published under.</summary>
+    private async Task<bool> NamesViewerAsync()
+    {
+        if (AuthState is null || _entry is null)
+        {
+            return false;
+        }
+        try
+        {
+            var user = (await AuthState).User;
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                return false;
+            }
+            var profile = await Buerger.GetOwnAsync(user);
+            return profile is not null
+                && ObjectionRules.NamesCitizen(profile.FirstName, profile.LastName, _entry.DisplayName);
+        }
+        catch
+        {
+            /* best effort */
+            return false;
+        }
+    }
+
     private static string? NameStyle(PublicWantedKind kind)
         => WantedKinds.IsItem(kind) ? "font-family:monospace;letter-spacing:.08em;" : null;
 

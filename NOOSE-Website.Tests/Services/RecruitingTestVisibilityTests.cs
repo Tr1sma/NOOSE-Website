@@ -32,7 +32,9 @@ public class RecruitingTestVisibilityTests
     /// <summary>Identifiers carrying the verdict, the answer key, or HRB decision prose. Case-sensitive.</summary>
     private static readonly string[] CodeSymbols =
     [
-        "TestEvaluation", "TestEvaluationItem", "GetEvaluationAsync", "TestGrading", "SetManualGradeAsync",
+        "TestEvaluation", "TestEvaluationItem", "GetEvaluationAsync", "TestGrading",
+        "SetAwardedPointsAsync", "CompleteGradingAsync", "ReopenGradingAsync", "ManualPoints",
+        "GradedAt", "GradedByName", "FinalPoints", "FinalMaxPoints", "OpenCount", "IsGraded",
         "TestEditModel", "TestQuestionEdit",
         "PassPercent", "Bestehensgrenze", "TotalPoints", "MaxPoints", "AwardedPoints", "Passed", "Punkte",
         "IsCorrect", "IstRichtig", "CorrectAnswer", "CorrectYesNo", "RichtigJaNein",
@@ -58,10 +60,15 @@ public class RecruitingTestVisibilityTests
         // the bell renders the applicant's OWN notifications - a title and a link, keyed on their agent id, with
         // no verdict among them. Declared rather than treated as inert, so it is scanned like everything else.
         Path.Combine("Layout", "NotificationBell.razor"),
+        // the shells were unified: the applicant portal now renders the same header and tab bar as the public
+        // site, so both are scanned here rather than trusted
+        Path.Combine("Common", "Shared", "PublicHeader.razor"),
+        Path.Combine("Layout", "PublicNav.razor"),
     ];
 
     /// <summary>Framework and inert tags that need no decision.</summary>
-    private static readonly string[] InertTags = ["PageTitle", "InputFile", "AntiforgeryToken", "ImageLightbox"];
+    private static readonly string[] InertTags =
+        ["PageTitle", "InputFile", "AntiforgeryToken", "ImageLightbox", "LegalFooter", "AuthorizeView", "Authorized", "NotAuthorized"];
 
     private static readonly Regex CodeRegex =
         new(@"\b(?:" + string.Join("|", CodeSymbols) + @")\b", RegexOptions.Compiled);
@@ -114,7 +121,9 @@ public class RecruitingTestVisibilityTests
 
     [Theory]
     [InlineData(typeof(TestView), "AssignmentId,CaseNumber,Completed,Description,Questions,Title")]
-    [InlineData(typeof(TestQuestionView), "Options,Prompt,QuestionId,Required,Type")]
+    // AllowMultiple is the shape of the form control, an author switch — it says nothing about the key: a
+    // single-choice question can have one correct option and a multi-choice one can have several, or none.
+    [InlineData(typeof(TestQuestionView), "AllowMultiple,Options,Prompt,QuestionId,Required,Type")]
     [InlineData(typeof(TestOptionView), "Label,OptionId")]
     public void TheApplicantFacingTestDtos_HaveExactlyTheseMembers(Type dto, string expected)
     {

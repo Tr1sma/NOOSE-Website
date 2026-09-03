@@ -95,13 +95,29 @@
                         @switch (q.Type)
                         {
                             case TestQuestionType.MultipleChoice:
-                                <MudRadioGroup T="string" Value="@_choice.GetValueOrDefault(q.QuestionId)"
-                                               ValueChanged="@(v => _choice[q.QuestionId] = v)">
-                                    @foreach (var o in q.Options)
+                                if (q.AllowMultiple)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">
+                                        Mehrere Antworten möglich.
+                                    </MudText>
+                                    foreach (var o in q.Options)
                                     {
-                                        <MudRadio T="string" Value="@o.OptionId">@o.Label</MudRadio>
+                                        var optionId = o.OptionId;
+                                        <MudCheckBox T="bool" Dense="true" Label="@o.Label"
+                                                     Value="@Ticked(q.QuestionId).Contains(optionId)"
+                                                     ValueChanged="@(v => Tick(q.QuestionId, optionId, v))" />
                                     }
-                                </MudRadioGroup>
+                                }
+                                else
+                                {
+                                    <MudRadioGroup T="string" Value="@_choice.GetValueOrDefault(q.QuestionId)"
+                                                   ValueChanged="@(v => _choice[q.QuestionId] = v)">
+                                        @foreach (var o in q.Options)
+                                        {
+                                            <MudRadio T="string" Value="@o.OptionId">@o.Label</MudRadio>
+                                        }
+                                    </MudRadioGroup>
+                                }
                                 break;
 
                             case TestQuestionType.YesNo:
@@ -144,7 +160,28 @@
     private bool _busy;
     private TestView? _test;
     private readonly Dictionary<string, string> _choice = new();
+    private readonly Dictionary<string, HashSet<string>> _ticked = new();
     private readonly Dictionary<string, string> _text = new();
+
+    private HashSet<string> Ticked(string questionId)
+        => _ticked.TryGetValue(questionId, out var set) ? set : [];
+
+    private void Tick(string questionId, string optionId, bool on)
+    {
+        if (!_ticked.TryGetValue(questionId, out var set))
+        {
+            set = [];
+            _ticked[questionId] = set;
+        }
+        if (on)
+        {
+            set.Add(optionId);
+        }
+        else
+        {
+            set.Remove(optionId);
+        }
+    }
 
     private const string ContainerId = "noose-pruefung-bogen";
     private IJSObjectReference? _module;
@@ -217,14 +254,16 @@
             var input = new TestAnswerInput { QuestionId = q.QuestionId };
             if (q.Type == TestQuestionType.MultipleChoice)
             {
-                input.SelectedOptionId = _choice.GetValueOrDefault(q.QuestionId);
+                input.SelectedOptionIds = q.AllowMultiple
+                    ? Ticked(q.QuestionId).ToList()
+                    : _choice.GetValueOrDefault(q.QuestionId) is { Length: > 0 } one ? [one] : [];
             }
             else
             {
                 input.FreeText = _text.GetValueOrDefault(q.QuestionId);
             }
 
-            if (q.Required && string.IsNullOrWhiteSpace(input.SelectedOptionId) && string.IsNullOrWhiteSpace(input.FreeText))
+            if (q.Required && input.SelectedOptionIds.Count == 0 && string.IsNullOrWhiteSpace(input.FreeText))
             {
                 Snackbar.Add("Bitte beantworte alle Pflichtfragen.", Severity.Warning);
                 return;

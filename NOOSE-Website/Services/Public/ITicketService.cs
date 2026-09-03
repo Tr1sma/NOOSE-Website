@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
@@ -17,6 +17,27 @@ public interface ITicketService
 
     /// <summary>Opens a ticket with its first message and returns the case number.</summary>
     Task<string> OpenAsync(TicketInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    // ---- internal ticket (agent) ----
+
+    /// <summary>Opens a ticket for the house; no citizen, no module gate, no quota.</summary>
+    Task<string> OpenAsAgentAsync(TicketInput input, IReadOnlyList<string> participantIds, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Tickets the caller is attached to, with their own unread count over the internal thread.</summary>
+    Task<IReadOnlyList<TicketParticipationRow>> GetMyParticipationsAsync(ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    // ---- participants ----
+
+    Task<IReadOnlyList<TicketParticipantRow>> GetParticipantsAsync(string id, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    Task AddParticipantAsync(string id, string agentId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    Task RemoveParticipantAsync(string participantId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     /// <summary>The caller's own tickets, newest activity first; empty for an account without a civilian profile.</summary>
     Task<IReadOnlyList<CitizenTicketRow>> GetOwnAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);

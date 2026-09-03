@@ -1,4 +1,4 @@
-using NOOSE_Website.Data.Entities.Recruiting;
+﻿using NOOSE_Website.Data.Entities.Recruiting;
 
 namespace NOOSE_Website.Services;
 
@@ -7,6 +7,38 @@ public static class TestGrading
 {
     /// <summary>Multiple-choice: correct when the chosen option is flagged correct; null if unanswered.</summary>
     public static bool? GradeMultipleChoice(BewerbungTestOption? chosen) => chosen?.IsCorrect;
+
+    /// <summary>Multiple-choice with several allowed ticks: all-or-nothing, null if nothing was ticked.</summary>
+    /// <remarks>
+    /// The ticked set must equal the flagged set exactly — a partial hit is a wrong answer here, and the grader
+    /// awards partial points by hand where that is unfair. Storing a rule for partial credit would put a second,
+    /// silent scoring model next to the one HRB can see.
+    /// </remarks>
+    public static bool? GradeMultipleChoice(
+        IReadOnlyCollection<string> chosenIds, IReadOnlyCollection<BewerbungTestOption> questionOptions)
+    {
+        if (chosenIds.Count == 0)
+        {
+            return null;
+        }
+        var chosen = chosenIds.ToHashSet(StringComparer.Ordinal);
+        var expected = questionOptions.Where(o => o.IsCorrect).Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+        return expected.Count > 0 && chosen.SetEquals(expected);
+    }
+
+    /// <summary>Splits the stored option-id list; tolerates the scalar column of a pre-multi-select row.</summary>
+    public static IReadOnlyList<string> SplitOptionIds(string? optionIds, string? singleOptionId)
+    {
+        if (!string.IsNullOrWhiteSpace(optionIds))
+        {
+            return optionIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        return string.IsNullOrWhiteSpace(singleOptionId) ? [] : [singleOptionId];
+    }
+
+    /// <summary>Joins ticked option ids for storage; null when nothing was ticked.</summary>
+    public static string? JoinOptionIds(IReadOnlyCollection<string> optionIds)
+        => optionIds.Count == 0 ? null : string.Join(',', optionIds);
 
     /// <summary>Yes/No: null when no correct answer is defined; otherwise compares against it (unanswered = wrong).</summary>
     public static bool? GradeYesNo(string? answer, bool? correctYesNo)

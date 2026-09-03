@@ -1,0 +1,37 @@
+@* Sign-in panel for a citizen page reached without a session; a bounce to the landing page reads as a broken link. *@
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerbereich</MudText>
+            <MudText Typo="Typo.h4">@Title</MudText>
+        </MudStack>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">@Text</MudAlert>
+        <div>
+            <form method="post" action="/Account/PerformExternalLogin">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                <input type="hidden" name="source" value="buerger" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
+                    Mit Discord anmelden
+                </MudButton>
+            </form>
+        </div>
+        <div>
+            <MudButton Href="/" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">Zur Startseite</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>Where the login sends the visitor back to; the page passes its own address.</summary>
+    [Parameter, EditorRequired]
+    public string ReturnUrl { get; set; } = "/buerger";
+}

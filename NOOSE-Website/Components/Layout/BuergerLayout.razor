@@ -2,82 +2,33 @@
 @inject IBuergerService BuergerService
 @inject NavigationManager Nav
 
-@* Shell for the authenticated citizen area; no internal nav, no maintenance wall. *@
+@* Shell for the authenticated citizen area; same header and same tab bar as the public site. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
-    <div style="max-width:860px;margin:0 auto;">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-4">
-            @* the wordmark is the way home, as in LegalLayout: a citizen otherwise has no link back to the hub *@
-            <MudLink Href="/buerger" Underline="Underline.None" Color="Color.Inherit">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                    <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
-                    <MudStack Spacing="0">
-                        <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Bürgerbereich</MudText>
-                    </MudStack>
-                </MudStack>
-            </MudLink>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-                @if (!string.IsNullOrWhiteSpace(_displayName))
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Angemeldet als <b>@_displayName</b></MudText>
-                }
-                @* both are account controls: an anonymous visitor reaches this shell through /buerger/einspruch,
-                   and "Mein Konto" would bounce them to the landing page with no explanation *@
-                @if (_signedIn)
-                {
-                    <MudButton Href="/buerger/profil" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Badge">Mein Konto</MudButton>
-                }
+    <div style="max-width:960px;margin:0 auto;">
+        <PublicHeader HomeHref="/" Subtitle="Bürgerbereich" DisplayName="@_displayName">
+            <Actions>
                 @if (_returnHref is not null)
                 {
                     <MudButton Href="@_returnHref" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.ArrowBack">@_returnLabel</MudButton>
                 }
-                @if (_signedIn)
-                {
-                    <form method="post" action="/Account/Logout">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="returnUrl" value="/" />
-                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
-                    </form>
-                }
-            </MudStack>
-        </MudStack>
+            </Actions>
+        </PublicHeader>
 
-        @* section nav, so a citizen is never stranded on a list page: the shell is the only place all five
-           citizen pages share, and none of them carried a link back to the hub *@
-        @if (_signedIn)
-        {
-            <MudDivider Class="mb-2" />
-            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4">
-                @foreach (var tab in Tabs)
-                {
-                    var active = IsActive(tab.Href);
-                    <MudButton Href="@tab.Href"
-                               Variant="@(active ? Variant.Filled : Variant.Text)"
-                               Color="@(active ? Color.Primary : Color.Default)"
-                               StartIcon="@tab.Icon"
-                               Size="Size.Small">@tab.Label</MudButton>
-                }
-            </MudStack>
-        }
+        <MudDivider Class="mb-2" />
+        @* the same two rows as on the public site: a citizen is never stranded and never loses the way out *@
+        <PublicNav />
 
-        @Body
+        <div class="mt-4">
+            @Body
+        </div>
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="mt-6">
-            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
-                     Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
-            <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
-            <MudLink Href="/nutzungsbedingungen" Typo="Typo.caption" Color="Color.Default">Nutzungsbedingungen</MudLink>
-        </MudStack>
+        <LegalFooter />
     </div>
 </div>
 
@@ -93,7 +44,6 @@
     private string? _returnHref;
     private string _returnLabel = string.Empty;
     private bool _mustComplete;
-    private bool _signedIn;
 
     // OnParametersSet, not OnInitialized: the layout instance survives navigation between citizen pages, so an
     // incomplete profile has to be re-checked on each of them instead of once per shell.
@@ -108,19 +58,16 @@
         try
         {
             var user = (await AuthState).User;
-            // set BEFORE the early return: the header's account controls hang off it, and an anonymous visitor
-            // reaches this shell through the objection form
-            _signedIn = user.MayUseCitizenPortal();
-            if (!_signedIn)
+            if (!user.MayUseCitizenPortal())
             {
                 return;
             }
 
-            // an agent, partner or applicant keeps a way back to their own area
-            if (!user.IsCitizen())
+            // an agent or partner keeps a way back to their own area; an applicant already has the portal tab
+            if (!user.IsCitizen() && !user.IsApplicant())
             {
-                _returnHref = user.IsApplicant() ? "/portal" : "/dashboard";
-                _returnLabel = user.IsApplicant() ? "Bewerber-Portal" : "Interner Bereich";
+                _returnHref = "/dashboard";
+                _returnLabel = "Interner Bereich";
             }
             // only a citizen is pushed into the form: for everyone else the area is readable without a civilian
             // identity, and a read-only account could not create one anyway
@@ -149,27 +96,6 @@
     private bool OnProfilePage()
         => CurrentPath().Equals(ProfileRoute, StringComparison.OrdinalIgnoreCase);
 
-    private sealed record Tab(string Label, string Href, string Icon);
-
-    private static readonly Tab[] Tabs =
-    [
-        new("Übersicht", "/buerger", Icons.Material.Filled.Home),
-        new("Meine Hinweise", "/buerger/hinweise", Icons.Material.Filled.TipsAndUpdates),
-        new("Meine Tickets", "/buerger/tickets", Icons.Material.Filled.Forum),
-        new("Einspruch", "/buerger/einspruch", Icons.Material.Filled.Gavel),
-        new("Mein Konto", ProfileRoute, Icons.Material.Filled.Badge),
-    ];
-
     private string CurrentPath()
         => "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('#')[0].TrimEnd('/');
-
-    // segment match, so a detail route keeps its section highlighted; the hub only matches itself
-    private bool IsActive(string href)
-    {
-        var path = CurrentPath();
-        return href == "/buerger"
-            ? path.Equals("/buerger", StringComparison.OrdinalIgnoreCase)
-            : path.Equals(href, StringComparison.OrdinalIgnoreCase)
-                || path.StartsWith(href + "/", StringComparison.OrdinalIgnoreCase);
-    }
 }

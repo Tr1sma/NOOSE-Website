@@ -41,6 +41,15 @@
                 </MudStack>
             </MudStack>
 
+            @* in the bar, not folded away behind "Details": this is the only confirmation the applicant gets
+               after submitting, and it took the place the questionnaire button just vacated *@
+            @if (_test is { Completed: true })
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+                    Dein Eignungstest wurde übermittelt. Wir melden uns.
+                </MudAlert>
+            }
+
             @if (_bewerbung.AttachmentFileNameSaved is not null)
             {
                 @* own divider; both following branches emit their own *@
@@ -99,12 +108,6 @@
                             </MudTimelineItem>
                         }
                     </MudTimeline>
-                    @if (_test is { Completed: true })
-                    {
-                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
-                            Dein Eignungstest wurde übermittelt.
-                        </MudAlert>
-                    }
                 </MudCollapse>
             }
         </MudPaper>

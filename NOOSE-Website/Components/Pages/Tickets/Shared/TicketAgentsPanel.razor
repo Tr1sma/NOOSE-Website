@@ -1,0 +1,124 @@
+@* Agents attached to a ticket; they and leadership are the audience of the internal thread. *@
+@inject ITicketService Tickets
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.subtitle1">Beteiligte Agents (@_agents.Count)</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Nur diese und die Führungsebene lesen die internen Notizen. Der Bürger sieht davon nichts.
+            </MudText>
+        </MudStack>
+        @if (CanManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd"
+                       OnClick="AddAsync">Agent beteiligen</MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agents.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch niemand beteiligt.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agents)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Codename</b></MudText>
+                        @if (!string.IsNullOrWhiteSpace(a.RealName))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.RealName</MudText>
+                        }
+                    </MudStack>
+                    @if (CanManage)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(a))" aria-label="Beteiligung aufheben" />
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string TicketId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>May the caller attach and detach agents (the desk, not a mere participant)?</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    /// <summary>Raised after any change, so the host can reload the thread it gates.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private IReadOnlyList<TicketParticipantRow> _agents = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _agents = await Tickets.GetParticipantsAsync(TicketId, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _load = false;
+    }
+
+    private async Task AddAsync()
+    {
+        var exclusion = _agents.Select(a => a.AgentId).ToList();
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await Tickets.AddParticipantAsync(TicketId, choice.AgentId, User);
+            Snackbar.Add("Agent beteiligt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(TicketParticipantRow a)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Beteiligung aufheben?",
+            $"„{a.Codename}“ liest die internen Notizen dieses Tickets danach nicht mehr.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Tickets.RemoveParticipantAsync(a.Id, User);
+            Snackbar.Add("Beteiligung aufgehoben.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

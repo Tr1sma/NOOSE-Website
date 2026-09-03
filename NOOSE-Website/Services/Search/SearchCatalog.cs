@@ -484,6 +484,10 @@ public static class SearchCatalog
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
                 + "Führungs-Gate vorbei lesbar.",
+            ["TicketParticipant"] = "Zuordnung eines Agenten zu einem Ticket, ohne eigenen Text. Gesucht wird "
+                + "das Ticket; eine durchsuchbare Beteiligtenliste wäre eine Karte, wer woran sitzt.",
+            ["OeffentlichesFuehrungsprofil"] = "Redaktioneller Eintrag des öffentlichen Organigramms, gepflegt "
+                + "in /einstellungen. Eine interne Suche nach Führungskräften ist das Organigramm selbst.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
         };

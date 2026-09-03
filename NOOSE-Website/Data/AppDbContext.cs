@@ -251,6 +251,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
+    public DbSet<TicketParticipant> TicketBeteiligte => Set<TicketParticipant>();
+    public DbSet<OeffentlichesFuehrungsprofil> OeffentlicheFuehrungsprofile => Set<OeffentlichesFuehrungsprofil>();
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
     public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
     public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
@@ -1638,6 +1640,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<BewerbungTestAssignment>(b =>
         {
             b.Property(a => a.AssignedByName).HasMaxLength(128);
+            b.Property(a => a.GradedByName).HasMaxLength(128);
             b.HasIndex(a => a.BewerbungId).IsUnique();
             b.HasOne(a => a.Bewerbung).WithMany()
                 .HasForeignKey(a => a.BewerbungId).OnDelete(DeleteBehavior.Cascade);
@@ -1648,6 +1651,8 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<BewerbungTestAnswer>(b =>
         {
             b.Property(a => a.SelectedOptionId).HasMaxLength(64);
+            // a guid list, not one id: an option-rich question would overflow a 64-char column
+            b.Property(a => a.SelectedOptionIds).HasMaxLength(2048);
             b.Property(a => a.FreeTextAnswer).HasColumnType("longtext");
             b.HasIndex(a => new { a.AssignmentId, a.QuestionId });
             b.HasOne(a => a.Assignment).WithMany()
@@ -1844,6 +1849,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<Hinweis>(b =>
         {
+            b.Property(h => h.PriorityOverrideReason).HasMaxLength(500);
             b.Property(h => h.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(h => h.CitizenProfileId).HasMaxLength(64);
             b.Property(h => h.WantedId).HasMaxLength(64);
@@ -1891,18 +1897,55 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.CitizenProfileId).HasMaxLength(64);
             b.Property(t => t.Subject).HasMaxLength(160).IsRequired();
             b.Property(t => t.HandlerId).HasMaxLength(64);
+            b.Property(t => t.OpenedByAgentId).HasMaxLength(64);
             b.Property(t => t.ClosedById).HasMaxLength(64);
             // Restrict throughout: a ticket outlives the account and the handler it names
             b.HasOne(t => t.CitizenProfile).WithMany()
                 .HasForeignKey(t => t.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(t => t.Handler).WithMany()
                 .HasForeignKey(t => t.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(t => t.OpenedByAgent).WithMany()
+                .HasForeignKey(t => t.OpenedByAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(t => t.CaseNumber).IsUnique();
+            // the desk splits citizen from internal before it sorts
+            b.HasIndex(t => new { t.Kind, t.Status, t.LastActivityAt });
             // the desk order: newest activity first within a status tab
             b.HasIndex(t => new { t.Status, t.LastActivityAt });
             // both caps of the quota read these
             b.HasIndex(t => new { t.CitizenProfileId, t.Status });
             b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+        });
+
+        modelBuilder.Entity<OeffentlichesFuehrungsprofil>(b =>
+        {
+            b.Property(p => p.PublicKey).HasMaxLength(64).IsRequired();
+            b.Property(p => p.AgentId).HasMaxLength(64);
+            b.Property(p => p.DisplayName).HasMaxLength(128).IsRequired();
+            b.Property(p => p.Title).HasMaxLength(128).IsRequired();
+            b.Property(p => p.RoleText).HasMaxLength(160);
+            b.Property(p => p.PhotoFileName).HasMaxLength(256);
+            b.Property(p => p.PhotoContentType).HasMaxLength(128);
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // Restrict: a released entry outlives the account it was made from, and it carries its own copy of
+            // every value anyway
+            b.HasOne(p => p.Agent).WithMany()
+                .HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(p => p.PublicKey).IsUnique();
+            b.HasIndex(p => new { p.PublishedAt, p.SortOrder });
+        });
+
+        modelBuilder.Entity<TicketParticipant>(b =>
+        {
+            b.Property(p => p.TicketId).HasMaxLength(64);
+            b.Property(p => p.AgentId).HasMaxLength(64);
+            // Cascade off the ticket, Restrict off the account: the assignment dies with its ticket, never with
+            // the agent — the same split TicketNachricht draws
+            b.HasOne(p => p.Ticket).WithMany()
+                .HasForeignKey(p => p.TicketId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(p => p.Agent).WithMany()
+                .HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(p => new { p.TicketId, p.AgentId }).IsUnique();
+            b.HasIndex(p => p.AgentId);
         });
 
         modelBuilder.Entity<TicketNachricht>(b =>

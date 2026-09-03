@@ -12,7 +12,13 @@
 
 <PageTitle>Meine Tickets · NOOSE</PageTitle>
 
-@if (_ready)
+@if (_anonymous)
+{
+    <CitizenSignInPanel Title="Meine Tickets"
+                        Text="Melde dich mit Discord an, um deine Anliegen an die Führungsebene zu sehen."
+                        ReturnUrl="@ReturnUrl()" />
+}
+else if (_ready)
 {
     <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="4">
@@ -21,11 +27,19 @@
                     <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerbereich</MudText>
                     <MudText Typo="Typo.h4">Meine Tickets</MudText>
                 </MudStack>
-                @if (_moduleOn && _detail is null)
-                {
-                    <MudButton OnClick="OpenNewAsync" Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Add">Neues Ticket</MudButton>
-                }
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    @if (_moduleOn && _detail is null)
+                    {
+                        <MudButton OnClick="OpenNewAsync" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add">Neues Ticket</MudButton>
+                    }
+                    @* agents took their own questions to leadership over Discord; the same desk answers both *@
+                    @if (_isAgent && _detail is null)
+                    {
+                        <MudButton OnClick="OpenInternalAsync" Variant="Variant.Outlined" Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.Lock">Internes Ticket</MudButton>
+                    }
+                </MudStack>
             </MudStack>
 
             @if (!_moduleOn && _detail is null)
@@ -157,7 +171,12 @@
     private bool _ready;
     private bool _busy;
     private bool _moduleOn;
+    private bool _anonymous;
+    private bool _isAgent;
     private string? _loadedKey;
+
+    private string ReturnUrl()
+        => string.IsNullOrWhiteSpace(CaseNumber) ? "/buerger/tickets" : $"/buerger/tickets/{CaseNumber}";
 
     protected override void OnInitialized() => Broadcaster.Modified += OnModified;
 
@@ -165,11 +184,16 @@
     protected override async Task OnParametersSetAsync()
     {
         _user = (await AuthStateTask).User;
+        // render the sign-in panel instead of navigating: OnParametersSet re-runs on every auth-state change, and a
+        // forceLoad there threw the visitor onto the landing page mid-session
         if (!_user.MayUseCitizenPortal())
         {
-            Nav.NavigateTo("/", forceLoad: true);
+            _anonymous = true;
+            _ready = true;
             return;
         }
+        _anonymous = false;
+        _isAgent = _user.IsInternalAgent();
 
         var key = CaseNumber ?? string.Empty;
         if (_loadedKey == key)
@@ -217,6 +241,16 @@
 
     private void Open(string caseNumber) => Nav.NavigateTo($"/buerger/tickets/{caseNumber}");
 
+    private async Task OpenInternalAsync()
+    {
+        var caseNumber = await InternalTicketOpenDialog.ShowAsync(Dialog, _user);
+        if (caseNumber is not null)
+        {
+            // the internal desk, not this shell: an internal ticket has no citizen side to show here
+            Nav.NavigateTo("/tickets?tab=beteiligt");
+        }
+    }
+
     private async Task OpenNewAsync()
     {
         var caseNumber = await TicketOpenDialog.ShowAsync(Dialog, _user);
@@ -252,8 +286,13 @@
 
     // the case number is what this page knows; the row id in the same signal belongs to the desk. Comparing it
     // is what keeps every citizen circuit from reloading on every ticket in the house
-    private void OnModified(string ticketId, string caseNumber)
+    private void OnModified(string ticketId, string caseNumber, TicketMessageAudience? audience)
     {
+        // an internal note is signalled too, and the citizen circuit must not learn WHEN the desk talks about them
+        if (audience == TicketMessageAudience.Intern)
+        {
+            return;
+        }
         var mine = string.IsNullOrWhiteSpace(CaseNumber)
             ? _rows.Any(r => r.CaseNumber == caseNumber)
             : CaseNumber == caseNumber;

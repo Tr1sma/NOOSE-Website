@@ -247,7 +247,8 @@ else
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Warnung veröffentlichen?",
             $"„{row.Title}“ wird öffentlich sichtbar"
-            + (row.ValidUntil is { } until ? $" und gilt bis zum {until.ToLocalTime():dd.MM.yyyy}." : " und gilt bis zum Zurückziehen."));
+            + (row.ValidUntil is { } until ? $" und gilt bis zum {until.ToLocalTime():dd.MM.yyyy}." : " und gilt bis zum Zurückziehen."),
+            "Veröffentlichen", Color.Success);
         if (!ok)
         {
             return;
@@ -267,7 +268,8 @@ else
     private async Task RetractAsync(WarningEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Warnung zurückziehen?",
-            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.");
+            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.",
+            "Zurückziehen", Color.Warning);
         if (!ok)
         {
             return;

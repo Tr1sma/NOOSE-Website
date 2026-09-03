@@ -288,7 +288,8 @@ else
     private async Task PublishAsync(PublicPageEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Seite veröffentlichen?",
-            $"Der aktuelle Entwurf von „{row.Title}“ wird unter /info/{row.Slug} öffentlich sichtbar.");
+            $"Der aktuelle Entwurf von „{row.Title}“ wird unter /info/{row.Slug} öffentlich sichtbar.",
+            "Veröffentlichen", Color.Success);
         if (!ok)
         {
             return;
@@ -308,7 +309,8 @@ else
     private async Task RetractAsync(PublicPageEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Seite zurückziehen?",
-            $"„{row.Title}“ ist danach öffentlich nicht mehr erreichbar. Der Entwurf bleibt erhalten.");
+            $"„{row.Title}“ ist danach öffentlich nicht mehr erreichbar. Der Entwurf bleibt erhalten.",
+            "Zurückziehen", Color.Warning);
         if (!ok)
         {
             return;

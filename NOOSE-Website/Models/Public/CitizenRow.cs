@@ -1,4 +1,4 @@
-namespace NOOSE_Website.Models.Public;
+﻿namespace NOOSE_Website.Models.Public;
 
 /// <summary>One citizen account for the admin roster.</summary>
 public sealed record CitizenRow(
@@ -10,6 +10,7 @@ public sealed record CitizenRow(
     bool IsBlocked,
     string? BlockedReason,
     DateTime? BlockedAt,
+    bool AccountBlocked,
     int ConfirmedTips,
     string? LinkedPersonId,
     DateTime RegisteredAt)
@@ -27,4 +28,7 @@ public sealed record CitizenRow(
     /// <summary>True once first and last name are set; without both the citizen may submit nothing.</summary>
     public bool HasCompleteProfile
         => !string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(LastName);
+
+    /// <summary>Once named, only leadership may rename; the citizen's own form refuses.</summary>
+    public bool NameLocked => HasCompleteProfile;
 }

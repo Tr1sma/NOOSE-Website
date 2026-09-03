@@ -256,7 +256,8 @@ else
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Pressemitteilung veröffentlichen?",
             $"„{row.Title}“ wird öffentlich sichtbar"
-            + (row.DiscordPushedAt is null ? " und einmalig im Discord-Kanal gemeldet." : "."));
+            + (row.DiscordPushedAt is null ? " und einmalig im Discord-Kanal gemeldet." : "."),
+            "Veröffentlichen", Color.Success);
         if (!ok)
         {
             return;
@@ -276,7 +277,8 @@ else
     private async Task RetractAsync(PressEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Pressemitteilung zurückziehen?",
-            $"„{row.Title}“ ist danach öffentlich nicht mehr erreichbar. Entwurf und Aktenzeichen bleiben erhalten.");
+            $"„{row.Title}“ ist danach öffentlich nicht mehr erreichbar. Entwurf und Aktenzeichen bleiben erhalten.",
+            "Zurückziehen", Color.Warning);
         if (!ok)
         {
             return;

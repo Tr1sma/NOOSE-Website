@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -156,7 +156,8 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 }
             }
 
-            // only active agents get a session into the internal app
+            // the cases that sign in must stay in step with AgentStatusRules.MayHoldSession, or the circuit
+            // revalidation evicts the account seconds after it arrives (AgentStatusRulesTests pins it)
             switch (agent.Status)
             {
                 case AgentStatus.Active:

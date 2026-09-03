@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Recruiting;
@@ -16,7 +16,7 @@ public interface IBewerbungTestService
     Task<TestEditModel?> GetEditModelAsync(string testId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     Task<BewerbungTestQuestion> AddQuestionAsync(string testId, TestQuestionType type, string prompt, bool required, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, bool keepOptionOrder, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task UpdateQuestionAsync(string questionId, string prompt, bool required, int points, bool? correctYesNo, string? keywords, int? minKeywordHits, bool keepOptionOrder, bool allowMultiple, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteQuestionAsync(string questionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     Task<BewerbungTestOption> AddOptionAsync(string questionId, string label, bool isCorrect, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
@@ -27,7 +27,9 @@ public interface IBewerbungTestService
     Task<BewerbungTestAssignment?> GetAssignmentAsync(string bewerbungId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task AssignAsync(string bewerbungId, string testId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<TestEvaluation?> GetEvaluationAsync(string bewerbungId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task SetManualGradeAsync(string answerId, bool? manualCorrect, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task SetAwardedPointsAsync(string assignmentId, string questionId, int? points, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task CompleteGradingAsync(string bewerbungId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task ReopenGradingAsync(string bewerbungId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     // ---- applicant ----
     Task<TestView?> GetAssignedForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default);

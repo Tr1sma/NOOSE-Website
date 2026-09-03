@@ -296,7 +296,8 @@ else
             }
         }
         else if (!await ConfirmDialog.ShowAsync(DialogService, "Ausschreibung veröffentlichen?",
-                     "Der Steckbrief wird sofort anonym abrufbar."))
+                     "Der Steckbrief wird sofort anonym abrufbar.",
+                     "Veröffentlichen", Color.Success))
         {
             return;
         }
@@ -324,7 +325,8 @@ else
     private async Task CapturedAsync() => await RunAsync(async () =>
     {
         if (!await ConfirmDialog.ShowAsync(DialogService, "Als gefasst markieren?",
-                "Die Ausschreibung verschwindet damit vom öffentlichen Board."))
+                "Die Ausschreibung verschwindet damit vom öffentlichen Board.",
+                "Als gefasst markieren", Color.Success))
         {
             return;
         }

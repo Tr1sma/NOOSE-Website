@@ -44,20 +44,9 @@
 
             <MudDivider />
 
+            @* the tab bar above already links all five sections; only the two that carry a number are worth a
+               tile of their own, and the rest was the same list twice *@
             <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
-                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
-                    <MudStack Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Large" />
-                        <MudText Typo="Typo.h6">Mein Konto</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Vor- und Nachname sind Pflicht, damit eine Meldung zugeordnet und eine Belohnung
-                            abgewickelt werden kann.
-                        </MudText>
-                        <MudButton Href="/buerger/profil" Variant="Variant.Filled" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Edit" Class="mt-2">Angaben bearbeiten</MudButton>
-                    </MudStack>
-                </MudPaper>
-
                 <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
                     <MudStack Spacing="2">
                         <MudBadge Content="@_unreadTips" Visible="@(_unreadTips > 0)" Color="Color.Error" Overlap="true">
@@ -85,32 +74,6 @@
                                    StartIcon="@Icons.Material.Filled.Forum" Class="mt-2">
                             @(_ticketsOn ? "Tickets ansehen" : "Bestehende Tickets")
                         </MudButton>
-                    </MudStack>
-                </MudPaper>
-
-                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
-                    <MudStack Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Primary" Size="Size.Large" />
-                        <MudText Typo="Typo.h6">Einspruch</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Widerspruch gegen eine öffentliche Ausschreibung, mit Begründung. Die Führungsebene
-                            entscheidet und antwortet.
-                        </MudText>
-                        <MudButton Href="/buerger/einspruch" Variant="Variant.Outlined" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Balance" Class="mt-2">Einsprüche ansehen</MudButton>
-                    </MudStack>
-                </MudPaper>
-
-                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
-                    <MudStack Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Large" />
-                        <MudText Typo="Typo.h6">Öffentlicher Bereich</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Fahndungen, Presse und die Kommunikation mit der Führungsebene werden hier
-                            schrittweise freigeschaltet.
-                        </MudText>
-                        <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Home" Class="mt-2">Zur Startseite</MudButton>
                     </MudStack>
                 </MudPaper>
             </MudStack>

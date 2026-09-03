@@ -1,4 +1,4 @@
-@* Released monthly situation reports: draft, publish, retract. *@
+﻿@* Released monthly situation reports: draft, publish, retract. *@
 @using NOOSE_Website.Models.Public
 @inject IPublicReportService Reports
 @inject IDialogService DialogService
@@ -285,7 +285,8 @@ else
     private async Task PublishAsync(PublicReportEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Lagebericht veröffentlichen?",
-            $"„{row.Title}“ ist danach unter /berichte/{ReportPeriod.Format(row.Year, row.Month)} öffentlich lesbar.");
+            $"„{row.Title}“ ist danach unter /berichte/{ReportPeriod.Format(row.Year, row.Month)} öffentlich lesbar.",
+            "Veröffentlichen", Color.Success);
         if (!ok)
         {
             return;
@@ -305,7 +306,8 @@ else
     private async Task RetractAsync(PublicReportEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Lagebericht zurückziehen?",
-            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.");
+            $"„{row.Title}“ ist danach öffentlich nicht mehr sichtbar. Der Entwurf bleibt erhalten.",
+            "Zurückziehen", Color.Warning);
         if (!ok)
         {
             return;

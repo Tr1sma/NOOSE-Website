@@ -12,7 +12,13 @@
 
 <PageTitle>Meine Hinweise · NOOSE</PageTitle>
 
-@if (_ready)
+@if (_anonymous)
+{
+    <CitizenSignInPanel Title="Meine Hinweise"
+                        Text="Melde dich mit Discord an, um deine Hinweise zu sehen und zu beantworten."
+                        ReturnUrl="@ReturnUrl()" />
+}
+else if (_ready)
 {
     <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
         <MudStack Spacing="4">
@@ -217,17 +223,25 @@
     private bool _ready;
     private bool _busy;
     private bool _moduleOn;
+    private bool _anonymous;
     private string? _loadedKey;
+
+    private string ReturnUrl()
+        => string.IsNullOrWhiteSpace(CaseNumber) ? "/buerger/hinweise" : $"/buerger/hinweise/{CaseNumber}";
 
     // OnParametersSet, not OnInitialized: list and detail share this component, so Blazor reuses the instance
     protected override async Task OnParametersSetAsync()
     {
         _user = (await AuthStateTask).User;
+        // render the sign-in panel instead of navigating: OnParametersSet re-runs on every auth-state change, and a
+        // forceLoad there threw the visitor onto the landing page mid-session
         if (!_user.MayUseCitizenPortal())
         {
-            Nav.NavigateTo("/", forceLoad: true);
+            _anonymous = true;
+            _ready = true;
             return;
         }
+        _anonymous = false;
 
         var key = CaseNumber ?? string.Empty;
         if (_loadedKey == key)

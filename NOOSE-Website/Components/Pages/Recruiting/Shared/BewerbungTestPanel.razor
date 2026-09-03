@@ -1,4 +1,4 @@
-@implements IDisposable
+﻿@implements IDisposable
 @inject IBewerbungTestService TestService
 @inject BewerbungBroadcaster Broadcaster
 @inject ISnackbar Snackbar
@@ -6,7 +6,7 @@
 <MudPaper Elevation="2" Class="pa-4">
     <MudText Typo="Typo.h6" Class="mb-2">Eignungstest</MudText>
 
-    @if (_load)
+    @if (_first)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
@@ -50,6 +50,12 @@
                 @_eval.Title · abgeschlossen am @_assignment.CompletedAt!.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
             </MudText>
             <MudSpacer />
+            @if (_eval.GradedAt is null && _eval.OpenCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                    @(_eval.Items.Count - _eval.OpenCount) von @_eval.Items.Count korrigiert
+                </MudChip>
+            }
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
                 @_eval.TotalPoints / @_eval.MaxPoints Punkte (@_eval.Percent %)
             </MudChip>
@@ -62,6 +68,23 @@
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Cancel">Nicht bestanden (≥@_eval.PassPercent %)</MudChip>
             }
         </MudStack>
+
+        @if (_eval.GradedAt is not null)
+        {
+            @* once the grading is closed the single questions are noise; the result is the statement *@
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-2">
+                Korrektur abgeschlossen am @_eval.GradedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")@(string.IsNullOrWhiteSpace(_eval.GradedByName) ? "" : " von " + _eval.GradedByName).
+            </MudAlert>
+            @if (_canWrite)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.LockOpen" OnClick="ReopenAsync" Disabled="_busy">
+                    Korrektur wieder öffnen
+                </MudButton>
+            }
+        }
+        else
+        {
         <MudStack Spacing="2">
             @foreach (var (item, i) in _eval.Items.Select((x, i) => (x, i + 1)))
             {
@@ -110,20 +133,48 @@
                         </MudStack>
                     }
 
-                    @if (_canWrite && item.AnswerId is not null)
+                    @if (_canWrite)
                     {
-                        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="mt-2">
-                            <MudButton Color="Color.Success" Variant="@(item.ManualCorrect is true ? Variant.Filled : Variant.Outlined)"
-                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, true))">Richtig</MudButton>
-                            <MudButton Color="Color.Error" Variant="@(item.ManualCorrect is false ? Variant.Filled : Variant.Outlined)"
-                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, false))">Falsch</MudButton>
-                            <MudButton Color="Color.Default" Variant="@(item.ManualCorrect is null ? Variant.Filled : Variant.Outlined)"
-                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, null))">Auto</MudButton>
-                        </MudButtonGroup>
+                        @* keyed on the question, so a question added after the submission is gradeable too *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2" Wrap="Wrap.Wrap">
+                            <MudNumericField T="int?" Value="@item.ManualPoints"
+                                             ValueChanged="@(v => SetPointsAsync(item.QuestionId, v))"
+                                             Label="Punkte" Min="0" Max="@item.Points" Clearable="true"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             Style="max-width:130px;" Disabled="_busy" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">von @item.Points</MudText>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                       StartIcon="@Icons.Material.Filled.AutoFixHigh" Disabled="_busy"
+                                       OnClick="@(() => SetPointsAsync(item.QuestionId, null))">Auto</MudButton>
+                            @if (!item.IsGraded)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                    noch offen
+                                </MudChip>
+                            }
+                        </MudStack>
                     }
                 </MudPaper>
             }
         </MudStack>
+
+        @if (_canWrite)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.TaskAlt" OnClick="CompleteAsync"
+                           Disabled="@(_busy || _eval.OpenCount > 0)">
+                    Als korrigiert markieren
+                </MudButton>
+                @if (_eval.OpenCount > 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Noch @_eval.OpenCount Frage(n) ohne Wertung.
+                    </MudText>
+                }
+            </MudStack>
+        }
+        }
     }
 </MudPaper>
 
@@ -131,7 +182,8 @@
     [Parameter, EditorRequired] public string BewerbungId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    private bool _load = true;
+    private bool _first = true;
+    private bool _busy;
     private bool _canWrite;
     private string? _selectedTestId;
     private List<BewerbungTest> _tests = new();
@@ -145,9 +197,10 @@
         await LoadAsync();
     }
 
+    // no spinner on a refresh: swapping the list for a progress bar collapsed the page height, and the browser
+    // scrolled back to the top on every grading click
     private async Task LoadAsync()
     {
-        _load = true;
         _assignment = await TestService.GetAssignmentAsync(BewerbungId, User);
         if (_assignment is null)
         {
@@ -157,7 +210,7 @@
         {
             _eval = await TestService.GetEvaluationAsync(BewerbungId, User);
         }
-        _load = false;
+        _first = false;
     }
 
     private async Task AssignAsync()
@@ -177,16 +230,29 @@
         }
     }
 
-    private async Task SetGradeAsync(string answerId, bool? value)
+    // no LoadAsync here: the service broadcasts and OnModified reloads once. Doing both doubled the queries and
+    // widened the race that made the panel flicker.
+    private Task SetPointsAsync(string questionId, int? points)
+        => RunAsync(() => TestService.SetAwardedPointsAsync(_assignment!.Id, questionId, points, User));
+
+    private Task CompleteAsync() => RunAsync(() => TestService.CompleteGradingAsync(BewerbungId, User));
+
+    private Task ReopenAsync() => RunAsync(() => TestService.ReopenGradingAsync(BewerbungId, User));
+
+    private async Task RunAsync(Func<Task> action)
     {
+        _busy = true;
         try
         {
-            await TestService.SetManualGradeAsync(answerId, value, User);
-            await LoadAsync();
+            await action();
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

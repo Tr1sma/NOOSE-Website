@@ -146,6 +146,115 @@ public sealed class TipServiceTests
         return await db.Hinweise.Where(h => h.CaseNumber == caseNumber).Select(h => h.Id).SingleAsync();
     }
 
+    // ---- desk badge and manual priority ----
+
+    [Fact]
+    public async Task TheDeskBadgeCountsAnUnreadTip()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+
+        Assert.Equal(1, await host.Service.GetOpenCountAsync());
+
+        await host.Service.MarkAgentReadAsync(await TipIdAsync(host, caseNumber), Agent());
+
+        // the reported defect: looking at everything left the number where it was, because it counted Status == Neu
+        Assert.Equal(0, await host.Service.GetOpenCountAsync());
+    }
+
+    [Fact]
+    public async Task ReadingATipTwiceKeepsTheFirstStamp()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+
+        await host.Service.MarkAgentReadAsync(id, Agent());
+        await using (var db = host.Factory.CreateDbContext())
+        {
+            var first = (await db.Hinweise.SingleAsync(h => h.Id == id)).AgentLastReadAt;
+            await host.Service.MarkAgentReadAsync(id, Agent());
+            await using var again = host.Factory.CreateDbContext();
+            Assert.Equal(first, (await again.Hinweise.SingleAsync(h => h.Id == id)).AgentLastReadAt);
+        }
+    }
+
+    [Fact]
+    public async Task ReadingATipDoesNotStampItAsChanged()
+    {
+        // it goes through ExecuteUpdate for the same reason the citizen's read mark does: opening a tip is not a
+        // change to it, and a tracked write would push it onto the record timeline every visit
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+
+        await host.Service.MarkAgentReadAsync(id, Agent());
+
+        await using var db = host.Factory.CreateDbContext();
+        Assert.Null((await db.Hinweise.SingleAsync(h => h.Id == id)).ModifiedAt);
+    }
+
+    [Fact]
+    public async Task AHandlerMayNotPinThePriority()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SetPriorityAsync(id, 20, "dringend", Agent()));
+    }
+
+    [Fact]
+    public async Task APinnedPriorityWinsAndSurvivesARecomputation()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await PublishedNoticeAsync(host);
+        var id = await TipIdAsync(host, await SubmitAsync(host, reference: caseNumber));
+
+        await host.Service.SetPriorityAsync(id, 20, "Chef will das zuerst", Leader());
+        // the automatic path runs on every bounty or hazard change; it must leave a pinned row alone
+        await host.Priority.StampAsync(id);
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.NotNull(detail);
+        Assert.Equal(20, detail!.Priority);
+        Assert.Equal(20, detail.PriorityOverride);
+        Assert.Equal("Chef will das zuerst", detail.PriorityOverrideReason);
+    }
+
+    [Fact]
+    public async Task HandingThePriorityBackRecomputesItAtOnce()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.SetPriorityAsync(id, 25, null, Leader());
+
+        await host.Service.SetPriorityAsync(id, null, null, Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.NotNull(detail);
+        Assert.Null(detail!.PriorityOverride);
+        // a tip without a notice scores its trust tier alone, never the pinned 25
+        Assert.NotEqual(25, detail.Priority);
+    }
+
+    [Fact]
+    public async Task APinnedPriorityStaysInsideTheScale()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+
+        await host.Service.SetPriorityAsync(id, 9999, null, Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TipPriority.Max, detail!.Priority);
+    }
+
     // ---- submitting ----
 
     [Fact]

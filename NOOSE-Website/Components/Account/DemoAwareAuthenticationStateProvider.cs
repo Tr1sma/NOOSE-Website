@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Identity;
@@ -7,7 +7,6 @@ using Microsoft.Extensions.Options;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure;
-using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Account;
@@ -63,9 +62,17 @@ internal sealed class DemoAwareAuthenticationStateProvider(
             return true;
         }
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Agent>>();
-        return await ValidateAsync(userManager, authenticationState.User);
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Agent>>();
+            return await ValidateAsync(userManager, authenticationState.User);
+        }
+        catch
+        {
+            /* transient DB fault: keep the session, the next tick decides */
+            return true;
+        }
     }
 
     private async Task<bool> DemoActiveAsync()
@@ -78,7 +85,9 @@ internal sealed class DemoAwareAuthenticationStateProvider(
     private async Task<bool> ValidateAsync(UserManager<Agent> userManager, ClaimsPrincipal principal)
     {
         var agent = await userManager.GetUserAsync(principal);
-        if (agent is null || agent.Status != AgentStatus.Active)
+        // not Active-only: an applicant and a citizen hold a real session too, and rejecting them here signed
+        // every civilian circuit out within 30 seconds
+        if (agent is null || !AgentStatusRules.MayHoldSession(agent.Status))
         {
             return false;
         }

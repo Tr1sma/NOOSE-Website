@@ -1,0 +1,87 @@
+@* One header for every outward shell: wordmark, bell, account controls. Five shells duplicated this block. *@
+@inject INotificationService Notifications
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
+    <MudLink Href="@HomeHref" Underline="Underline.None" Color="Color.Inherit">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+            </MudStack>
+        </MudStack>
+    </MudLink>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <AuthorizeView>
+            <Authorized Context="authCtx">
+                @if (!string.IsNullOrWhiteSpace(DisplayName))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Angemeldet als <b>@DisplayName</b></MudText>
+                }
+                @if (AssignedRenderMode is not null)
+                {
+                    @* the live bell needs a circuit and the popover provider of an interactive tree *@
+                    <NotificationBell User="authCtx.User" />
+                }
+                else
+                {
+                    @* a statically rendered page cannot open a dropdown, so the badge is a link into the area
+                       where the live bell lives; the count itself is read while the page renders *@
+                    <MudBadge Content="_unread" Color="Color.Error" Overlap="true" Bordered="true" Visible="@(_unread > 0)">
+                        <MudIconButton Href="/buerger" Icon="@(_unread > 0 ? Icons.Material.Filled.Notifications : Icons.Material.Filled.NotificationsNone)"
+                                       Color="Color.Inherit" aria-label="Benachrichtigungen" title="Benachrichtigungen" />
+                    </MudBadge>
+                }
+                @Actions
+                <form method="post" action="/Account/Logout">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/" />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                @AnonymousActions
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudStack>
+</MudStack>
+
+@code {
+    /// <summary>Where the wordmark leads; each shell keeps its own home.</summary>
+    [Parameter] public string HomeHref { get; set; } = "/";
+
+    [Parameter] public string Subtitle { get; set; } = "National Office of Security Enforcement";
+
+    /// <summary>Name of the signed-in visitor as the shell knows it; the header resolves none itself.</summary>
+    [Parameter] public string? DisplayName { get; set; }
+
+    /// <summary>Shell-specific controls between the bell and the logout form.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>What an anonymous visitor sees in place of the account block.</summary>
+    [Parameter] public RenderFragment? AnonymousActions { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private int _unread;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // only the static branch needs the number; the interactive bell counts for itself and keeps itself current
+        if (AssignedRenderMode is not null || AuthState is null)
+        {
+            return;
+        }
+        try
+        {
+            var user = (await AuthState).User;
+            _unread = user.Identity?.IsAuthenticated == true ? await Notifications.GetUnreadCountAsync(user) : 0;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

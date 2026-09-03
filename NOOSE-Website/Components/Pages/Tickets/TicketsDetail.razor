@@ -1,5 +1,8 @@
-@page "/tickets/{Id}"
-@attribute [Authorize(Policy = Policies.LeadershipPage)]
+﻿@page "/tickets/{Id}"
+@* InternalAgent, not LeadershipPage: an agent attached to one ticket has to reach that one. Which ticket they
+   may see is decided in the service — GetAsync returns null, and the empty state below does not confirm that
+   the ticket exists. *@
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject ITicketService Tickets
 @inject TicketBroadcaster Broadcaster
 @inject ISnackbar Snackbar
@@ -55,17 +58,31 @@ else
                             <MudChip T="string" Size="Size.Small" Color="@StatusColour(_ticket.Status)">
                                 @TicketStatusDisplay.Name(_ticket.Status)
                             </MudChip>
-                            @if (_ticket.CitizenIsBlocked)
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@(_ticket.Kind == TicketArt.Intern ? Color.Secondary : Color.Default)">
+                                @TicketArtDisplay.Name(_ticket.Kind)
+                            </MudChip>
+                            @if (_ticket.Kind != TicketArt.Intern && _ticket.CitizenIsBlocked)
                             {
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
                                          Icon="@Icons.Material.Filled.Block">Konto gesperrt</MudChip>
                             }
                         </MudStack>
                         <MudText Typo="Typo.h6">@_ticket.Subject</MudText>
-                        <MudStack Spacing="1">
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bürger</MudText>
-                            <MudText Typo="Typo.body2">@_ticket.CitizenName</MudText>
-                        </MudStack>
+                        @if (_ticket.Kind == TicketArt.Intern)
+                        {
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Eröffnet von</MudText>
+                                <MudText Typo="Typo.body2">@(_ticket.OpenedByCodename ?? "—")</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Bürger</MudText>
+                                <MudText Typo="Typo.body2">@_ticket.CitizenName</MudText>
+                            </MudStack>
+                        }
                         <MudStack Spacing="1">
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Bearbeiter</MudText>
                             <MudText Typo="Typo.body2">
@@ -89,15 +106,25 @@ else
                     </MudStack>
                 </MudPaper>
 
-                <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
-                                    Audience="TicketMessageAudience.Intern" CanWrite="@_canWrite" />
+                <MudPaper Outlined="true" Class="pa-4">
+                    <TicketAgentsPanel TicketId="@_ticket.Id" User="@_user" CanManage="@_canManage"
+                                       Changed="ReloadQuietlyAsync" />
+                </MudPaper>
             </MudStack>
         </MudItem>
         <MudItem xs="12" md="7">
-            <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
-                                Audience="TicketMessageAudience.Buerger"
-                                CaseNumber="@_ticket.CaseNumber" CitizenName="@_ticket.CitizenName"
-                                CanWrite="@(_canWrite && TicketRules.IsOpen(_ticket.Status))" />
+            <MudStack Spacing="4">
+                @* the internal thread is the wide one on an internal ticket: there is no citizen side *@
+                <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
+                                    Audience="TicketMessageAudience.Intern" CanWrite="@_canWriteInternal" />
+                @if (_ticket.Kind != TicketArt.Intern)
+                {
+                    <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
+                                        Audience="TicketMessageAudience.Buerger"
+                                        CaseNumber="@_ticket.CaseNumber" CitizenName="@_ticket.CitizenName"
+                                        CanWrite="@(_canWrite && TicketRules.IsOpen(_ticket.Status))" />
+                }
+            </MudStack>
         </MudItem>
     </MudGrid>
 }
@@ -112,7 +139,15 @@ else
     private ClaimsPrincipal _user = default!;
     private TicketDetail? _ticket;
     private bool _load = true;
+    /// <summary>Desk rights: status, deletion, the citizen thread, and who is attached.</summary>
     private bool _canWrite;
+
+    /// <summary>Managing participants is a desk call, never a participant's own.</summary>
+    private bool _canManage;
+
+    /// <summary>Writing an internal note: the desk, and every agent attached to this ticket.</summary>
+    private bool _canWriteInternal;
+
     private string? _loadedId;
 
     protected override void OnInitialized() => Broadcaster.Modified += OnModified;
@@ -121,6 +156,9 @@ else
     {
         _user = (await AuthStateTask).User;
         _canWrite = _user.MayWrite() && _user.IsLeadership();
+        _canManage = _canWrite;
+        // a participant writes notes but sets no status and answers no citizen; the service enforces the same split
+        _canWriteInternal = _user.MayWrite();
         if (_loadedId == Id)
         {
             return;
@@ -131,9 +169,18 @@ else
         await Tickets.MarkAgentReadAsync(Id, _user);
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadAsync(showSpinner: true);
+
+    /// <summary>Refresh without the spinner; swapping the page for a progress bar tears down both message panels
+    /// and throws away whatever the handler had half-typed in them.</summary>
+    private Task ReloadQuietlyAsync() => LoadAsync(showSpinner: false);
+
+    private async Task LoadAsync(bool showSpinner)
     {
-        _load = true;
+        if (showSpinner)
+        {
+            _load = true;
+        }
         try
         {
             _ticket = await Tickets.GetAsync(Id, _user);
@@ -189,7 +236,7 @@ else
         }
     }
 
-    private void OnModified(string ticketId, string caseNumber)
+    private void OnModified(string ticketId, string caseNumber, TicketMessageAudience? audience)
     {
         if (ticketId != Id)
         {
@@ -198,7 +245,7 @@ else
         // the mark moves again: a line arriving while the handler has the ticket open has been read
         InvokeAsync(async () =>
         {
-            await LoadAsync();
+            await ReloadQuietlyAsync();
             await Tickets.MarkAgentReadAsync(Id, _user);
             StateHasChanged();
         });

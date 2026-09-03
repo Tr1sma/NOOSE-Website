@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
@@ -110,11 +110,22 @@ public sealed class ObjectionServiceTests
         });
         db.BuergerProfile.Add(new BuergerProfil
         {
-            Id = ProfileId, UserId = "buerger", FirstName = "Erika", LastName = "Beispiel",
+            // the notice is published for "Max Mustermann", and only that person may dispute it
+            Id = ProfileId, UserId = "buerger", FirstName = "Max", LastName = "Mustermann",
+        });
+        db.Users.Add(new Agent
+        {
+            Id = "fremd", UserName = "fremd", DiscordId = "1003", Status = AgentStatus.Civilian,
         });
         db.BuergerProfile.Add(new BuergerProfil
         {
-            Id = OtherProfileId, UserId = "buerger2", FirstName = "Klaus", LastName = "Zweitkonto",
+            Id = "profil-fremd", UserId = "fremd", FirstName = "Anna", LastName = "Andere",
+        });
+        db.BuergerProfile.Add(new BuergerProfil
+        {
+            // a second account of the same name: the tests about quotas and foreign lists are about the account,
+            // not about the identity gate
+            Id = OtherProfileId, UserId = "buerger2", FirstName = "Max", LastName = "Mustermann",
         });
         await db.SaveChangesAsync();
         return ctx;
@@ -159,6 +170,34 @@ public sealed class ObjectionServiceTests
     }
 
     // ---- filing ----
+
+    [Fact]
+    public async Task OnlyTheNamedPersonMayObject()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen("fremd")));
+
+        Assert.Equal(ObjectionRules.NotTheNamedPerson, error.Message);
+    }
+
+    [Fact]
+    public async Task ARefusedObjectionLeavesNoRow()
+    {
+        // the guard sits before the write, so a refusal must not have spent a case number or a quota slot
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var wantedCaseNumber = await PublishedAsync(ctx, host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SubmitAsync(Input(wantedCaseNumber), Citizen("fremd")));
+
+        await using var db = ctx.NewContext();
+        Assert.Empty(await db.FahndungEinsprueche.IgnoreQueryFilters().ToListAsync());
+    }
 
     [Fact]
     public async Task FilingAgainstAPublishedNotice_MintsItsOwnCaseNumber()
@@ -551,7 +590,7 @@ public sealed class ObjectionServiceTests
         Assert.NotNull(detail);
         Assert.Equal(wantedCaseNumber, detail!.WantedCaseNumber);
         Assert.Equal(PublicWantedStatus.Veroeffentlicht, detail.WantedStatus);
-        Assert.Equal("Erika Beispiel", detail.CitizenName);
+        Assert.Equal("Max Mustermann", detail.CitizenName);
         Assert.False(detail.CitizenIsBlocked);
     }
 

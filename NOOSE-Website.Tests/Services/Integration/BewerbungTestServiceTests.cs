@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Chat;
@@ -46,14 +46,15 @@ public sealed class BewerbungTestServiceTests
     }
 
     private static BewerbungTestQuestion AddQuestion(SqliteTestContext ctx, string id, string testId, TestQuestionType type, int sorting,
-        int points = 1, bool? correctYesNo = null, string? keywords = null, int? minKeywordHits = null, bool keepOptionOrder = false)
+        int points = 1, bool? correctYesNo = null, string? keywords = null, int? minKeywordHits = null, bool keepOptionOrder = false,
+        bool allowMultiple = false, bool required = true)
     {
         using var db = ctx.NewContext();
         var q = new BewerbungTestQuestion
         {
-            Id = id, TestId = testId, Type = type, Prompt = $"Frage {id}", Sorting = sorting,
+            Id = id, TestId = testId, Type = type, Prompt = $"Frage {id}", Sorting = sorting, Required = required,
             Points = points, CorrectYesNo = correctYesNo, Keywords = keywords, MinKeywordHits = minKeywordHits,
-            KeepOptionOrder = keepOptionOrder, CreatedAt = Ts,
+            KeepOptionOrder = keepOptionOrder, AllowMultiple = allowMultiple, CreatedAt = Ts,
         };
         db.BewerbungTestQuestions.Add(q);
         db.SaveChanges();
@@ -374,7 +375,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "  Neuer Text  ", required: true, points: -5,
-            correctYesNo: true, keywords: "  a; b  ", minKeywordHits: 2, keepOptionOrder: false, Hrb());
+            correctYesNo: true, keywords: "  a; b  ", minKeywordHits: 2, keepOptionOrder: false, allowMultiple: false, Hrb());
 
         using var check = ctx.NewContext();
         var q = await check.BewerbungTestQuestions.SingleAsync(x => x.Id == "q1");
@@ -394,7 +395,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "Ja oder nein?", required: true, points: 3,
-            correctYesNo: false, keywords: "ignored", minKeywordHits: 5, keepOptionOrder: false, Hrb());
+            correctYesNo: false, keywords: "ignored", minKeywordHits: 5, keepOptionOrder: false, allowMultiple: false, Hrb());
 
         using var check = ctx.NewContext();
         var q = await check.BewerbungTestQuestions.SingleAsync(x => x.Id == "q1");
@@ -411,7 +412,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.UpdateQuestionAsync("nope", "Q", true, 1, null, null, null, false, Hrb()));
+            () => svc.UpdateQuestionAsync("nope", "Q", true, 1, null, null, null, false, false, Hrb()));
     }
 
     [Fact]
@@ -423,7 +424,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.UpdateQuestionAsync("q1", "Q", true, 1, null, null, null, false, NonHrb()));
+            () => svc.UpdateQuestionAsync("q1", "Q", true, 1, null, null, null, false, false, NonHrb()));
     }
 
     // ---------- DeleteQuestionAsync ----------
@@ -764,44 +765,297 @@ public sealed class BewerbungTestServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetEvaluationAsync("b1", NonHrb()));
     }
 
-    // ---------- SetManualGradeAsync ----------
+    // ---------- SetAwardedPointsAsync / grading transitions ----------
 
     [Fact]
-    public async Task SetManualGradeAsync_UpdatesAnswer_AndBroadcasts()
+    public async Task SetAwardedPointsAsync_StoresPoints_AndBroadcasts()
     {
         using var ctx = new SqliteTestContext();
         AddTest(ctx, "t1", "Test", sorting: 1);
         AddBewerbung(ctx, "b1", "userA");
         AddAssignment(ctx, "as1", "b1", "t1");
-        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 5);
         AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
         var (svc, broadcaster, _) = Build(ctx);
         var fired = new List<string>();
         broadcaster.Modified += fired.Add;
 
-        await svc.SetManualGradeAsync("an1", manualCorrect: true, Hrb());
+        await svc.SetAwardedPointsAsync("as1", "q1", 3, Hrb());
 
         using var check = ctx.NewContext();
-        Assert.True((await check.BewerbungTestAnswers.SingleAsync(a => a.Id == "an1")).ManualCorrect);
+        Assert.Equal(3, (await check.BewerbungTestAnswers.SingleAsync(a => a.Id == "an1")).ManualPoints);
         Assert.Contains("b1", fired);
     }
 
     [Fact]
-    public async Task SetManualGradeAsync_Throws_WhenAnswerMissing()
+    public async Task SetAwardedPointsAsync_ClampsToTheQuestionsMaximum()
     {
         using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 4);
         var (svc, _, _) = Build(ctx);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SetManualGradeAsync("nope", true, Hrb()));
+        await svc.SetAwardedPointsAsync("as1", "q1", 99, Hrb());
+
+        using var check = ctx.NewContext();
+        Assert.Equal(4, (await check.BewerbungTestAnswers.SingleAsync(a => a.QuestionId == "q1")).ManualPoints);
     }
 
     [Fact]
-    public async Task SetManualGradeAsync_Throws_WhenNotHrbOrLeadership()
+    public async Task SetAwardedPointsAsync_CreatesARowForAQuestionAddedAfterTheSubmission()
+    {
+        // the old grading keyed on an existing answer row, so such a question counted against the maximum but
+        // could never be graded
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "spaet", "t1", TestQuestionType.FreeText, sorting: 9, points: 2);
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SetAwardedPointsAsync("as1", "spaet", 2, Hrb());
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.SingleAsync(a => a.QuestionId == "spaet");
+        Assert.Equal(2, stored.ManualPoints);
+    }
+
+    [Fact]
+    public async Task SetAwardedPointsAsync_Auto_ClearsTheOldVerdictToo()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 5);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas", manualCorrect: true);
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SetAwardedPointsAsync("as1", "q1", null, Hrb());
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.SingleAsync(a => a.Id == "an1");
+        Assert.Null(stored.ManualPoints);
+        Assert.Null(stored.ManualCorrect);
+    }
+
+    [Fact]
+    public async Task SetAwardedPointsAsync_Throws_ForAQuestionOfAnotherTest()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddTest(ctx, "t2", "Fremd", sorting: 2);
+        AddQuestion(ctx, "fremd", "t2", TestQuestionType.FreeText, sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.SetAwardedPointsAsync("as1", "fremd", 1, Hrb()));
+    }
+
+    [Fact]
+    public async Task SetAwardedPointsAsync_Throws_WhenNotHrbOrLeadership()
     {
         using var ctx = new SqliteTestContext();
         var (svc, _, _) = Build(ctx);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.SetManualGradeAsync("an1", true, NonHrb()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.SetAwardedPointsAsync("as1", "q1", 1, NonHrb()));
+    }
+
+    [Fact]
+    public async Task GetEvaluationAsync_AwardedPoints_PreferTheHandGradeOverTheAutomaticVerdict()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, points: 6);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddAnswer(ctx, "an1", "as1", "q1", selectedOptionId: "o1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SetAwardedPointsAsync("as1", "q1", 2, Hrb());
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        Assert.NotNull(eval);
+        Assert.Equal(2, eval!.TotalPoints);
+        Assert.Equal(6, eval.MaxPoints);
+    }
+
+    [Fact]
+    public async Task AMultipleChoiceQuestionWithoutAKeyStaysUndecided()
+    {
+        // "wrong" would let CompleteGradingAsync freeze a 0 for a question the machine could not judge and
+        // nobody ever looked at
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, points: 5, allowMultiple: true);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: false, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: false, sorting: 2);
+        AddAnswer(ctx, "an1", "as1", "q1", selectedOptionId: "o1");
+        var (svc, _, _) = Build(ctx);
+
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        Assert.NotNull(eval);
+        Assert.Equal(1, eval!.OpenCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteGradingAsync("b1", Hrb()));
+    }
+
+    [Fact]
+    public async Task AStoredMultiAnswerIsStillGradedAsASetAfterTheSwitchIsTurnedOff()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        // not pre-completed: the applicant's own submission is what stores the multi-answer here
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, points: 5, allowMultiple: true);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: true, sorting: 2);
+        var (svc, _, _) = Build(ctx);
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("userA"));
+
+        // the author changes their mind after the applicant has answered
+        await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 5, correctYesNo: null,
+            keywords: null, minKeywordHits: null, keepOptionOrder: false, allowMultiple: false, Hrb());
+
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        // graded on the answer that was actually given, not on whichever single option came first
+        Assert.Equal(5, eval!.TotalPoints);
+    }
+
+    [Fact]
+    public async Task AFrozenVerdictSurvivesAChangeToThePassMark()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1, passPercent: 50);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 10);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+        await svc.SetAwardedPointsAsync("as1", "q1", 6, Hrb());
+        await svc.CompleteGradingAsync("b1", Hrb());
+        Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);
+
+        await svc.UpdateTestAsync("t1", "Test", null, isActive: true, passPercent: 90, Hrb());
+
+        // the applicant was already told the outcome; raising the bar afterwards must not turn it around
+        Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);
+    }
+
+    [Fact]
+    public async Task CompleteGradingAsync_Throws_WhileAQuestionIsUndecided()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        // free text without keywords: the machine cannot decide it
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 3);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteGradingAsync("b1", Hrb()));
+    }
+
+    [Fact]
+    public async Task CompleteGradingAsync_FreezesTheResult()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 4);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+        await svc.SetAwardedPointsAsync("as1", "q1", 3, Hrb());
+
+        await svc.CompleteGradingAsync("b1", Hrb());
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAssignments.SingleAsync(a => a.Id == "as1");
+        Assert.NotNull(stored.GradedAt);
+        Assert.Equal(3, stored.FinalPoints);
+        Assert.Equal(4, stored.FinalMaxPoints);
+    }
+
+    [Fact]
+    public async Task AFrozenResultSurvivesAChangeToTheTest()
+    {
+        // the reason to freeze at all: raising a question's points must not rewrite an old applicant's score
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 4);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+        await svc.SetAwardedPointsAsync("as1", "q1", 4, Hrb());
+        await svc.CompleteGradingAsync("b1", Hrb());
+
+        await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 40,
+            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: false,
+            allowMultiple: false, Hrb());
+
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        Assert.NotNull(eval);
+        Assert.Equal(4, eval!.TotalPoints);
+        Assert.Equal(4, eval.MaxPoints);
+    }
+
+    [Fact]
+    public async Task GradingIsLockedWhileClosed_AndOpensAgainOnReopen()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 4);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+        await svc.SetAwardedPointsAsync("as1", "q1", 1, Hrb());
+        await svc.CompleteGradingAsync("b1", Hrb());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.SetAwardedPointsAsync("as1", "q1", 2, Hrb()));
+
+        await svc.ReopenGradingAsync("b1", Hrb());
+        await svc.SetAwardedPointsAsync("as1", "q1", 2, Hrb());
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAssignments.SingleAsync(a => a.Id == "as1");
+        Assert.Null(stored.GradedAt);
+        Assert.Null(stored.FinalPoints);
+        Assert.Equal(2, (await check.BewerbungTestAnswers.SingleAsync(a => a.Id == "an1")).ManualPoints);
+    }
+
+    [Fact]
+    public async Task CompleteGradingAsync_Throws_WhenNotHrbOrLeadership()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.CompleteGradingAsync("b1", NonHrb()));
+    }
+
+    [Fact]
+    public async Task ReopenGradingAsync_Throws_WhenNotHrbOrLeadership()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.ReopenGradingAsync("b1", NonHrb()));
     }
 
     [Fact]
@@ -813,7 +1067,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 1,
-            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, Hrb());
+            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, allowMultiple: false, Hrb());
 
         using var check = ctx.NewContext();
         Assert.True((await check.BewerbungTestQuestions.SingleAsync(q => q.Id == "q1")).KeepOptionOrder);
@@ -828,7 +1082,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 1,
-            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, Hrb());
+            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, allowMultiple: false, Hrb());
 
         using var check = ctx.NewContext();
         // not applicable without options
@@ -960,6 +1214,11 @@ public sealed class BewerbungTestServiceTests
     {
         using var ctx = new SqliteTestContext();
         AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1);
+        AddOption(ctx, "o1", "q1", "Erste", isCorrect: true, sorting: 1);
+        AddQuestion(ctx, "q2", "t1", TestQuestionType.FreeText, sorting: 2);
+        AddQuestion(ctx, "q3", "t1", TestQuestionType.MultipleChoice, sorting: 3, required: false);
+        AddOption(ctx, "o3", "q3", "Einzige", isCorrect: true, sorting: 1);
         AddBewerbung(ctx, "b1", "app1", assignedAgentId: "agentHandler");
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, broadcaster, notifications) = Build(ctx);
@@ -968,9 +1227,9 @@ public sealed class BewerbungTestServiceTests
 
         var inputs = new List<TestAnswerInput>
         {
-            new() { QuestionId = "q1", SelectedOptionId = "o1" },
+            new() { QuestionId = "q1", SelectedOptionIds = ["o1"] },
             new() { QuestionId = "q2", FreeText = "  meine Antwort  " },
-            new() { QuestionId = "q3", SelectedOptionId = "   " }, // whitespace => stored null
+            new() { QuestionId = "q3", SelectedOptionIds = ["   "] }, // not an option of q3 => stored null
         };
 
         await svc.SubmitAnswersAsync("as1", inputs, Applicant("app1"));
@@ -984,6 +1243,133 @@ public sealed class BewerbungTestServiceTests
         Assert.Contains("b1", fired);
         await notifications.Received(1).NotifyAsync("agentHandler", NotificationType.Recruiting,
             Arg.Any<string>(), "/bewerbungen/b1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_MultiSelect_StoresEveryTickedOption()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, allowMultiple: true);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: true, sorting: 2);
+        AddOption(ctx, "o3", "q1", "C", isCorrect: false, sorting: 3);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("app1"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.SingleAsync(a => a.AssignmentId == "as1");
+        Assert.Equal("o1,o2", stored.SelectedOptionIds);
+        // the scalar column stays empty: it means "exactly one", and two were ticked
+        Assert.Null(stored.SelectedOptionId);
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_SingleChoice_KeepsOnlyOneTick()
+    {
+        // the form offers radio buttons, but the payload is not the form
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: false, sorting: 2);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("app1"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.SingleAsync(a => a.AssignmentId == "as1");
+        Assert.Equal("o1", stored.SelectedOptionId);
+        Assert.Equal("o1", stored.SelectedOptionIds);
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_DropsAnOptionThatBelongsToAnotherQuestion()
+    {
+        // the column carries no foreign key, so nothing downstream would catch an invented id
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, required: false);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddQuestion(ctx, "q2", "t1", TestQuestionType.MultipleChoice, sorting: 2, required: false);
+        AddOption(ctx, "o2", "q2", "B", isCorrect: true, sorting: 1);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o2", "erfunden"] }], Applicant("app1"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.SingleAsync(a => a.QuestionId == "q1");
+        Assert.Null(stored.SelectedOptionIds);
+        Assert.Null(stored.SelectedOptionId);
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_IgnoresAQuestionFromAnotherTest()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, required: false);
+        AddTest(ctx, "t2", "Fremd", sorting: 2);
+        AddQuestion(ctx, "fremd", "t2", TestQuestionType.FreeText, sorting: 1, required: false);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "fremd", FreeText = "hallo" }], Applicant("app1"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.Where(a => a.AssignmentId == "as1").ToListAsync();
+        Assert.Equal("q1", Assert.Single(stored).QuestionId);
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_CollapsesTwoRowsForOneQuestion()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await svc.SubmitAnswersAsync("as1",
+            [
+                new TestAnswerInput { QuestionId = "q1", FreeText = "erste" },
+                new TestAnswerInput { QuestionId = "q1", FreeText = "zweite" },
+            ], Applicant("app1"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.BewerbungTestAnswers.Where(a => a.AssignmentId == "as1").ToListAsync();
+        Assert.Equal("zweite", Assert.Single(stored).FreeTextAnswer);
+    }
+
+    [Fact]
+    public async Task SubmitAnswersAsync_Throws_WhenAMandatoryQuestionIsLeftEmpty()
+    {
+        // the form blocks it too, but the submission travels over SignalR and never passes the form's check
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.SubmitAnswersAsync("as1", [], Applicant("app1")));
+
+        using var check = ctx.NewContext();
+        Assert.Null((await check.BewerbungTestAssignments.SingleAsync(a => a.Id == "as1")).CompletedAt);
     }
 
     [Fact]

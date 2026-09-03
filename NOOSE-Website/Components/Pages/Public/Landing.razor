@@ -77,26 +77,12 @@
                         }
                         @if (_numbers.TipsReceived is { } tips)
                         {
+                            @* the two sub-figures used to be tiles of their own; they are shares OF this number,
+                               so they belong in its hint rather than in the same row as their own total *@
                             <div style="flex:1 1 190px;">
                                 <StatTile Icon="@Icons.Material.Filled.TipsAndUpdates" Colour="Color.Info"
                                           Label="Hinweise" Value="@tips.ToString("N0")"
-                                          Hint="Über diese Seite eingegangene Bürgerhinweise." />
-                            </div>
-                        }
-                        @if (_numbers.TipsConfirmed is { } confirmed)
-                        {
-                            <div style="flex:1 1 190px;">
-                                <StatTile Icon="@Icons.Material.Filled.CheckCircle" Colour="Color.Info"
-                                          Label="davon bestätigt" Value="@confirmed.ToString("N0")"
-                                          Hint="Hinweise, die sich als zutreffend erwiesen haben." />
-                            </div>
-                        }
-                        @if (_numbers.TipsLedToCapture is { } led)
-                        {
-                            <div style="flex:1 1 190px;">
-                                <StatTile Icon="@Icons.Material.Filled.Gavel" Colour="Color.Success"
-                                          Label="davon zur Ergreifung" Value="@led.ToString("N0")"
-                                          Hint="Hinweise, die zu einer Festnahme geführt haben." />
+                                          Hint="@TipsHint(tips)" />
                             </div>
                         }
                         @if (_numbers.RewardsPaid is { } paid)
@@ -249,38 +235,34 @@
                 </MudStack>
             </MudPaper>
 
-            <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
-                <MudStack Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
-                    <MudText Typo="Typo.h6">Agent-Zugang</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        NOOSE-Agenten gelangen über den internen Login zum Lagezentrum und zur Akten-Datenbank.
-                    </MudText>
-                    <AuthorizeView>
-                        <Authorized Context="agentCtx">
-                            @if (agentCtx.User.IsApplicant())
-                            {
-                                <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Filled.Badge" Class="mt-2">Zum Bewerber-Portal</MudButton>
-                            }
-                            else if (agentCtx.User.IsCitizen())
-                            {
-                                @* a citizen has no agency access at all; the tile above is their way in *@
-                                <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true" Class="mt-2">Kein Zugriff</MudButton>
-                            }
-                            else
-                            {
-                                <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Zum Agent-Portal</MudButton>
-                            }
-                        </Authorized>
-                        <NotAuthorized>
-                            @* secret agency: no usable agent login on the public page *@
-                            <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true" Class="mt-2">Kein Zugriff</MudButton>
-                        </NotAuthorized>
-                    </AuthorizeView>
-                </MudStack>
-            </MudPaper>
+            <AuthorizeView>
+                <Authorized Context="agentCtx">
+                    @* only for someone who actually has an inward area: for a citizen and for an anonymous
+                       visitor this tile was a disabled button and nothing else *@
+                    @if (!agentCtx.User.IsCitizen())
+                    {
+                        <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
+                            <MudStack Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
+                                <MudText Typo="Typo.h6">Dienstzugang</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    Weiter zu deinem eigenen Bereich.
+                                </MudText>
+                                @if (agentCtx.User.IsApplicant())
+                                {
+                                    <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Badge" Class="mt-2">Zum Bewerber-Portal</MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Zum Agent-Portal</MudButton>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </Authorized>
+            </AuthorizeView>
         </MudStack>
     </MudPaper>
 
@@ -289,6 +271,21 @@
 @code {
     /// <summary>How many notices the start page shows before pointing at the board.</summary>
     private const int WantedPreview = 3;
+
+    /// <summary>The two shares of the tip figure, in the tile they belong to instead of two tiles of their own.</summary>
+    private string TipsHint(int received)
+    {
+        var parts = new List<string> { $"{received:N0} über diese Seite eingegangen" };
+        if (_numbers.TipsConfirmed is { } confirmed)
+        {
+            parts.Add($"{confirmed:N0} davon bestätigt");
+        }
+        if (_numbers.TipsLedToCapture is { } led)
+        {
+            parts.Add($"{led:N0} führten zu einer Festnahme");
+        }
+        return string.Join(", ", parts) + ".";
+    }
 
     private bool _careersEnabled;
     private bool _registrationEnabled;

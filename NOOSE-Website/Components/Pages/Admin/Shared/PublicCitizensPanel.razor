@@ -1,4 +1,4 @@
-@inject IBuergerService BuergerService
+﻿@inject IBuergerService BuergerService
 @inject IPersonService PersonService
 @inject ISnackbar Snackbar
 
@@ -57,7 +57,14 @@ else
                 }
             </MudTd>
             <MudTd DataLabel="Status">
-                @if (context.IsBlocked)
+                @if (context.AccountBlocked)
+                {
+                    <MudTooltip Text="@(context.BlockedReason ?? "")">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                                 Icon="@Icons.Material.Filled.NoAccounts">Ausgesperrt</MudChip>
+                    </MudTooltip>
+                }
+                else if (context.IsBlocked)
                 {
                     <MudTooltip Text="@(context.BlockedReason ?? "")">
                         <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Gesperrt</MudChip>
@@ -89,6 +96,22 @@ else
                     <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
                                StartIcon="@Icons.Material.Filled.Link"
                                OnClick="() => StartLinkAsync(context)">Personenakte</MudButton>
+                    @* the citizen's own form refuses a rename once the name stands; this is the only way back *@
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.DriveFileRenameOutline"
+                               OnClick="() => StartRename(context)">Name ändern</MudButton>
+                    @if (context.AccountBlocked)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.HowToReg"
+                                   OnClick="() => UnblockAccountAsync(context)">Aussperrung aufheben</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.NoAccounts"
+                                   OnClick="() => StartAccountBlock(context)">Konto aussperren</MudButton>
+                    }
                 </AuthorizeView>
             </MudTd>
         </RowTemplate>
@@ -144,6 +167,50 @@ else
                     }
                 </MudList>
             }
+        </MudStack>
+    </MudPaper>
+}
+
+@if (_renameTarget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mt-4">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">Namen von @_renameTarget.DisplayName ändern</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Der Bürger kann seinen Namen nicht selbst ändern. Die Änderung steht mit deinem Namen im Protokoll.
+            </MudText>
+            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                <MudTextField @bind-Value="_renameFirst" Label="Vorname" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" MaxLength="64" Immediate="true" Style="max-width:240px;" />
+                <MudTextField @bind-Value="_renameLast" Label="Nachname" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" MaxLength="64" Immediate="true" Style="max-width:240px;" />
+            </MudStack>
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="@(_renameFirst.Trim().Length == 0 || _renameLast.Trim().Length == 0)"
+                           OnClick="ConfirmRenameAsync">Speichern</MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelRename">Abbrechen</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+
+@if (_accountBlockTarget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mt-4">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">@_accountBlockTarget.DisplayName aussperren</MudText>
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Das Konto kann sich danach nicht mehr anmelden; eine laufende Sitzung endet binnen 30 Sekunden.
+                Das ist die Stufe für einen Troll-Namen — für reinen Einreichungs-Missbrauch reicht „Sperren“.
+            </MudAlert>
+            <MudTextField @bind-Value="_accountBlockReason" Label="Grund" Variant="Variant.Outlined"
+                          Lines="2" Immediate="true" />
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.NoAccounts"
+                           OnClick="ConfirmAccountBlockAsync">Aussperren</MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelAccountBlock">Abbrechen</MudButton>
+            </MudStack>
         </MudStack>
     </MudPaper>
 }
@@ -306,6 +373,82 @@ else
     {
         _blockTarget = null;
         _blockReason = string.Empty;
+    }
+
+    private CitizenRow? _renameTarget;
+    private string _renameFirst = string.Empty;
+    private string _renameLast = string.Empty;
+
+    private CitizenRow? _accountBlockTarget;
+    private string _accountBlockReason = string.Empty;
+
+    private void StartRename(CitizenRow row)
+    {
+        _renameTarget = row;
+        _renameFirst = row.FirstName;
+        _renameLast = row.LastName;
+    }
+
+    private void CancelRename() => _renameTarget = null;
+
+    private async Task ConfirmRenameAsync()
+    {
+        if (_renameTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            await BuergerService.SetNameAsync(_renameTarget.Id, _renameFirst, _renameLast, _user);
+            Snackbar.Add("Name geändert.", Severity.Success);
+            _renameTarget = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartAccountBlock(CitizenRow row)
+    {
+        _accountBlockTarget = row;
+        _accountBlockReason = string.Empty;
+    }
+
+    private void CancelAccountBlock() => _accountBlockTarget = null;
+
+    private async Task ConfirmAccountBlockAsync()
+    {
+        if (_accountBlockTarget is null)
+        {
+            return;
+        }
+        try
+        {
+            await BuergerService.BlockAccountAsync(_accountBlockTarget.Id, _accountBlockReason, _user);
+            Snackbar.Add("Konto ausgesperrt.", Severity.Success);
+            _accountBlockTarget = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task UnblockAccountAsync(CitizenRow row)
+    {
+        try
+        {
+            await BuergerService.UnblockAccountAsync(row.Id, _user);
+            Snackbar.Add("Aussperrung aufgehoben.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task ConfirmBlockAsync()

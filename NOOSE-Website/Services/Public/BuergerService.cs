@@ -1,9 +1,10 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 using NOOSE_Website.Models.Recruiting;
 
@@ -56,7 +57,16 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
         }
         else
         {
-            // a blocked citizen may still correct their own name; the block governs submissions, not identity
+            // settled at the first save: the name is an identity claim elsewhere, and a rewritable one made the
+            // objection gate self-asserted. A repeated save of the SAME name is not a change and stays silent.
+            if (BuergerNameRules.IsLocked(profile))
+            {
+                if (BuergerNameRules.Same(profile.FirstName, profile.LastName, first, last))
+                {
+                    return profile;
+                }
+                throw new InvalidOperationException(BuergerNameRules.LockedMessage);
+            }
             profile.FirstName = first;
             profile.LastName = last;
         }
@@ -135,7 +145,9 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
         var rows = await query.OrderByDescending(p => p.CreatedAt).ToListAsync(cancellationToken);
         return rows.Select(p => new CitizenRow(
             p.Id, p.UserId, p.FirstName, p.LastName, p.User?.DiscordUsername,
-            p.IsBlocked, p.BlockedReason, p.BlockedAt, p.ConfirmedTips, p.LinkedPersonId,
+            p.IsBlocked, p.BlockedReason, p.BlockedAt,
+            p.User?.Status == AgentStatus.Blocked,
+            p.ConfirmedTips, p.LinkedPersonId,
             p.User?.RegisteredAt ?? p.CreatedAt)).ToList();
     }
 
@@ -220,6 +232,98 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
         }
         return new LinkedPersonInfo(person.Id, person.Name, person.CaseNumber, person.ThreatScore,
             person.ThreatConfidence, person.ScoreCalculatedAt, person.IsClassified);
+    }
+
+    public async Task SetNameAsync(string profileId, string firstName, string lastName, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        var first = Clean(firstName, "Vorname");
+        var last = Clean(lastName, "Nachname");
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var profile = await GetOrThrowAsync(db, profileId, cancellationToken);
+        profile.FirstName = first;
+        profile.LastName = last;
+        // plain SaveChanges: the audit interceptor records the field diff, so who renamed whom is on the record
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Status, not just the citizen flag: the login endpoint sends a Blocked account to /Account/Gesperrt and the
+    /// circuit revalidation evicts a running session within 30 seconds. The security stamp is rotated with it, the
+    /// house rule for every status change. The citizen-level block is set too, so the two levels never disagree.
+    /// </remarks>
+    public async Task BlockAccountAsync(string profileId, string reason, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("Bitte einen Sperrgrund angeben.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var profile = await GetOrThrowAsync(db, profileId, cancellationToken);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == profile.UserId, cancellationToken)
+            ?? throw new InvalidOperationException("Zu diesem Profil gibt es kein Konto.");
+
+        if (user.Id == actor.GetAgentId())
+        {
+            throw new InvalidOperationException("Du kannst dich nicht selbst aussperren.");
+        }
+        // this desk governs citizens; an agent, applicant or partner is shut out from the agent roster, where the
+        // status machine and the personnel file live
+        if (user.Status != AgentStatus.Civilian)
+        {
+            throw new InvalidOperationException(
+                "Nur Bürgerkonten werden hier ausgesperrt. Agenten und Bewerber laufen über die Agentenverwaltung.");
+        }
+
+        user.Status = AgentStatus.Blocked;
+        user.BlockedReason = reason.Trim();
+        // rotates the cookie's stamp the way AgentManagementService.Save(newStamp: true) does; the status alone
+        // already fails revalidation, this closes the same door from the second side
+        user.SecurityStamp = Guid.NewGuid().ToString();
+
+        profile.IsBlocked = true;
+        profile.BlockedReason = reason.Trim();
+        profile.BlockedById = actor.GetAgentId();
+        profile.BlockedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UnblockAccountAsync(string profileId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var profile = await GetOrThrowAsync(db, profileId, cancellationToken);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == profile.UserId, cancellationToken)
+            ?? throw new InvalidOperationException("Zu diesem Profil gibt es kein Konto.");
+
+        // Civilian, never Active: the agent unblock path restores Active, and using it here would hand a citizen
+        // the whole records database
+        if (user.Status != AgentStatus.Blocked)
+        {
+            throw new InvalidOperationException("Dieses Konto ist nicht ausgesperrt.");
+        }
+        user.Status = AgentStatus.Civilian;
+        user.BlockedReason = null;
+        user.SecurityStamp = Guid.NewGuid().ToString();
+
+        profile.IsBlocked = false;
+        profile.BlockedReason = null;
+        profile.BlockedById = null;
+        profile.BlockedAt = null;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RecomputeConfirmedTipsAsync(string profileId, CancellationToken cancellationToken = default)
