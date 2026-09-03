@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components.Routing;
+﻿using Microsoft.AspNetCore.Components.Routing;
 using MudBlazor;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Common;
@@ -113,6 +113,11 @@ public static class NavCatalog
         new NavEntry("tickets", "/tickets", Icons.Material.Filled.Forum, "Bürger-Tickets",
             NavSection.VerwaltungFuehrung, NavArea.Verwaltung, BadgeKey: "tickets",
             Description: "Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss"),
+        // the same page, a different section: without an entry of their own an attached agent could only ever
+        // reach their tickets through a notification link
+        new NavEntry("tickets.beteiligt", "/tickets?tab=beteiligt", Icons.Material.Filled.Group, "Meine Tickets",
+            NavSection.MeinDienst, NavArea.MeinDienst, NavLinkMatch.All,
+            Description: "Tickets, an denen du beteiligt bist, und eigene Anliegen an die Führung"),
         new NavEntry("papierkorb", "/papierkorb", Icons.Material.Filled.Delete, "Papierkorb", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Gelöschte Akten aller Typen wiederherstellen"),
     };

@@ -251,6 +251,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
+    public DbSet<TicketParticipant> TicketBeteiligte => Set<TicketParticipant>();
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
     public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
     public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
@@ -1895,18 +1896,37 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.CitizenProfileId).HasMaxLength(64);
             b.Property(t => t.Subject).HasMaxLength(160).IsRequired();
             b.Property(t => t.HandlerId).HasMaxLength(64);
+            b.Property(t => t.OpenedByAgentId).HasMaxLength(64);
             b.Property(t => t.ClosedById).HasMaxLength(64);
             // Restrict throughout: a ticket outlives the account and the handler it names
             b.HasOne(t => t.CitizenProfile).WithMany()
                 .HasForeignKey(t => t.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(t => t.Handler).WithMany()
                 .HasForeignKey(t => t.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(t => t.OpenedByAgent).WithMany()
+                .HasForeignKey(t => t.OpenedByAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(t => t.CaseNumber).IsUnique();
+            // the desk splits citizen from internal before it sorts
+            b.HasIndex(t => new { t.Kind, t.Status, t.LastActivityAt });
             // the desk order: newest activity first within a status tab
             b.HasIndex(t => new { t.Status, t.LastActivityAt });
             // both caps of the quota read these
             b.HasIndex(t => new { t.CitizenProfileId, t.Status });
             b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+        });
+
+        modelBuilder.Entity<TicketParticipant>(b =>
+        {
+            b.Property(p => p.TicketId).HasMaxLength(64);
+            b.Property(p => p.AgentId).HasMaxLength(64);
+            // Cascade off the ticket, Restrict off the account: the assignment dies with its ticket, never with
+            // the agent — the same split TicketNachricht draws
+            b.HasOne(p => p.Ticket).WithMany()
+                .HasForeignKey(p => p.TicketId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(p => p.Agent).WithMany()
+                .HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(p => new { p.TicketId, p.AgentId }).IsUnique();
+            b.HasIndex(p => p.AgentId);
         });
 
         modelBuilder.Entity<TicketNachricht>(b =>

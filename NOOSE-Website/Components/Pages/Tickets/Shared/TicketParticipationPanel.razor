@@ -1,0 +1,83 @@
+﻿@* Tickets the caller is attached to; their own unread count over the internal thread. *@
+@implements IDisposable
+@inject ITicketService Tickets
+@inject TicketBroadcaster Broadcaster
+@inject NavigationManager Nav
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Group" Title="Keine Beteiligung"
+                Text="Du bist an keinem Ticket beteiligt. Die Führung kann dich an einem hinzufügen." />
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true" Striped="true">
+        <thead>
+            <tr>
+                <th>Aktenzeichen</th>
+                <th>Betreff</th>
+                <th>Art</th>
+                <th>Status</th>
+                <th>Letzte Aktivität</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr style="cursor:pointer;" @onclick="@(() => Open(row.Id))" tabindex="0"
+                    @onkeydown="@(e => { if (e.Key is "Enter" or " ") { Open(row.Id); } })">
+                    <td>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @row.CaseNumber
+                            @if (row.UnreadInternal > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">
+                                    @row.UnreadInternal
+                                </MudChip>
+                            }
+                        </MudStack>
+                    </td>
+                    <td>@row.Subject</td>
+                    <td>@TicketArtDisplay.Name(row.Kind)</td>
+                    <td>@TicketStatusDisplay.Name(row.Status)</td>
+                    <td>@row.LastActivityAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<TicketParticipationRow> _rows = [];
+    private bool _load = true;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _rows = await Tickets.GetMyParticipationsAsync(_user); }
+        catch { /* best effort */ }
+        _load = false;
+    }
+
+    private void Open(string id) => Nav.NavigateTo($"/tickets/{id}");
+
+    private void OnModified(string ticketId, string caseNumber, TicketMessageAudience? audience)
+        => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+}

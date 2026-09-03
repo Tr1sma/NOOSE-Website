@@ -1,25 +1,57 @@
-@page "/tickets"
-@attribute [Authorize(Policy = Policies.LeadershipPage)]
+﻿@page "/tickets"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IDialogService DialogService
+@inject NavigationManager Nav
 
-@* The desk that replaces the public Discord ticket. Leadership only, and the read-only supervision reads it. *@
+@* The desk that replaces the public Discord ticket. The four desk tabs are leadership only, and the read-only
+   supervision reads them; "Beteiligt" is every agent's own list. A section inside an AuthorizeView that does not
+   render also registers no rail button, which is exactly the gate we want here. *@
 
-<PageTitle>Bürger-Tickets · NOOSE</PageTitle>
+<PageTitle>Tickets · NOOSE</PageTitle>
 
 <PageHeader Icon="@Icons.Material.Filled.Forum"
-            Title="Bürger-Tickets"
-            Subtitle="Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss." />
+            Title="Tickets"
+            Subtitle="Anliegen von Bürgern an die Führungsebene und interne Anliegen der Agenten.">
+    <Actions>
+        <MudButton OnClick="OpenInternalAsync" Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add">Internes Ticket</MudButton>
+    </Actions>
+</PageHeader>
 
 <RecordSectionRail>
-    <RecordSection Group="Schalter" Slug="offen" Label="Offen" Icon="@Icons.Material.Filled.Inbox">
-        <TicketsListPanel Scope="TicketInboxScope.Offen" />
-    </RecordSection>
-    <RecordSection Group="Schalter" Slug="bearbeitung" Label="In Bearbeitung" Icon="@Icons.Material.Filled.HourglassTop">
-        <TicketsListPanel Scope="TicketInboxScope.Bearbeitung" />
-    </RecordSection>
-    <RecordSection Group="Schalter" Slug="wartet" Label="Wartet auf Bürger" Icon="@Icons.Material.Filled.MarkEmailRead">
-        <TicketsListPanel Scope="TicketInboxScope.Wartet" />
-    </RecordSection>
-    <RecordSection Group="Schalter" Slug="geschlossen" Label="Geschlossen" Icon="@Icons.Material.Filled.DoneAll">
-        <TicketsListPanel Scope="TicketInboxScope.Geschlossen" />
+    <AuthorizeView Policy="@Policies.LeadershipPage" Context="deskCtx">
+        <RecordSection Group="Schalter" Slug="offen" Label="Offen" Icon="@Icons.Material.Filled.Inbox">
+            <TicketsListPanel Scope="TicketInboxScope.Offen" />
+        </RecordSection>
+        <RecordSection Group="Schalter" Slug="bearbeitung" Label="In Bearbeitung" Icon="@Icons.Material.Filled.HourglassTop">
+            <TicketsListPanel Scope="TicketInboxScope.Bearbeitung" />
+        </RecordSection>
+        <RecordSection Group="Schalter" Slug="wartet" Label="Wartet auf Bürger" Icon="@Icons.Material.Filled.MarkEmailRead">
+            <TicketsListPanel Scope="TicketInboxScope.Wartet" />
+        </RecordSection>
+        <RecordSection Group="Schalter" Slug="geschlossen" Label="Geschlossen" Icon="@Icons.Material.Filled.DoneAll">
+            <TicketsListPanel Scope="TicketInboxScope.Geschlossen" />
+        </RecordSection>
+    </AuthorizeView>
+    <RecordSection Group="Mein Dienst" Slug="beteiligt" Label="Beteiligt" Icon="@Icons.Material.Filled.Group">
+        <TicketParticipationPanel />
     </RecordSection>
 </RecordSectionRail>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnParametersSetAsync() => _user = (await AuthStateTask).User;
+
+    private async Task OpenInternalAsync()
+    {
+        var caseNumber = await InternalTicketOpenDialog.ShowAsync(DialogService, _user);
+        if (caseNumber is not null)
+        {
+            Nav.NavigateTo("/tickets?tab=beteiligt", forceLoad: false);
+        }
+    }
+}

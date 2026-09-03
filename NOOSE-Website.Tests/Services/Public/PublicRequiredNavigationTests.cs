@@ -30,7 +30,8 @@ public class PublicRequiredNavigationTests
         ["HinweisBelohnung.Tip"] = "alle drei Lesepfade gewurzelt; Löschen eines belohnten Hinweises abgewiesen",
         ["Hinweis.CitizenProfile"] = "Eingang gewurzelt, !IsDeleted von Hand zurück - die Zähler berühren keine "
             + "Navigation und hätten sonst Zeilen behauptet, die die Liste nicht zeigt",
-        ["Ticket.CitizenProfile"] = "Schalter gewurzelt, aus demselben Grund wie der Hinweis-Eingang",
+        ["TicketParticipant.Ticket"] = "Die Beteiligung wird immer über ihr Ticket gelesen, nie umgekehrt; "
+            + "die eigene Liste joint bewusst über die Navigation, damit ein gelöschtes Ticket dort verschwindet",
         ["FahndungEinspruch.CitizenProfile"] = "die Einspruchs-Lesepfade sind schon gewurzelt (siehe Wanted)",
         ["FahndungWarnhinweis.Fahndung"] = "Zuordnungen werden über ihre Ausschreibung gelesen; der "
             + "Verwendungszähler joint bewusst nicht, sondern prüft die lebende Zeile per Subquery",

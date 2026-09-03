@@ -1,0 +1,101 @@
+﻿@* Opens an internal ticket to leadership; the agency's own concern, without a citizen behind it. *@
+@inject ITicketService Tickets
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Dein Anliegen geht an die Führungsebene. Es hat keine Bürgerseite: der ganze Schriftwechsel bleibt
+                intern und ist nur für die Führung und die beteiligten Agents lesbar.
+            </MudText>
+
+            <MudTextField @bind-Value="_subject" Label="Betreff" Variant="Variant.Outlined"
+                          MaxLength="@TicketRules.SubjectMaxLength" Immediate="true" />
+            <MudTextField @bind-Value="_text" Label="Dein Anliegen" Lines="6" Variant="Variant.Outlined"
+                          MaxLength="@TicketRules.MaxMessageLength" Immediate="true" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AddAgentAsync">
+                    Agent beteiligen
+                </MudButton>
+                @if (_participants.Count > 0)
+                {
+                    @* only the count here: the picker returns an id, and the names are on the ticket page a
+                       moment later, where they can also be taken off again *@
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                             Icon="@Icons.Material.Filled.Group"
+                             OnClose="@(() => _participants.Clear())">@_participants.Count beteiligt</MudChip>
+                }
+            </MudStack>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Mindestens @TicketRules.SubjectMinLength Zeichen im Betreff und
+                @TicketRules.MinLength Zeichen im Text. Du bist immer selbst beteiligt.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_busy || !MayOpen)"
+                   OnClick="SubmitAsync" StartIcon="@Icons.Material.Filled.Send">Ticket öffnen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private readonly List<string> _participants = [];
+    private string _subject = string.Empty;
+    private string _text = string.Empty;
+    private bool _busy;
+
+    private bool MayOpen => _subject.Trim().Length >= TicketRules.SubjectMinLength
+                            && _text.Trim().Length >= TicketRules.MinLength;
+
+    private async Task AddAgentAsync()
+    {
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, _participants, User.MayRealNameSee(), false);
+        if (choice is not null)
+        {
+            _participants.Add(choice.AgentId);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        try
+        {
+            var caseNumber = await Tickets.OpenAsAgentAsync(
+                new TicketInput { Subject = _subject, Text = _text },
+                _participants, User);
+            Snackbar.Add($"Ticket {caseNumber} eröffnet.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(caseNumber));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the form; returns the new case number or null when nothing was opened.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
+    {
+        var parameters = new DialogParameters<InternalTicketOpenDialog> { { x => x.User, user } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var reference = await dialog.ShowAsync<InternalTicketOpenDialog>("Neues internes Ticket", parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string caseNumber } ? caseNumber : null;
+    }
+}

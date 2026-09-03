@@ -1,4 +1,4 @@
-@inject ITicketService Tickets
+﻿@inject ITicketService Tickets
 @inject TicketBroadcaster Broadcaster
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -109,7 +109,7 @@ else
         }
     }
 
-    private void OnModified(string ticketId, string caseNumber)
+    private void OnModified(string ticketId, string caseNumber, TicketMessageAudience? audience)
         => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
 
     public void Dispose() => Broadcaster.Modified -= OnModified;

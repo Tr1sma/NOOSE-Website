@@ -144,6 +144,10 @@ public class PublicWantedModelTests
         [typeof(TicketRow)] = "Zeile des Führungs-Schalters; nennt Bürger und Bearbeiter.",
         [typeof(TicketDetail)] = "Ein Ticket in der Bearbeitung, inklusive Sperrstatus des Bürgerkontos.",
         [typeof(TicketMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
+        [typeof(TicketParticipantRow)] = "Wer an einem Ticket sitzt, samt Klarname hinter dem Führungs-Gate. "
+            + "Nach außen ist der Absender eine Konstante; diese Liste sieht der Bürger nie.",
+        [typeof(TicketParticipationRow)] = "Die eigenen Beteiligungen eines Agenten mit ungelesenen internen "
+            + "Notizen. Ein rein innerer Schalter ohne Bürgerbezug.",
         [typeof(TicketInput)] = "Formulareingabe des Ticket-Dialogs.",
         [typeof(PublicTemplateRow)] = "Vorlage mit rohen Tokens und internem Arbeitstitel; nach außen geht die "
             + "gerenderte Nachricht.",

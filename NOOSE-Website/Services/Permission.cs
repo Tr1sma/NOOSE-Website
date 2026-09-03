@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Models.Enums;
 
@@ -7,6 +7,19 @@ namespace NOOSE_Website.Services;
 /// <summary>Server-side permission guards.</summary>
 public static class Permission
 {
+    /// <summary>Require an internal agent; which single ticket they may open is decided per ticket.</summary>
+    /// <remarks>
+    /// The set guard of the ticket desk stays <see cref="RequireTicketRead"/>. This one only opens the door far
+    /// enough that an agent attached to one ticket can reach it; <c>TicketVisibility</c> decides the rest.
+    /// </remarks>
+    public static void RequireTicketParticipation(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent())
+        {
+            throw new UnauthorizedAccessException("Diese Aktion ist Agenten vorbehalten.");
+        }
+    }
+
     /// <summary>Require leadership or admin.</summary>
     public static void RequireLeadership(ClaimsPrincipal actor)
     {

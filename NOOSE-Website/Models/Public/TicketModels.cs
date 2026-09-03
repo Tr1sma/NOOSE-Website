@@ -41,6 +41,7 @@ public record TicketRow(
     string CaseNumber,
     string Subject,
     TicketStatus Status,
+    TicketArt Kind,
     DateTime CreatedAt,
     DateTime LastActivityAt,
     string CitizenName,
@@ -49,19 +50,25 @@ public record TicketRow(
     int UnreadCount);
 
 /// <summary>One ticket, opened by a handler.</summary>
+/// <param name="CitizenName">Empty for an internal ticket: there is no citizen behind it.</param>
 public record TicketDetail(
     string Id,
     string CaseNumber,
     string Subject,
     TicketStatus Status,
+    TicketArt Kind,
     DateTime CreatedAt,
     DateTime LastActivityAt,
     string CitizenName,
     bool CitizenIsBlocked,
     string? HandlerId,
     string? HandlerCodename,
+    string? OpenedByCodename,
     DateTime? ClosedAt,
     string? ClosedByCodename);
+
+/// <summary>One agent attached to a ticket, as the desk lists them.</summary>
+public record TicketParticipantRow(string Id, string AgentId, string Codename, string? RealName, DateTime AddedAt);
 
 /// <summary>One line of either thread as a handler sees it.</summary>
 public record TicketMessageRow(
@@ -78,3 +85,13 @@ public class TicketInput
     public string Subject { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
 }
+
+/// <summary>One internal ticket in the list of the agent attached to it.</summary>
+public record TicketParticipationRow(
+    string Id,
+    string CaseNumber,
+    string Subject,
+    TicketStatus Status,
+    TicketArt Kind,
+    DateTime LastActivityAt,
+    int UnreadInternal);

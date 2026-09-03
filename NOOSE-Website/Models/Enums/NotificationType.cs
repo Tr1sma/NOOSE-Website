@@ -1,4 +1,4 @@
-using MudBlazor;
+﻿using MudBlazor;
 
 namespace NOOSE_Website.Models.Enums;
 
@@ -94,6 +94,10 @@ public enum NotificationType
 
     /// <summary>A press release went public. Routable — an official statement naming no citizen belongs in the channel.</summary>
     PublicPressPublished = 29,
+
+    /// <summary>An internal note on a ticket, or being attached to one. Not routable: it is house correspondence,
+    /// and the citizen thread it sits next to names a citizen.</summary>
+    PublicTicketInternal = 30,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -128,6 +132,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
         NotificationType.PublicTicketOpened => "Neues Bürger-Ticket",
         NotificationType.PublicTicketAnswered => "Antwort zu deinem Ticket",
+        NotificationType.PublicTicketInternal => "Internes zum Ticket",
         NotificationType.PublicObjectionReceived => "Einspruch gegen eine Ausschreibung",
         NotificationType.PublicObjectionDecided => "Entscheidung zu deinem Einspruch",
         NotificationType.PublicPressPublished => "Pressemitteilung",
@@ -164,6 +169,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
         NotificationType.PublicTicketOpened => Icons.Material.Filled.Forum,
         NotificationType.PublicTicketAnswered => Icons.Material.Filled.MarkChatUnread,
+        NotificationType.PublicTicketInternal => Icons.Material.Filled.Lock,
         NotificationType.PublicObjectionReceived => Icons.Material.Filled.Balance,
         NotificationType.PublicObjectionDecided => Icons.Material.Filled.Gavel,
         NotificationType.PublicPressPublished => Icons.Material.Filled.Feed,

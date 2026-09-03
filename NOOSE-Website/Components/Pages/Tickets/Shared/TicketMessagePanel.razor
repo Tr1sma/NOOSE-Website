@@ -1,4 +1,4 @@
-@inject ITicketService Tickets
+﻿@inject ITicketService Tickets
 @inject IPublicTemplateService Templates
 @inject TicketBroadcaster Broadcaster
 @inject ISnackbar Snackbar
@@ -185,9 +185,10 @@
         return IsInternal ? message.AuthorCodename ?? TicketRules.AgencySender : TicketRules.AgencySender;
     }
 
-    private void OnModified(string ticketId, string caseNumber)
+    private void OnModified(string ticketId, string caseNumber, TicketMessageAudience? audience)
     {
-        if (ticketId != TicketId)
+        // a signal about the other thread is none of this panel's business; null concerns both
+        if (ticketId != TicketId || (audience is { } only && only != Audience))
         {
             return;
         }

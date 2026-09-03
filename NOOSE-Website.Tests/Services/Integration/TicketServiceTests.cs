@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
@@ -92,6 +92,8 @@ public sealed class TicketServiceTests
         row.IsEnabled = ticketsOn;
 
         db.Users.Add(Seed.Agent("lead", Rank.Director, configure: a => a.Codename = "Falcon"));
+        // an ordinary agent, so the participant picker predicate has someone to find
+        db.Users.Add(Seed.Agent("junior", Rank.SpecialAgent, configure: a => a.Codename = "Wren"));
 
         var mine = new BuergerProfil
         {
@@ -257,8 +259,165 @@ public sealed class TicketServiceTests
             host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Citizen()));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Partner()));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            host.Service.GetAsync(id, Junior()));
+
+        // not a refusal any more: an agent who is not attached gets "does not exist", because a refusal would
+        // confirm that this ticket is there
+        Assert.Null(await host.Service.GetAsync(id, Junior()));
+        Assert.Empty(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Junior()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.Service.GetAsync(id, Citizen()));
+    }
+
+    // ---- participants and the internal thread ----
+
+    [Fact]
+    public async Task AnAttachedAgentReadsTheTicketAndItsInternalThread()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Interner Vermerk zur Lage.", Leader());
+
+        Assert.Null(await host.Service.GetAsync(id, Junior()));
+
+        await host.Service.AddParticipantAsync(id, "junior", Leader());
+
+        Assert.NotNull(await host.Service.GetAsync(id, Junior()));
+        Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Junior()));
+    }
+
+    [Fact]
+    public async Task RemovingAnAgentTakesTheInternalThreadWithIt()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Interner Vermerk zur Lage.", Leader());
+        await host.Service.AddParticipantAsync(id, "junior", Leader());
+        var row = Assert.Single(await host.Service.GetParticipantsAsync(id, Leader()));
+
+        await host.Service.RemoveParticipantAsync(row.Id, Leader());
+
+        Assert.Null(await host.Service.GetAsync(id, Junior()));
+        Assert.Empty(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Junior()));
+    }
+
+    [Fact]
+    public async Task LeadershipReadsTheInternalThreadWithoutBeingAttached()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Interner Vermerk zur Lage.", Leader());
+
+        Assert.Empty(await host.Service.GetParticipantsAsync(id, Leader()));
+        Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+    }
+
+    [Fact]
+    public async Task AnUnattachedAgentCannotWriteAnInternalNote()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.PostInternalNoteAsync(id, "Ich schreibe hier einfach mit.", Junior()));
+    }
+
+    [Fact]
+    public async Task OnlyTheDeskMayAttachAnAgent()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.AddParticipantAsync(id, "junior", Junior()));
+    }
+
+    // ---- internal tickets ----
+
+    [Fact]
+    public async Task AnAgentOpensAnInternalTicketAndIsAttachedToIt()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+
+        await using var db = host.Factory.CreateDbContext();
+        var row = await db.Tickets.SingleAsync(t => t.CaseNumber == caseNumber);
+        Assert.Equal(TicketArt.Intern, row.Kind);
+        Assert.Null(row.CitizenProfileId);
+        Assert.Equal("junior", row.OpenedByAgentId);
+        // the opener is attached, or they would lose their own ticket the moment they leave the page
+        Assert.True(await db.TicketBeteiligte.AnyAsync(p => p.TicketId == row.Id && p.AgentId == "junior"));
+        // the opening message is the first internal note; an internal ticket has no citizen thread at all
+        var message = await db.TicketNachrichten.SingleAsync(m => m.TicketId == row.Id);
+        Assert.Equal(TicketMessageAudience.Intern, message.Audience);
+    }
+
+    [Fact]
+    public async Task AnInternalTicketIgnoresTheCitizenQuotas()
+    {
+        // the caps count per citizen profile, and an internal ticket has none
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        for (var i = 0; i < TicketRules.PerDay + 2; i++)
+        {
+            await host.Service.OpenAsAgentAsync(
+                new TicketInput { Subject = $"Anliegen {i}", Text = "Ich brauche eine Entscheidung dazu." },
+                [], Junior());
+        }
+
+        await using var db = host.Factory.CreateDbContext();
+        Assert.Equal(TicketRules.PerDay + 2, await db.Tickets.CountAsync(t => t.Kind == TicketArt.Intern));
+    }
+
+    [Fact]
+    public async Task AnInternalTicketIsOpenedEvenWithTheModuleOff()
+    {
+        // the switch is the OFF button for the citizen desk, not for the agency's own correspondence
+        using var ctx = await SeededAsync(ticketsOn: false);
+        var host = NewHost(ctx);
+
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+
+        Assert.False(string.IsNullOrWhiteSpace(caseNumber));
+    }
+
+    [Fact]
+    public async Task ACitizenCannotOpenAnInternalTicket()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Citizen()));
+    }
+
+    [Fact]
+    public async Task TheOwnParticipationListShowsUnreadInternalNotesOfOthersOnly()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+        var id = await IdAsync(host, caseNumber);
+        await host.Service.PostInternalNoteAsync(id, "Antwort der Führung dazu.", Leader());
+
+        var mine = Assert.Single(await host.Service.GetMyParticipationsAsync(Junior()));
+
+        Assert.Equal(caseNumber, mine.CaseNumber);
+        // the opener's own line does not count against them
+        Assert.Equal(1, mine.UnreadInternal);
     }
 
     [Fact]

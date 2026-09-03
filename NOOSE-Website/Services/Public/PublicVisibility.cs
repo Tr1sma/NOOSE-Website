@@ -247,6 +247,8 @@ public static class PublicVisibility
                 + "Öffentlichkeit.",
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; er gehört den beiden Beteiligten. "
                 + "Die interne Zielgruppe verlässt das Haus nie.",
+            ["TicketParticipant"] = "Welcher Agent an einem Anliegen sitzt, ist nach außen nie eine "
+                + "Information — weder gegenüber dem Bürger noch öffentlich.",
             ["OeffentlicheVorlage"] = "Rohtext einer Bürger-Nachricht, mit unaufgelösten Tokens und dem "
                 + "Arbeitstitel der Redaktion. Nach draußen geht die gerenderte Nachrichtenzeile, nie die "
                 + "Vorlage selbst.",
