@@ -89,14 +89,14 @@ else
                 @if (_mayEdit)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
-                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadAsync(row, f))"
-                                       Accept=".jpg,.jpeg,.png,.webp,.gif">
-                            <ActivatorContent>
+                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadAsync(row, f))" Accept="image/*">
+                            <CustomContent>
                                 <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
-                                           StartIcon="@Icons.Material.Filled.Image">
+                                           StartIcon="@Icons.Material.Filled.Image"
+                                           OnClick="@context.OpenFilePickerAsync">
                                     @(row.HasPhoto ? "Foto ersetzen" : "Foto hochladen")
                                 </MudButton>
-                            </ActivatorContent>
+                            </CustomContent>
                         </MudFileUpload>
                     </MudStack>
                 }
