@@ -1,10 +1,11 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Integration;
@@ -43,6 +44,217 @@ public sealed class BuergerServiceTests
 
     private static BuergerService NewService(SqliteTestContext ctx) => new(ctx.Factory);
 
+    // ---- the name is settled at the first save ----
+
+    [Fact]
+    public async Task TheNameCannotBeChangedBySelfOnceItIsSet()
+    {
+        // it is an identity claim elsewhere — the objection gate compares it against a published notice — so a
+        // freely rewritable name would have made that gate self-asserted
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.SaveOwnAsync("Anna", "Andere", Citizen()));
+
+        Assert.Equal(BuergerNameRules.LockedMessage, error.Message);
+        await using var db = ctx.NewContext();
+        var profile = await db.BuergerProfile.SingleAsync(p => p.UserId == "buerger-1");
+        Assert.Equal("Max", profile.FirstName);
+        Assert.Equal("Mustermann", profile.LastName);
+    }
+
+    [Fact]
+    public async Task SavingTheSameNameAgainIsNotAChange()
+    {
+        // a double submit, a re-render, a back button: none of them is an attempt to rename
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+
+        await service.SaveOwnAsync("  Max  ", "Mustermann", Citizen());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal("Max", (await db.BuergerProfile.SingleAsync(p => p.UserId == "buerger-1")).FirstName);
+    }
+
+    [Fact]
+    public async Task AHalfFilledProfileIsNotLockedYet()
+    {
+        using var ctx = await SeededAsync();
+        await using (var db = ctx.NewContext())
+        {
+            db.BuergerProfile.Add(new BuergerProfil { UserId = "buerger-1", FirstName = "Max", LastName = "" });
+            await db.SaveChangesAsync();
+        }
+        var service = NewService(ctx);
+
+        await service.SaveOwnAsync("Moritz", "Mustermann", Citizen());
+
+        await using var check = ctx.NewContext();
+        var profile = await check.BuergerProfile.SingleAsync(p => p.UserId == "buerger-1");
+        Assert.Equal("Moritz", profile.FirstName);
+        Assert.Equal("Mustermann", profile.LastName);
+    }
+
+    [Fact]
+    public async Task LeadershipMayCorrectASettledName()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Xx", "Trollname", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+
+        await service.SetNameAsync(id, " Max ", " Mustermann ", Leader());
+
+        await using var db = ctx.NewContext();
+        var profile = await db.BuergerProfile.SingleAsync(p => p.Id == id);
+        Assert.Equal("Max", profile.FirstName);
+        Assert.Equal("Mustermann", profile.LastName);
+    }
+
+    [Fact]
+    public async Task APlainAgentMayNotCorrectAName()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.SetNameAsync(id, "Anna", "Andere", PlainAgent()));
+    }
+
+    [Fact]
+    public async Task TheReadOnlySupervisionMayNotCorrectAName()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.SetNameAsync(id, "Anna", "Andere", OnlyReader()));
+    }
+
+    // ---- shutting an account out of the site ----
+
+    [Fact]
+    public async Task BlockingTheAccountEndsEveryAccessNotJustSubmissions()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Xx", "Trollname", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+
+        await service.BlockAccountAsync(id, "Troll-Name, kein IC-Bezug", Leader());
+
+        await using var db = ctx.NewContext();
+        var user = await db.Users.SingleAsync(u => u.Id == "buerger-1");
+        // Blocked fails AgentStatusRules.MayHoldSession, so the login refuses and a running circuit is evicted
+        Assert.Equal(AgentStatus.Blocked, user.Status);
+        Assert.False(AgentStatusRules.MayHoldSession(user.Status));
+        // and the submission block is set too, so the two levels never disagree
+        Assert.True((await db.BuergerProfile.SingleAsync(p => p.Id == id)).IsBlocked);
+    }
+
+    [Fact]
+    public async Task BlockingTheAccountRotatesTheSecurityStamp()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Xx", "Trollname", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+        string? before;
+        await using (var db = ctx.NewContext())
+        {
+            before = (await db.Users.SingleAsync(u => u.Id == "buerger-1")).SecurityStamp;
+        }
+
+        await service.BlockAccountAsync(id, "Troll-Name", Leader());
+
+        await using var check = ctx.NewContext();
+        Assert.NotEqual(before, (await check.Users.SingleAsync(u => u.Id == "buerger-1")).SecurityStamp);
+    }
+
+    [Fact]
+    public async Task LiftingTheLockoutRestoresACitizenNeverAnAgent()
+    {
+        // the agent unblock path sets Active; using it here would hand a citizen the whole records database
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+        await service.BlockAccountAsync(id, "Versehen", Leader());
+
+        await service.UnblockAccountAsync(id, Leader());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(AgentStatus.Civilian, (await db.Users.SingleAsync(u => u.Id == "buerger-1")).Status);
+        Assert.False((await db.BuergerProfile.SingleAsync(p => p.Id == id)).IsBlocked);
+    }
+
+    [Fact]
+    public async Task AnAgentAccountIsNotShutOutThroughTheCitizenDesk()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen("agent-1"));
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "agent-1").Id;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.BlockAccountAsync(id, "aus Versehen", Leader()));
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(AgentStatus.Active, (await db.Users.SingleAsync(u => u.Id == "agent-1")).Status);
+    }
+
+    [Fact]
+    public async Task NobodyShutsTheirOwnCivilIdentityOut()
+    {
+        // leadership holds a civilian identity too; locking yourself out of your own account is never the intent
+        using var ctx = await SeededAsync();
+        await using (var db = ctx.NewContext())
+        {
+            (await db.Users.SingleAsync(u => u.Id == "lead")).Status = AgentStatus.Civilian;
+            await db.SaveChangesAsync();
+        }
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Falco", "Falkner", Citizen("lead"));
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "lead").Id;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.BlockAccountAsync(id, "Selbsttest", Leader()));
+    }
+
+    [Fact]
+    public async Task AnAccountLockoutNeedsAReason()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.BlockAccountAsync(id, "   ", Leader()));
+    }
+
+    [Fact]
+    public async Task TheRosterShowsWhichAccountsAreShutOut()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+        await service.BlockAccountAsync(id, "Troll-Name", Leader());
+
+        var row = (await service.ListAsync(Leader())).Single(r => r.Id == id);
+
+        Assert.True(row.AccountBlocked);
+        Assert.True(row.NameLocked);
+    }
+
     // ---- own profile ----
 
     [Fact]
@@ -61,18 +273,20 @@ public sealed class BuergerServiceTests
     }
 
     [Fact]
-    public async Task SaveOwnAsync_SecondCall_UpdatesInsteadOfDuplicating()
+    public async Task SaveOwnAsync_SecondCall_TouchesTheOneRowAndNeverAddsASecond()
     {
+        // the name itself is settled at the first save now; what this still pins is the read-then-insert path,
+        // which must find its own row rather than write a second profile for the same account
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
         await service.SaveOwnAsync("Max", "Mustermann", Citizen());
-        await service.SaveOwnAsync("Maximilian", "Mustermann", Citizen());
+        await service.SaveOwnAsync("Max", "Mustermann", Citizen());
 
         await using var db = ctx.NewContext();
         var profiles = await db.BuergerProfile.Where(p => p.UserId == "buerger-1").ToListAsync();
         Assert.Single(profiles);
-        Assert.Equal("Maximilian", profiles[0].FirstName);
+        Assert.Equal("Max", profiles[0].FirstName);
     }
 
     [Fact]
@@ -143,20 +357,21 @@ public sealed class BuergerServiceTests
     }
 
     [Fact]
-    public async Task SaveOwnAsync_StillWorksWhileBlocked()
+    public async Task ABlockedCitizenIsNoMoreAbleToRenameThemselvesThanAnyOther()
     {
+        // the block governs submissions and the lock governs identity; neither hands the other an exception
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
         await service.SaveOwnAsync("Max", "Mustermann", Citizen());
         var id = await IdOfAsync(ctx, "buerger-1");
         await service.BlockAsync(id, "Spam", Leader());
 
-        // the block governs submissions, not identity: a wrong name must stay correctable
-        await service.SaveOwnAsync("Maximilian", "Mustermann", Citizen());
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.SaveOwnAsync("Maximilian", "Mustermann", Citizen()));
 
         await using var db = ctx.NewContext();
         var profile = await db.BuergerProfile.SingleAsync(p => p.UserId == "buerger-1");
-        Assert.Equal("Maximilian", profile.FirstName);
+        Assert.Equal("Max", profile.FirstName);
         Assert.True(profile.IsBlocked);
     }
 
@@ -342,7 +557,9 @@ public sealed class BuergerServiceTests
         var service = new BuergerService(new TestDbContextFactory(options));
 
         await service.SaveOwnAsync("Max", "Mustermann", Citizen());
-        await service.SaveOwnAsync("Maximilian", "Mustermann", Citizen());
+        // the citizen cannot rename themselves any more, so the audited change is the leadership correction
+        var id = (await service.ListAsync(Leader())).Single(r => r.UserId == "buerger-1").Id;
+        await service.SetNameAsync(id, "Maximilian", "Mustermann", Leader());
 
         await using var read = ctx.NewContext();
         var rows = await read.AuditLogs
