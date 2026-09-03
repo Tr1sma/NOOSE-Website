@@ -334,7 +334,7 @@
         {
             return;
         }
-        await RunAsync(() => TestService.ResetAttemptAsync(BewerbungId, null, User));
+        await RunAsync(() => TestService.ResetAttemptAsync(BewerbungId, null, reason, User));
     }
 
     /// <summary>Time can be granted while the attempt is open, and as a rescue once the clock closed it.</summary>
@@ -372,6 +372,8 @@
         : string.Empty;
 
     /// <summary>No data, no chip: an attempt assigned before the clock existed has no start.</summary>
+    /// <remarks>The denominator is dropped once time was granted: after a rescue extension the span from the
+    /// start to the hand-in also covers the hours the attempt sat expired, so the two are not comparable.</remarks>
     private string Bearbeitungsdauer
     {
         get
@@ -381,7 +383,7 @@
             {
                 return string.Empty;
             }
-            return TestDeadline.AllowedMinutes(_assignment) is { } allowed
+            return _assignment.ExtraMinutes == 0 && TestDeadline.AllowedMinutes(_assignment) is { } allowed
                 ? $"Bearbeitungsdauer: {used} von {allowed} Min"
                 : $"Bearbeitungsdauer: {used} Min";
         }

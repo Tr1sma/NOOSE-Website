@@ -33,8 +33,12 @@ public class BewerbungTestExpiryService(
         var now = DateTime.UtcNow;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
+        // the decided filter belongs in the PREDICATE, not in the loop. An attempt on a decided application
+        // is never closed, so skipping it inside the batch left it sitting at the head of every following
+        // ordered batch forever - a handful of them starve the sweep and no later attempt is ever handed in.
         var due = await db.BewerbungTestAssignments
-            .Where(a => a.CompletedAt == null && a.DeadlineAt != null && a.DeadlineAt <= now)
+            .Where(a => a.CompletedAt == null && a.DeadlineAt != null && a.DeadlineAt <= now
+                && db.Bewerbungen.Any(b => b.Id == a.BewerbungId && !Decided.Contains(b.Status)))
             .OrderBy(a => a.DeadlineAt)
             .Take(ExpiryBatch)
             .ToListAsync(cancellationToken);
@@ -45,13 +49,13 @@ public class BewerbungTestExpiryService(
 
         var bewerbungIds = due.Select(a => a.BewerbungId).ToList();
         var applications = await db.Bewerbungen.AsNoTracking()
-            .Where(b => bewerbungIds.Contains(b.Id) && !Decided.Contains(b.Status))
+            .Where(b => bewerbungIds.Contains(b.Id))
             .ToDictionaryAsync(b => b.Id, cancellationToken);
 
         var closed = 0;
         foreach (var assignment in due)
         {
-            // a decided application needs no hand-in, and a bell about it would only confuse its case worker
+            // the predicate already excluded these; belt for a decision landing mid-pass
             if (!applications.TryGetValue(assignment.BewerbungId, out var bewerbung))
             {
                 continue;
@@ -68,15 +72,18 @@ public class BewerbungTestExpiryService(
     private async Task<bool> CloseAsync(AppDbContext db, BewerbungTestAssignment assignment,
         Bewerbung bewerbung, DateTime now, CancellationToken cancellationToken)
     {
-        // the draft rows ARE the submission: nothing is rewritten, only the untouched questions get the empty
-        // row the evaluation keys on
-        await TestAttemptClose.FillMissingAnswersAsync(db, assignment, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        // CompletedAt is the idempotency token: a second pass selects nothing, so no extra column is needed
-        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, timedOut: true, cancellationToken))
+        // claim BEFORE filling: this row was read at the top of the pass, and a reset in between would move
+        // it to another test - the empty rows would then be written for the questions of the old test and
+        // stay there even though the claim lost. CompletedAt is the idempotency token against a second pass;
+        // onlyWhenOverdue is what protects a meanwhile extended or reset attempt.
+        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, timedOut: true,
+                onlyWhenOverdue: true, cancellationToken))
         {
             return false;
         }
+        // the draft rows ARE the submission: nothing is rewritten, only the untouched questions get the empty
+        // row the evaluation keys on
+        await TestAttemptClose.FillMissingAnswersAsync(db, assignment, cancellationToken);
         db.AuditLogs.Add(ManualAudit.SystemRow(nameof(BewerbungTestAssignment), assignment.Id,
             AuditAction.Modified, ManualAudit.Change("Zeit abgelaufen", null, now)));
         await db.SaveChangesAsync(cancellationToken);

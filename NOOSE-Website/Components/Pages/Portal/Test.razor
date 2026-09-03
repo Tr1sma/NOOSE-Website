@@ -119,13 +119,13 @@
                 }
                 <MudButton Variant="Variant.Outlined" Href="/portal/status" StartIcon="@Icons.Material.Filled.ArrowBack">Zurück</MudButton>
             }
-            else if (_test is null)
+            else if (_test is null && _status is { StartedAt: null, TimeLimitMinutes: int limit })
             {
                 @* the start gate: the clock starts with the click, not with a curious tap from the status page *@
                 <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                    Bearbeitungszeit: <b>@_status!.TimeLimitMinutes Minuten</b>. Die Uhr startet, sobald du auf
-                    „Test jetzt starten“ klickst, und läuft dann durchgehend weiter — auch wenn du das Fenster
-                    schließt. Bei Ablauf wird automatisch abgegeben, was du bis dahin eingetragen hast.
+                    Bearbeitungszeit: <b>@limit Minuten</b>. Die Uhr startet, sobald du auf „Test jetzt starten“
+                    klickst, und läuft dann durchgehend weiter — auch wenn du das Fenster schließt. Bei Ablauf
+                    wird automatisch abgegeben, was du bis dahin eingetragen hast.
                 </MudAlert>
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     <MudButton Variant="Variant.Text" Color="Color.Default" Href="/portal/status"
@@ -134,26 +134,28 @@
                                OnClick="StartAsync" Disabled="_busy">Test jetzt starten</MudButton>
                 </MudStack>
             }
+            else if (_test is null)
+            {
+                @* not the start gate: a hand-in that did not go through, or the test was released again.
+                   Offering to start would restate a state we do not actually know. *@
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" role="status">
+                    Dieser Test steht gerade nicht zur Bearbeitung offen. Bitte lade die Seite neu oder sieh
+                    in deiner Bewerbung nach.
+                </MudAlert>
+                <MudButton Variant="Variant.Outlined" Href="/portal/status" StartIcon="@Icons.Material.Filled.ArrowBack">Zurück</MudButton>
+            }
             else
             {
                 <MudText Typo="Typo.body2" Class="noose-pruefung-druckhinweis">
                     Der Fragebogen wird nicht gedruckt. Bitte beantworte den Test online.
                 </MudText>
 
-                @if (_test.DeadlineAt is not null)
-                {
-                    <div class="noose-pruefung-leiste">
-                        <PruefungStatusBar DeadlineAt="_test.DeadlineAt" Dirty="IsDirty" Save="SaveDraftAsync"
-                                           OnExpired="OnExpiredAsync" OnFiveMinutes="OnFiveMinutes" />
-                    </div>
-                    @if (_warned)
-                    {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                            Noch weniger als 5 Minuten. Wenn die Zeit abläuft, wird automatisch abgegeben, was du
-                            bis dahin eingetragen hast.
-                        </MudAlert>
-                    }
-                }
+                @* rendered without a deadline too: this bar owns the autosave, and an unlimited attempt must
+                   not silently lose its answers on a reload *@
+                <div class="noose-pruefung-leiste">
+                    <PruefungStatusBar DeadlineAt="_test.DeadlineAt" Dirty="IsDirty" Save="SaveDraftAsync"
+                                       OnExpired="OnExpiredAsync" OnFiveMinutes="OnFiveMinutes" />
+                </div>
 
                 <div id="@ContainerId" class="noose-pruefung"
                      @oncopy:preventDefault="true" @oncut:preventDefault="true"
@@ -250,7 +252,6 @@
     private bool _ready;
     private bool _busy;
     private bool _expiring;
-    private bool _warned;
     private bool _dirty;
     private TestStatusView? _status;
     private TestView? _test;
@@ -374,12 +375,10 @@
         _busy = false;
     }
 
+    // a snackbar, not a banner: a banner would still claim "less than 5 minutes" after HRB granted more,
+    // and the countdown chip turning amber and then red already carries the state
     private void OnFiveMinutes()
-    {
-        _warned = true;
-        Snackbar.Add("Noch 5 Minuten. Danach wird automatisch abgegeben.", Severity.Warning);
-        StateHasChanged();
-    }
+        => Snackbar.Add("Noch 5 Minuten. Danach wird automatisch abgegeben.", Severity.Warning);
 
     /// <summary>Flushes the draft; the status bar re-reads the deadline from the result.</summary>
     private async Task<TestDraftResult> SaveDraftAsync()
@@ -388,7 +387,7 @@
         TestDraftResult result;
         try
         {
-            result = await TestService.SaveDraftAsync(_test!.AssignmentId, Collect(), _user);
+            result = await TestService.SaveDraftAsync(_test!.AssignmentId, _test.AttemptNumber, Collect(), _user);
         }
         catch
         {
@@ -411,7 +410,13 @@
         }
         _expiring = true;
         StateHasChanged();
-        await SubmitAsync(auto: true);
+        // _test can already be gone: the flush at zero closes the attempt server-side and persists this
+        // payload on the way. Nothing is lost then, so only the view has to catch up.
+        if (_test is not null)
+        {
+            await SubmitAsync(auto: true);
+        }
+        await ReloadClosedAsync();
     }
 
     /// <summary>Saves before leaving, so the last edits are not lost to the ten-second cadence.</summary>
@@ -506,14 +511,16 @@
         _busy = true;
         try
         {
-            var outcome = await TestService.SubmitAnswersAsync(_test.AssignmentId, Collect(), _user);
+            var outcome = await TestService.SubmitAnswersAsync(_test.AssignmentId, _test.AttemptNumber, Collect(), _user);
             if (auto || outcome == TestSubmitOutcome.ClosedByTimeout)
             {
                 // shown in place rather than by redirecting: after an involuntary hand-in the applicant needs
-                // to read why the form vanished
-                await ReloadClosedAsync();
+                // to read why the form vanished. The caller reloads.
                 _busy = false;
-                _expiring = false;
+                if (!auto)
+                {
+                    await ReloadClosedAsync();
+                }
                 return;
             }
             Snackbar.Add("Test übermittelt.", Severity.Success);
@@ -521,12 +528,7 @@
         }
         catch (Exception ex)
         {
-            if (auto)
-            {
-                await ReloadClosedAsync();
-                _expiring = false;
-            }
-            else
+            if (!auto)
             {
                 Snackbar.Add(ex.Message, Severity.Error);
             }
@@ -539,11 +541,13 @@
     {
         try
         {
-            _status = await TestService.GetTestStatusForApplicantAsync(_user);
+            // kept when the read comes back empty: overwriting with null would drop the page into a branch
+            // that knows nothing about the attempt
+            _status = await TestService.GetTestStatusForApplicantAsync(_user) ?? _status;
             _test = null;
-            _expiring = false;
         }
         catch { /* best effort */ }
+        _expiring = false;
         StateHasChanged();
     }
 }

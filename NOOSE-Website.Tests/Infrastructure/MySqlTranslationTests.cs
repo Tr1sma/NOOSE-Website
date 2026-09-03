@@ -148,6 +148,36 @@ public sealed class MySqlTranslationTests : IDisposable
     }
 
     [Fact]
+    public void TheSweepsDecidedFilterInThePredicate_TranslatesToAnExists()
+    {
+        // the filter has to live in the predicate, not in the loop, or attempts it never closes keep
+        // occupying the head of every ordered batch. That only helps if it translates.
+        var now = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.CompletedAt == null && a.DeadlineAt != null && a.DeadlineAt <= now
+                && _db.Bewerbungen.Any(b => b.Id == a.BewerbungId && !Decided.Contains(b.Status)))
+            .OrderBy(a => a.DeadlineAt)
+            .Take(100)
+            .ToQueryString();
+
+        Assert.Contains("EXISTS", sql, StringComparison.Ordinal);
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOverdueCloseClaim_Translates()
+    {
+        var now = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var sql = _db.BewerbungTestAssignments
+            .Where(a => a.Id == "a1" && a.CompletedAt == null)
+            .Where(a => a.DeadlineAt != null && a.DeadlineAt <= now && a.StartedAt != null)
+            .ToQueryString();
+
+        Assert.Contains("FristBis", sql, StringComparison.Ordinal);
+        Assert.Contains("GestartetAm", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheSweepsDecidedFilter_TranslatesToAnInClause()
     {
         var ids = new[] { "b1", "b2" };

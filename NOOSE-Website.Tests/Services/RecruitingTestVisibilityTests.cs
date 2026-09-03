@@ -127,8 +127,10 @@ public class RecruitingTestVisibilityTests
     // DeadlineAt/TimedOut/TimeLimitMinutes are the applicant's OWN attempt clock. They cannot encode a
     // verdict: when the deadline is written no answer exists yet, and running out of time is orthogonal to
     // being right — a timed-out applicant may have answered everything correctly.
+    // AttemptNumber is how many times HRB released this test to them; they see the questionnaire either way,
+    // and the write paths use it to refuse answers that were typed for a previous attempt.
     [InlineData(typeof(TestView),
-        "AssignmentId,CaseNumber,Completed,DeadlineAt,Description,Questions,TimeLimitMinutes,TimedOut,Title")]
+        "AssignmentId,AttemptNumber,CaseNumber,Completed,DeadlineAt,Description,Questions,TimeLimitMinutes,TimedOut,Title")]
     // AllowMultiple is the shape of the form control, an author switch — it says nothing about the key: a
     // single-choice question can have one correct option and a multi-choice one can have several, or none.
     // SavedOptionIds/SavedFreeText are the applicant's own draft answer echoed back so a reload loses

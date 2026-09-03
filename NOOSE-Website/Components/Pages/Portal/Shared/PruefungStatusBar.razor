@@ -4,12 +4,16 @@
    from it, so a reconnect needs no resynchronisation. Isolated from the page on purpose: the page renders
    forty watermark spans, and re-diffing those once a second for half an hour is pure waste. *@
 
-<MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Timer" Color="@Colour"
-         Variant="@(Critical ? Variant.Filled : Variant.Outlined)"
-         Class="@(Critical ? "noose-restzeit-kritisch" : null)">
-    Restzeit @Clock
-</MudChip>
-<span class="noose-nur-vorlesen" aria-live="polite" aria-atomic="true">@Ansage</span>
+@* no chip without a deadline: an unlimited attempt still autosaves, it just has nothing to count down *@
+@if (_deadline is not null)
+{
+    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Timer" Color="@Colour"
+             Variant="@(Critical ? Variant.Filled : Variant.Outlined)"
+             Class="@(Critical ? "noose-restzeit-kritisch" : null)">
+        Restzeit @Clock
+    </MudChip>
+    <span class="noose-nur-vorlesen" aria-live="polite" aria-atomic="true">@Ansage</span>
+}
 <MudSpacer />
 @if (SaveText is { Length: > 0 } text)
 {
@@ -51,6 +55,7 @@
     private bool _failed;
     private bool _fired;
     private bool _warned;
+    private bool _closed;
 
     private TimeSpan Remaining
     {
@@ -136,6 +141,11 @@
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
+                if (_closed)
+                {
+                    // the attempt is gone (handed in, expired or released again); nothing left to save
+                    return;
+                }
                 if (Remaining > TimeSpan.Zero)
                 {
                     await MaybeWarnAsync();
@@ -168,7 +178,13 @@
 
     private async Task MaybeWarnAsync()
     {
-        if (_warned || Remaining > TimeSpan.FromMinutes(5))
+        if (Remaining > TimeSpan.FromMinutes(5))
+        {
+            // an extension put more than five minutes back on the clock, so the notice is due again
+            _warned = false;
+            return;
+        }
+        if (_warned || _deadline is null)
         {
             return;
         }
@@ -188,7 +204,15 @@
         try
         {
             var result = await Save();
-            // the server's deadline wins; this is how an extension reaches a running countdown with no push
+            if (result.Outcome == TestDraftOutcome.Closed)
+            {
+                // adopting the deadline of a closed or freshly released attempt would show an absurd
+                // countdown that never reaches zero
+                _closed = true;
+                _saving = false;
+                return;
+            }
+            // the deadline of the server wins; this is how an extension reaches a running countdown with no push
             _deadline = result.DeadlineAt;
             _savedAt = DateTime.Now;
             _failed = false;

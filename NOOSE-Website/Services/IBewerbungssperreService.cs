@@ -18,7 +18,8 @@ public interface IBewerbungssperreService
     /// <summary>Put the applicant on the permanent blacklist. HRB/leadership, write access.</summary>
     Task BlacklistAsync(string agentId, string? bewerbungId, string? applicantName, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Change a temporary ban's end date (a past date effectively lifts it). HRB/leadership, write access.</summary>
+    /// <summary>Change a temporary ban's end date, in UTC (a past date effectively lifts it). HRB/leadership, write access.</summary>
+    /// <remarks>A date picked in the UI goes through <see cref="BewerbungssperreRules.PickedDateToUtc"/> first; passing the picker value raw shifts the ban by the local offset.</remarks>
     Task ShortenAsync(string sperreId, DateTime newUntil, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Lift a ban or remove from the blacklist (soft-delete). HRB/leadership, write access.</summary>

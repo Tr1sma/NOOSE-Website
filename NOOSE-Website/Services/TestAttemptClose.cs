@@ -9,7 +9,7 @@ namespace NOOSE_Website.Services;
 /// Written once so the applicant's own hand-in, the read path's late close and the background sweep cannot end an
 /// attempt in three subtly different states. The caller owns its guard, its audit row and its notifications.
 /// </remarks>
-internal static class TestAttemptClose
+public static class TestAttemptClose
 {
     /// <summary>Adds the empty answer row an untouched question has none of; draft rows are left alone.</summary>
     /// <remarks>The evaluation keys on one row per question, and a missing row reads as "question added later"
@@ -34,13 +34,23 @@ internal static class TestAttemptClose
     }
 
     /// <summary>Claims the close; exactly one of applicant, read path and sweep gets true.</summary>
-    /// <remarks>CompletedAt is the idempotency token, so a second sweep selects nothing and no extra column
-    /// is needed. ExecuteUpdate bypasses the interceptors, so the caller owes an audit row.</remarks>
+    /// <remarks>
+    /// CompletedAt is the idempotency token against a second sweep. It is NOT one against an extension or a
+    /// reset: both deliberately set it back to null, which would re-arm this claim. So a caller closing
+    /// BECAUSE the time ran out must pass onlyWhenOverdue, and the deadline then rides in the UPDATE itself —
+    /// re-reading the row first would just be a smaller race.
+    /// ExecuteUpdate bypasses the interceptors, so the caller owes an audit row.
+    /// </remarks>
     public static async Task<bool> ClaimAsync(AppDbContext db, string assignmentId, DateTime now, bool timedOut,
-        CancellationToken cancellationToken)
-        => await db.BewerbungTestAssignments
-            .Where(a => a.Id == assignmentId && a.CompletedAt == null)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(a => a.CompletedAt, now)
-                .SetProperty(a => a.TimedOut, timedOut), cancellationToken) == 1;
+        bool onlyWhenOverdue, CancellationToken cancellationToken)
+    {
+        var claim = db.BewerbungTestAssignments.Where(a => a.Id == assignmentId && a.CompletedAt == null);
+        if (onlyWhenOverdue)
+        {
+            claim = claim.Where(a => a.DeadlineAt != null && a.DeadlineAt <= now && a.StartedAt != null);
+        }
+        return await claim.ExecuteUpdateAsync(s => s
+            .SetProperty(a => a.CompletedAt, now)
+            .SetProperty(a => a.TimedOut, timedOut), cancellationToken) == 1;
+    }
 }

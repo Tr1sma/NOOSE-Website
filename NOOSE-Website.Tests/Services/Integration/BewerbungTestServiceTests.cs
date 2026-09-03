@@ -920,7 +920,7 @@ public sealed class BewerbungTestServiceTests
         AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
         AddOption(ctx, "o2", "q1", "B", isCorrect: true, sorting: 2);
         var (svc, _, _) = Build(ctx);
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("userA"));
 
         // the author changes their mind after the applicant has answered
@@ -1232,7 +1232,7 @@ public sealed class BewerbungTestServiceTests
             new() { QuestionId = "q3", SelectedOptionIds = ["   "] }, // not an option of q3 => stored null
         };
 
-        await svc.SubmitAnswersAsync("as1", inputs, Applicant("app1"));
+        await svc.SubmitAnswersAsync("as1", 1, inputs, Applicant("app1"));
 
         using var check = ctx.NewContext();
         var stored = await check.BewerbungTestAnswers.Where(a => a.AssignmentId == "as1").ToListAsync();
@@ -1258,7 +1258,7 @@ public sealed class BewerbungTestServiceTests
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, _, _) = Build(ctx);
 
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("app1"));
 
         using var check = ctx.NewContext();
@@ -1281,7 +1281,7 @@ public sealed class BewerbungTestServiceTests
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, _, _) = Build(ctx);
 
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("app1"));
 
         using var check = ctx.NewContext();
@@ -1304,7 +1304,7 @@ public sealed class BewerbungTestServiceTests
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, _, _) = Build(ctx);
 
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o2", "erfunden"] }], Applicant("app1"));
 
         using var check = ctx.NewContext();
@@ -1325,7 +1325,7 @@ public sealed class BewerbungTestServiceTests
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, _, _) = Build(ctx);
 
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [new TestAnswerInput { QuestionId = "fremd", FreeText = "hallo" }], Applicant("app1"));
 
         using var check = ctx.NewContext();
@@ -1343,7 +1343,7 @@ public sealed class BewerbungTestServiceTests
         AddAssignment(ctx, "as1", "b1", "t1");
         var (svc, _, _) = Build(ctx);
 
-        await svc.SubmitAnswersAsync("as1",
+        await svc.SubmitAnswersAsync("as1", 1,
             [
                 new TestAnswerInput { QuestionId = "q1", FreeText = "erste" },
                 new TestAnswerInput { QuestionId = "q1", FreeText = "zweite" },
@@ -1366,7 +1366,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.SubmitAnswersAsync("as1", [], Applicant("app1")));
+            () => svc.SubmitAnswersAsync("as1", 1, [], Applicant("app1")));
 
         using var check = ctx.NewContext();
         Assert.Null((await check.BewerbungTestAssignments.SingleAsync(a => a.Id == "as1")).CompletedAt);
@@ -1379,7 +1379,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.SubmitAnswersAsync("nope", new List<TestAnswerInput>(), Applicant("app1")));
+            () => svc.SubmitAnswersAsync("nope", 1, new List<TestAnswerInput>(), Applicant("app1")));
     }
 
     [Fact]
@@ -1393,7 +1393,7 @@ public sealed class BewerbungTestServiceTests
 
         // applicant "intruder" does not own bewerbung b1
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.SubmitAnswersAsync("as1", new List<TestAnswerInput>(), Applicant("intruder")));
+            () => svc.SubmitAnswersAsync("as1", 1, new List<TestAnswerInput>(), Applicant("intruder")));
 
         using var check = ctx.NewContext();
         Assert.Null((await check.BewerbungTestAssignments.SingleAsync(a => a.Id == "as1")).CompletedAt);
@@ -1409,7 +1409,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.SubmitAnswersAsync("as1", new List<TestAnswerInput>(), Applicant("app1")));
+            () => svc.SubmitAnswersAsync("as1", 1, new List<TestAnswerInput>(), Applicant("app1")));
     }
 
     [Fact]
@@ -1419,6 +1419,6 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.SubmitAnswersAsync("as1", new List<TestAnswerInput>(), Hrb()));
+            () => svc.SubmitAnswersAsync("as1", 1, new List<TestAnswerInput>(), Hrb()));
     }
 }

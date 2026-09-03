@@ -558,13 +558,13 @@ public class BewerbungTestService(
             ? (IReadOnlyList<TestQuestionView>)Array.Empty<TestQuestionView>()
             : await BuildQuestionViewsAsync(db, assignment, cancellationToken);
 
-        return new TestView(assignment.Id, bewerbung.CaseNumber, test.Title, test.Description,
+        return new TestView(assignment.Id, assignment.AttemptCount, bewerbung.CaseNumber, test.Title, test.Description,
             completed, assignment.DeadlineAt, assignment.TimedOut,
             TestDeadline.AllowedMinutes(assignment, test.TimeLimitMinutes), questions);
     }
 
-    public async Task<TestDraftResult> SaveDraftAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers,
-        ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    public async Task<TestDraftResult> SaveDraftAsync(string assignmentId, int attemptNumber,
+        IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
         var now = DateTime.UtcNow;
@@ -577,8 +577,21 @@ public class BewerbungTestService(
         {
             return new TestDraftResult(TestDraftOutcome.Closed, assignment.DeadlineAt);
         }
+        // the circuit still holds an older attempt: HRB released the test again, and answers typed for the
+        // previous attempt must not be written into the fresh one
+        if (assignment.AttemptCount != attemptNumber)
+        {
+            return new TestDraftResult(TestDraftOutcome.Closed, null);
+        }
         if (TestDeadline.IsExpired(assignment.DeadlineAt, now))
         {
+            // this payload is the last input of the applicant, arriving as the clock ran out - the countdown
+            // flushes at zero precisely to save it, so it is written before the attempt is closed
+            if (!TestDeadline.GraceOver(assignment.DeadlineAt, now))
+            {
+                await UpsertAnswersAsync(db, assignment, answers, requireMandatory: false, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+            }
             await CloseExpiredAsync(db, assignment, bewerbung, now, cancellationToken);
             return new TestDraftResult(TestDraftOutcome.Closed, assignment.DeadlineAt);
         }
@@ -589,8 +602,8 @@ public class BewerbungTestService(
         return new TestDraftResult(TestDraftOutcome.Saved, assignment.DeadlineAt);
     }
 
-    public async Task<TestSubmitOutcome> SubmitAnswersAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers,
-        ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
+    public async Task<TestSubmitOutcome> SubmitAnswersAsync(string assignmentId, int attemptNumber,
+        IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
         Permission.RequireApplicant(applicant);
         var now = DateTime.UtcNow;
@@ -612,6 +625,11 @@ public class BewerbungTestService(
             }
             throw new InvalidOperationException("Dieser Test wurde bereits abgeschlossen.");
         }
+        // answers typed for an older attempt must not land in the fresh one
+        if (assignment.AttemptCount != attemptNumber)
+        {
+            throw new InvalidOperationException("Dieser Test wurde neu freigegeben. Bitte lade die Seite neu.");
+        }
 
         // past the deadline the answers still count - the decision was auto-submit, not discard - and the
         // attempt carries the marker so the grading panel can see why it is thin
@@ -625,7 +643,8 @@ public class BewerbungTestService(
         // survive even when another writer closed the attempt in between
         await db.SaveChangesAsync(cancellationToken);
 
-        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, expired, cancellationToken))
+        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, expired,
+                onlyWhenOverdue: false, cancellationToken))
         {
             return TestSubmitOutcome.ClosedByTimeout;
         }
@@ -686,6 +705,13 @@ public class BewerbungTestService(
             throw new InvalidOperationException(
                 "Für diesen Test ist keine Bearbeitungszeit hinterlegt, es gibt also keine Frist zu verlängern.");
         }
+        // started without a clock: the test only got its minutes afterwards, so there is no deadline to push
+        // and adding minutes here would report success while granting nothing
+        if (assignment is { StartedAt: not null, DeadlineAt: null })
+        {
+            throw new InvalidOperationException(
+                "Dieser Versuch läuft ohne Bearbeitungszeit. Nutze „Test neu freigeben“, damit die neue Zeit greift.");
+        }
 
         // only the grant column grows; the base stays frozen so the two never add up twice
         assignment.ExtraMinutes += granted;
@@ -718,7 +744,7 @@ public class BewerbungTestService(
         catch { /* best effort */ }
     }
 
-    public async Task ResetAttemptAsync(string bewerbungId, string? testId, ClaimsPrincipal actor,
+    public async Task ResetAttemptAsync(string bewerbungId, string? testId, string? reason, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
         Permission.RequireTestAttemptWrite(actor);
@@ -766,6 +792,12 @@ public class BewerbungTestService(
         if (bewerbung.Status is BewerbungStatus.Eingereicht or BewerbungStatus.InSicherheitspruefung)
         {
             bewerbung.Status = BewerbungStatus.ImTest;
+        }
+        // the interceptor logs the cleared fields, but not WHY: that is the whole point of asking for it
+        if (Trim(reason) is { } note)
+        {
+            db.AuditLogs.Add(ManualAudit.Row(nameof(BewerbungTestAssignment), assignment.Id,
+                AuditAction.Modified, actor, ManualAudit.Change("Neu freigegeben", null, note)));
         }
         await db.SaveChangesAsync(cancellationToken);
 
@@ -870,14 +902,16 @@ public class BewerbungTestService(
     private async Task<bool> CloseExpiredAsync(AppDbContext db, BewerbungTestAssignment assignment,
         Bewerbung bewerbung, DateTime now, CancellationToken cancellationToken)
     {
-        // the draft rows ARE the submission: nothing is rewritten, only the untouched questions get the
-        // empty row the evaluation keys on
-        await TestAttemptClose.FillMissingAnswersAsync(db, assignment, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, timedOut: true, cancellationToken))
+        // claim first, and only while the row really is overdue: an extension or a reset landing in between
+        // sets CompletedAt back to null and would re-arm a plain claim
+        if (!await TestAttemptClose.ClaimAsync(db, assignment.Id, now, timedOut: true,
+                onlyWhenOverdue: true, cancellationToken))
         {
             return false;
         }
+        // the draft rows ARE the submission: nothing is rewritten, only the untouched questions get the
+        // empty row the evaluation keys on
+        await TestAttemptClose.FillMissingAnswersAsync(db, assignment, cancellationToken);
         db.AuditLogs.Add(ManualAudit.SystemRow(nameof(BewerbungTestAssignment), assignment.Id,
             AuditAction.Modified, ManualAudit.Change("Zeit abgelaufen", null, now)));
         await db.SaveChangesAsync(cancellationToken);

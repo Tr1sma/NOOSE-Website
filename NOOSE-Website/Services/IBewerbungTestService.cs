@@ -33,7 +33,7 @@ public interface IBewerbungTestService
 
     // ---- attempt control (HRB/leadership, write guard first) ----
     Task ExtendAttemptAsync(string bewerbungId, int minutes, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task ResetAttemptAsync(string bewerbungId, string? testId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task ResetAttemptAsync(string bewerbungId, string? testId, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     // ---- applicant ----
     /// <summary>Summary without questions; never stamps the clock, so the status page may call it.</summary>
@@ -43,6 +43,6 @@ public interface IBewerbungTestService
     /// <remarks>Starting is not a separate call on purpose: a patched client could simply never make one
     /// and would then hold the questions with no clock running.</remarks>
     Task<TestView?> GetAssignedForApplicantAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
-    Task<TestDraftResult> SaveDraftAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
-    Task<TestSubmitOutcome> SubmitAnswersAsync(string assignmentId, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
+    Task<TestDraftResult> SaveDraftAsync(string assignmentId, int attemptNumber, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
+    Task<TestSubmitOutcome> SubmitAnswersAsync(string assignmentId, int attemptNumber, IReadOnlyList<TestAnswerInput> answers, ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
 }

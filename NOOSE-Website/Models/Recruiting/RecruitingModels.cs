@@ -45,8 +45,10 @@ public record BewerbungssperreInfo(
 /// <param name="DeadlineAt">End of their own processing time, UTC; null means this attempt has no limit.</param>
 /// <param name="TimedOut">The clock closed the attempt rather than they did — they watched it run out.</param>
 /// <param name="TimeLimitMinutes">Configured minutes, so the start gate can warn before the clock runs.</param>
+/// <param name="AttemptNumber">Which attempt this is; the write paths refuse a payload from an older one.</param>
 public record TestView(
     string AssignmentId,
+    int AttemptNumber,
     string CaseNumber,
     string Title,
     string? Description,
