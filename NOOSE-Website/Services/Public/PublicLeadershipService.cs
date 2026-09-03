@@ -105,20 +105,27 @@ public class PublicLeadershipService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // AgentSelection decides who may appear at all; a raw id off the wire must not get past it, and the rank
-        // floor sits on top of it rather than inside it
-        var eligible = await db.Users.OnlySelectable()
-            .AnyAsync(u => u.Id == input.AgentId && u.Rank != null
-                && u.Rank >= LeadershipChart.RankFloor, cancellationToken);
-        if (!eligible)
-        {
-            throw new InvalidOperationException(
-                "Nur aktive Agenten ab Supervisory Special Agent können in das öffentliche Organigramm.");
-        }
-
         var row = string.IsNullOrWhiteSpace(input.Id)
             ? null
             : await db.OeffentlicheFuehrungsprofile.FirstOrDefaultAsync(p => p.Id == input.Id, cancellationToken);
+
+        // only when the pointer actually changes. The entry is a snapshot that outlives the account it was made
+        // from, so re-validating an unchanged AgentId would lock the editor out of a published entry the moment
+        // its agent is terminated or flagged IsTeamLead — including out of fixing a typo in the released name.
+        if (row is null || !string.Equals(row.AgentId, input.AgentId, StringComparison.Ordinal))
+        {
+            // AgentSelection decides who may appear at all; a raw id off the wire must not get past it, and the
+            // rank floor sits on top of it rather than inside it
+            var eligible = await db.Users.OnlySelectable()
+                .AnyAsync(u => u.Id == input.AgentId && u.Rank != null
+                    && u.Rank >= LeadershipChart.RankFloor, cancellationToken);
+            if (!eligible)
+            {
+                throw new InvalidOperationException(
+                    "Nur aktive Agenten ab Supervisory Special Agent können in das öffentliche Organigramm.");
+            }
+        }
+
         if (row is null)
         {
             row = new OeffentlichesFuehrungsprofil();

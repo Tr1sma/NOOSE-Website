@@ -503,6 +503,7 @@ public class TicketService(
                 t.AgentLastReadAt,
                 FirstName = t.CitizenProfile!.FirstName,
                 LastName = t.CitizenProfile!.LastName,
+                OpenedByCodename = t.OpenedByAgent!.Codename,
                 HandlerCodename = t.Handler!.Codename,
             })
             .ToListAsync(cancellationToken);
@@ -513,7 +514,9 @@ public class TicketService(
 
         return rows
             .Select(r => new TicketRow(r.Id, r.CaseNumber, r.Subject, r.Status, r.Kind, r.CreatedAt, r.LastActivityAt,
-                Name(r.FirstName, r.LastName), r.HandlerCodename,
+                // an internal ticket has no citizen; the column would otherwise be blank on every one of them
+                r.Kind == TicketArt.Intern ? r.OpenedByCodename ?? "Intern" : Name(r.FirstName, r.LastName),
+                r.HandlerCodename,
                 last.TryGetValue(r.Id, out var newest) && newest.FromCitizen,
                 UnreadFor(fromCitizen, r.Id, r.AgentLastReadAt)))
             .ToList();
@@ -686,6 +689,11 @@ public class TicketService(
         var body = CleanMessage(text);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
+        if (row.Kind == TicketArt.Intern)
+        {
+            // there is nobody on the other side; the line would be written into a thread no one can open
+            throw new InvalidOperationException("Ein internes Ticket hat keinen Bürger-Schriftwechsel.");
+        }
         if (!TicketRules.IsOpen(row.Status))
         {
             throw new InvalidOperationException("Dieses Ticket ist geschlossen. Bitte öffne es zuerst wieder.");
@@ -708,10 +716,18 @@ public class TicketService(
         broadcaster.Report(row.Id, row.CaseNumber);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Two marks, two audiences. <c>Ticket.AgentLastReadAt</c> is the DESK's mark, one for the whole house, so only
+    /// the desk moves it; an attached agent moves their own row instead, or the "Beteiligt" badge could never clear.
+    /// Both go through ExecuteUpdate and therefore past the interceptor, so the write guard is spelled out here.
+    /// </remarks>
     public async Task MarkAgentReadAsync(string id, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        Permission.RequireTicketRead(actor);
+        // participation, not RequireTicketRead: the detail page is open to an attached agent now, and this call
+        // sits in its OnParametersSetAsync — the leadership-only guard threw before the page could render
+        Permission.RequireTicketParticipation(actor);
         if (!actor.MayWrite())
         {
             // the supervision reads the desk but sets no mark; the interceptor would refuse the write anyway
@@ -719,8 +735,23 @@ public class TicketService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        await db.Tickets.Where(t => t.Id == id)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.AgentLastReadAt, DateTime.UtcNow), cancellationToken);
+        if (!await TicketVisibility.MayReadAsync(db, id, actor, cancellationToken))
+        {
+            return;
+        }
+
+        if (TicketVisibility.IsDesk(actor))
+        {
+            await db.Tickets.Where(t => t.Id == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.AgentLastReadAt, DateTime.UtcNow), cancellationToken);
+        }
+
+        var me = actor.GetAgentId();
+        if (!string.IsNullOrEmpty(me))
+        {
+            await db.TicketBeteiligte.Where(p => p.TicketId == id && p.AgentId == me)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.LastReadAt, DateTime.UtcNow), cancellationToken);
+        }
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -754,8 +785,10 @@ public class TicketService(
             ?? throw new InvalidOperationException("Das Ticket liegt nicht im Papierkorb.");
 
         // the citizen got the slot back when this was deleted (OpenAsync counts living rows only), so restoring is
-        // the second door onto MaxOpen and only the service guards that rule
-        if (TicketRules.IsOpen(row.Status))
+        // the second door onto MaxOpen and only the service guards that rule. An internal ticket has no citizen:
+        // without the null check the comparison becomes "BuergerProfilId IS NULL" and counts every open internal
+        // ticket in the house as one account's quota.
+        if (TicketRules.IsOpen(row.Status) && row.CitizenProfileId is not null)
         {
             var open = await db.Tickets
                 .Where(t => t.CitizenProfileId == row.CitizenProfileId)

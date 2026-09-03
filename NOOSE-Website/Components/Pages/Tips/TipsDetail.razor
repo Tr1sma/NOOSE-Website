@@ -74,16 +74,32 @@ else
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                                          Icon="@Icons.Material.Filled.VisibilityOff">anonym</MudChip>
                             }
-                            <MudTooltip Text="@PriorityHint()">
-                                <MudChip T="string" Size="Size.Small"
-                                         Variant="@(_tip.PriorityOverride is null ? Variant.Outlined : Variant.Filled)"
-                                         Color="@(_tip.PriorityOverride is null ? Color.Default : Color.Info)"
-                                         Icon="@Icons.Material.Filled.LowPriority"
-                                         OnClick="@(_mayPin ? PinPriorityAsync : null)">
-                                    Priorität @_tip.Priority@(_tip.PriorityOverride is null ? "" : " (manuell)")
-                                </MudChip>
-                            </MudTooltip>
-                            @if (_mayPin && _tip.PriorityOverride is not null)
+                            @* two variants rather than a null OnClick: EventCallback.Factory would be handed a
+                               null delegate, and the chip would look clickable to a handler who may not pin *@
+                            @if (MayPinNow)
+                            {
+                                <MudTooltip Text="@PriorityHint()">
+                                    <MudChip T="string" Size="Size.Small"
+                                             Variant="@(_tip.PriorityOverride is null ? Variant.Outlined : Variant.Filled)"
+                                             Color="@(_tip.PriorityOverride is null ? Color.Default : Color.Info)"
+                                             Icon="@Icons.Material.Filled.LowPriority"
+                                             OnClick="PinPriorityAsync">
+                                        Priorität @_tip.Priority@(_tip.PriorityOverride is null ? "" : " (manuell)")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudTooltip Text="@PriorityHint()">
+                                    <MudChip T="string" Size="Size.Small"
+                                             Variant="@(_tip.PriorityOverride is null ? Variant.Outlined : Variant.Filled)"
+                                             Color="@(_tip.PriorityOverride is null ? Color.Default : Color.Info)"
+                                             Icon="@Icons.Material.Filled.LowPriority">
+                                        Priorität @_tip.Priority@(_tip.PriorityOverride is null ? "" : " (manuell)")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            @if (MayPinNow && _tip.PriorityOverride is not null)
                             {
                                 <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
                                            StartIcon="@Icons.Material.Filled.AutoFixHigh"
@@ -329,6 +345,10 @@ else
     }
 
     private bool _mayPin;
+
+    /// <summary>Only while the tip still needs an order: a decided tip is never re-stamped, so releasing a pin
+    /// there would leave the pinned number standing with nothing to recompute it.</summary>
+    private bool MayPinNow => _mayPin && _tip is not null && !TipRules.IsClosed(_tip.Status);
 
     /// <summary>Why the number is what it is; the formula is not obvious from a bare figure.</summary>
     private string PriorityHint()

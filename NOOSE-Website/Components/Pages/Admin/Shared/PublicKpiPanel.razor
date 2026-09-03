@@ -118,10 +118,12 @@ else
         <MudText Typo="Typo.overline" Class="mud-text-secondary">Aufrufe der Ausschreibungen</MudText>
         <MudGrid Spacing="2" Class="mb-3 mt-1">
             <MudItem xs="6" md="3">
+                @* the counter is a lifetime total per notice, so the window selects the notices, never the
+                   views: saying "im Zeitraum" about the number itself would be wrong. Above the tag, not
+                   between its attributes — Razor binds a comment in an attribute list as a PARAMETER NAME and
+                   the component throws at render time, which is what took this whole tab down. *@
                 <StatTile Icon="@Icons.Material.Filled.Visibility" Label="Aufrufe gesamt"
                           Value="@views.Total.ToString("N0")"
-                          @* the counter is a lifetime total per notice, so the window selects the notices, never
-                             the views: saying "im Zeitraum" about the number itself would be wrong *@
                           Hint="@($"Lebenszeit-Aufrufe der {views.Notices} Ausschreibungen, die im Zeitraum "
                                   + "veröffentlicht wurden.")" />
             </MudItem>

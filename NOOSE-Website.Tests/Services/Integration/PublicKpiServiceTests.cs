@@ -354,6 +354,29 @@ public sealed class PublicKpiServiceTests
         Assert.Equal(0, tickets.Waiting);
     }
 
+    [Fact]
+    public async Task AnInternalTicketIsNotAPublicFigure()
+    {
+        // it has no citizen thread at all, so it can never be answered: counted in, it would sit in
+        // "Noch ohne Antwort" for ever and drag the reaction times of a desk it never reached
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var opened = Now.AddDays(-2);
+        await AddAsync(ctx,
+            new Ticket
+            {
+                Id = "t1", CaseNumber = "NOOSE-T-1", Kind = TicketArt.Intern, CitizenProfileId = null,
+                Subject = "Internes Anliegen", Status = TicketStatus.Offen,
+                CreatedAt = opened, LastActivityAt = opened,
+            });
+
+        var tickets = (await service.GetAsync(30, Leadership())).Tickets;
+
+        Assert.Equal(0, tickets.Opened);
+        Assert.Equal(0, tickets.Waiting);
+        Assert.Null(tickets.OldestWaitingMinutes);
+    }
+
     // ---- views ----
 
     [Fact]

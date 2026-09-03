@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Infrastructure;
@@ -116,6 +116,42 @@ public sealed class PublicLeadershipServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => host.Service.SaveAsync(Input("erfunden"), Leader()));
+    }
+
+    [Fact]
+    public async Task AnEntryStaysEditableAfterItsAgentLeavesTheRoster()
+    {
+        // the entry is a snapshot that outlives the account; re-validating an unchanged pointer would lock the
+        // editor out of a published card the moment the agent is terminated — including out of fixing a typo
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await host.Service.SaveAsync(Input(), Leader());
+
+        await using (var db = ctx.NewContext())
+        {
+            (await db.Users.SingleAsync(u => u.Id == "chef")).Status = AgentStatus.Terminated;
+            await db.SaveChangesAsync();
+        }
+
+        var fixedUp = Input(id: id);
+        fixedUp.DisplayName = "Marcus Hale-Vance";
+        await host.Service.SaveAsync(fixedUp, Leader());
+
+        await using var check = ctx.NewContext();
+        Assert.Equal("Marcus Hale-Vance",
+            (await check.OeffentlicheFuehrungsprofile.SingleAsync(p => p.Id == id)).DisplayName);
+    }
+
+    [Fact]
+    public async Task PointingAnEntryAtAnIneligibleAgentIsStillRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await host.Service.SaveAsync(Input(), Leader());
+
+        var moved = Input("klein", id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.SaveAsync(moved, Leader()));
     }
 
     // ---- nothing goes live by itself ----

@@ -35,6 +35,10 @@ public class BewerbungTestAssignment : IAuditable, ISoftDelete
     [Column("ErgebnisMaxPunkte")]
     public int? FinalMaxPoints { get; set; }
 
+    /// <summary>Threshold at the moment of freezing; the verdict is derived from it, so it is frozen with it.</summary>
+    [Column("ErgebnisBestehensgrenze")]
+    public int? FinalPassPercent { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

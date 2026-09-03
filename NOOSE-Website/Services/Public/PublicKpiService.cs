@@ -100,8 +100,11 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
     /// </remarks>
     private static async Task<PublicKpiTickets> TicketsAsync(AppDbContext db, DateTime since, CancellationToken ct)
     {
-        // AgencyRows plus the strict timestamp is the query twin of TicketRules.IsHumanAgencyReply
+        // AgencyRows plus the strict timestamp is the query twin of TicketRules.IsHumanAgencyReply.
+        // Citizen tickets only: an internal ticket has no citizen thread at all, so it can never be "answered" and
+        // would sit in "Noch ohne Antwort" for ever while dragging the reaction times of a desk it never reached.
         var cohort = await db.Tickets.AsNoTracking()
+            .Where(t => t.Kind == TicketArt.Fuehrungsebene)
             .Where(t => t.CreatedAt >= since)
             .Select(t => new
             {
@@ -121,6 +124,7 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
         // ticket regardless of age. Windowed, the longest-neglected ticket in the house fell out of the figure
         // and the panel reported an all-clear. Opened/Answered and the percentiles stay the window's cohort.
         var openedAt = await db.Tickets.AsNoTracking()
+            .Where(t => t.Kind == TicketArt.Fuehrungsebene)
             .Where(TicketRules.OpenRows)
             .Where(t => !db.TicketNachrichten.Where(TicketRules.AgencyRows)
                 .Any(m => m.TicketId == t.Id && m.CreatedAt > t.CreatedAt))

@@ -184,12 +184,14 @@
     }
 
     // the projection is the gate: TipDetail.CitizenName stays null while the anonymity promise holds, so a name
-    // here can only be one the leadership already resolved
+    // here can only be one the leadership already resolved. Not conditional on the audience: this panel renders on
+    // the handler's page only (the citizen area draws its own thread), and the citizen-facing audience is exactly
+    // where the reported "Hinweisgeber" stood next to a name the desk already knew.
     private string Author(TipMessageRow message)
     {
         if (message.FromCitizen)
         {
-            return IsInternal ? CitizenName ?? "Hinweisgeber" : "Hinweisgeber";
+            return CitizenName ?? "Hinweisgeber";
         }
         return IsInternal ? message.AuthorCodename ?? "NOOSE" : "NOOSE";
     }

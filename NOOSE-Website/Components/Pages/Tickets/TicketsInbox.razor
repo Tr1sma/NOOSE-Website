@@ -33,9 +33,14 @@
             <TicketsListPanel Scope="TicketInboxScope.Geschlossen" />
         </RecordSection>
     </AuthorizeView>
-    <RecordSection Group="Mein Dienst" Slug="beteiligt" Label="Beteiligt" Icon="@Icons.Material.Filled.Group">
-        <TicketParticipationPanel />
-    </RecordSection>
+    @* inside an AuthorizeView like the desk sections above, although the page policy already covers it: a direct
+       child registers before an AuthorizeView's children do, and "Beteiligt" would become the default tab for
+       leadership arriving at a bare /tickets *@
+    <AuthorizeView Policy="@Policies.InternalAgent" Context="mineCtx">
+        <RecordSection Group="Mein Dienst" Slug="beteiligt" Label="Beteiligt" Icon="@Icons.Material.Filled.Group">
+            <TicketParticipationPanel />
+        </RecordSection>
+    </AuthorizeView>
 </RecordSectionRail>
 
 @code {

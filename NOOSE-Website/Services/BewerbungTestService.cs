@@ -280,9 +280,18 @@ public class BewerbungTestService(
                     var chosenIds = TestGrading.SplitOptionIds(answer?.SelectedOptionIds, answer?.SelectedOptionId);
                     var chosen = own.Where(o => chosenIds.Contains(o.Id, StringComparer.Ordinal)).ToList();
                     answerText = chosen.Count == 0 ? null : string.Join(", ", chosen.Select(o => o.Label));
-                    autoCorrect = q.AllowMultiple
+                    // the SHAPE OF THE STORED ANSWER decides the overload, not the question's current switch:
+                    // turning Mehrfachauswahl off after the submission would otherwise grade a two-tick answer on
+                    // whichever single option happened to come first
+                    autoCorrect = q.AllowMultiple || chosenIds.Count > 1
                         ? TestGrading.GradeMultipleChoice(chosenIds, own)
                         : TestGrading.GradeMultipleChoice(chosen.FirstOrDefault());
+                    if (!own.Any(o => o.IsCorrect))
+                    {
+                        // no option flagged: the machine cannot decide this one, and "wrong" would let
+                        // CompleteGradingAsync freeze a 0 that nobody ever looked at
+                        autoCorrect = null;
+                    }
                     var correct = own.Where(o => o.IsCorrect).Select(o => o.Label).ToList();
                     correctAnswer = correct.Count > 0 ? string.Join(", ", correct) : null;
                     break;
@@ -318,7 +327,10 @@ public class BewerbungTestService(
             test?.Title ?? "Test", assignment.CompletedAt,
             assignment.GradedAt is null ? total : assignment.FinalPoints ?? total,
             assignment.GradedAt is null ? max : assignment.FinalMaxPoints ?? max,
-            test?.PassPercent, assignment.GradedAt, assignment.GradedByName, items);
+            // the threshold is frozen too: Passed is derived from it, so a later edit to the Bestehensgrenze would
+            // otherwise flip the verdict of an applicant who was already told the outcome
+            assignment.GradedAt is null ? test?.PassPercent : assignment.FinalPassPercent,
+            assignment.GradedAt, assignment.GradedByName, items);
     }
 
     public async Task SetAwardedPointsAsync(string assignmentId, string questionId, int? points,
@@ -380,6 +392,7 @@ public class BewerbungTestService(
         assignment.GradedByName = actor.GetCodename();
         assignment.FinalPoints = evaluation.Report.TotalPoints;
         assignment.FinalMaxPoints = evaluation.Report.MaxPoints;
+        assignment.FinalPassPercent = evaluation.Report.PassPercent;
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(bewerbungId);
@@ -414,6 +427,7 @@ public class BewerbungTestService(
         assignment.GradedByName = null;
         assignment.FinalPoints = null;
         assignment.FinalMaxPoints = null;
+        assignment.FinalPassPercent = null;
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(bewerbungId);

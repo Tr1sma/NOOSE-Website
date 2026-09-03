@@ -108,7 +108,7 @@ else
 
                 <MudPaper Outlined="true" Class="pa-4">
                     <TicketAgentsPanel TicketId="@_ticket.Id" User="@_user" CanManage="@_canManage"
-                                       Changed="LoadAsync" />
+                                       Changed="ReloadQuietlyAsync" />
                 </MudPaper>
             </MudStack>
         </MudItem>
@@ -169,9 +169,18 @@ else
         await Tickets.MarkAgentReadAsync(Id, _user);
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadAsync(showSpinner: true);
+
+    /// <summary>Refresh without the spinner; swapping the page for a progress bar tears down both message panels
+    /// and throws away whatever the handler had half-typed in them.</summary>
+    private Task ReloadQuietlyAsync() => LoadAsync(showSpinner: false);
+
+    private async Task LoadAsync(bool showSpinner)
     {
-        _load = true;
+        if (showSpinner)
+        {
+            _load = true;
+        }
         try
         {
             _ticket = await Tickets.GetAsync(Id, _user);
@@ -236,7 +245,7 @@ else
         // the mark moves again: a line arriving while the handler has the ticket open has been read
         InvokeAsync(async () =>
         {
-            await LoadAsync();
+            await ReloadQuietlyAsync();
             await Tickets.MarkAgentReadAsync(Id, _user);
             StateHasChanged();
         });

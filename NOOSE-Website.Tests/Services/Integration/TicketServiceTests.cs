@@ -335,6 +335,121 @@ public sealed class TicketServiceTests
             () => host.Service.AddParticipantAsync(id, "junior", Junior()));
     }
 
+    [Fact]
+    public async Task AnAttachedAgentMayMarkTheTicketRead()
+    {
+        // the regression: the detail page calls this in OnParametersSetAsync, and the leadership-only guard threw
+        // before the page could render — the whole participation feature was unreachable for its own audience
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.AddParticipantAsync(id, "junior", Leader());
+
+        await host.Service.MarkAgentReadAsync(id, Junior());
+
+        await using var db = host.Factory.CreateDbContext();
+        // the participant stamps their OWN row; the desk mark is one for the whole house and stays where it was
+        Assert.NotNull((await db.TicketBeteiligte.SingleAsync(p => p.AgentId == "junior")).LastReadAt);
+        Assert.Null((await db.Tickets.SingleAsync(t => t.Id == id)).AgentLastReadAt);
+    }
+
+    [Fact]
+    public async Task TheDeskMarkMovesForTheDesk()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.MarkAgentReadAsync(id, Leader());
+
+        await using var db = host.Factory.CreateDbContext();
+        Assert.NotNull((await db.Tickets.SingleAsync(t => t.Id == id)).AgentLastReadAt);
+    }
+
+    [Fact]
+    public async Task AnUnattachedAgentMovesNoMark()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.MarkAgentReadAsync(id, Junior());
+
+        await using var db = host.Factory.CreateDbContext();
+        Assert.Null((await db.Tickets.SingleAsync(t => t.Id == id)).AgentLastReadAt);
+    }
+
+    [Fact]
+    public async Task ReadingClearsTheParticipationBadge()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+        var id = await IdAsync(host, caseNumber);
+        await host.Service.PostInternalNoteAsync(id, "Antwort der Führung dazu.", Leader());
+        Assert.Equal(1, Assert.Single(await host.Service.GetMyParticipationsAsync(Junior())).UnreadInternal);
+
+        await host.Service.MarkAgentReadAsync(id, Junior());
+
+        Assert.Equal(0, Assert.Single(await host.Service.GetMyParticipationsAsync(Junior())).UnreadInternal);
+    }
+
+    [Fact]
+    public async Task AnInternalTicketHasNoCitizenThreadToAnswerInto()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+        var id = await IdAsync(host, caseNumber);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.ReplyToCitizenAsync(id, "Sehr geehrte Frau Musterfrau,", Leader()));
+    }
+
+    [Fact]
+    public async Task RestoringAnInternalTicketIgnoresTheCitizenQuota()
+    {
+        // the citizen quota compared a null column against a null parameter, so it counted every open internal
+        // ticket in the house as one account's allowance
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        for (var i = 0; i < TicketRules.MaxOpen; i++)
+        {
+            await host.Service.OpenAsAgentAsync(
+                new TicketInput { Subject = $"Laufendes Anliegen {i}", Text = "Ich brauche eine Entscheidung dazu." },
+                [], Junior());
+        }
+        var caseNumber = await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Versehentlich gelöscht", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+        var id = await IdAsync(host, caseNumber);
+        await host.Service.DeleteAsync(id, Leader());
+
+        await host.Service.RestoreAsync(id, Leader());
+
+        await using var db = host.Factory.CreateDbContext();
+        Assert.False((await db.Tickets.IgnoreQueryFilters().SingleAsync(t => t.Id == id)).IsDeleted);
+    }
+
+    [Fact]
+    public async Task TheDeskListNamesTheOpenerOfAnInternalTicket()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+
+        var row = Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+
+        Assert.Equal(TicketArt.Intern, row.Kind);
+        Assert.Equal("Wren", row.CitizenName);
+    }
+
     // ---- internal tickets ----
 
     [Fact]

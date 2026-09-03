@@ -887,6 +887,73 @@ public sealed class BewerbungTestServiceTests
     }
 
     [Fact]
+    public async Task AMultipleChoiceQuestionWithoutAKeyStaysUndecided()
+    {
+        // "wrong" would let CompleteGradingAsync freeze a 0 for a question the machine could not judge and
+        // nobody ever looked at
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, points: 5, allowMultiple: true);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: false, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: false, sorting: 2);
+        AddAnswer(ctx, "an1", "as1", "q1", selectedOptionId: "o1");
+        var (svc, _, _) = Build(ctx);
+
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        Assert.NotNull(eval);
+        Assert.Equal(1, eval!.OpenCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteGradingAsync("b1", Hrb()));
+    }
+
+    [Fact]
+    public async Task AStoredMultiAnswerIsStillGradedAsASetAfterTheSwitchIsTurnedOff()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "userA");
+        // not pre-completed: the applicant's own submission is what stores the multi-answer here
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, points: 5, allowMultiple: true);
+        AddOption(ctx, "o1", "q1", "A", isCorrect: true, sorting: 1);
+        AddOption(ctx, "o2", "q1", "B", isCorrect: true, sorting: 2);
+        var (svc, _, _) = Build(ctx);
+        await svc.SubmitAnswersAsync("as1",
+            [new TestAnswerInput { QuestionId = "q1", SelectedOptionIds = ["o1", "o2"] }], Applicant("userA"));
+
+        // the author changes their mind after the applicant has answered
+        await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 5, correctYesNo: null,
+            keywords: null, minKeywordHits: null, keepOptionOrder: false, allowMultiple: false, Hrb());
+
+        var eval = await svc.GetEvaluationAsync("b1", Hrb());
+
+        // graded on the answer that was actually given, not on whichever single option came first
+        Assert.Equal(5, eval!.TotalPoints);
+    }
+
+    [Fact]
+    public async Task AFrozenVerdictSurvivesAChangeToThePassMark()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1, passPercent: 50);
+        AddBewerbung(ctx, "b1", "userA");
+        AddAssignment(ctx, "as1", "b1", "t1", completedAt: Ts);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, points: 10);
+        AddAnswer(ctx, "an1", "as1", "q1", freeText: "etwas");
+        var (svc, _, _) = Build(ctx);
+        await svc.SetAwardedPointsAsync("as1", "q1", 6, Hrb());
+        await svc.CompleteGradingAsync("b1", Hrb());
+        Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);
+
+        await svc.UpdateTestAsync("t1", "Test", null, isActive: true, passPercent: 90, Hrb());
+
+        // the applicant was already told the outcome; raising the bar afterwards must not turn it around
+        Assert.True((await svc.GetEvaluationAsync("b1", Hrb()))!.Passed);
+    }
+
+    [Fact]
     public async Task CompleteGradingAsync_Throws_WhileAQuestionIsUndecided()
     {
         using var ctx = new SqliteTestContext();

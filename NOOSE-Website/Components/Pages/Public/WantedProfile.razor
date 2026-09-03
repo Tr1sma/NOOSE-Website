@@ -132,11 +132,10 @@
                         else if (_objectionOffered)
                         {
                             @* greyed out with the reason rather than absent: the person it does concern has to be
-                               able to see that the way exists *@
-                            <MudTooltip Text="@ObjectionRules.NotTheNamedPerson">
-                                <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true"
-                                           StartIcon="@Icons.Material.Filled.Balance">Einspruch erheben</MudButton>
-                            </MudTooltip>
+                               able to see that the way exists. Written out, not a tooltip: this page renders
+                               statically, so a MudTooltip would never open. *@
+                            <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true"
+                                       StartIcon="@Icons.Material.Filled.Balance">Einspruch erheben</MudButton>
                         }
                         @if (_mayPrint)
                         {
@@ -145,6 +144,13 @@
                                        StartIcon="@Icons.Material.Filled.Print">Poster drucken</MudButton>
                         }
                     </MudStack>
+
+                    @if (!_mayObject && _objectionOffered)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @ObjectionRules.NotTheNamedPerson
+                        </MudText>
+                    }
 
                     <MudDivider Class="my-2" />
                     <div>
