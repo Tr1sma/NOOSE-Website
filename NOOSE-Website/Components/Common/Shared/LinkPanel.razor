@@ -283,24 +283,7 @@
         ? "Automatisch durch ein Bündnis der Organisation – wird mit dem Bündnis gepflegt."
         : "Automatisch durch einen Konflikt der Organisation – wird mit dem Konflikt gepflegt.";
 
-    private static string TypeDisplay(string type) => type switch
-    {
-        nameof(Person) => "Person",
-        nameof(Faction) => "Fraktion",
-        nameof(PersonGroup) => "Personengruppe",
-        nameof(Party) => "Partei",
-        nameof(Agent) => "Agent",
-        nameof(PersonDoc) => "Dok",
-        nameof(Operation) => "Operation",
-        nameof(Taskforce) => "Taskforce",
-        nameof(Case) => "Vorgang",
-        nameof(Observation) => "Observation",
-        nameof(Bewerbung) => "Bewerbung",
-        nameof(Meeting) => "Besprechung",
-        nameof(MeetingAgendaItem) => "Tagesordnungspunkt",
-        nameof(Hinweis) => "Bürgerhinweis",
-        _ => type,
-    };
+    private static string TypeDisplay(string type) => RecordTypeDisplay.Name(type);
 
     private static Color TypeColour(RelationType type) => type switch
     {

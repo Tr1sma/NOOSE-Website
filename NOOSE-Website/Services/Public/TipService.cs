@@ -321,7 +321,7 @@ public class TipService(
             .Where(m => m.HinweisId == row.Id && m.Audience == TipMessageAudience.Buerger)
             .OrderBy(m => m.CreatedAt)
             // no author is projected because none may exist outside; the agency answers as NOOSE
-            .Select(m => new CitizenTipMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen))
+            .Select(m => new CitizenTipMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
             .ToListAsync(cancellationToken);
 
         return new CitizenTipDetail(row.CaseNumber, row.Status, row.CreatedAt, row.Text, row.WantsAnonymity,
@@ -471,6 +471,29 @@ public class TipService(
                 r.DuplicateGroupId is null ? 0 : duplicates.GetValueOrDefault(r.DuplicateGroupId),
                 r.Kind, r.Handover))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<TipPickRow>> SearchForLinkAsync(string? term, ClaimsPrincipal actor,
+        int take = 20, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // no rooting and no IgnoreQueryFilters here, unlike the inbox: this projection touches no navigation, so
+        // nothing joins INNER, and a deleted tip must not be offered as a link target in the first place
+        var query = db.Hinweise.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            var needle = term.Trim();
+            query = query.Where(h => h.CaseNumber.Contains(needle) || h.Text.Contains(needle));
+        }
+
+        return await query
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(Math.Clamp(take, 1, ListCap))
+            .Select(h => new TipPickRow(h.Id, h.CaseNumber, h.Status, h.Kind, h.CreatedAt,
+                h.Text.Length > ExcerptLength ? h.Text.Substring(0, ExcerptLength) : h.Text))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<TipInboxCounts> GetCountsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -701,12 +724,16 @@ public class TipService(
         ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireTipRead(actor);
+        // spelled out, not compared against a possibly null id: an unowned row belongs to nobody, and a null
+        // actor must not come out as the owner of every line the system ever wrote
+        var me = actor.GetAgentId();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.HinweisNachrichten.AsNoTracking()
             .Where(m => m.HinweisId == id && m.Audience == audience)
             .OrderBy(m => m.CreatedAt)
             .Select(m => new TipMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
-                m.AuthorAgent!.Codename, m.CreatedAt))
+                m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
+                me != null && m.CreatedById != null && m.CreatedById == me))
             .ToListAsync(cancellationToken);
     }
 
@@ -805,6 +832,44 @@ public class TipService(
 
         await NotifyCitizenAsync(db, row, cancellationToken);
         Report(row, TipMessageAudience.Buerger);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A correction, not a message: no status moves, nothing rings, no read mark shifts, and a closed tip stays
+    /// editable — unlike <see cref="AskCitizenAsync"/>, which would be a new matter. A typo is usually noticed after
+    /// the file is closed.
+    /// </remarks>
+    public async Task EditMessageAsync(string messageId, string text, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipHandling(actor);
+        var body = CleanMessage(text);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var message = await db.HinweisNachrichten
+            .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
+            ?? throw new InvalidOperationException("Die Nachricht wurde nicht gefunden.");
+        // not covered by the author check below: an agent may report through his own civilian identity, and then
+        // his account is the one stamped on the citizen's line
+        if (message.AuthorIsCitizen)
+        {
+            throw new InvalidOperationException("Eine Nachricht des Hinweisgebers kann nicht bearbeitet werden.");
+        }
+        // author only; an unowned row belongs to nobody, so a null match must not open it
+        if (message.CreatedById is null || message.CreatedById != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Nur eigene Nachrichten können bearbeitet werden.");
+        }
+        if (message.Text == body)
+        {
+            // no audit row and no signal for a save that changes nothing
+            return;
+        }
+
+        var row = await GetOrThrowAsync(db, message.HinweisId, cancellationToken);
+        message.Text = body;
+        await db.SaveChangesAsync(cancellationToken);
+        Report(row, message.Audience);
     }
 
     public async Task ResolveAnonymityAsync(string id, string reason, ClaimsPrincipal actor,

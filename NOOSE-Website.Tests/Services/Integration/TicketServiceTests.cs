@@ -822,6 +822,202 @@ public sealed class TicketServiceTests
             host.Service.SetStatusAsync(id, TicketStatus.Offen, Leader()));
     }
 
+    // ---- editing a line afterwards ----
+
+    /// <summary>Hands one message to another account; <see cref="FixedUser"/> stamps every fixture write as
+    /// "lead", so the author of a line has to be set by hand to test anyone else.</summary>
+    private static async Task HandOverAsync(SqliteTestContext ctx, string messageId, string agentId)
+    {
+        // no interceptors on this context, so nothing re-stamps and ModifiedAt stays null
+        await using var db = ctx.NewContext();
+        var row = await db.TicketNachrichten.SingleAsync(m => m.Id == messageId);
+        row.CreatedById = agentId;
+        row.AuthorAgentId = row.Audience == TicketMessageAudience.Intern ? agentId : null;
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task AHandlerRewritesHisOwnAnswerToTheCitizen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+        await host.Service.ReplyToCitizenAsync(id, "Ihr Fahrzeug bleibt ausgeschrieben.", Leader());
+        var message = (await host.Service.GetMessagesAsync(id, TicketMessageAudience.Buerger, Leader()))
+            .Single(m => !m.FromCitizen);
+        Assert.Null(message.EditedAt);
+        Assert.True(message.Mine);
+
+        await host.Service.EditMessageAsync(message.Id, "  Ihr Fahrzeug bleibt vorerst ausgeschrieben.  ", Leader());
+
+        var outside = (await host.Service.GetOwnDetailAsync(caseNumber, Citizen()))!.Messages
+            .Single(m => !m.FromCitizen && m.EditedAt is not null);
+        Assert.Equal("Ihr Fahrzeug bleibt vorerst ausgeschrieben.", outside.Text);
+    }
+
+    /// <summary>The text is the one field the change protocol never carries; /nachweis is open to every agent,
+    /// while a ticket itself is leadership-only.</summary>
+    [Fact]
+    public async Task AnEditIsAuditedWithoutTheWording()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Alter Wortlaut.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        await host.Service.EditMessageAsync(message.Id, "Neuer Wortlaut.", Leader());
+
+        await using var db = ctx.NewContext();
+        var row = await db.AuditLogs.SingleAsync(
+            a => a.EntityType == nameof(TicketNachricht) && a.Action == AuditAction.Modified);
+        Assert.Equal("lead", row.AgentId);
+        // no ChangesJson at all: Text was the only changed field, and it is redacted
+        Assert.Null(row.ChangesJson);
+    }
+
+    [Fact]
+    public async Task AnAttachedAgentRewritesHisOwnNoteButNoCitizenLine()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.AddParticipantAsync(id, "junior", Leader());
+        await host.Service.PostInternalNoteAsync(id, "Vermerk des Beteiligten.", Leader());
+        await host.Service.ReplyToCitizenAsync(id, "Wir prüfen das.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Junior()));
+        var answer = (await host.Service.GetMessagesAsync(id, TicketMessageAudience.Buerger, Junior()))
+            .Single(m => !m.FromCitizen);
+        await HandOverAsync(ctx, note.Id, "junior");
+        await HandOverAsync(ctx, answer.Id, "junior");
+
+        await host.Service.EditMessageAsync(note.Id, "Vermerk ergänzt.", Junior());
+        Assert.Equal("Vermerk ergänzt.", Assert.Single(
+            await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Junior())).Text);
+
+        // the citizen thread belongs to the desk, whoever wrote the line
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(answer.Id, "Anders", Junior()));
+    }
+
+    [Fact]
+    public async Task AnAgentWhoIsNotAttachedMayNotRewriteAnInternalNote()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+        await HandOverAsync(ctx, note.Id, "junior");
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(note.Id, "Anders", Junior()));
+    }
+
+    [Fact]
+    public async Task TheLineTheCitizenWroteIsNeverEditableFromTheDesk()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+        var citizenLine = (await host.Service.GetMessagesAsync(id, TicketMessageAudience.Buerger, Leader()))
+            .Single(m => m.FromCitizen);
+
+        // the fixture stamps every row with the same account, so the author check alone would have let this through
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(citizenLine.Id, "Umgeschrieben", Leader()));
+    }
+
+    [Fact]
+    public async Task AForeignLineIsRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+        await HandOverAsync(ctx, note.Id, "lead2");
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(note.Id, "Umformuliert", Leader()));
+    }
+
+    /// <summary>A typo is usually noticed after the ticket is closed, so the correction must survive the closure —
+    /// and it must not look like activity the citizen is waiting on.</summary>
+    [Fact]
+    public async Task AClosedTicketStillTakesACorrectionWithoutMovingAnything()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+        var before = (await host.Service.GetAsync(id, Leader()))!;
+
+        await host.Service.EditMessageAsync(note.Id, "Vermerk berichtigt.", Leader());
+
+        var after = (await host.Service.GetAsync(id, Leader()))!;
+        Assert.Equal(TicketStatus.Geschlossen, after.Status);
+        Assert.Equal(before.LastActivityAt, after.LastActivityAt);
+        Assert.Equal("Vermerk berichtigt.", Assert.Single(
+            await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader())).Text);
+    }
+
+    [Fact]
+    public async Task AnUnchangedRewriteWritesNothing()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        await host.Service.EditMessageAsync(note.Id, "Vermerk der Führung.", Leader());
+
+        Assert.Null(Assert.Single(
+            await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader())).EditedAt);
+        await using var db = ctx.NewContext();
+        Assert.Empty(await db.AuditLogs
+            .Where(a => a.EntityType == nameof(TicketNachricht) && a.Action == AuditAction.Modified)
+            .ToListAsync());
+    }
+
+    [Fact]
+    public async Task AnEmptyOrOversizedRewriteIsRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(note.Id, "   ", Leader()));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(
+                note.Id, new string('x', TicketRules.MaxMessageLength + 1), Leader()));
+    }
+
+    [Fact]
+    public async Task NeitherTheSupervisionNorAPartnerNorACitizenMayRewriteALine()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(note.Id, "Anders", Supervision()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(note.Id, "Anders", Partner()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(note.Id, "Anders", Citizen()));
+    }
+
     // ---- read marks and counters ----
 
     [Fact]
@@ -1037,5 +1233,66 @@ public sealed class TicketServiceTests
         Assert.True(open[0].AwaitingAnswer);
         // and the desk's own unread counter ignores the agency line
         Assert.Equal(1, open[0].UnreadCount);
+    }
+
+    // ---- the link picker ----
+
+    [Fact]
+    public async Task ThePicker_findsATicket_byCaseNumberAndBySubject()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+
+        var byNumber = await host.Service.SearchForLinkAsync(caseNumber, Leader());
+        Assert.Equal(caseNumber, Assert.Single(byNumber).CaseNumber);
+
+        var bySubject = await host.Service.SearchForLinkAsync("Fahrzeug", Leader());
+        Assert.Equal(caseNumber, Assert.Single(bySubject).CaseNumber);
+
+        Assert.NotEmpty(await host.Service.SearchForLinkAsync(null, Leader()));
+    }
+
+    [Fact]
+    public async Task ThePicker_doesNotSearchTheCitizenName()
+    {
+        // the desk's own inbox does; this list feeds a link, and a hit by name would answer "which citizen writes
+        // about this record" for anyone who can open the dialog
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await OpenAsync(host);
+
+        Assert.Empty(await host.Service.SearchForLinkAsync("Musterfrau", Leader()));
+        Assert.NotEmpty(await host.Service.GetInboxAsync(TicketInboxScope.Offen, "Musterfrau", false, Leader()));
+    }
+
+    [Fact]
+    public async Task ThePicker_isTheDesks()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await OpenAsync(host);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SearchForLinkAsync(null, Junior()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SearchForLinkAsync(null, Partner()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SearchForLinkAsync(null, Citizen()));
+        // the read-only supervision is part of RequireTicketRead and may pick
+        Assert.NotEmpty(await host.Service.SearchForLinkAsync(null, Supervision()));
+    }
+
+    [Fact]
+    public async Task ThePicker_leavesADeletedTicketOut()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await OpenAsync(host);
+        var id = (await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader())).Single().Id;
+
+        await host.Service.DeleteAsync(id, Leader());
+
+        Assert.Empty(await host.Service.SearchForLinkAsync(null, Leader()));
     }
 }

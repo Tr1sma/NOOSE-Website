@@ -17,12 +17,26 @@ using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ILinkService" />
 public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : ILinkService
 {
+    /// <summary>Every type this service can resolve. A known type that stays unresolved is hidden, not guessed.</summary>
+    /// <remarks>
+    /// Public so a test can hold it against <c>SearchCatalog</c>: a type listed here without a catalog row renders
+    /// its raw CLR name as a group heading, which is how "Law" and "Hinweis" once reached the screen.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> KnownTypes =
+    [
+        nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
+        nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
+        nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
+        nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem), nameof(Hinweis), nameof(Ticket),
+    ];
+
     public Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default)
         => GetForRecordAsync(entityType, entityId, new ViewerScope(isLeadership, isLeadership, meId, null), kind, cancellationToken);
 
@@ -164,6 +178,17 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Hinweis), x.Id)] = ($"Bürgerhinweis {x.CaseNumber}", false, $"/hinweise/{x.Id}");
         }
 
+        // citizen tickets: the case number only — the subject is written by the citizen and can name them. Resolved
+        // for the desk and for an agent attached to the row, exactly TicketVisibility. Vetted here, so it is flagged
+        // unclassified like the case arm above, or the leadership filter below would re-hide it from a participant.
+        var ticketIds = pairs.Where(p => p.OtherType == nameof(Ticket)).Select(p => p.OtherId).Distinct().ToList();
+        var readableTickets = await TicketVisibility.ReadableIdsAsync(db, ticketIds, scope, cancellationToken);
+        foreach (var x in await db.Tickets.Where(t => readableTickets.Contains(t.Id))
+                     .Select(t => new { t.Id, t.CaseNumber }).ToListAsync(cancellationToken))
+        {
+            targets[(nameof(Ticket), x.Id)] = ($"Bürger-Ticket {x.CaseNumber}", false, $"/tickets/{x.Id}");
+        }
+
         // library documents: classified if any VS flag is set, leadership-gated below
         var documentIds = pairs.Where(p => p.OtherType == nameof(Document)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Documents.Where(d => documentIds.Contains(d.Id))
@@ -217,13 +242,6 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             }
         }
 
-        var knownTypes = new[]
-        {
-            nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
-            nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
-            nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
-            nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem), nameof(Hinweis),
-        };
         // partners: only links to released, releasable-type records
         HashSet<(string, string)>? releasedTargets = null;
         if (scope.PartnerAgency is { } agency)
@@ -255,7 +273,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
                 }
                 result.Add(new LinkDisplay(p.V.Id, p.OtherType, p.OtherId, p.V.Label, info.Designation, p.V.Automatic, info.Href));
             }
-            else if (knownTypes.Contains(p.OtherType))
+            else if (KnownTypes.Contains(p.OtherType))
             {
                 // known type but unresolved (trashed/unknown) -> hide
             }
@@ -280,7 +298,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         // don't let forged calls link to a classified/restricted target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
                 or nameof(Operation) or nameof(Taskforce) or nameof(Case) or nameof(Document) or nameof(Bewerbung)
-                or nameof(Meeting) or nameof(MeetingAgendaItem)
+                or nameof(Meeting) or nameof(MeetingAgendaItem) or nameof(Hinweis) or nameof(Ticket)
             && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");

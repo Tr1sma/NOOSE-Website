@@ -271,11 +271,18 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   auf Mitglieder/Bestände/Aktivitäten/Doks ⇒ `FactionRecency.StampAsync` **nach** dem `SaveChanges` aufrufen
   (Raw-Update, damit der Stempel selbst kein `GeaendertAm`/Audit-Eintrag erzeugt).
 - **Nachvollziehbarkeit:** Ein Schreibpfad, der den Interceptor umgeht (`ExecuteUpdate/Delete`/Raw-SQL) **oder** eine nicht-`IAuditable`-Zuordnung ändert (z. B. `TagMapping`), muss selbst eine Zeile via `ManualAudit.Row(entityType, entityId, …)` schreiben — gegen die **Akte** geloggt (⇒ Zeitstrahl + Chronik + Protokoll), bei reinen Config-Aktionen gegen einen Config-Typ (nur Protokoll). `ChangesJson` folgt der `{Feld:[alt,neu]}`-Form (`ManualAudit.Change`), sonst rendert `AuditDisplay.Parse` nichts.
+- **Ein Feld, dessen Inhalt nicht ins Änderungsprotokoll gehört, wird in `Infrastructure/Audit/AuditRedaction.cs` eingetragen** (Registry aus `(CLR-Typname, Property)`, vom `AuditSaveChangesInterceptor` beim **Schreiben** gefragt). Grund: **`/nachweis` liest jeder interne Agent** (`Policies.InternalAgent`) und `AuditLogQueryService` filtert nicht nach Typ — Ticket-Inhalte sind sonst führungs-only, ein Hinweis trägt eine Anonymitätszusage. Display-seitig zu filtern reicht nicht: `AuditDisplay.Parse` kennt den Entitätstyp nicht, und `Comment.Text` **soll** dort sichtbar bleiben. Preis: der alte Wert ist danach nirgends mehr rekonstruierbar (Wer/Wann bleiben).
 - **Neue Kind-/Anhang-Tabelle einer Akte** (auditiert, aber unsichtbar auf dem Zeitstrahl) → Fall in `TimelineService.AuditSourceAsync` (Fan-out per FK bzw. polymorph über `EntityType/EntityId`) **und** einen Titel in `TimelineDisplay.MapAudit` ergänzen — sonst erscheint sie generisch als „Akte geändert" oder gar nicht.
 - **Bewerbungs-Anschreiben nie auf `{{...}}` „normalisieren"** — `BewerbungTemplateRenderer` schwärzt `\bNAME\b` zu `███████`, damit der Agent gegenüber Bewerbern anonym bleibt; `{{Agent}}` würde stattdessen den Codename ausliefern. `DocumentTemplates` ist dieselbe Tabelle für Bibliothek **und** Bewerbung → Consumer müssen nach `Category` (`RecruitingSeeder.TemplateCategory`) filtern.
 - **`SearchNavigation.For` gibt `null` statt zu raten.** Der alte `_ => "/personen/{id}"`-Fallback öffnete für einen
   Kommentar an einer Fraktion eine *Personenakte mit der Fraktions-Id* — eine falsche Akte, lautlos. Ein Treffer ohne
   Route ist nicht klickbar; wer eine Route braucht, prüft `SearchCatalog.IsRoutable`.
+- **Deutsches Label, Plural und Icon eines Akten-Typs kommen ausschließlich aus `Services/RecordTypeDisplay.cs`**
+  (`Name`/`Plural`/`Icon`, eine Fassade über `SearchCatalog` — keine zweite Tabelle). Jedes Verknüpfungs-Panel
+  delegiert dorthin. Vorher lag dasselbe Paar in **acht** Razor-Dateien kopiert und driftete: `CaseContentPanel`
+  kannte `Law`/`Meeting`/`Job` nicht (Gruppenüberschrift „Law"), `PrintLinks` und `LawView` schrieben den rohen
+  CLR-Namen. Ein neuer verknüpfbarer Typ ist damit **eine `SearchCatalog`-Zeile**, kein Rundgang durch die Panels;
+  `LinkCitizenContactTests` hält `LinkService.KnownTypes` gegen den Katalog.
 - **Neue Suchkategorie = eine `SearchCatalog`-Zeile + ein `ISearchProvider` + eine Registrierungszeile.** Fehlt eins,
   schlägt `SearchCatalogTests`/`SearchCoverageTests` fehl. Der `Assistant`-Trait wird **zusammen mit dem Provider**
   gesetzt; `NooseiRecordTypes` leitet Name, Plural und die durchsuchbare Menge daraus ab, eine zweite Tabelle gibt

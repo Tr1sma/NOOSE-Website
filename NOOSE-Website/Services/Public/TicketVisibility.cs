@@ -42,4 +42,44 @@ public static class TicketVisibility
     public static Task<bool> MayReadInternalAsync(AppDbContext db, string ticketId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
         => MayReadAsync(db, ticketId, actor, cancellationToken);
+
+    /// <summary>Batch twin for a viewer scope: which of these tickets the viewer may open.</summary>
+    /// <remarks>
+    /// Modelled on <c>TaskforceVisibility.VisibleIdsAsync</c>, and the reason it exists is the link engine: a
+    /// reference to a ticket must resolve per row, and one query for the whole page beats one per link. Existence
+    /// is part of the answer, so a deleted ticket drops out here rather than rendering as a dangling reference.
+    /// </remarks>
+    public static async Task<HashSet<string>> ReadableIdsAsync(AppDbContext db, IReadOnlyCollection<string> ticketIds,
+        ViewerScope scope, CancellationToken cancellationToken = default)
+    {
+        if (ticketIds.Count == 0 || !scope.IsInternalAgent)
+        {
+            return new();
+        }
+
+        var existing = await db.Tickets.AsNoTracking()
+            .Where(t => ticketIds.Contains(t.Id))
+            .Select(t => t.Id)
+            .ToListAsync(cancellationToken);
+        if (scope.MayClassifiedRead)
+        {
+            // the desk: MayClassifiedRead is the scope side of Permission.RequireTicketRead
+            return existing.ToHashSet();
+        }
+        if (scope.MeId is not { } agentId || existing.Count == 0)
+        {
+            return new();
+        }
+
+        var attached = await db.TicketBeteiligte.AsNoTracking()
+            .Where(p => existing.Contains(p.TicketId) && p.AgentId == agentId)
+            .Select(p => p.TicketId)
+            .ToListAsync(cancellationToken);
+        return attached.ToHashSet();
+    }
+
+    /// <summary>Scope twin of <see cref="MayReadAsync(AppDbContext, string, ClaimsPrincipal, CancellationToken)"/>.</summary>
+    public static async Task<bool> MayReadAsync(AppDbContext db, string ticketId, ViewerScope scope,
+        CancellationToken cancellationToken = default)
+        => (await ReadableIdsAsync(db, new[] { ticketId }, scope, cancellationToken)).Count > 0;
 }

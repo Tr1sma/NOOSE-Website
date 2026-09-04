@@ -119,10 +119,12 @@ else
                                     Audience="TicketMessageAudience.Intern" CanWrite="@_canWriteInternal" />
                 @if (_ticket.Kind != TicketArt.Intern)
                 {
+                    @* Closed, not folded into CanWrite: a closed ticket takes no new answer, but its own lines
+                       stay correctable *@
                     <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
                                         Audience="TicketMessageAudience.Buerger"
                                         CaseNumber="@_ticket.CaseNumber" CitizenName="@_ticket.CitizenName"
-                                        CanWrite="@(_canWrite && TicketRules.IsOpen(_ticket.Status))" />
+                                        CanWrite="@_canWrite" Closed="@(!TicketRules.IsOpen(_ticket.Status))" />
                 }
             </MudStack>
         </MudItem>

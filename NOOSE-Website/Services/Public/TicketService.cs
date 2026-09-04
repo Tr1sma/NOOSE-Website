@@ -379,7 +379,7 @@ public class TicketService(
             .Where(m => m.TicketId == row.Id && m.Audience == TicketMessageAudience.Buerger)
             .OrderBy(m => m.CreatedAt)
             // no author is projected because none exists outside; every agency line is the constant sender
-            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen))
+            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
             .ToListAsync(cancellationToken);
 
         return new CitizenTicketDetail(row.CaseNumber, row.Subject, row.Status, row.CreatedAt,
@@ -528,6 +528,28 @@ public class TicketService(
             .ToList();
     }
 
+    public async Task<IReadOnlyList<TicketPickRow>> SearchForLinkAsync(string? term, ClaimsPrincipal actor,
+        int take = 20, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTicketRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // the citizen name is deliberately not searchable here, unlike on the desk: this list feeds a link, and a
+        // hit by name would put "which citizen writes about this record" into a picker anyone with the desk may open
+        var query = db.Tickets.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            var needle = term.Trim();
+            query = query.Where(t => t.CaseNumber.Contains(needle) || t.Subject.Contains(needle));
+        }
+
+        return await query
+            .OrderByDescending(t => t.LastActivityAt)
+            .Take(Math.Clamp(take, 1, ListCap))
+            .Select(t => new TicketPickRow(t.Id, t.CaseNumber, t.Subject, t.Status, t.LastActivityAt))
+            .ToListAsync(cancellationToken);
+    }
+
     /// <inheritdoc />
     /// <remarks>No guard: the number sits in a badge on a nav entry only leadership renders at all.</remarks>
     public async Task<int> GetOpenCountAsync(CancellationToken cancellationToken = default)
@@ -610,11 +632,15 @@ public class TicketService(
         {
             return [];
         }
+        // spelled out, not compared against a possibly null id: an unowned row belongs to nobody, and a null
+        // actor must not come out as the owner of every line the system ever wrote
+        var me = actor.GetAgentId();
         return await db.TicketNachrichten.AsNoTracking()
             .Where(m => m.TicketId == id && m.Audience == audience)
             .OrderBy(m => m.CreatedAt)
             .Select(m => new TicketMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
-                m.AuthorAgent!.Codename, m.CreatedAt))
+                m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
+                me != null && m.CreatedById != null && m.CreatedById == me))
             .ToListAsync(cancellationToken);
     }
 
@@ -721,6 +747,66 @@ public class TicketService(
 
         await NotifyCitizenAsync(db, row, cancellationToken);
         broadcaster.Report(row.Id, row.CaseNumber);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The audience of the loaded row decides the gate, because the two threads are written under different ones:
+    /// an attached agent owns his internal notes, while a line addressed to the citizen belongs to the desk. The
+    /// write check runs before either, so the supervision and the demo principal never reach the database.
+    ///
+    /// A correction, not a message: no status moves, nothing rings, no read mark shifts, and <c>LastActivityAt</c>
+    /// stays put — a rewritten line is not something the citizen is waiting on, and it must not push the ticket up
+    /// the desk's sort order. A closed ticket stays editable, unlike <see cref="ReplyToCitizenAsync"/>.
+    /// </remarks>
+    public async Task EditMessageAsync(string messageId, string text, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTicketParticipation(actor);
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Bürger-Tickets bearbeitet nur ein schreibberechtigter Agent.");
+        }
+        var body = CleanMessage(text);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var message = await db.TicketNachrichten
+            .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
+            ?? throw new InvalidOperationException("Die Nachricht wurde nicht gefunden.");
+
+        if (message.Audience == TicketMessageAudience.Intern)
+        {
+            if (!await TicketVisibility.MayReadInternalAsync(db, message.TicketId, actor, cancellationToken))
+            {
+                throw new UnauthorizedAccessException("Du bist an diesem Ticket nicht beteiligt.");
+            }
+        }
+        else
+        {
+            Permission.RequireTicketHandling(actor);
+        }
+
+        // not covered by the author check below: an account files tickets out of its own civilian identity, and
+        // then its own id is the one stamped on the citizen's line
+        if (message.AuthorIsCitizen)
+        {
+            throw new InvalidOperationException("Eine Nachricht des Bürgers kann nicht bearbeitet werden.");
+        }
+        // author only; an unowned row belongs to nobody, so a null match must not open it
+        if (message.CreatedById is null || message.CreatedById != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Nur eigene Nachrichten können bearbeitet werden.");
+        }
+        if (message.Text == body)
+        {
+            // no audit row and no signal for a save that changes nothing
+            return;
+        }
+
+        var row = await GetOrThrowAsync(db, message.TicketId, cancellationToken);
+        message.Text = body;
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(row.Id, row.CaseNumber, message.Audience);
     }
 
     /// <inheritdoc />

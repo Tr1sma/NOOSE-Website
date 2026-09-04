@@ -207,6 +207,21 @@ public static class RecordsReference
             }
         }
 
+        // citizen tickets: case number only, never the subject, which the citizen wrote and which can name them.
+        // Flagged classified on purpose: this resolver carries no participant list, only meId, so it cannot tell an
+        // attached agent from an uninvolved one. The conservative answer shows the reference to the desk alone; the
+        // link panel resolves the same row through TicketVisibility and does see the participant.
+        var ticketIds = OpenIds(nameof(Ticket));
+        if (ticketIds.Count > 0)
+        {
+            foreach (var x in await db.Tickets.Where(t => ticketIds.Contains(t.Id))
+                .Select(t => new { t.Id, t.CaseNumber }).ToListAsync(ct))
+            {
+                map[(nameof(Ticket), x.Id)] = new($"Bürger-Ticket {x.CaseNumber}", true,
+                    SearchNavigation.For(nameof(Ticket), x.Id));
+            }
+        }
+
         // codename, never real name
         var agentIds = OpenIds(nameof(Agent));
         if (agentIds.Count > 0)

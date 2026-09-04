@@ -26,6 +26,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -170,6 +171,11 @@ public static class Visibility
             case nameof(Hinweis):
                 return scope.IsInternalAgent
                     && await db.Hinweise.AnyAsync(h => h.Id == entityId, cancellationToken);
+            // Citizen tickets: the desk, or the one agent attached to this row — TicketVisibility owns that rule,
+            // this is only its scope-shaped caller. Named rather than left to the tail below, where the final
+            // "_ => true" would answer "visible" for a partner and for every uninvolved agent alike.
+            case nameof(Ticket):
+                return await TicketVisibility.MayReadAsync(db, entityId, scope, cancellationToken);
         }
 
         // open to every internal agent, but named rather than left to the tail below: a type that falls through

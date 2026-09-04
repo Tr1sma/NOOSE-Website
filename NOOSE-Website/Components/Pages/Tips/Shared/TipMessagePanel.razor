@@ -34,17 +34,51 @@
                     <MudPaper Outlined="true" Class="pa-3"
                               Style="@(message.FromCitizen ? "margin-right:12%;" : "margin-left:12%;")">
                         <MudStack Spacing="1">
-                            <MudText Typo="Typo.caption" Color="@(message.FromCitizen ? Color.Default : Color.Primary)">
-                                @Author(message) · @message.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                            </MudText>
-                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.caption" Color="@(message.FromCitizen ? Color.Default : Color.Primary)">
+                                    @Author(message) · @message.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                </MudText>
+                                @if (message.EditedAt is not null)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">· bearbeitet</MudText>
+                                }
+                                @if (CanEdit(message))
+                                {
+                                    <MudTooltip Text="Bearbeiten">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                       Color="Color.Default" aria-label="Bearbeiten"
+                                                       OnClick="@(() => BeginEdit(message))" />
+                                    </MudTooltip>
+                                }
+                            </MudStack>
+                            @if (_editingId == message.Id)
+                            {
+                                @* plain text on purpose: the citizen thread has no sanitizer, line breaks are the formatting *@
+                                <MudTextField @bind-Value="_editText" Lines="3" Variant="Variant.Outlined"
+                                              MaxLength="@TipRules.MaxMessageLength" AutoFocus="true"
+                                              Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")" />
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                               OnClick="CancelEdit">Abbrechen</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Check" OnClick="SaveEditAsync"
+                                               Disabled="@(_editSaving || string.IsNullOrWhiteSpace(_editText))">
+                                        Speichern
+                                    </MudButton>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                            }
                         </MudStack>
                     </MudPaper>
                 }
             </MudStack>
         }
 
-        @if (CanWrite)
+        @* a closed tip takes no new message, but an old one of your own stays correctable *@
+        @if (CanWrite && !Closed)
         {
             <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")"
                           Lines="3" Variant="Variant.Outlined" MaxLength="@TipRules.MaxMessageLength" />
@@ -87,6 +121,10 @@
     [Parameter]
     public bool CanWrite { get; set; }
 
+    /// <summary>Closes the composer only; a handler still corrects his own lines on a finished tip.</summary>
+    [Parameter]
+    public bool Closed { get; set; }
+
     /// <summary>Fills the AKTENZEICHEN token of a picked template.</summary>
     [Parameter]
     public string? CaseNumber { get; set; }
@@ -102,6 +140,9 @@
     private bool _load = true;
     private bool _busy;
     private string? _loadedId;
+    private string? _editingId;
+    private string _editText = string.Empty;
+    private bool _editSaving;
 
     private bool IsInternal => Audience == TipMessageAudience.Intern;
 
@@ -109,8 +150,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        // before the id guard: CanWrite turns true only when a closed tip moves back, and the guard would then
-        // skip the template load for the life of the component
+        // before the id guard: its own flag makes the load a one-shot anyway, and a reopened tip has to find
+        // its templates without the guard skipping them for the life of the component
         await LoadTemplatesAsync();
         if (_loadedId == TipId)
         {
@@ -122,7 +163,8 @@
 
     private async Task LoadTemplatesAsync()
     {
-        if (_templatesLoaded || IsInternal || !CanWrite)
+        // tied to the composer that uses them, Closed included: a finished tip needs no template menu
+        if (_templatesLoaded || IsInternal || !CanWrite || Closed)
         {
             return;
         }
@@ -180,6 +222,45 @@
         finally
         {
             _busy = false;
+        }
+    }
+
+    // author only, and never the citizen's own line: leadership may delete a foreign line, never restate it
+    private bool CanEdit(TipMessageRow message)
+        => CanWrite && message.Mine && !message.FromCitizen && _editingId != message.Id;
+
+    private void BeginEdit(TipMessageRow message)
+    {
+        _editingId = message.Id; // one edit at a time
+        _editText = message.Text;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editText = string.Empty;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editSaving || _editingId is null || string.IsNullOrWhiteSpace(_editText))
+        {
+            return;
+        }
+        _editSaving = true;
+        try
+        {
+            await Tips.EditMessageAsync(_editingId, _editText, User);
+            CancelEdit();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _editSaving = false;
         }
     }
 

@@ -78,7 +78,7 @@
         nameof(Person), nameof(PersonDoc), nameof(Observation), nameof(Operation), nameof(Case),
         nameof(Taskforce), nameof(Faction), nameof(PersonGroup), nameof(Party),
         nameof(Document), nameof(Law), nameof(Agent), nameof(Job), nameof(Bewerbung),
-        nameof(Meeting), nameof(MeetingAgendaItem),
+        nameof(Meeting), nameof(MeetingAgendaItem), nameof(Hinweis), nameof(Ticket),
     };
 
     private IEnumerable<IGrouping<string, LinkDisplay>> _grouped =>
@@ -132,45 +132,7 @@
         await LoadAsync();
     }
 
-    private static string TypeDisplay(string type) => type switch
-    {
-        nameof(Person) => "Personen",
-        nameof(PersonDoc) => "Personen-Doks",
-        nameof(Observation) => "Observationen",
-        nameof(Operation) => "Operationen",
-        nameof(Case) => "Vorgänge",
-        nameof(Taskforce) => "Taskforces",
-        nameof(Faction) => "Fraktionen",
-        nameof(PersonGroup) => "Personengruppen",
-        nameof(Party) => "Parteien",
-        nameof(Document) => "Dokumente",
-        nameof(Law) => "Gesetze",
-        nameof(Agent) => "Agenten",
-        nameof(Job) => "Aufgaben",
-        nameof(Bewerbung) => "Bewerbungen",
-        nameof(Meeting) => "Besprechungen",
-        nameof(MeetingAgendaItem) => "Tagesordnungspunkte",
-        _ => type,
-    };
+    private static string TypeDisplay(string type) => RecordTypeDisplay.Plural(type);
 
-    private static string TypeIcon(string type) => type switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(PersonDoc) => Icons.Material.Filled.Description,
-        nameof(Observation) => Icons.Material.Filled.Visibility,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Taskforce) => Icons.Material.Filled.Groups2,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Document) => Icons.Material.Filled.Article,
-        nameof(Law) => Icons.Material.Filled.Gavel,
-        nameof(Agent) => Icons.Material.Filled.Person,
-        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
-        nameof(Bewerbung) => Icons.Material.Filled.HowToReg,
-        nameof(Meeting) => Icons.Material.Filled.Groups,
-        nameof(MeetingAgendaItem) => Icons.Material.Filled.ChecklistRtl,
-        _ => Icons.Material.Filled.Hub,
-    };
+    private static string TypeIcon(string type) => RecordTypeDisplay.Icon(type);
 }

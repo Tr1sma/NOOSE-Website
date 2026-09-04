@@ -84,9 +84,14 @@ else if (_ready)
                         <MudPaper Outlined="true" Class="pa-3"
                                   Style="@(message.FromCitizen ? "margin-left:15%;" : "margin-right:15%;")">
                             <MudStack Spacing="1">
+                                @* a line you may already have read can be corrected; saying so costs no identity *@
                                 <MudText Typo="Typo.caption" Color="@(message.FromCitizen ? Color.Default : Color.Primary)">
                                     @(message.FromCitizen ? "Du" : TicketRules.AgencySender)
                                     · @message.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    @if (message.EditedAt is not null)
+                                    {
+                                        <span> · bearbeitet</span>
+                                    }
                                 </MudText>
                                 <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
                             </MudStack>

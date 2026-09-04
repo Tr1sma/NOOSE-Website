@@ -160,6 +160,11 @@ public class PublicWantedModelTests
         [typeof(TicketParticipationRow)] = "Die eigenen Beteiligungen eines Agenten mit ungelesenen internen "
             + "Notizen. Ein rein innerer Schalter ohne Bürgerbezug.",
         [typeof(TicketInput)] = "Formulareingabe des Ticket-Dialogs.",
+        [typeof(TipPickRow)] = "Vorschlagszeile des Verknüpfungs-Dialogs. Trägt Aktenzeichen, Status und Auszug "
+            + "und bewusst kein Bürgerfeld: die Anonymitätszusage steckt in der Form der Zeile, nicht in einem "
+            + "Zweig, den ein späterer Leser vergessen kann.",
+        [typeof(TicketPickRow)] = "Vorschlagszeile des Verknüpfungs-Dialogs, hinter dem Führungs-Gate. Der Betreff "
+            + "hilft beim Auswählen und bleibt im Dialog; in die Verknüpfung geht nur das Aktenzeichen.",
         [typeof(PublicTemplateRow)] = "Vorlage mit rohen Tokens und internem Arbeitstitel; nach außen geht die "
             + "gerenderte Nachricht.",
         [typeof(PublicTemplateInput)] = "Formulareingabe des Vorlagen-Dialogs.",

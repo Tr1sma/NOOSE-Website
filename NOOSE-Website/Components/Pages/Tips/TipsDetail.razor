@@ -233,31 +233,8 @@ else
                             <MudText Typo="Typo.h6">Übernahme</MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                                 Aus dem Hinweis wird eine Akte. Jede Übernahme hinterlässt eine Verknüpfung, damit die
-                                Herkunft an der Akte sichtbar bleibt.
+                                Herkunft an der Akte sichtbar bleibt — sie steht unten bei den verknüpften Akten.
                             </MudText>
-
-                            @if (_takeover.Count > 0)
-                            {
-                                <MudStack Spacing="1">
-                                    @foreach (var link in _takeover)
-                                    {
-                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                                @TakeoverType(link.OtherType)
-                                            </MudChip>
-                                            @if (link.Href is not null)
-                                            {
-                                                <MudLink Href="@link.Href" Typo="Typo.body2">@link.OtherDesignation</MudLink>
-                                            }
-                                            else
-                                            {
-                                                <MudText Typo="Typo.body2">@link.OtherDesignation</MudText>
-                                            }
-                                        </MudStack>
-                                    }
-                                </MudStack>
-                                <MudDivider />
-                            }
 
                             <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
                                 <MudTextField @bind-Value="_newPersonName" Label="Name der neuen Personenakte"
@@ -305,6 +282,12 @@ else
                     </MudPaper>
                 }
 
+                @* every internal agent reads this, the read-only supervision included: the panel gates writing on
+                   MayWrite() itself, and hiding the list from a reader would hide the origin of an existing file *@
+                <MudPaper Outlined="true" Class="pa-4">
+                    <RecordLinksPanel EntityType="@nameof(Hinweis)" EntityId="@Id" User="@_user" />
+                </MudPaper>
+
                 @if (_duplicates.Count > 0)
                 {
                     <MudPaper Outlined="true" Class="pa-4">
@@ -333,9 +316,11 @@ else
 
         <MudItem xs="12" md="6">
             <MudStack Spacing="4">
+                @* Closed, not folded into CanWrite: a finished tip takes no new message, but its own lines
+                   stay correctable *@
                 <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Buerger"
                                  CaseNumber="@_tip.CaseNumber" CitizenName="@_tip.CitizenName"
-                                 CanWrite="@(_canWrite && !TipRules.IsClosed(_tip.Status))" />
+                                 CanWrite="_canWrite" Closed="@TipRules.IsClosed(_tip.Status)" />
                 <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Intern"
                                  CanWrite="_canWrite" />
             </MudStack>
@@ -353,7 +338,6 @@ else
     private ClaimsPrincipal _user = default!;
     private TipDetail? _tip;
     private IReadOnlyList<TipDuplicateRow> _duplicates = Array.Empty<TipDuplicateRow>();
-    private IReadOnlyList<LinkDisplay> _takeover = Array.Empty<LinkDisplay>();
     private List<Person> _people = new();
     private string _newPersonName = string.Empty;
     private string _personSearch = string.Empty;
@@ -433,9 +417,6 @@ else
             _duplicates = _tip?.DuplicateGroupId is null
                 ? Array.Empty<TipDuplicateRow>()
                 : await Tips.GetDuplicatesAsync(Id, _user);
-            _takeover = _tip is null
-                ? Array.Empty<LinkDisplay>()
-                : await Takeover.GetStateAsync(Id, _user);
             _rewards = _tip is null
                 ? Array.Empty<RewardRow>()
                 : await Reward.GetForTipAsync(Id, _user);
@@ -503,14 +484,6 @@ else
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
-
-    private static string TakeoverType(string type) => type switch
-    {
-        nameof(Person) => "Personenakte",
-        nameof(Case) => "Vorgang",
-        nameof(Observation) => "Observation",
-        _ => type,
-    };
 
     private Task SetStatusAsync(TipStatus status) => RunAsync(() => Tips.SetStatusAsync(Id, status, _user));
 

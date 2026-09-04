@@ -1053,6 +1053,63 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.NotEqual(unfiltered, sql);
     }
 
+    /// <summary>The handler's thread projection: the edit stamp plus the computed ownership flag.</summary>
+    /// <remarks>
+    /// Ownership is a boolean the provider has to build in the SELECT list, and the spelled-out null branch exists
+    /// so an actor without an id cannot come out as the owner of every system-written row. Both shapes are the ones
+    /// the edit button reads, so an untranslatable projection here would blank the whole thread.
+    /// </remarks>
+    [Fact]
+    public void TheHandlerThreadProjection_TranslatesTheEditStampAndTheOwnershipFlag()
+    {
+        string? me = "a1";
+
+        var tip = _db.HinweisNachrichten.AsNoTracking()
+            .Where(m => m.HinweisId == "h1" && m.Audience == TipMessageAudience.Intern)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new TipMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
+                m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
+                me != null && m.CreatedById != null && m.CreatedById == me))
+            .ToQueryString();
+
+        var ticket = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.TicketId == "t1" && m.Audience == TicketMessageAudience.Intern)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new TicketMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
+                m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
+                me != null && m.CreatedById != null && m.CreatedById == me))
+            .ToQueryString();
+
+        foreach (var sql in new[] { tip, ticket })
+        {
+            Assert.Contains("GeaendertAm", sql, StringComparison.Ordinal);
+            Assert.Contains("ErstelltVonId", sql, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>The same stamp on the way out: the citizen is told a line was rewritten, never by whom.</summary>
+    [Fact]
+    public void TheCitizenThreadProjection_CarriesTheEditStampAndNoAuthor()
+    {
+        var tip = _db.HinweisNachrichten.AsNoTracking()
+            .Where(m => m.HinweisId == "h1" && m.Audience == TipMessageAudience.Buerger)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new CitizenTipMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
+            .ToQueryString();
+
+        var ticket = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.TicketId == "t1" && m.Audience == TicketMessageAudience.Buerger)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
+            .ToQueryString();
+
+        foreach (var sql in new[] { tip, ticket })
+        {
+            Assert.Contains("GeaendertAm", sql, StringComparison.Ordinal);
+            Assert.DoesNotContain("AutorAgentId", sql, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void TheRewardTwoHop_TranslatesToAJoinOntoTheShare()
     {
@@ -1105,6 +1162,63 @@ public sealed class MySqlTranslationTests : IDisposable
         // the notice query keeps its own soft-delete filter; the second one deliberately does not
         Assert.Contains("IstGeloescht", notices, StringComparison.Ordinal);
         Assert.DoesNotContain("IstGeloescht", people, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTipLinkPicker_Translates()
+    {
+        // the excerpt is a conditional Substring in the projection, and SQLite accepts shapes Pomelo rejects.
+        // This one runs while an agent types into the link dialog, so an untranslatable query would be a broken
+        // dropdown in production against a green test suite
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(h => h.CaseNumber.Contains("H-2026") || h.Text.Contains("Hafen"))
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(20)
+            .Select(h => new TipPickRow(h.Id, h.CaseNumber, h.Status, h.Kind, h.CreatedAt,
+                h.Text.Length > 160 ? h.Text.Substring(0, 160) : h.Text))
+            .ToQueryString();
+
+        Assert.Contains("Aktenzeichen", sql, StringComparison.Ordinal);
+        // the soft-delete filter must survive: a deleted tip is no link target
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
+        // and no citizen table is touched at all — the promise is the shape of the query
+        Assert.DoesNotContain("BuergerProfile", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTicketLinkPicker_Translates()
+    {
+        var sql = _db.Tickets.AsNoTracking()
+            .Where(t => t.CaseNumber.Contains("T-2026") || t.Subject.Contains("Fahrzeug"))
+            .OrderByDescending(t => t.LastActivityAt)
+            .Take(20)
+            .Select(t => new TicketPickRow(t.Id, t.CaseNumber, t.Subject, t.Status, t.LastActivityAt))
+            .ToQueryString();
+
+        Assert.Contains("Betreff", sql, StringComparison.Ordinal);
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BuergerProfile", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTicketsReadableIdsQuery_Translates()
+    {
+        // the participant half of TicketVisibility: two round trips rather than a subquery, because the link panel
+        // asks for a whole page of ids at once
+        var ids = new List<string> { "t1", "t2" };
+        var existing = _db.Tickets.AsNoTracking()
+            .Where(t => ids.Contains(t.Id))
+            .Select(t => t.Id)
+            .ToQueryString();
+        var attached = _db.TicketBeteiligte.AsNoTracking()
+            .Where(p => ids.Contains(p.TicketId) && p.AgentId == "me")
+            .Select(p => p.TicketId)
+            .ToQueryString();
+
+        Assert.Contains("IN (", existing, StringComparison.Ordinal);
+        Assert.Contains("IN (", attached, StringComparison.Ordinal);
+        // a deleted ticket drops out of the existence half, so it can never resolve as a link
+        Assert.Contains("IstGeloescht", existing, StringComparison.Ordinal);
     }
 
     private static int Occurrences(string text, string needle)

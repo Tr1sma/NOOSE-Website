@@ -653,6 +653,167 @@ public sealed class TipServiceTests
         Assert.Equal(0, await host.Service.GetOwnUnreadCountAsync(Citizen()));
     }
 
+    // ---- editing a line afterwards ----
+
+    /// <summary>The interceptor stamps whatever <see cref="FixedUser"/> reports, so every line the fixture writes
+    /// belongs to "lead": <see cref="Leader"/> is its author and <see cref="Agent"/> the stranger.</summary>
+    [Fact]
+    public async Task A_handler_rewrites_his_own_internal_note()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Abgleich läuft.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+        Assert.Null(message.EditedAt);
+        Assert.True(message.Mine);
+
+        await host.Service.EditMessageAsync(message.Id, "  Abgleich abgeschlossen.  ", Leader());
+
+        var edited = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+        Assert.Equal("Abgleich abgeschlossen.", edited.Text);
+        Assert.NotNull(edited.EditedAt);
+    }
+
+    [Fact]
+    public async Task A_rewritten_agency_line_reaches_the_citizen_marked_as_edited()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+        await host.Service.AskCitizenAsync(id, "Nennen Sie das Kennzeichen.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Buerger, Leader()));
+
+        await host.Service.EditMessageAsync(message.Id, "Nennen Sie bitte das Kennzeichen.", Leader());
+
+        var outside = Assert.Single((await host.Service.GetOwnDetailAsync(caseNumber, Citizen()))!.Messages);
+        Assert.Equal("Nennen Sie bitte das Kennzeichen.", outside.Text);
+        Assert.NotNull(outside.EditedAt);
+    }
+
+    /// <summary>The text is the one field the change protocol never carries; /nachweis is open to every agent.</summary>
+    [Fact]
+    public async Task An_edit_is_audited_without_the_wording()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Alter Wortlaut.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+
+        await host.Service.EditMessageAsync(message.Id, "Neuer Wortlaut.", Leader());
+
+        await using var db = ctx.NewContext();
+        var row = await db.AuditLogs.SingleAsync(
+            a => a.EntityType == nameof(HinweisNachricht) && a.Action == AuditAction.Modified);
+        Assert.Equal("lead", row.AgentId);
+        // no ChangesJson at all: Text was the only changed field, and it is redacted
+        Assert.Null(row.ChangesJson);
+    }
+
+    [Fact]
+    public async Task A_foreign_line_is_refused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Abgleich läuft.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+
+        Assert.False((await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Agent()))[0].Mine);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(message.Id, "Umformuliert", Agent()));
+    }
+
+    [Fact]
+    public async Task The_line_the_citizen_wrote_is_never_editable_from_the_desk()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+        await host.Service.AskCitizenAsync(id, "Nennen Sie das Kennzeichen.", Leader());
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Es war ein weißer Van.", Citizen());
+        var citizenLine = (await host.Service.GetMessagesAsync(id, TipMessageAudience.Buerger, Leader()))
+            .Single(m => m.FromCitizen);
+
+        // the fixture stamps every row with the same account, so the author check alone would have let this through
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(citizenLine.Id, "Umgeschrieben", Leader()));
+    }
+
+    [Fact]
+    public async Task An_empty_or_oversized_rewrite_is_refused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Abgleich läuft.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(message.Id, "   ", Leader()));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.EditMessageAsync(
+                message.Id, new string('x', TipRules.MaxMessageLength + 1), Leader()));
+    }
+
+    [Fact]
+    public async Task An_unchanged_rewrite_writes_nothing()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Abgleich läuft.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+
+        await host.Service.EditMessageAsync(message.Id, "Abgleich läuft.", Leader());
+
+        Assert.Null(Assert.Single(
+            await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader())).EditedAt);
+        await using var db = ctx.NewContext();
+        Assert.Empty(await db.AuditLogs
+            .Where(a => a.EntityType == nameof(HinweisNachricht) && a.Action == AuditAction.Modified)
+            .ToListAsync());
+    }
+
+    /// <summary>A typo is usually noticed after the file is closed, so the correction must survive the closure.</summary>
+    [Fact]
+    public async Task A_closed_tip_still_takes_a_correction()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Abgleich läuft.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+        await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Leader());
+        await host.Service.SetStatusAsync(id, TipStatus.Verworfen, Leader());
+
+        await host.Service.EditMessageAsync(message.Id, "Abgleich ergebnislos.", Leader());
+
+        Assert.Equal("Abgleich ergebnislos.", Assert.Single(
+            await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader())).Text);
+    }
+
+    [Fact]
+    public async Task Nobody_without_tip_handling_may_rewrite_a_line()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+        await host.Service.AskCitizenAsync(id, "Nennen Sie das Kennzeichen.", Leader());
+        var message = Assert.Single(await host.Service.GetMessagesAsync(id, TipMessageAudience.Buerger, Leader()));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(message.Id, "Anders", Citizen()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(message.Id, "Anders", Supervision()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.EditMessageAsync(message.Id, "Anders", Partner()));
+    }
+
     // ---- status ----
 
     [Fact]
@@ -1355,5 +1516,84 @@ public sealed class TipServiceTests
         Assert.NotNull(detail);
         Assert.Equal(TipKind.Ergreifung, detail!.Kind);
         Assert.Equal("Am Pier", detail.HandoverLocation);
+    }
+
+    // ---- the link picker ----
+
+    [Fact]
+    public async Task ThePicker_findsATip_byCaseNumberAndByText()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+
+        var byNumber = await host.Service.SearchForLinkAsync(caseNumber, Agent());
+        Assert.Equal(caseNumber, Assert.Single(byNumber).CaseNumber);
+
+        var byText = await host.Service.SearchForLinkAsync("Hafen", Agent());
+        Assert.Equal(caseNumber, Assert.Single(byText).CaseNumber);
+
+        // an empty term is the freshly opened dropdown, not "match nothing"
+        Assert.NotEmpty(await host.Service.SearchForLinkAsync(null, Agent()));
+    }
+
+    [Fact]
+    public async Task ThePicker_offersATipOfEveryStatus()
+    {
+        // it is not the inbox: which tab a tip sits in has nothing to do with whether a record may point at it
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+        var id = (await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader())).Single().Id;
+        await host.Service.SetStatusAsync(id, TipStatus.Verworfen, Leader());
+
+        var rows = await host.Service.SearchForLinkAsync(null, Agent());
+
+        Assert.Equal(caseNumber, Assert.Single(rows).CaseNumber);
+        Assert.Equal(TipStatus.Verworfen, rows[0].Status);
+    }
+
+    [Fact]
+    public async Task ThePicker_isClosedToAPartnerAndToACitizen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SearchForLinkAsync(null, Partner()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SearchForLinkAsync(null, Citizen()));
+        // the read-only supervision reads along here, as everywhere else
+        Assert.NotEmpty(await host.Service.SearchForLinkAsync(null, Supervision()));
+    }
+
+    [Fact]
+    public async Task ThePickerRow_carriesNoCitizenField()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host);
+
+        var row = Assert.Single(await host.Service.SearchForLinkAsync(null, Agent()));
+
+        // structural, not a branch: the type has no property that could name the tipster
+        Assert.DoesNotContain(typeof(TipPickRow).GetProperties(),
+            p => p.Name.Contains("Citizen", StringComparison.OrdinalIgnoreCase)
+                || p.Name.Contains("Buerger", StringComparison.OrdinalIgnoreCase));
+        Assert.False(string.IsNullOrWhiteSpace(row.CaseNumber));
+    }
+
+    [Fact]
+    public async Task ThePicker_leavesADeletedTipOut()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host);
+        var id = (await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader())).Single().Id;
+
+        await host.Service.DeleteAsync(id, Leader());
+
+        Assert.Empty(await host.Service.SearchForLinkAsync(null, Agent()));
     }
 }

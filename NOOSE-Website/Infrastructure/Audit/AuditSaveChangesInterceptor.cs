@@ -175,9 +175,12 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
             if (action is AuditAction.Modified or AuditAction.Deleted or AuditAction.Restored)
             {
+                var type = entry.Entity.GetType().Name;
                 foreach (var prop in entry.Properties)
                 {
-                    if (prop.IsModified && !Equals(prop.OriginalValue, prop.CurrentValue))
+                    // a redacted field still counts as changed; only its value stays out
+                    if (prop.IsModified && !Equals(prop.OriginalValue, prop.CurrentValue)
+                        && !AuditRedaction.Hides(type, prop.Metadata.Name))
                     {
                         _changes[prop.Metadata.Name] = new[] { prop.OriginalValue, prop.CurrentValue };
                     }

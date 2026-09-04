@@ -78,7 +78,7 @@ else
                         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
                                 <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Small" />
-                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@v.OtherType</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RecordTypeDisplay.Name(v.OtherType)</MudChip>
                                 @if (v.Href is not null)
                                 {
                                     <MudLink Href="@v.Href" Typo="Typo.body2">@v.OtherDesignation</MudLink>

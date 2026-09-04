@@ -13,6 +13,8 @@
 @inject IDocumentService DocumentService
 @inject IBewerbungService BewerbungService
 @inject IMeetingService MeetingService
+@inject ITipService TipService
+@inject ITicketService TicketService
 
 <MudDialog>
     <DialogContent>
@@ -282,6 +284,44 @@
                         </ItemTemplate>
                     </MudAutocomplete>
                     break;
+
+                case nameof(Hinweis):
+                    <MudAutocomplete T="TipPickRow" Label="Bürgerhinweis" @bind-Value="_tip" AutoFocus="true"
+                                     SearchFunc="@SearchTips" ToStringFunc="@TipText"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.TipsAndUpdates">
+                        <ItemTemplate Context="h">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.TipsAndUpdates" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@h.CaseNumber</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @TipStatusDisplay.Name(h.Status) · @h.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudText>
+                                @if (!string.IsNullOrWhiteSpace(h.Excerpt))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">· @h.Excerpt</MudText>
+                                }
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Ticket):
+                    <MudAutocomplete T="TicketPickRow" Label="Bürger-Ticket" @bind-Value="_ticket" AutoFocus="true"
+                                     SearchFunc="@SearchTickets" ToStringFunc="@TicketText"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Forum">
+                        <ItemTemplate Context="t">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@t.CaseNumber</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@t.Subject</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
             }
 
             @if (RoleContext)
@@ -321,6 +361,8 @@
     private bool _mayAllTf;
     private bool _mayClassified;
     private bool _mayBewerbung;
+    private bool _mayTip;
+    private bool _mayTicket;
     private DocumentViewerScope _docScope;
     private ViewerScope _scope;
 
@@ -334,6 +376,8 @@
             _mayAllTf = user.MayAllTaskforcesSee();
             _mayClassified = user.MayClassifiedRead();
             _mayBewerbung = user.IsHrbOrLeadership();
+            _mayTip = user.IsInternalAgent();
+            _mayTicket = user.IsInternalAgent() && user.MayClassifiedRead();
             _docScope = DocumentViewerScope.From(user);
             _scope = ViewerScope.From(user);
         }
@@ -358,9 +402,30 @@
         new(nameof(Meeting), "Besprechung"),
     };
 
-    // applications are HRB/leadership-only, so only offer the type to those viewers
-    private IEnumerable<TypeOption> ShownTypes =>
-        _mayBewerbung ? _types.Append(new(nameof(Bewerbung), "Bewerbung")) : _types;
+    // three types are offered by audience rather than to everyone: applications are HRB/leadership-only, a citizen
+    // tip is readable by every internal agent but by no partner, and a ticket picker is the desk's — the search
+    // behind it carries RequireTicketRead. An agent attached to a single ticket therefore cannot pick one here,
+    // while an existing link to their own ticket still resolves for them (LinkService asks per row).
+    private IEnumerable<TypeOption> ShownTypes
+    {
+        get
+        {
+            var shown = _types.AsEnumerable();
+            if (_mayBewerbung)
+            {
+                shown = shown.Append(new(nameof(Bewerbung), "Bewerbung"));
+            }
+            if (_mayTip)
+            {
+                shown = shown.Append(new(nameof(Hinweis), "Bürgerhinweis"));
+            }
+            if (_mayTicket)
+            {
+                shown = shown.Append(new(nameof(Ticket), "Bürger-Ticket"));
+            }
+            return shown;
+        }
+    }
 
     private string _targetType = nameof(Person);
     private string? _label;
@@ -391,6 +456,8 @@
     private DocumentListItem? _document;
     private Bewerbung? _bewerbung;
     private Meeting? _meeting;
+    private TipPickRow? _tip;
+    private TicketPickRow? _ticket;
 
     // loaded on demand for client-side search
     private List<Agent>? _allAgents;
@@ -415,6 +482,8 @@
         nameof(Document) => _document?.Id,
         nameof(Bewerbung) => _bewerbung?.Id,
         nameof(Meeting) => _meeting?.Id,
+        nameof(Hinweis) => _tip?.Id,
+        nameof(Ticket) => _ticket?.Id,
         _ => null,
     };
 
@@ -422,7 +491,7 @@
     {
         _person = null; _faction = null; _group = null; _party = null; _operation = null; _taskforce = null;
         _case = null; _job = null; _agent = null; _doc = null; _observation = null; _law = null; _document = null;
-        _bewerbung = null; _meeting = null;
+        _bewerbung = null; _meeting = null; _tip = null; _ticket = null;
         if (_targetType == nameof(Agent) && _allAgents is null)
         {
             // TeamLeads are never selectable
@@ -477,6 +546,17 @@
 
     private async Task<IEnumerable<Meeting>> SearchMeetings(string value, CancellationToken token)
         => await MeetingService.SearchAsync(value, 20, token);
+
+    private async Task<IEnumerable<TipPickRow>> SearchTips(string value, CancellationToken token)
+        => _user is null ? Array.Empty<TipPickRow>() : await TipService.SearchForLinkAsync(value, _user, 20, token);
+
+    private async Task<IEnumerable<TicketPickRow>> SearchTickets(string value, CancellationToken token)
+        => _user is null ? Array.Empty<TicketPickRow>() : await TicketService.SearchForLinkAsync(value, _user, 20, token);
+
+    // the picker shows the subject, the link never does: only the case number identifies a ticket outward
+    private static string TipText(TipPickRow? h) => h is null ? string.Empty : $"Bürgerhinweis {h.CaseNumber}";
+
+    private static string TicketText(TicketPickRow? t) => t is null ? string.Empty : $"Bürger-Ticket {t.CaseNumber}";
 
     private Task<IEnumerable<Bewerbung>> SearchBewerbungen(string value, CancellationToken token)
     {
@@ -550,6 +630,8 @@
         nameof(Document) => _document?.Title,
         nameof(Bewerbung) => _bewerbung?.Name,
         nameof(Meeting) => _meeting?.Title,
+        nameof(Hinweis) => _tip is null ? null : TipText(_tip),
+        nameof(Ticket) => _ticket is null ? null : TicketText(_ticket),
         _ => null,
     };
 

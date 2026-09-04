@@ -111,9 +111,20 @@
     Rennen doch, wird die frische Akte soft-gelöscht und die Verwerfung auditiert. Anders als bei Geld ist eine
     doppelte Akte ein Papierkorb-Eintrag.
   - **`Hinweis` als Verknüpfungs-Gegenstück braucht drei Registries:** `LinkService` (Auflösungs-Arm **und**
-    `knownTypes` — ohne den Arm rendert der `else`-Zweig die rohe GUID), `RecordsReference` (sonst steht auf dem
-    Zeitstrahl „Akte") und `LinkPanel.TypeDisplay`. Nach draußen geht nur das Aktenzeichen; für einen Partner
+    `KnownTypes` — ohne den Arm rendert der `else`-Zweig die rohe GUID), `RecordsReference` (sonst steht auf dem
+    Zeitstrahl „Akte") und die Beschriftung. Nach draußen geht nur das Aktenzeichen; für einen Partner
     fällt die Verknüpfung automatisch heraus, weil `releasedTargets` den Typ nicht kennt.
+    **Die Beschriftung ist seit 2026-09-04 keine Registry mehr**, sondern kommt aus
+    `Services/RecordTypeDisplay.cs` — einer Fassade über `SearchCatalog`, die jeder Verknüpfungs-Panel nutzt.
+    Vorher lag dasselbe Paar aus deutschem Plural und Icon in **acht** Razor-Dateien kopiert, drei davon
+    unvollständig: ein Vorgang, der auf ein Gesetz verwies, trug die Gruppenüberschrift „Law", und die
+    Druckansicht schrieb den rohen CLR-Namen in die Tabelle.
+  - **Seit 2026-09-04 ist der Hinweis in beide Richtungen verknüpfbar.** Er ist im `LinkDialog` als Aktentyp
+    wählbar (jeder interne Agent, kein Partner — `RequireTipRead` auf der Scope-Achse), und `/hinweise/{Id}`
+    trägt ein eigenes `RecordLinksPanel`. Die frühere Read-only-Liste im Übernahme-Block ist dafür entfallen;
+    sie zeigte dieselben Zeilen ein zweites Mal. Der Übernahme-Block behält seine **Knöpfe** — er ist der
+    Arbeitsablauf, das Panel die Liste. `ITipService.SearchForLinkAsync` speist den Picker und liest, wörtlich
+    wie `TipSearchProvider`, **kein Bürgerfeld**: `TipPickRow` hat gar keins, die Zusage steckt in der Form.
   - **Die Hinweisgeber-Historie an der Personenakte listet nur offengelegte Hinweise — auch nicht als Zähler.**
     Der Abschnitt ist über die Identität des Bürgers verschlüsselt, eine Zahl nannte ihn durch Rechnen. Regel:
     `TipAnonymity.IsHidden` plus Query-Zwilling `TipAnonymity.Disclosable`, an einer Stelle, von beiden
@@ -155,13 +166,27 @@
     `SetStatusAsync` und `PostInternalNoteAsync` prüfen weiter `MayWrite()`, die Aufsicht kann ihr eigenes
     Ticket also nicht selbst beantworten. Die Führungsebene sieht es als **ganz normales Bürger-Ticket** unter
     dem Zivilnamen; wer dahintersteckt, steht am Bürgerkonto, nicht am Ticket.
-  - **Ein Ticket hängt an keiner Akte.** Es ist Schriftwechsel, kein Aktenmaterial: **kein** Eintrag in
-    `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `ChronikParentResolver`, `RecordsReference`
-    oder `LinkService` — es gibt keinen Elternteil, auf den es fan-in könnte. Registriert ist es in
-    `PublicVisibility`, `SearchCatalog` (seit Phase 16 mit Provider; `TicketNachricht` bleibt draußen),
-    `AuditEntityDisplay`
-    (Label **und** Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` und
-    `MergedPageSections.Trash`.
+  - **Ein Ticket hat keinen Elternteil — seit 2026-09-04 ist es trotzdem verlinkbar, aber nur als *Ziel*.**
+    Der ursprüngliche Satz war „ein Ticket hängt an keiner Akte", und der harte Teil davon gilt weiter:
+    **kein** Eintrag in `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`,
+    `ChronikParentResolver` oder `GlobalChronikService.RecordTypes`, und **kein** Verknüpfungs-Panel auf
+    `/tickets/{Id}` — ein Ticket ist nie *Quelle* einer Verknüpfung, es gibt nichts, worauf es fan-in könnte.
+    Umgekehrt darf eine Akte jetzt **auf** ein Ticket zeigen („zu diesem Vorgang schreibt ein Bürger"), und
+    dafür kennen `LinkService` (Auflösungs-Arm + `KnownTypes` + Ziel-Guard in `CreateAsync`) und
+    `RecordsReference` den Typ. Drei Dinge tragen die Zusage:
+    **(1)** Nach draußen geht **nur das Aktenzeichen** — der Betreff ist vom Bürger geschrieben und kann ihn
+    benennen; im Picker steht er, in der `LinkDisplay`-Bezeichnung nie.
+    **(2)** `Visibility.IsRecordVisibleAsync` hat einen eigenen `Ticket`-Arm über `TicketVisibility` (Desk
+    **oder** Beteiligter). Ohne ihn hätte der `_ => true`-Schwanz jedem Agenten und jedem Partner „sichtbar"
+    geantwortet — die Verknüpfung wäre ein Existenz-Orakel gewesen.
+    **(3)** `RecordsReference` markiert die Zeile **`Classified = true`**, weil dieser Auflöser keine
+    Beteiligtenliste kennt, sondern nur `meId`: auf dem Zeitstrahl sieht sie damit nur die Führung, im
+    Verknüpfungs-Panel auch der Beteiligte (dort fragt `LinkService` je Zeile `TicketVisibility`).
+    Der Picker im `LinkDialog` hängt an `RequireTicketRead`, ist also der Führung vorbehalten — ein
+    Beteiligter ohne Rang kann keins auswählen, sieht eine bestehende Verknüpfung zu seinem Ticket aber.
+    Weiter registriert ist es in `PublicVisibility`, `SearchCatalog` (seit Phase 16 mit Provider;
+    `TicketNachricht` bleibt draußen), `AuditEntityDisplay` (Label **und** Route), `WatchlistRecordRollup`
+    („not watchable"), `TrashService`/`TrashProjection` und `MergedPageSections.Trash`.
   - **`MayClassifiedRead` ist die Service-Seite von `Policies.LeadershipPage`.** `Permission.RequireTicketRead`
     = `IsInternalAgent() && MayClassifiedRead()`, also Führung *oder* Nur-Lese-Aufsicht — genau die Menge, die
     die Seiten-Policy hereinlässt. `RequireTicketHandling` legt `MayWrite()` darüber, **vor** der Rangprüfung
@@ -220,6 +245,56 @@
     Anonymitätszusage, weil das Konto die Missbrauchskontrolle ist). In **Chronik und Zeitstrahl** taucht ein
     Ticket gar nicht auf: `GlobalChronikService.RecordTypes` ist eine geschlossene Liste von zehn Aktenarten,
     und ein Typ ohne Elternteil fällt dort heraus.
+    **Seit dem Nachbearbeiten gilt das nicht mehr von selbst** (siehe unten): eine Bearbeitung ist die erste
+    `Modified`-Zeile auf `HinweisNachricht`/`TicketNachricht`, und ohne Gegenmaßnahme stünde alter **und** neuer
+    Wortlaut in `ChangesJson`. Getragen wird die Zusage jetzt von
+    `Infrastructure/Audit/AuditRedaction.cs` — einer Registry aus `(CLR-Typname, Property)`, die der
+    Interceptor beim **Schreiben** fragt. Display-seitig zu filtern reicht nicht: `AuditDisplay.Parse` kennt
+    den Entitätstyp nicht, und `Comment.Text` **soll** dort sichtbar bleiben.
+
+## Nachbearbeiten einer Nachricht (Hinweis und Ticket)
+
+- **Beide Fäden sind nachträglich bearbeitbar, aber nur die eigene Zeile.**
+  `ITipService.EditMessageAsync` und `ITicketService.EditMessageAsync` prüfen
+  `CreatedById is null || CreatedById != actor.GetAgentId()` mit ausgeschriebenem `null`-Zweig — eine
+  herrenlose Zeile gehört niemandem. Hausregel, nicht Zufall: `CommentPanel` sagt es wörtlich
+  („leadership may remove a foreign comment, never restate it"), `BewerbungService.EditInternalMessageAsync`
+  hält dieselbe Grenze. **Keine Führungs-Ausnahme.**
+- **Eine Bürger-Zeile ist von innen nie bearbeitbar**, und der `AuthorIsCitizen`-Zweig ist **nicht** redundant
+  zur Autorprüfung: ein Konto reicht seine Zeilen aus der **Zivil-Identität** ein, also steht dort *sein
+  eigenes* `ErstelltVonId`. Ohne den Zweig könnte ein Agent, der über sein Bürgerprofil gemeldet hat, seine
+  Bürger-Aussage von der Desk-Seite umschreiben.
+- **Ownership kommt aus dem Audit-Stempel, nicht aus `AutorAgentId`** — die Bürger-Zeile trägt baulich keinen
+  Agenten. Nach außen gereicht wird deshalb ein berechnetes `Mine` auf `TipMessageRow`/`TicketMessageRow`,
+  **keine** Konto-Id: der Dienst vergleicht, die UI fragt nur.
+- **Eine Bearbeitung ist eine Korrektur, keine Nachricht.** Kein Statuswechsel, keine Glocke, kein Lesestand,
+  und beim Ticket **kein `LetzteAktivitaetAm`** — sonst schiebt ein Tippfehler das Ticket in der
+  Desk-Sortierung nach oben und behauptet, der Bürger warte. Aus demselben Grund bleibt eine **abgeschlossene**
+  Akte bearbeitbar (anders als `AskCitizenAsync`/`ReplyToCitizenAsync`): der Tippfehler fällt meist erst nach
+  dem Abschluss auf. In der UI ist das der Parameter `Closed` am Nachrichten-Panel — **nicht** in `CanWrite`
+  gefaltet, sonst verschwindet mit dem Verfassen-Feld auch der Stift.
+- **Unveränderter Text kehrt vorzeitig zurück** (`if (message.Text == body) return;`) — sonst schreibt jedes
+  Speichern eine `Modified`-Audit-Zeile und ein Broadcast-Signal für nichts.
+- **Die Zielgruppe muss in den Broadcast** (`Report(row, message.Audience)` bzw.
+  `broadcaster.Report(id, caseNumber, message.Audience)`): ohne sie signalisiert das Bearbeiten einer internen
+  Notiz ihren *Zeitpunkt* in den Circuit des Bürgers.
+- **Der Marker „· bearbeitet" geht bewusst mit nach draußen** (`CitizenTipMessage.EditedAt`,
+  `CitizenTicketMessage.EditedAt`, gerendert in `MeineHinweise.razor`/`MeineTickets.razor`): eine schon
+  gelesene Behörden-Aussage darf sich nicht stillschweigend ändern. Das Feld ist mit den Struktur-Wächtern
+  vereinbar — es endet nicht auf `.Id` und nennt weder `Author`/`Handler`/`Codename`/`AgentId`. Ein
+  Bearbeiten-Knopf gibt es im Portal **nicht**; ein Bürger-Hinweis ist eine Aussage, auf die Triage,
+  Dublettenerkennung und Priorität schon gerechnet haben. Deshalb bleibt der `ReadOnlyBarrierInterceptor`
+  unangetastet: `HinweisNachricht`/`TicketNachricht` stehen weiter nur in `CitizenAuthorable`, nicht in
+  `CitizenEditableOwn`.
+- **Der Editor bleibt ein `MudTextField`.** Kein `MentionInput`, kein `RichTextEditor` — die Zeilen sind
+  Klartext (Phase 11), Zeilenumbrüche sind die Formatierung, und ein HTML-Editor bräuchte einen Sanitizer, den
+  es hier absichtlich nicht gibt.
+- **Der alte Wortlaut ist danach weg** — bewusst. Nachvollziehbar bleiben `GeaendertAm`/`GeaendertVonId` auf
+  der Zeile plus die inhaltsfreie Audit-Zeile. Eine Versionshistorie gibt es nicht.
+- **Die Ticket-Methode gatet nach der Zielgruppe der geladenen Zeile**, weil die beiden Fäden unter
+  verschiedenen Guards geschrieben werden: `Intern` → `TicketVisibility.MayReadInternalAsync` (ein beteiligter
+  Junior-Agent darf seine Notiz berichtigen), `Buerger` → `Permission.RequireTicketHandling`. Die
+  Schreibprüfung (`MayWrite()`) läuft **vor** beiden und vor jedem DB-Zugriff.
 
 ## Phase 11 — Vorlagen für Bürger-Nachrichten
 

@@ -61,6 +61,15 @@ public interface ITicketService
     Task<IReadOnlyList<TicketRow>> GetInboxAsync(TicketInboxScope scope, string? search, bool onlyMine,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Tickets for the link picker, latest activity first, across every status.</summary>
+    /// <remarks>
+    /// Guarded by <c>RequireTicketRead</c> like the inbox, so the picker is the desk's. An agent attached to a single
+    /// ticket cannot search here and does not get the type offered; an existing link to their own ticket still
+    /// resolves for them, because <c>LinkService</c> asks <c>TicketVisibility</c> per row.
+    /// </remarks>
+    Task<IReadOnlyList<TicketPickRow>> SearchForLinkAsync(string? term, ClaimsPrincipal actor, int take = 20,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Running tickets for the navigation badge.</summary>
     Task<int> GetOpenCountAsync(CancellationToken cancellationToken = default);
 
@@ -80,6 +89,10 @@ public interface ITicketService
 
     /// <summary>Agency answer to the citizen; the row carries no agent, so it reads as the constant sender outside.</summary>
     Task ReplyToCitizenAsync(string id, string text, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Rewrites one line of either thread; its author only, and never a line the citizen wrote.</summary>
+    Task EditMessageAsync(string messageId, string text, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 
     /// <summary>Moves the desk's read mark; a read is not a change to the ticket.</summary>

@@ -30,8 +30,12 @@ public record CitizenTicketDetail(
     IReadOnlyList<CitizenTicketMessage> Messages);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>
-/// <remarks>No author field at all: the sender is either the citizen or the constant agency name.</remarks>
-public record CitizenTicketMessage(DateTime CreatedAt, string Text, bool FromCitizen);
+/// <remarks>
+/// No author field at all: the sender is either the citizen or the constant agency name. <paramref name="EditedAt"/>
+/// is the one thing a rewritten agency line owes the reader — a text they may already have read can change, and
+/// saying so costs no identity.
+/// </remarks>
+public record CitizenTicketMessage(DateTime CreatedAt, string Text, bool FromCitizen, DateTime? EditedAt);
 
 // ---- inward: the desk's view ----
 
@@ -71,13 +75,19 @@ public record TicketDetail(
 public record TicketParticipantRow(string Id, string AgentId, string Codename, string? RealName, DateTime AddedAt);
 
 /// <summary>One line of either thread as a handler sees it.</summary>
+/// <remarks>
+/// <paramref name="Mine"/> instead of an author id: the citizen-facing row carries no agent by design, so ownership
+/// lives in the audit stamp. The service compares it, which keeps an account id out of the record entirely.
+/// </remarks>
 public record TicketMessageRow(
     string Id,
     TicketMessageAudience Audience,
     string Text,
     bool FromCitizen,
     string? AuthorCodename,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? EditedAt,
+    bool Mine);
 
 /// <summary>Form input when a citizen opens a ticket.</summary>
 public class TicketInput
@@ -95,3 +105,13 @@ public record TicketParticipationRow(
     TicketArt Kind,
     DateTime LastActivityAt,
     int UnreadInternal);
+
+/// <summary>One ticket in the link picker.</summary>
+/// <remarks>The subject is here so the desk can pick the right row; it never travels into the link, where a
+/// ticket shows its case number and nothing else.</remarks>
+public record TicketPickRow(
+    string Id,
+    string CaseNumber,
+    string Subject,
+    TicketStatus Status,
+    DateTime LastActivityAt);

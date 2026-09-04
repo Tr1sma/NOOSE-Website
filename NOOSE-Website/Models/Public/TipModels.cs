@@ -42,7 +42,11 @@ public record CitizenTipDetail(
     string? HandoverLocation);
 
 /// <summary>One line of the conversation as the citizen sees it.</summary>
-public record CitizenTipMessage(DateTime CreatedAt, string Text, bool FromCitizen);
+/// <remarks>
+/// <paramref name="EditedAt"/> is the one thing a rewritten agency line owes the reader — a text they may already
+/// have read can change, and saying so costs no identity.
+/// </remarks>
+public record CitizenTipMessage(DateTime CreatedAt, string Text, bool FromCitizen, DateTime? EditedAt);
 
 // ---- inward: the handler's view ----
 
@@ -132,13 +136,19 @@ public record TipNoticeRow(
     string Id, string CaseNumber, TipStatus Status, DateTime CreatedAt, string Excerpt, int Priority);
 
 /// <summary>One line of either thread as a handler sees it.</summary>
+/// <remarks>
+/// <paramref name="Mine"/> instead of an author id: the citizen-facing row carries no agent by design, so ownership
+/// lives in the audit stamp. The service compares it, which keeps an account id out of the record entirely.
+/// </remarks>
 public record TipMessageRow(
     string Id,
     TipMessageAudience Audience,
     string Text,
     bool FromCitizen,
     string? AuthorCodename,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? EditedAt,
+    bool Mine);
 
 /// <summary>Inbox tab counters.</summary>
 public record TipInboxCounts(int New, int InProgress, int Closed);
@@ -164,3 +174,16 @@ public class TipInput
     /// <summary>Required on a capture report, ignored otherwise.</summary>
     public string? HandoverLocation { get; set; }
 }
+
+/// <summary>One tip in the link picker: what it is about, never who filed it.</summary>
+/// <remarks>
+/// Carries no citizen field at all, the same way <c>TipSearchProvider</c> does: the anonymity promise is kept by
+/// the shape of the row, not by a branch a later reader could forget to write.
+/// </remarks>
+public record TipPickRow(
+    string Id,
+    string CaseNumber,
+    TipStatus Status,
+    TipKind Kind,
+    DateTime CreatedAt,
+    string Excerpt);

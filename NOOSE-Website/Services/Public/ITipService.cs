@@ -44,6 +44,14 @@ public interface ITipService
     Task<IReadOnlyList<TipRow>> GetInboxAsync(TipInboxScope scope, string? search, bool onlyMine,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Tips for the link picker, newest first, across every status.</summary>
+    /// <remarks>
+    /// Separate from <see cref="GetInboxAsync"/> because that one is bound to a <see cref="TipInboxScope"/> tab, and
+    /// a record being linked to a tip does not care which tab the tip currently sits in.
+    /// </remarks>
+    Task<IReadOnlyList<TipPickRow>> SearchForLinkAsync(string? term, ClaimsPrincipal actor, int take = 20,
+        CancellationToken cancellationToken = default);
+
     Task<TipInboxCounts> GetCountsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Open tips for the navigation badge.</summary>
@@ -88,6 +96,10 @@ public interface ITipService
 
     /// <summary>Agency message to the citizen; the row carries no agent, so it reads as "NOOSE" outside.</summary>
     Task AskCitizenAsync(string id, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Rewrites one line of either thread; its author only, and never a line the citizen wrote.</summary>
+    Task EditMessageAsync(string messageId, string text, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Lifts the anonymity promise; leadership only, and it writes its own audit row.</summary>
     Task ResolveAnonymityAsync(string id, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

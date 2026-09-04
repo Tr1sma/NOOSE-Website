@@ -118,35 +118,7 @@
         await LoadAsync();
     }
 
-    private static string TypeDisplay(string type) => type switch
-    {
-        nameof(Person) => "Personen",
-        nameof(PersonDoc) => "Personen-Doks",
-        nameof(Observation) => "Observationen",
-        nameof(Operation) => "Operationen",
-        nameof(Case) => "Vorgänge",
-        nameof(Taskforce) => "Taskforces",
-        nameof(Faction) => "Fraktionen",
-        nameof(PersonGroup) => "Personengruppen",
-        nameof(Party) => "Parteien",
-        nameof(Agent) => "Agenten",
-        nameof(Job) => "Aufgaben",
-        _ => type,
-    };
+    private static string TypeDisplay(string type) => RecordTypeDisplay.Plural(type);
 
-    private static string TypeIcon(string type) => type switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(PersonDoc) => Icons.Material.Filled.Description,
-        nameof(Observation) => Icons.Material.Filled.Visibility,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Taskforce) => Icons.Material.Filled.Groups2,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Agent) => Icons.Material.Filled.Person,
-        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
-        _ => Icons.Material.Filled.Hub,
-    };
+    private static string TypeIcon(string type) => RecordTypeDisplay.Icon(type);
 }

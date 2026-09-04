@@ -116,13 +116,5 @@
         await LoadAsync();
     }
 
-    private static string TypeIcon(string type) => type switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        _ => Icons.Material.Filled.Hub,
-    };
+    private static string TypeIcon(string type) => RecordTypeDisplay.Icon(type);
 }
