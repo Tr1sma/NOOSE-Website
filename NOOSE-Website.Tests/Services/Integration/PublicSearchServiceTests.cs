@@ -34,7 +34,8 @@ public sealed class PublicSearchServiceTests
         PublicReportSnapshot? reportSnapshot = null,
         PublicPageSnapshot? pageSnapshot = null,
         PublicLawSnapshot? lawSnapshot = null,
-        PublicFactionBoard? factionBoard = null)
+        PublicFactionBoard? factionBoard = null,
+        PublicFaqSnapshot? faqSnapshot = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(ctx.Connection).Options;
         var factory = new TestDbContextFactory(options);
@@ -67,8 +68,11 @@ public sealed class PublicSearchServiceTests
         var laws = Substitute.For<IPublicLawService>();
         laws.GetPublishedAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(lawSnapshot ?? PublicLawSnapshot.Empty));
+        var faq = Substitute.For<IPublicFaqService>();
+        faq.GetPublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(faqSnapshot ?? PublicFaqSnapshot.Empty));
 
-        var service = new PublicSearchService(modules, wanted, factions, pressService, warnings, reports, pages, laws);
+        var service = new PublicSearchService(modules, wanted, factions, pressService, warnings, reports, pages, faq, laws);
         return new Host(service, cache, pressService);
     }
 
@@ -414,5 +418,43 @@ public sealed class PublicSearchServiceTests
         var areas = (await host.Service.SearchAsync("Kupferdraht")).Groups.Select(g => g.Area).ToList();
 
         Assert.Equal([PublicSearchArea.Fahndung, PublicSearchArea.Presse], areas);
+    }
+
+    [Fact]
+    public async Task AFaqQuestionIsItsOwnHit_AddressedByItsAnchor()
+    {
+        using var ctx = await SeededAsync();
+        var faq = new PublicFaqSnapshot(
+        [
+            new PublicFaqRubrikView("Hinweise", null, "icon", false,
+            [
+                new PublicFaqEntryView("bekomme-ich-eine-belohnung", "Bekomme ich eine Belohnung?",
+                    "<p>Eine Belohnung ist bei Kupferdraht möglich.</p>",
+                    "Eine Belohnung ist bei Kupferdraht möglich."),
+            ]),
+        ]);
+        var host = NewHost(ctx, faqSnapshot: faq);
+
+        var group = Assert.Single((await host.Service.SearchAsync("Kupferdraht")).Groups);
+
+        Assert.Equal(PublicSearchArea.Fragen, group.Area);
+        var hit = Assert.Single(group.Hits);
+        Assert.Equal("Bekomme ich eine Belohnung?", hit.Title);
+        // the query opens the section on a statically rendered page; the fragment only scrolls
+        Assert.Equal("/info/faq?frage=bekomme-ich-eine-belohnung#bekomme-ich-eine-belohnung", hit.Href);
+        Assert.Equal("Hinweise", hit.Reference);
+    }
+
+    [Fact]
+    public async Task WithNoFaqPublished_TheGroupIsAbsent()
+    {
+        // the snapshot is empty whenever the module is off or /info/faq is not published; no dead hits either way
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await AddAsync(ctx, Notice("FA-1", PublicWantedStatus.Veroeffentlicht, "Kupferdraht"));
+
+        var areas = (await host.Service.SearchAsync("Kupferdraht")).Groups.Select(g => g.Area).ToList();
+
+        Assert.DoesNotContain(PublicSearchArea.Fragen, areas);
     }
 }

@@ -4,6 +4,7 @@
 @attribute [ExcludeFromInteractiveRouting]
 @using NOOSE_Website.Models.Public
 @inject IPublicPageService Pages
+@inject IPublicFaqService Faq
 
 <PageTitle>@(_page?.Title ?? "Information") · NOOSE</PageTitle>
 
@@ -31,6 +32,10 @@
         <MudDivider />
         @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
         <div class="dokument-html">@((MarkupString)_page.Html)</div>
+        @if (IsFaq)
+        {
+            <PublicFaqAccordion Snapshot="_faq" Open="@OpenQuestion" />
+        }
         <div>
             <MudButton Href="/info" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                        StartIcon="@Icons.Material.Filled.ArrowBack">Zur Übersicht</MudButton>
@@ -61,6 +66,10 @@ else
             <MudDivider />
             @* raw markup, not RichHtml: that component resolves @@{Typ:GUID} mentions and would print internal record names outside *@
             <div class="dokument-html">@((MarkupString)_page.Html)</div>
+            @if (IsFaq)
+            {
+                <PublicFaqAccordion Snapshot="_faq" Open="@OpenQuestion" />
+            }
             @if (_page.PublishedAt is { } published)
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -89,12 +98,24 @@ else
     [SupplyParameterFromQuery(Name = "vorschau")]
     public string? PreviewFlag { get; set; }
 
+    /// <summary>Anchor of the FAQ question to render expanded.</summary>
+    /// <remarks>
+    /// The page renders statically, so a fragment - which never reaches the server - could not open a closed
+    /// section. The search hit therefore carries both: this query part for the server, the fragment for the
+    /// browser to scroll with. Bound as a string and only ever compared, never written back into the page.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = PublicFaq.OpenParameter)]
+    public string? OpenQuestion { get; set; }
+
     private bool Preview => PreviewFlag is "1" or "true" or "ja";
+
+    private bool IsFaq => string.Equals(Slug, PublicFaq.PageSlug, StringComparison.OrdinalIgnoreCase);
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     private PublicPageView? _page;
+    private PublicFaqSnapshot _faq = PublicFaqSnapshot.Empty;
     private string? _loadedKey;
 
     // navigating from one slug to another stays on this route template, so Blazor reuses the instance and
@@ -108,6 +129,38 @@ else
         }
         _loadedKey = key;
         _page = await LoadAsync();
+        _faq = IsFaq ? await LoadFaqAsync() : PublicFaqSnapshot.Empty;
+    }
+
+    private async Task<PublicFaqSnapshot> LoadFaqAsync()
+    {
+        // the preview shows what is switched off as well, marked; without it there is no way to look at a
+        // question before making it visible
+        if (Preview && _page is { IsDraft: true } && AuthStateTask is not null)
+        {
+            try
+            {
+                return await Faq.GetPreviewAsync((await AuthStateTask).User);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // an anonymous visitor appending ?vorschau=1 simply gets the published sections
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+
+        try
+        {
+            return await Faq.GetPublishedAsync();
+        }
+        catch
+        {
+            /* best effort */
+            return PublicFaqSnapshot.Empty;
+        }
     }
 
     private async Task<PublicPageView?> LoadAsync()

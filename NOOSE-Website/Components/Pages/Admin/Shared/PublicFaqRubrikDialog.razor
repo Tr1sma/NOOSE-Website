@@ -1,0 +1,91 @@
+﻿@* Dialog to create/edit a FAQ section; returns a PublicFaqRubrikInput. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_title" Label="Titel des Abschnitts" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Titel ist erforderlich" AutoFocus="true"
+                              Immediate="true" MaxLength="@PublicFaqRules.MaxTitle"
+                              Counter="@PublicFaqRules.MaxTitle" />
+                <MudTextField @bind-Value="_description" Label="Kurztext (optional)" Variant="Variant.Outlined"
+                              Lines="2" MaxLength="@PublicFaqRules.MaxDescription"
+                              Counter="@PublicFaqRules.MaxDescription"
+                              HelperText="Steht unter der Überschrift. Reiner Text, keine Formatierung." />
+                <MudSelect T="string" @bind-Value="_iconName" Label="Icon" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var choice in PublicModules.IconChoices)
+                    {
+                        <MudSelectItem T="string" Value="@choice.Name">@choice.Label</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSwitch @bind-Value="_isVisible" Color="Color.Primary" Label="Öffentlich sichtbar" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Aus heißt: der Abschnitt und alle seine Fragen fehlen auf <code>/info/faq</code>.
+                </MudText>
+                <MudSwitch @bind-Value="_defaultOpen" Color="Color.Primary" Label="Standardmäßig aufgeklappt" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public PublicFaqRubrikInput? Value { get; set; }
+
+    private MudForm _form = default!;
+    private string? _id;
+    private string _title = string.Empty;
+    private string? _description;
+    private string? _iconName;
+    private bool _isVisible = true;
+    private bool _defaultOpen;
+
+    protected override void OnInitialized()
+    {
+        if (Value is null)
+        {
+            return;
+        }
+        _id = Value.Id;
+        _title = Value.Title;
+        _description = Value.Description;
+        _iconName = Value.IconName;
+        _isVisible = Value.IsVisible;
+        _defaultOpen = Value.DefaultOpen;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new PublicFaqRubrikInput
+        {
+            Id = _id,
+            Title = _title.Trim(),
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            IconName = _iconName,
+            IsVisible = _isVisible,
+            DefaultOpen = _defaultOpen,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the create/edit dialog; returns null if cancelled.</summary>
+    public static async Task<PublicFaqRubrikInput?> ShowAsync(
+        IDialogService dialog, string title, PublicFaqRubrikInput? value = null)
+    {
+        var parameters = new DialogParameters<PublicFaqRubrikDialog> { { x => x.Value, value } };
+        var reference = await dialog.ShowAsync<PublicFaqRubrikDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: PublicFaqRubrikInput input } ? input : null;
+    }
+}

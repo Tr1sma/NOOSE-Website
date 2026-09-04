@@ -12,6 +12,7 @@ public class PublicSearchService(
     IPublicWarningService warnings,
     IPublicReportService reports,
     IPublicPageService pages,
+    IPublicFaqService faq,
     IPublicLawService laws) : IPublicSearchService
 {
     /// <summary>One candidate before matching: what is shown, and the text that decides whether it matches.</summary>
@@ -131,7 +132,11 @@ public class PublicSearchService(
             PublicSearchArea.Warnungen => await WarningsAsync(ct),
             PublicSearchArea.Berichte => await ReportsAsync(ct),
             PublicSearchArea.Information => await PagesAsync(ct),
-            _ => await LawsAsync(ct),
+            PublicSearchArea.Fragen => await FaqAsync(ct),
+            PublicSearchArea.Recht => await LawsAsync(ct),
+            // an area without an arm produces an empty group, never another surface's rows: the discard arm that
+            // stood here answered "Recht" for anything new, which would have shipped every paragraph twice
+            _ => [],
         };
 
     private async Task<IReadOnlyList<Candidate>> NoticesAsync(CancellationToken ct)
@@ -209,6 +214,21 @@ public class PublicSearchService(
             .Where(page => linked.Contains(page.Slug))
             .Select(page => new Candidate(page.Title, null, $"/info/{page.Slug}", page.PublishedAt,
                 Join(page.Title, Body(snapshot.SearchTextFor(page.Slug), page.Html))))
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<Candidate>> FaqAsync(CancellationToken ct)
+    {
+        // one hit per question, addressed by its own anchor. The query part is what actually opens it: the page
+        // renders statically, so a fragment alone would arrive at a closed section. Both gates - the module and
+        // the FAQ page being published - are already applied inside the snapshot.
+        var snapshot = await faq.GetPublishedAsync(ct);
+        return snapshot.All()
+            .Select(pair => new Candidate(pair.Entry.Question, pair.Rubrik.Title, PublicFaq.Href(pair.Entry.Anchor),
+                // no date: a question is not a dated statement, and PublishedAt only decides the tie-break, where
+                // null leaves the editorial order the sections already define
+                null,
+                Join(pair.Rubrik.Title, pair.Entry.Question, pair.Entry.PlainText)))
             .ToList();
     }
 

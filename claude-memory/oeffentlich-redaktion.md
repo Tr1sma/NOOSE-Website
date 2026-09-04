@@ -445,3 +445,49 @@
     `RecordsReference`/`LinkService`, kein `AuditEntityDisplay`, keine `MergedPageSections`/`FeedbackPageTabs`
     (es gibt nichts zu konfigurieren außer dem Modulschalter), kein `NotificationType`, kein Discord-Push,
     kein Aktenzeichen-Präfix, keine Migration.
+
+## FAQ auf /info/faq — gegliederte Fragen
+
+Zwei Tabellen (`OeffentlicheFaqRubriken`, `OeffentlicheFaqEintraege`), Service `PublicFaqService`,
+Redaktion unter `/einstellungen?tab=oeffentliche-faq`, gerendert von `InfoPage.razor` **unter** dem Text der
+Seite mit dem Slug `faq`. Migration `Oeffentlich03_Faq` — dieselbe Kapitelnummer wie die Seiten selbst, weil
+das FAQ keine eigene Route und kein eigenes Modul hat.
+
+- **`<details>`/`<summary>`, nicht `MudExpansionPanels`.** Jede öffentliche Seite außer `TipForm` trägt
+  `[ExcludeFromInteractiveRouting]`, rendert also **ohne Circuit**: ein `ExpandedChanged` läuft dort nie.
+  Dieselbe tote Geste, gegen die es schon `NoPublicPage_RendersAClickableStatTile` und das `PrintFrame`-Verbot
+  gibt. Der Aufklappzustand entsteht deshalb auf dem Server und steht im Markup. `HtmlCleanup` erlaubt weder
+  `details` noch `summary` — irrelevant, die Tags entstehen im Razor, nie im gespeicherten HTML.
+- **Der Deep-Link braucht den Query-Teil, nicht nur das Fragment.** Ein `#anker` erreicht den Server nie, also
+  könnte er auf einer statischen Seite keinen zugeklappten Abschnitt öffnen. Der Suchtreffer verlinkt
+  `/info/faq?frage=<anker>#<anker>`: Query für den Server, Fragment für den Browser. Gebaut wird er nur über
+  `PublicFaq.Href`.
+- **Der Anker wird einmal geprägt und dann in Ruhe gelassen** (Spalte `Anker`, unique). Ihn beim Lesen aus der
+  Frage abzuleiten wäre bequemer und falsch: die Eindeutigmachung (`-2`, `-3`) hängt an der Reihenfolge der
+  Geschwister, also würde ein Umbenennen, Verschieben oder Löschen den Anker einer *anderen* Frage still
+  verschieben — nachdem der Link in Discord steht. Dass keine Antwort einen konkurrierenden Anker fälschen
+  kann, garantiert `HtmlCleanup`: `id` steht nicht auf der Attribut-Whitelist.
+- **Zwei Tore auf dem Lesepfad, beide im Service** (`GetPublishedAsync`): Modul `Infoseiten` an **und** die
+  Seite `/info/faq` veröffentlicht. Das zweite gehört dorthin und nicht in die Seite, weil die öffentliche
+  Suche denselben Snapshot liest — sonst blieben die Fragen einer zurückgezogenen Seite findbar und der
+  Treffer landete auf „Seite nicht gefunden". Beide Prüfungen liegen **außerhalb** des 10-s-Caches.
+- **Kein Entwurf/Veröffentlichen-Paar, nur `Sichtbar` je Rubrik und je Frage.** Eine FAQ-Antwort ist keine
+  datierte Aussage wie eine Pressemitteilung; ein zweiter Klick wäre nur eine Gelegenheit, ihn zu vergessen.
+  Neue Fragen entstehen deshalb **ausgeblendet** — eine Überschrift ohne Antwort soll nicht rausrutschen.
+- **Hartes Löschen, kein Papierkorb** (`IAuditable` ohne `ISoftDelete`, wie `OeffentlichesFuehrungsprofil`).
+  Genau deshalb **verweigert** `DeleteRubrikAsync` eine Rubrik, die noch Fragen trägt, und der FK steht auf
+  `Restrict`: ein Kaskaden-Delete würde mehrere geschriebene Antworten auf einen Klick vernichten.
+- **Ein Schreib-Nadelöhr** (`CommitAsync`): genau ein `SaveChangesAsync`, ein `cache.Remove`, ein `cache.Set`
+  in der Datei — `PublicFaqCacheDisciplineTests` prüft das als Dateiscan. Zwei Tabellen hinter einem Snapshot
+  machen das wichtiger als anderswo: ein Rubrik-Write am Nadelöhr vorbei zeigte eine veraltete Überschrift
+  über frischen Fragen.
+- **Sortieren renummeriert, es tauscht nicht.** Ein Tausch zweier `Reihenfolge`-Werte ist ein stiller No-op,
+  sobald zwei Zeilen denselben Wert tragen — bei sparsamer +10-Nummerierung passiert das.
+- **Registrierungen, die sonst rot werden:** `PublicVisibility.Publishable`, `SearchCatalog.NotSearchable`,
+  `AuditEntityDisplay` (Label **und** Route), `MergedPageSections.Settings`, **`FeedbackPageTabs`**,
+  `WatchlistRecordRollup`, und für die drei Nach-außen-Modelle die `Outward`-Liste in
+  `PublicWantedModelTests` (die Redaktions-Modelle stehen in `Inward`).
+- **Öffentliche Suche:** eigener Bereich `PublicSearchArea.Fragen`, ein Treffer je Frage, Rubrik als
+  `Reference`-Chip. Der `switch` in `PublicSearchService.CandidatesAsync` endete früher auf
+  `_ => LawsAsync(ct)` — jeder neue Enum-Wert wäre still als „Recht" ausgespielt worden; er endet jetzt auf
+  `_ => []`.

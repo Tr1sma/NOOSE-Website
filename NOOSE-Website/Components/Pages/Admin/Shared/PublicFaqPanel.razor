@@ -1,0 +1,505 @@
+﻿@* The FAQ of /info/faq: sections, the questions under them, and what is switched on. *@
+@inject IPublicFaqService FaqService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Die Fragen erscheinen als aufklappbare Abschnitte unter dem Text der Seite <code>/info/faq</code>. Ein Abschnitt
+    gruppiert Fragen, jede Frage klappt einzeln auf. Anders als bei den redaktionellen Seiten gibt es hier keinen
+    Veröffentlichen-Schritt: <em>Speichern wirkt sofort</em>, und was noch nicht hinaus soll, bleibt über den
+    Schalter „sichtbar“ aus. Gelöschte Fragen landen in keinem Papierkorb.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @if (!_view.ModuleIsOn)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+            Das Modul „Information“ ist abgeschaltet — <code>/info/faq</code> ist derzeit für niemanden erreichbar.
+            <MudLink Href="/einstellungen?tab=oeffentliche-module" Typo="Typo.body2">Module &amp; Not-Aus</MudLink>
+        </MudAlert>
+    }
+    else if (!_view.PageIsPublished)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+            Die Seite <code>/info/faq</code> ist nicht veröffentlicht — das FAQ ist nach außen unsichtbar, egal wie
+            viele Fragen hier stehen.
+            <MudLink Href="/einstellungen?tab=oeffentliche-seiten" Typo="Typo.body2">Öffentliche Seiten</MudLink>
+        </MudAlert>
+    }
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudButton Href="/info/faq?vorschau=1" Target="_blank" Variant="Variant.Text" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.Visibility">Vorschau</MudButton>
+        <MudSpacer />
+        @if (_mayEdit)
+        {
+            <MudButton OnClick="RubrikNewAsync" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neuer Abschnitt</MudButton>
+        }
+    </MudStack>
+
+    @if (_view.Rubriken.Count == 0)
+    {
+        <MudPaper Outlined="true" Class="pa-6">
+            <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" Size="Size.Large" Color="Color.Default" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Noch kein Abschnitt angelegt. Fang mit einer Gruppe wie „Hinweise &amp; Meldungen“ an.
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        @* multi-expansion at the top level: an editor keeps its section open while the neighbour is compared *@
+        <MudExpansionPanels MultiExpansion="true" Dense="true" Elevation="1">
+            @for (var i = 0; i < _view.Rubriken.Count; i++)
+            {
+                var rubrik = _view.Rubriken[i];
+                var index = i;
+                <MudExpansionPanel @key="rubrik.Id" Expanded="@_openRubriken.Contains(rubrik.Id)"
+                                   ExpandedChanged="@(open => RubrikToggledAsync(rubrik.Id, open))">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@(index + 1).</MudText>
+                            <MudIcon Icon="@PublicModules.IconFor(rubrik.IconName, PublicFaq.RubrikDefaultIcon)"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.body1">@rubrik.Title</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                                @rubrik.Entries.Count Fragen
+                            </MudChip>
+                            @if (!rubrik.IsVisible)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                                    versteckt
+                                </MudChip>
+                            }
+                            @if (rubrik.DefaultOpen)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    offen
+                                </MudChip>
+                            }
+                            @if (_mayEdit)
+                            {
+                                @* stopPropagation, or every button press also toggles the panel *@
+                                <div @onclick:stopPropagation="true">
+                                    <MudSwitch T="bool" Value="@rubrik.IsVisible" Color="Color.Primary"
+                                               Size="Size.Small"
+                                               ValueChanged="@(v => RubrikVisibleAsync(rubrik, v))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
+                                                   Disabled="@(index == 0)"
+                                                   OnClick="@(() => RubrikMoveAsync(rubrik.Id, -1))"
+                                                   aria-label="Abschnitt nach oben" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
+                                                   Disabled="@(index == _view.Rubriken.Count - 1)"
+                                                   OnClick="@(() => RubrikMoveAsync(rubrik.Id, 1))"
+                                                   aria-label="Abschnitt nach unten" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => RubrikEditAsync(rubrik))"
+                                                   aria-label="Abschnitt bearbeiten" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => RubrikRemoveAsync(rubrik))"
+                                                   aria-label="Abschnitt löschen" />
+                                </div>
+                            }
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        @if (_openRubriken.Contains(rubrik.Id))
+                        {
+                            @if (!string.IsNullOrWhiteSpace(rubrik.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@rubrik.Description</MudText>
+                            }
+
+                            @* single expansion inside: only one answer editor may be mounted at a time, and the
+                               auto-save on collapse relies on the previous one closing *@
+                            <MudExpansionPanels MultiExpansion="false" Dense="true" Elevation="0">
+                                @for (var q = 0; q < rubrik.Entries.Count; q++)
+                                {
+                                    var entry = rubrik.Entries[q];
+                                    var position = q;
+                                    <MudExpansionPanel @key="entry.Id" Expanded="@(_openEntryId == entry.Id)"
+                                                       ExpandedChanged="@(open => EntryToggledAsync(entry, open))">
+                                        <TitleContent>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                                                <MudText Typo="Typo.body2">@entry.Question</MudText>
+                                                @if (!entry.HasAnswer)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                             Color="Color.Warning">ohne Antwort</MudChip>
+                                                }
+                                                @if (!entry.IsVisible)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                             Color="Color.Warning">versteckt</MudChip>
+                                                }
+                                                @if (_mayEdit)
+                                                {
+                                                    <div @onclick:stopPropagation="true">
+                                                        <MudSwitch T="bool" Value="@entry.IsVisible"
+                                                                   Size="Size.Small" Color="Color.Primary"
+                                                                   ValueChanged="@(v => EntryVisibleAsync(entry, v))" />
+                                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                                                       Size="Size.Small" Disabled="@(position == 0)"
+                                                                       OnClick="@(() => EntryMoveAsync(entry.Id, -1))"
+                                                                       aria-label="Frage nach oben" />
+                                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                                                       Size="Size.Small"
+                                                                       Disabled="@(position == rubrik.Entries.Count - 1)"
+                                                                       OnClick="@(() => EntryMoveAsync(entry.Id, 1))"
+                                                                       aria-label="Frage nach unten" />
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                       Size="Size.Small" Color="Color.Error"
+                                                                       OnClick="@(() => EntryRemoveAsync(entry))"
+                                                                       aria-label="Frage löschen" />
+                                                    </div>
+                                                }
+                                            </MudStack>
+                                        </TitleContent>
+                                        <ChildContent>
+                                            @if (_openEntryId == entry.Id)
+                                            {
+                                                <MudStack Spacing="3">
+                                                    <MudTextField @bind-Value="_editQuestion" Label="Frage"
+                                                                  Variant="Variant.Outlined"
+                                                                  MaxLength="@PublicFaqRules.MaxQuestion"
+                                                                  Counter="@PublicFaqRules.MaxQuestion"
+                                                                  Disabled="@(!_mayEdit)" />
+                                                    @if (_mayEdit && _rubrikChoices.Count > 1)
+                                                    {
+                                                        <MudSelect T="string" @bind-Value="_editRubrikId"
+                                                                   Label="Abschnitt" Variant="Variant.Outlined">
+                                                            @foreach (var choice in _rubrikChoices)
+                                                            {
+                                                                <MudSelectItem T="string" Value="@choice.Id">
+                                                                    @choice.Title
+                                                                </MudSelectItem>
+                                                            }
+                                                        </MudSelect>
+                                                    }
+                                                    <div>
+                                                        <MudText Typo="Typo.subtitle2" Class="mb-1">Antwort</MudText>
+                                                        @* no Ai and no Mentions: this is outward text, and a
+                                                           resolved mention would print an internal record name *@
+                                                        <RichTextEditor @ref="_answerEditor" @key="entry.Id"
+                                                                        Value="@_editAnswer" MinHeight="240px" />
+                                                    </div>
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                            Adresse: <code>/info/faq?frage=@entry.Anchor</code>
+                                                        </MudText>
+                                                        <MudSpacer />
+                                                        @if (_mayEdit)
+                                                        {
+                                                            <MudButton Size="Size.Small" Color="Color.Primary"
+                                                                       Variant="Variant.Filled" Disabled="@_saving"
+                                                                       OnClick="@(() => EntrySaveAsync(entry))">
+                                                                Frage speichern
+                                                            </MudButton>
+                                                        }
+                                                    </MudStack>
+                                                </MudStack>
+                                            }
+                                        </ChildContent>
+                                    </MudExpansionPanel>
+                                }
+                            </MudExpansionPanels>
+
+                            @if (_mayEdit)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3">
+                                    <MudTextField @bind-Value="_newQuestion" Label="Neue Frage"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                                                  MaxLength="@PublicFaqRules.MaxQuestion" />
+                                    <MudButton OnClick="@(() => EntryAddAsync(rubrik))" Variant="Variant.Outlined"
+                                               Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                               Disabled="@(_saving || string.IsNullOrWhiteSpace(_newQuestion))">
+                                        Hinzufügen
+                                    </MudButton>
+                                </MudStack>
+                            }
+                        }
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    }
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayEdit;
+    private bool _load = true;
+    private bool _saving;
+
+    private PublicFaqAdminView _view = PublicFaqAdminView.Empty;
+    private readonly HashSet<string> _openRubriken = new(StringComparer.Ordinal);
+    private bool _firstLoad = true;
+    private List<PublicFaqRubrikRow> _rubrikChoices = new();
+
+    private RichTextEditor? _answerEditor;
+    private string? _openEntryId;
+    private string _editQuestion = string.Empty;
+    private string _editRubrikId = string.Empty;
+    private string _editAnswer = string.Empty;
+    private string? _newQuestion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayEdit = _user.IsLeadership() && _user.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _view = await FaqService.GetAllAsync(_user);
+            _rubrikChoices = _view.Rubriken.ToList();
+            // first paint opens the first section: a rail of closed headings shows nothing to work on. Only
+            // once, so a save does not re-open what the editor has just folded away
+            if (_firstLoad && _view.Rubriken.Count > 0)
+            {
+                _openRubriken.Add(_view.Rubriken[0].Id);
+            }
+            _firstLoad = false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    /// <summary>Runs a write, reports it, and reloads; the service's German message is surfaced verbatim.</summary>
+    private async Task RunAsync(Func<Task> write, string done)
+    {
+        _saving = true;
+        try
+        {
+            await write();
+            Snackbar.Add(done, Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ---- sections ----
+
+    private async Task RubrikToggledAsync(string rubrikId, bool open)
+    {
+        if (open)
+        {
+            _openRubriken.Add(rubrikId);
+            return;
+        }
+        // the answer editor lives inside, so save it before the section unmounts it - but only when the open
+        // question is one of THIS section's; a question open in a neighbour must not be closed from here
+        if (_openEntryId is { } openId
+            && _view.Rubriken.Any(r => r.Id == rubrikId && r.Entries.Any(e => e.Id == openId)))
+        {
+            await EntryCloseAsync();
+        }
+        _openRubriken.Remove(rubrikId);
+    }
+
+    private async Task RubrikNewAsync()
+    {
+        var input = await PublicFaqRubrikDialog.ShowAsync(DialogService, "Neuer Abschnitt");
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(() => FaqService.SaveRubrikAsync(input, _user), "Abschnitt angelegt.");
+    }
+
+    private async Task RubrikEditAsync(PublicFaqRubrikRow row)
+    {
+        var input = await PublicFaqRubrikDialog.ShowAsync(DialogService, "Abschnitt bearbeiten",
+            new PublicFaqRubrikInput
+            {
+                Id = row.Id,
+                Title = row.Title,
+                Description = row.Description,
+                IconName = row.IconName,
+                IsVisible = row.IsVisible,
+                DefaultOpen = row.DefaultOpen,
+            });
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(() => FaqService.SaveRubrikAsync(input, _user), "Abschnitt gespeichert.");
+    }
+
+    private Task RubrikVisibleAsync(PublicFaqRubrikRow row, bool visible)
+        => RunAsync(() => FaqService.SetRubrikVisibleAsync(row.Id, visible, _user),
+            visible ? "Abschnitt ist öffentlich sichtbar." : "Abschnitt ist ausgeblendet.");
+
+    private Task RubrikMoveAsync(string id, int delta)
+        => RunAsync(() => FaqService.MoveRubrikAsync(id, delta, _user), "Reihenfolge geändert.");
+
+    private async Task RubrikRemoveAsync(PublicFaqRubrikRow row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Abschnitt löschen?",
+            $"„{row.Title}“ wird endgültig gelöscht — es gibt für das FAQ keinen Papierkorb.");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => FaqService.DeleteRubrikAsync(row.Id, _user), "Abschnitt gelöscht.");
+    }
+
+    // ---- questions ----
+
+    // load first, flip state last: the editor reads Value only in OnAfterRenderAsync(firstRender)
+    private async Task EntryToggledAsync(PublicFaqEntryRow entry, bool open)
+    {
+        if (!open)
+        {
+            // only while this panel is still the open one: with single expansion the collapse of the previous
+            // panel can arrive after the next one has already opened, and closing then would shut that one
+            if (_openEntryId == entry.Id)
+            {
+                await EntryCloseAsync();
+            }
+            return;
+        }
+        await EntryCloseAsync();
+        try
+        {
+            _editAnswer = await FaqService.GetAnswerAsync(entry.Id, _user) ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+        _editQuestion = entry.Question;
+        _editRubrikId = _view.Rubriken.FirstOrDefault(r => r.Entries.Any(e => e.Id == entry.Id))?.Id ?? string.Empty;
+        _openEntryId = entry.Id;
+    }
+
+    /// <summary>Closes the open question, saving first when the text differs from what was loaded.</summary>
+    /// <remarks>
+    /// Without this the typed answer is gone the moment the panel collapses, and nothing says so.
+    /// </remarks>
+    private async Task EntryCloseAsync()
+    {
+        var id = _openEntryId;
+        if (id is null)
+        {
+            _answerEditor = null;
+            return;
+        }
+
+        var entry = _view.Rubriken.SelectMany(r => r.Entries).FirstOrDefault(e => e.Id == id);
+        if (_mayEdit && entry is not null && _answerEditor is not null)
+        {
+            try
+            {
+                var html = await _answerEditor.GetHtmlAsync();
+                // the loaded value is already sanitized, so compare on the sanitized form to avoid false dirties
+                var dirty = !string.Equals(HtmlCleanup.Clean(html), _editAnswer, StringComparison.Ordinal)
+                    || !string.Equals(_editQuestion.Trim(), entry.Question, StringComparison.Ordinal);
+                if (dirty)
+                {
+                    await SaveEntryAsync(entry, html);
+                    Snackbar.Add("Frage automatisch gespeichert.", Severity.Info);
+                    await LoadAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+
+        _openEntryId = null;
+        _answerEditor = null;
+        _editAnswer = string.Empty;
+        _editQuestion = string.Empty;
+    }
+
+    private async Task EntrySaveAsync(PublicFaqEntryRow entry)
+    {
+        var html = _answerEditor is null ? _editAnswer : await _answerEditor.GetHtmlAsync();
+        await RunAsync(() => SaveEntryAsync(entry, html), "Frage gespeichert.");
+        _editAnswer = HtmlCleanup.Clean(html);
+    }
+
+    private Task SaveEntryAsync(PublicFaqEntryRow entry, string html)
+        => FaqService.SaveEntryAsync(new PublicFaqEntryInput
+        {
+            Id = entry.Id,
+            RubrikId = _editRubrikId,
+            Question = _editQuestion,
+            AnswerHtml = html,
+            IsVisible = entry.IsVisible,
+        }, _user);
+
+    private async Task EntryAddAsync(PublicFaqRubrikRow rubrik)
+    {
+        var question = (_newQuestion ?? string.Empty).Trim();
+        if (question.Length == 0)
+        {
+            return;
+        }
+        // hidden on arrival: a question without an answer must not go outside just because someone typed a heading
+        await RunAsync(() => FaqService.SaveEntryAsync(new PublicFaqEntryInput
+        {
+            RubrikId = rubrik.Id,
+            Question = question,
+            AnswerHtml = string.Empty,
+            IsVisible = false,
+        }, _user), "Frage angelegt — sie ist noch ausgeblendet.");
+        _newQuestion = null;
+    }
+
+    private Task EntryVisibleAsync(PublicFaqEntryRow entry, bool visible)
+        => RunAsync(() => FaqService.SetEntryVisibleAsync(entry.Id, visible, _user),
+            visible ? "Frage ist öffentlich sichtbar." : "Frage ist ausgeblendet.");
+
+    private Task EntryMoveAsync(string id, int delta)
+        => RunAsync(() => FaqService.MoveEntryAsync(id, delta, _user), "Reihenfolge geändert.");
+
+    private async Task EntryRemoveAsync(PublicFaqEntryRow entry)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Frage löschen?",
+            $"„{entry.Question}“ wird mitsamt der Antwort endgültig gelöscht — es gibt für das FAQ keinen Papierkorb.");
+        if (!ok)
+        {
+            return;
+        }
+        if (_openEntryId == entry.Id)
+        {
+            _openEntryId = null;
+            _answerEditor = null;
+        }
+        await RunAsync(() => FaqService.DeleteEntryAsync(entry.Id, _user), "Frage gelöscht.");
+    }
+}

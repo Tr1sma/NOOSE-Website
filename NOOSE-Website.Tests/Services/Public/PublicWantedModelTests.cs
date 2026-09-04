@@ -28,6 +28,10 @@ public class PublicWantedModelTests
         typeof(PublicPageLink),
         typeof(PublicPageView),
         typeof(PublicPageSnapshot),
+        // the FAQ of /info/faq: sections, their questions and the answers an anonymous visitor unfolds
+        typeof(PublicFaqSnapshot),
+        typeof(PublicFaqRubrikView),
+        typeof(PublicFaqEntryView),
         // the public shell renders these two as well: the nav tabs and the career page's requirement list
         typeof(PublicModuleState),
         typeof(NOOSE_Website.Models.Recruiting.CareerRequirement),
@@ -159,6 +163,14 @@ public class PublicWantedModelTests
         [typeof(PublicTemplateRow)] = "Vorlage mit rohen Tokens und internem Arbeitstitel; nach außen geht die "
             + "gerenderte Nachricht.",
         [typeof(PublicTemplateInput)] = "Formulareingabe des Vorlagen-Dialogs.",
+        [typeof(PublicFaqAdminView)] = "Redaktionsansicht des FAQ; nennt die beiden Tore, die nach außen "
+            + "niemanden etwas angehen, und führt versteckte Rubriken und Fragen mit.",
+        [typeof(PublicFaqRubrikRow)] = "Zeile der Redaktionsliste einer Rubrik; trägt Zeilen-Id, Reihenfolge "
+            + "und den Sichtbar-Schalter.",
+        [typeof(PublicFaqEntryRow)] = "Zeile der Redaktionsliste einer Frage; trägt Zeilen-Id und Schalter, "
+            + "die Antwort bewusst nicht.",
+        [typeof(PublicFaqRubrikInput)] = "Formulareingabe des Rubrik-Dialogs.",
+        [typeof(PublicFaqEntryInput)] = "Formulareingabe des Frage-Dialogs, mit dem rohen Antwort-HTML.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>

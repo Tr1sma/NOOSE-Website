@@ -488,6 +488,9 @@ public static class SearchCatalog
                 + "das Ticket; eine durchsuchbare Beteiligtenliste wäre eine Karte, wer woran sitzt.",
             ["OeffentlichesFuehrungsprofil"] = "Redaktioneller Eintrag des öffentlichen Organigramms, gepflegt "
                 + "in /einstellungen. Eine interne Suche nach Führungskräften ist das Organigramm selbst.",
+            ["OeffentlicheFaqRubrik"] = "Überschrift eines FAQ-Abschnitts ohne eigenen Text; die Fragen tragen ihn.",
+            ["OeffentlicheFaqEintrag"] = "Redaktionelle Antwort für draußen; sie steht auf /info/faq und wird "
+                + "über die öffentliche Suche gefunden, nicht über den Aktenbestand.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
         };

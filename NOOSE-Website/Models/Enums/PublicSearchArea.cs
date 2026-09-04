@@ -17,6 +17,7 @@ public enum PublicSearchArea
     Berichte = 4,
     Information = 5,
     Recht = 6,
+    Fragen = 7,
 }
 
 /// <summary>German label and icon of a search group.</summary>
@@ -31,6 +32,7 @@ public static class PublicSearchAreaDisplay
         PublicSearchArea.Warnungen,
         PublicSearchArea.Berichte,
         PublicSearchArea.Information,
+        PublicSearchArea.Fragen,
         PublicSearchArea.Recht,
     ];
 
@@ -42,6 +44,7 @@ public static class PublicSearchAreaDisplay
         PublicSearchArea.Warnungen => "Warnungen",
         PublicSearchArea.Berichte => "Lageberichte",
         PublicSearchArea.Information => "Information",
+        PublicSearchArea.Fragen => "Häufige Fragen",
         PublicSearchArea.Recht => "Recht",
         _ => "Sonstiges",
     };
@@ -54,6 +57,7 @@ public static class PublicSearchAreaDisplay
         PublicSearchArea.Warnungen => Icons.Material.Filled.Campaign,
         PublicSearchArea.Berichte => Icons.Material.Filled.Assessment,
         PublicSearchArea.Information => Icons.Material.Filled.MenuBook,
+        PublicSearchArea.Fragen => Icons.Material.Filled.QuestionAnswer,
         PublicSearchArea.Recht => Icons.Material.Filled.Gavel,
         _ => Icons.Material.Filled.Search,
     };

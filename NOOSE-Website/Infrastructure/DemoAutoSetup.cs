@@ -23,8 +23,16 @@ public static class DemoAutoSetup
         var demoData = services.GetRequiredService<IDemoDataService>();
         var settings = services.GetRequiredService<ISystemSettingService>();
 
-        var added = await demoData.SeedAsync(actor, cancellationToken);
-        logger.LogInformation("Demo-AutoSetup: {Count} Datensaetze geseedet.", added);
+        // example data is cosmetic; a failure here must not keep the demo instance from starting
+        try
+        {
+            var added = await demoData.SeedAsync(actor, cancellationToken);
+            logger.LogInformation("Demo-AutoSetup: {Count} Datensaetze geseedet.", added);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Demo-AutoSetup: Seeding fehlgeschlagen, Instanz startet ohne die neuen Beispieldaten.");
+        }
 
         var current = await settings.GetAsync(cancellationToken);
         if (!current.DemoModeActive)
@@ -49,6 +57,10 @@ public static class DemoAutoSetup
         var identity = new ClaimsIdentity("DemoAutoSetup");
         identity.AddClaim(new Claim(AgentClaimTypes.IsAdmin, "true"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsBootstrap, "true"));
+        // an active internal identity as well: seeding runs through services whose guards ask for more than admin
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, DemoIdentity.AgentId));
+        identity.AddClaim(new Claim(AgentClaimTypes.Status, Models.Enums.AgentStatus.Active.ToString()));
+        identity.AddClaim(new Claim(AgentClaimTypes.Rank, ((int)Models.Enums.Rank.Director).ToString()));
         return new ClaimsPrincipal(identity);
     }
 }

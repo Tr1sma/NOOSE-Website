@@ -1,0 +1,65 @@
+﻿@* The FAQ of /info/faq: main sections that fold open, each holding the questions as sections of their own. *@
+@*
+   Native <details>/<summary>, not MudExpansionPanels: this page carries [ExcludeFromInteractiveRouting], so it
+   renders without a circuit and a click handler would never run — the same dead affordance as a print button on
+   the wanted poster. The open state is therefore decided on the server and shipped in the markup.
+*@
+
+@if (!Snapshot.IsEmpty)
+{
+    <div class="faq">
+        @foreach (var rubrik in Snapshot.Rubriken)
+        {
+            <details class="faq-rubrik" open="@rubrik.OpensFor(Open)">
+                <summary class="faq-kopf">
+                    <MudIcon Icon="@rubrik.Icon" Size="Size.Small" Class="faq-icon" />
+                    <span class="faq-titel">@rubrik.Title</span>
+                    @if (rubrik.Hidden)
+                    {
+                        <span class="faq-marke">versteckt</span>
+                    }
+                    <span class="faq-anzahl">@rubrik.Entries.Count</span>
+                </summary>
+                <div class="faq-inhalt">
+                    @if (!string.IsNullOrWhiteSpace(rubrik.Description))
+                    {
+                        @* plain text, deliberately: a section heading carries no markup a sanitizer would have to trust *@
+                        <p class="faq-beschreibung">@rubrik.Description</p>
+                    }
+                    @if (rubrik.Entries.Count == 0)
+                    {
+                        <p class="faq-beschreibung">Zu diesem Abschnitt ist noch keine Frage veröffentlicht.</p>
+                    }
+                    @foreach (var entry in rubrik.Entries)
+                    {
+                        @* the id is the anchor the search hit scrolls to; anchors are validated slugs *@
+                        <details class="faq-frage" id="@entry.Anchor" open="@IsOpen(entry.Anchor)">
+                            <summary class="faq-kopf">
+                                <span class="faq-titel">@entry.Question</span>
+                                @if (entry.Hidden)
+                                {
+                                    <span class="faq-marke">versteckt</span>
+                                }
+                            </summary>
+                            @* raw markup, not RichHtml: that component resolves mention tokens and would print
+                               internal record names outside *@
+                            <div class="faq-antwort dokument-html">@((MarkupString)entry.Html)</div>
+                        </details>
+                    }
+                </div>
+            </details>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public PublicFaqSnapshot Snapshot { get; set; } = PublicFaqSnapshot.Empty;
+
+    /// <summary>Anchor of the question to render expanded; compared only, never written back into the page.</summary>
+    [Parameter]
+    public string? Open { get; set; }
+
+    private bool IsOpen(string anchor)
+        => !string.IsNullOrEmpty(Open) && string.Equals(anchor, Open, StringComparison.OrdinalIgnoreCase);
+}

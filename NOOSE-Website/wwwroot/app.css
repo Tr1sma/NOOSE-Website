@@ -1322,3 +1322,120 @@ div.vis-tooltip {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
+
+/* ---- FAQ accordion on /info/faq ---- */
+/* Native <details>, because that page renders without a circuit: the open state arrives from the server and the
+   browser does the folding. Two nesting levels, one set of rules; the section is the heavier of the two. */
+.faq {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.faq details {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+    background-color: var(--mud-palette-surface);
+    /* the fragment jump must not glue a question to the top edge of the viewport */
+    scroll-margin-top: 1.5rem;
+}
+
+.faq-kopf {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .7rem 1rem;
+    cursor: pointer;
+    /* the chevron below replaces the browser's own marker */
+    list-style: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+    .faq-kopf::-webkit-details-marker {
+        display: none;
+    }
+
+    .faq-kopf::before {
+        content: "";
+        flex: 0 0 auto;
+        width: .45rem;
+        height: .45rem;
+        margin-left: .15rem;
+        border-right: 2px solid var(--mud-palette-text-secondary);
+        border-bottom: 2px solid var(--mud-palette-text-secondary);
+        transform: rotate(-45deg);
+        transition: transform .15s ease;
+    }
+
+    .faq-kopf:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+
+    /* keyboard users get the same affordance the pointer does; details/summary is focusable by default */
+    .faq-kopf:focus-visible {
+        outline: 2px solid var(--mud-palette-primary);
+        outline-offset: -2px;
+        border-radius: 8px;
+    }
+
+.faq details[open] > .faq-kopf::before {
+    transform: rotate(45deg);
+}
+
+.faq-icon {
+    flex: 0 0 auto;
+    color: var(--mud-palette-text-secondary);
+}
+
+.faq-titel {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--mud-palette-text-primary);
+}
+
+.faq-rubrik > .faq-kopf .faq-titel {
+    font-weight: 500;
+    font-size: 1.05rem;
+}
+
+.faq-anzahl {
+    flex: 0 0 auto;
+    padding: 0 .5rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    line-height: 1.5rem;
+    color: var(--mud-palette-text-secondary);
+    background-color: var(--mud-palette-background-gray);
+}
+
+/* only ever rendered in the agent preview */
+.faq-marke {
+    flex: 0 0 auto;
+    padding: 0 .45rem;
+    border: 1px solid var(--mud-palette-warning);
+    border-radius: 4px;
+    font-size: .7rem;
+    line-height: 1.15rem;
+    color: var(--mud-palette-warning);
+}
+
+.faq-inhalt {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    padding: 0 1rem 1rem;
+}
+
+.faq-beschreibung {
+    margin: 0 0 .25rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.faq-frage {
+    background-color: var(--mud-palette-background-gray);
+}
+
+.faq-antwort {
+    padding: 0 1rem 1rem 2.15rem;
+}

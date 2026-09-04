@@ -242,6 +242,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BuergerProfil> BuergerProfile => Set<BuergerProfil>();
     public DbSet<OeffentlichesModul> OeffentlicheModule => Set<OeffentlichesModul>();
     public DbSet<OeffentlicheSeite> OeffentlicheSeiten => Set<OeffentlicheSeite>();
+    public DbSet<OeffentlicheFaqRubrik> OeffentlicheFaqRubriken => Set<OeffentlicheFaqRubrik>();
+    public DbSet<OeffentlicheFaqEintrag> OeffentlicheFaqEintraege => Set<OeffentlicheFaqEintrag>();
     public DbSet<OeffentlicheFahndung> OeffentlicheFahndungen => Set<OeffentlicheFahndung>();
     public DbSet<Warnhinweis> Warnhinweise => Set<Warnhinweis>();
     public DbSet<FahndungWarnhinweis> FahndungWarnhinweise => Set<FahndungWarnhinweis>();
@@ -1709,6 +1711,35 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(p => p.Status);
             b.HasOne(p => p.PublishedBy).WithMany()
                 .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicheFaqRubrik>(b =>
+        {
+            b.Property(r => r.Title).HasMaxLength(160).IsRequired();
+            // plain text, not HTML: one line under the heading, rendered as text
+            b.Property(r => r.Description).HasMaxLength(400);
+            // an icon name from the allowlist, not the SVG itself
+            b.Property(r => r.IconName).HasMaxLength(64);
+            // the only shape the public read knows: the visible rubrics, in order
+            b.HasIndex(r => new { r.IsVisible, r.SortOrder });
+        });
+
+        modelBuilder.Entity<OeffentlicheFaqEintrag>(b =>
+        {
+            b.Property(e => e.RubrikId).HasMaxLength(64).IsRequired();
+            b.Property(e => e.Question).HasMaxLength(300).IsRequired();
+            // the deep-link handle; a slug, so it is validated on write instead of escaped on read
+            b.Property(e => e.Anchor).HasMaxLength(64).IsRequired();
+            b.Property(e => e.AnswerHtml).HasColumnType("longtext");
+            // Restrict, so the database says what the service says: a rubric that still holds questions is
+            // refused rather than taking several rich-text answers down with it, and these rows are hard-deleted
+            b.HasOne(e => e.Rubrik).WithMany(r => r.Entries)
+                .HasForeignKey(e => e.RubrikId).OnDelete(DeleteBehavior.Restrict);
+            // unique, unlike the page slug: that one may not be, because a soft-deleted page keeps its address.
+            // A question is hard-deleted, so nothing blocks an anchor a live one could want back
+            b.HasIndex(e => e.Anchor).IsUnique();
+            // the only shape the public read knows: the visible questions of one rubric, in order
+            b.HasIndex(e => new { e.RubrikId, e.IsVisible, e.SortOrder });
         });
 
         modelBuilder.Entity<Pressemitteilung>(b =>

@@ -70,7 +70,8 @@ public static class PublicModules
         new(Careers, "Karriere", "Informationen zum Auswahlverfahren und der Bewerbungs-Zugang.",
             Icons.Material.Filled.WorkOutline, "/karriere", PublicModuleGroup.Behoerde, 100, true, true,
             "Wir nehmen derzeit keine Bewerbungen an."),
-        new(InfoPages, "Information", "Redaktionelle Seiten zu Auftrag, Befugnissen, Zuständigkeiten und FAQ.",
+        new(InfoPages, "Information", "Redaktionelle Seiten zu Auftrag, Befugnissen, Zuständigkeiten sowie das "
+            + "gegliederte FAQ auf /info/faq.",
             Icons.Material.Filled.MenuBook, "/info", PublicModuleGroup.Behoerde, 110, false, true,
             "Die Informationsseiten sind derzeit nicht verfügbar."),
         new(Press, "Presse", "Pressemitteilungen der Behörde.",
@@ -121,7 +122,7 @@ public static class PublicModules
             Icons.Material.Filled.Person, null, PublicModuleGroup.Service, 240, true, true,
             "Neue Bürgerkonten können derzeit nicht angelegt werden."),
         new(PublicSearch, "Suche", "Volltextsuche über Fahndungen, Organisationen, Pressemitteilungen, Warnungen, "
-            + "Lageberichte, Infoseiten und freigegebene Gesetzesauszüge.",
+            + "Lageberichte, Infoseiten, häufige Fragen und freigegebene Gesetzesauszüge.",
             Icons.Material.Filled.Search, "/suche-oeffentlich", PublicModuleGroup.Service, 250, false, true, OffGeneric),
     ];
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Models.Enums;
@@ -30,12 +31,67 @@ public sealed class ReadOnlyBarrierInterceptorTests
 
     private static CurrentUserInfo OnlyReader() => new("aufsicht", "Owl", true, false, false);
 
+    private static CurrentUserInfo Demo() => new("demo-agent", "Demo", false, false, true);
+
     /// <summary>A context on the shared database with the barrier attached, acting as the given user.</summary>
     private static AppDbContext Guarded(SqliteTestContext ctx, CurrentUserInfo user)
         => new(new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlite(ctx.Connection)
             .AddInterceptors(new ReadOnlyBarrierInterceptor(new FixedUser(user)))
             .Options);
+
+    /// <summary>Barrier plus audit interceptor, in the production order.</summary>
+    /// <remarks>
+    /// The own-row carve-out compares <c>CreatedById</c> against the acting user, and that column is written by the
+    /// audit interceptor rather than by any service. Only this pairing shows that the two agree — the barrier-only
+    /// fixture sets the author by hand, and the service fixtures run without the barrier.
+    /// </remarks>
+    private static AppDbContext FullChain(SqliteTestContext ctx, CurrentUserInfo user)
+        => new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(
+                new ReadOnlyBarrierInterceptor(new FixedUser(user)),
+                new AuditSaveChangesInterceptor(new FixedUser(user)))
+            .Options);
+
+    /// <summary>Opens a ticket and answers in it through the full chain, exactly as the service does.</summary>
+    private static async Task OpenAndAnswerAsync(SqliteTestContext ctx, CurrentUserInfo user)
+    {
+        await using (var open = FullChain(ctx, user))
+        {
+            // no CreatedById by hand: the audit interceptor stamps it, and that is the point of this test
+            open.Tickets.Add(new Ticket
+            {
+                Id = "t1",
+                CaseNumber = "NOOSE-T-2026-0001",
+                CitizenProfileId = ProfileId,
+                Status = TicketStatus.Offen,
+                Subject = "Anfrage an die Führungsebene",
+                LastActivityAt = DateTime.UtcNow,
+            });
+            open.TicketNachrichten.Add(new TicketNachricht
+            {
+                TicketId = "t1",
+                Audience = TicketMessageAudience.Buerger,
+                Text = "Wir bitten um eine Einschätzung zu einem laufenden Verfahren.",
+                AuthorIsCitizen = true,
+            });
+            await open.SaveChangesAsync();
+        }
+
+        await using var reply = FullChain(ctx, user);
+        var row = await reply.Tickets.SingleAsync();
+        row.Status = TicketStatus.InBearbeitung;
+        row.LastActivityAt = DateTime.UtcNow;
+        reply.TicketNachrichten.Add(new TicketNachricht
+        {
+            TicketId = row.Id,
+            Audience = TicketMessageAudience.Buerger,
+            Text = "Eine Ergänzung dazu.",
+            AuthorIsCitizen = true,
+        });
+        await reply.SaveChangesAsync();
+    }
 
     private static Ticket Ticket(string id, string author) => new()
     {
@@ -137,6 +193,33 @@ public sealed class ReadOnlyBarrierInterceptorTests
     }
 
     [Fact]
+    public async Task A_partner_answers_in_its_own_ticket_through_the_whole_interceptor_chain()
+    {
+        using var ctx = new SqliteTestContext();
+
+        await OpenAndAnswerAsync(ctx, Partner());
+
+        await using var check = ctx.NewContext();
+        var row = await check.Tickets.SingleAsync();
+        Assert.Equal(PartnerId, row.CreatedById);
+        Assert.Equal(TicketStatus.InBearbeitung, row.Status);
+        Assert.Equal(2, await check.TicketNachrichten.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_read_only_supervision_answers_in_its_own_ticket_through_the_whole_chain()
+    {
+        using var ctx = new SqliteTestContext();
+
+        await OpenAndAnswerAsync(ctx, OnlyReader());
+
+        await using var check = ctx.NewContext();
+        var row = await check.Tickets.SingleAsync();
+        Assert.Equal("aufsicht", row.CreatedById);
+        Assert.Equal(TicketStatus.InBearbeitung, row.Status);
+    }
+
+    [Fact]
     public async Task A_partner_may_not_touch_a_ticket_somebody_else_opened()
     {
         using var ctx = new SqliteTestContext();
@@ -185,6 +268,19 @@ public sealed class ReadOnlyBarrierInterceptorTests
         await db.SaveChangesAsync();
         await using var check = ctx.NewContext();
         Assert.Equal(1, await check.Tickets.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_demo_visitor_files_nothing_at_all()
+    {
+        // the synthetic principal is shared by every anonymous guest of the demo instance, so its "own" civilian
+        // identity would be everyone's — it is the one account the citizen carve-out does not cover
+        using var ctx = new SqliteTestContext();
+        await using var db = Guarded(ctx, Demo());
+
+        db.Tickets.Add(Ticket("0001", "demo-agent"));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => db.SaveChangesAsync());
     }
 
     [Fact]

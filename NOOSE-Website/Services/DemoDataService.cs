@@ -14,16 +14,19 @@ namespace NOOSE_Website.Services;
 
 /// <summary>Seeds the demo agent and a rich, interconnected example dataset; idempotent (skips existing by natural key) and bootstrap-admin-gated. Never auto-runs at startup.</summary>
 [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-public class DemoDataService(
+public partial class DemoDataService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumbers,
-    UserManager<Agent> userManager) : IDemoDataService
+    UserManager<Agent> userManager,
+    Public.IPublicSituationService situation) : IDemoDataService
 {
     public async Task<int> SeedAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireBootstrapAdmin(actor);
 
+        // identity rows first: UserManager writes on its own context and must be committed before a FK points at it
         var added = await EnsureDemoAgentAsync();
+        added += await EnsureCitizenAccountsAsync();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // case numbers need an enclosing transaction (see CaseNumberService); client-generated GUID
@@ -38,9 +41,54 @@ public class DemoDataService(
         var dAdded = SeedDocs(db, people, newPeople);
         var oAdded = SeedObservations(db, people, newPeople);
 
+        added += fAdded + pAdded + mAdded + rAdded + lAdded + dAdded + oAdded;
+
+        // the audit interceptor stamps CreatedAt to now; rows whose order or age is visible get pushed back afterwards
+        var stamps = new List<TimeStamp>();
+
+        added += await SeedPublicModulesAsync(db, cancellationToken);
+        added += await SeedTreasuryAsync(db, cancellationToken);
+
+        var wanted = await SeedWantedAsync(db, people, factions, stamps, cancellationToken);
+        added += wanted.Added;
+
+        var (citizens, cAdded) = await SeedCitizenProfilesAsync(db, cancellationToken);
+        added += cAdded;
+        added += await SeedTipsAsync(db, citizens, wanted.Notices, stamps, cancellationToken);
+        added += await SeedCaptureReportAsync(db, citizens, wanted.Notices, stamps, cancellationToken);
+        added += await SeedTicketsAsync(db, citizens, stamps, cancellationToken);
+        added += await SeedObjectionsAsync(db, citizens, wanted.Notices, stamps, cancellationToken);
+
+        // persist notices, shares and tips before the payout pass: it reads them back from the database
         await db.SaveChangesAsync(cancellationToken);
+        added += await SeedRewardsAsync(db, cancellationToken);
+
+        added += await SeedPublicPagesAsync(db, cancellationToken);
+        added += await SeedPublicFaqAsync(db, cancellationToken);
+        added += await SeedPressAsync(db, stamps, cancellationToken);
+        added += await SeedWarningsAsync(db, stamps, cancellationToken);
+        added += await SeedPublicReportsAsync(db, cancellationToken);
+        added += await SeedFactionProfilesAsync(db, factions, cancellationToken);
+        added += await SeedLeadershipProfilesAsync(db, cancellationToken);
+        added += await SeedLawsAsync(db, cancellationToken);
+        added += await SeedPublicTemplatesAsync(db, cancellationToken);
+
+        added += await SeedEvidenceAsync(db, people, cancellationToken);
+        added += await SeedFinancingAsync(db, cancellationToken);
+        added += await SeedAbductionAsync(db, people, factions, cancellationToken);
+        added += await SeedFeedbackAsync(db, stamps, cancellationToken);
+        added += await SeedInformantsAsync(db, people, factions, cancellationToken);
+        added += await SeedMeetingsAsync(db, cancellationToken);
+        added += await SeedAbsencesAsync(db, cancellationToken);
+        added += await SeedBadgesAsync(db, cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await ApplyTimestampsAsync(db, stamps, cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        return added + fAdded + pAdded + mAdded + rAdded + lAdded + dAdded + oAdded;
+
+        // owns its own settings rows and cache, so it runs on its own context after the commit
+        added += await SeedSituationLevelAsync(actor, cancellationToken);
+        return added;
     }
 
     private async Task<int> EnsureDemoAgentAsync()

@@ -353,6 +353,7 @@ builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>(
 builder.Services.AddScoped<IBuergerService, BuergerService>();
 builder.Services.AddScoped<IPublicModuleService, PublicModuleService>();
 builder.Services.AddScoped<IPublicPageService, PublicPageService>();
+builder.Services.AddScoped<IPublicFaqService, PublicFaqService>();
 builder.Services.AddScoped<IPressReleaseService, PressReleaseService>();
 builder.Services.AddScoped<IPublicWarningService, PublicWarningService>();
 builder.Services.AddScoped<IPublicLawService, PublicLawService>();
