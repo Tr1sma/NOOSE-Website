@@ -237,6 +237,29 @@ public sealed class LinkCitizenContactTests
             .CreateAsync(nameof(Person), "p1", nameof(Hinweis), "h1", null, Partner()));
     }
 
+    // ---- the cross-reference resolver ----
+
+    [Fact]
+    public async Task RecordsReference_marks_a_ticket_classified()
+    {
+        // TimelineService.CounterpartDisplay takes no rank: a classified reference reads "verdeckte Akte" for every
+        // viewer. Flipping this to false would write the ticket number onto the timeline of every internal agent,
+        // which is precisely what this resolver cannot decide — it has no participant list
+        using var ctx = new SqliteTestContext();
+        SeedRows(ctx, nameof(Ticket), "t1");
+        using var db = ctx.NewContext();
+
+        var map = await RecordsReference.ResolveAsync(db, [(nameof(Ticket), "t1"), (nameof(Hinweis), "h1")]);
+
+        var ticket = map[(nameof(Ticket), "t1")];
+        Assert.True(ticket.Classified);
+        Assert.Equal("Bürger-Ticket NOOSE-T-2026-0001", ticket.Display);
+        Assert.DoesNotContain("Streifenkontrolle", ticket.Display, StringComparison.OrdinalIgnoreCase);
+
+        // the tip is the deliberate counterexample: every internal agent may read it, so it keeps its case number
+        Assert.False(map[(nameof(Hinweis), "h1")].Classified);
+    }
+
     // ---- the drift guard behind the group headings ----
 
     [Fact]

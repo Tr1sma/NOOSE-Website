@@ -66,7 +66,9 @@ public static class TicketVisibility
             // the desk: MayClassifiedRead is the scope side of Permission.RequireTicketRead
             return existing.ToHashSet();
         }
-        if (scope.MeId is not { } agentId || existing.Count == 0)
+        // empty and null alike, as in IsParticipantAsync: an agent id of "" would match a malformed row
+        var agentId = scope.MeId;
+        if (string.IsNullOrEmpty(agentId) || existing.Count == 0)
         {
             return new();
         }

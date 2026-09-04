@@ -285,7 +285,7 @@ else
                 @* every internal agent reads this, the read-only supervision included: the panel gates writing on
                    MayWrite() itself, and hiding the list from a reader would hide the origin of an existing file *@
                 <MudPaper Outlined="true" Class="pa-4">
-                    <RecordLinksPanel EntityType="@nameof(Hinweis)" EntityId="@Id" User="@_user" />
+                    <RecordLinksPanel @ref="_links" EntityType="@nameof(Hinweis)" EntityId="@Id" User="@_user" />
                 </MudPaper>
 
                 @if (_duplicates.Count > 0)
@@ -336,6 +336,7 @@ else
     private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private ClaimsPrincipal _user = default!;
+    private RecordLinksPanel? _links;
     private TipDetail? _tip;
     private IReadOnlyList<TipDuplicateRow> _duplicates = Array.Empty<TipDuplicateRow>();
     private List<Person> _people = new();
@@ -424,6 +425,11 @@ else
             {
                 // opening it is what clears the inbox badge; the service ignores a repeat
                 await Tips.MarkAgentReadAsync(Id, _user);
+                // the takeover buttons write links the panel did not create, so it has to be told
+                if (_links is not null)
+                {
+                    await _links.RefreshAsync();
+                }
             }
         }
         catch (Exception ex)

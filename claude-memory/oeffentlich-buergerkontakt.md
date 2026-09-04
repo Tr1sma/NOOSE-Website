@@ -180,8 +180,13 @@
     **oder** Beteiligter). Ohne ihn hätte der `_ => true`-Schwanz jedem Agenten und jedem Partner „sichtbar"
     geantwortet — die Verknüpfung wäre ein Existenz-Orakel gewesen.
     **(3)** `RecordsReference` markiert die Zeile **`Classified = true`**, weil dieser Auflöser keine
-    Beteiligtenliste kennt, sondern nur `meId`: auf dem Zeitstrahl sieht sie damit nur die Führung, im
-    Verknüpfungs-Panel auch der Beteiligte (dort fragt `LinkService` je Zeile `TicketVisibility`).
+    Beteiligtenliste kennt, sondern nur `meId`. Folge, und die muss man kennen: `TimelineService.CounterpartDisplay`
+    prüft **keinen Rang** — eine als `Classified` markierte Referenz steht für *jeden* Betrachter als
+    „verdeckte Akte" ohne `Href` da, auch für die Führung. Das ist genau die Behandlung, die eine VS-Personenakte
+    dort schon bekommt: ein Querverweis nennt ein Ticket **nie**. Das Aktenzeichen zeigt allein das
+    Verknüpfungs-Panel, und dort fragt `LinkService` je Zeile `TicketVisibility` — deshalb sieht es dort auch der
+    Beteiligte ohne Rang. Wer den Wert auf `false` dreht, schreibt die Ticketnummer auf den Zeitstrahl jedes
+    internen Agenten (`RecordsReference_marks_a_ticket_classified` hält das fest).
     Der Picker im `LinkDialog` hängt an `RequireTicketRead`, ist also der Führung vorbehalten — ein
     Beteiligter ohne Rang kann keins auswählen, sieht eine bestehende Verknüpfung zu seinem Ticket aber.
     Weiter registriert ist es in `PublicVisibility`, `SearchCatalog` (seit Phase 16 mit Provider;

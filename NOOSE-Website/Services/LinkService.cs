@@ -183,10 +183,13 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         // unclassified like the case arm above, or the leadership filter below would re-hide it from a participant.
         var ticketIds = pairs.Where(p => p.OtherType == nameof(Ticket)).Select(p => p.OtherId).Distinct().ToList();
         var readableTickets = await TicketVisibility.ReadableIdsAsync(db, ticketIds, scope, cancellationToken);
-        foreach (var x in await db.Tickets.Where(t => readableTickets.Contains(t.Id))
-                     .Select(t => new { t.Id, t.CaseNumber }).ToListAsync(cancellationToken))
+        if (readableTickets.Count > 0)
         {
-            targets[(nameof(Ticket), x.Id)] = ($"Bürger-Ticket {x.CaseNumber}", false, $"/tickets/{x.Id}");
+            foreach (var x in await db.Tickets.Where(t => readableTickets.Contains(t.Id))
+                         .Select(t => new { t.Id, t.CaseNumber }).ToListAsync(cancellationToken))
+            {
+                targets[(nameof(Ticket), x.Id)] = ($"Bürger-Ticket {x.CaseNumber}", false, $"/tickets/{x.Id}");
+            }
         }
 
         // library documents: classified if any VS flag is set, leadership-gated below

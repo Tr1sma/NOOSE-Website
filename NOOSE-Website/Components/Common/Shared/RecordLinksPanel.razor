@@ -92,6 +92,17 @@
         await LoadAsync();
     }
 
+    /// <summary>Reloads the list from outside.</summary>
+    /// <remarks>
+    /// For a page that creates links through its own buttons rather than through this panel — the tip file does,
+    /// with its takeover actions. Without it the new link only appears on the next page load.
+    /// </remarks>
+    public async Task RefreshAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
+    }
+
     private async Task LoadAsync()
     {
         _load = true;

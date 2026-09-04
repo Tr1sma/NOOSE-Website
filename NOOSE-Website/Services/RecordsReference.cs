@@ -209,8 +209,9 @@ public static class RecordsReference
 
         // citizen tickets: case number only, never the subject, which the citizen wrote and which can name them.
         // Flagged classified on purpose: this resolver carries no participant list, only meId, so it cannot tell an
-        // attached agent from an uninvolved one. The conservative answer shows the reference to the desk alone; the
-        // link panel resolves the same row through TicketVisibility and does see the participant.
+        // attached agent from an uninvolved one. A classified reference renders as "verdeckte Akte" for EVERY viewer
+        // (CounterpartDisplay takes no rank) — the same treatment a classified person file gets, so a cross-reference
+        // never names a ticket. The case number is shown by the link panel alone, which asks TicketVisibility per row.
         var ticketIds = OpenIds(nameof(Ticket));
         if (ticketIds.Count > 0)
         {
