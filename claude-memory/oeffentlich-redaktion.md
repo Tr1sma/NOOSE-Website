@@ -1,4 +1,4 @@
-# Redaktionelle Außendarstellung — Organisationen, Presse, Warnungen, Recht, Berichte, Gefahrenlage, Zahlen
+﻿# Redaktionelle Außendarstellung — Organisationen, Presse, Warnungen, Recht, Berichte, Gefahrenlage, Zahlen
 
 > **Lies das, bevor du ein öffentliches Profil, eine Pressemitteilung, eine amtliche Warnung,
 > einen Gesetzesauszug, einen Lagebericht, die Gefahrenlage-Ampel oder die Startseiten-Zahlen anfasst.**
@@ -446,12 +446,35 @@
     (es gibt nichts zu konfigurieren außer dem Modulschalter), kein `NotificationType`, kein Discord-Push,
     kein Aktenzeichen-Präfix, keine Migration.
 
-## FAQ auf /info/faq — gegliederte Fragen
+## FAQ auf /faq — eigene Seite, gegliederte Fragen
 
 Zwei Tabellen (`OeffentlicheFaqRubriken`, `OeffentlicheFaqEintraege`), Service `PublicFaqService`,
-Redaktion unter `/einstellungen?tab=oeffentliche-faq`, gerendert von `InfoPage.razor` **unter** dem Text der
-Seite mit dem Slug `faq`. Migration `Oeffentlich03_Faq` — dieselbe Kapitelnummer wie die Seiten selbst, weil
-das FAQ keine eigene Route und kein eigenes Modul hat.
+Redaktion unter `/einstellungen?tab=oeffentliche-faq`, gerendert von **`FaqHub.razor` auf `/faq`** unter
+Überschrift und Einleitung der Seite mit dem Slug `faq`. Migration `Oeffentlich03_Faq` — dieselbe
+Kapitelnummer wie die Seiten selbst, weil das FAQ dieselbe Redaktionszeile benutzt.
+
+- **Eigenes Modul `Faq`, eigene Route, eigener Tab.** Vorher war das FAQ eine Ecke des Moduls `Infoseiten`
+  unter `/info/faq`; „Information aus" nahm das FAQ mit, und ein FAQ ohne Infoseiten ging nicht. Der Nav-Tab
+  kommt wie jeder andere aus `PublicModules.All` — ein zweiter Tab auf dieselbe Route gibt es nicht, weil die
+  Nav ausschließlich aus dem Katalog kommt. Das Modul startet **aus** wie jedes andere: eine Bestandsinstanz,
+  auf der das FAQ unter `/info/faq` lief, ist nach dem Deploy dunkel, bis jemand den Schalter umlegt
+  (`/einstellungen?tab=oeffentliche-module`). Bewusst die sichere Richtung — nichts geht durch einen Deploy live.
+- **Der Text bleibt eine redaktionelle Seite, die Adresse nicht.** Überschrift, Einleitung, Entwurf/
+  Veröffentlicht, Vorschau und das Stand-Datum kommen weiter aus der Zeile mit dem Slug `faq` — kein zweites
+  Datenmodell, keine Migration. Damit dieselbe Zeile nicht unter zwei Adressen antwortet, hält
+  `PublicPageService.LoadAsync` sie aus dem **ganzen** Infoseiten-Snapshot heraus (Menü, Seiten, Suchtext);
+  sonst stünde sie im `/info`-Menü, lieferte denselben Text unter `/info/faq` aus und gäbe der öffentlichen
+  Suche zwei Treffer für eine Seite.
+- **Der Kopf reist im FAQ-Snapshot mit** (`PublicFaqSnapshot.Page`), nicht über `IPublicPageService`. Sonst
+  hinge die Überschrift am Modul `Infoseiten` und ließe sich unter einem eingeschalteten FAQ abschalten. Der
+  Kopf **überlebt ein FAQ ohne einzige Rubrik** — die Seite ist veröffentlicht, sie hat nur noch nichts unter
+  sich; ihn dort fallenzulassen ergäbe „nicht veröffentlicht".
+- **`/info/faq` leitet dauerhaft um**, samt `?frage=`-Deep-Link (`InfoPage.RedirectTarget`). Ohne das
+  antwortete jeder in Discord geteilte Link „Seite nicht gefunden", weil die Zeile aus dem Infoseiten-Snapshot
+  gefallen ist. Zusammengesetzt wird die Zieladresse von Hand statt aus `PublicFaq.Href`: das Fragment muss
+  hinten stehen, ein angehängtes `&vorschau=1` wäre sonst Teil des Fragments geworden.
+- **Jede Adresse geht über `PublicFaq`** (`Route`, `Href`, `Owns`, `PageHref`). `PageHref` ist der Grund, dass
+  das Seiten-Panel keine `/info/{slug}`-Links mehr baut: genau eine Zeile antwortet woanders.
 
 - **`<details>`/`<summary>`, nicht `MudExpansionPanels`.** Jede öffentliche Seite außer `TipForm` trägt
   `[ExcludeFromInteractiveRouting]`, rendert also **ohne Circuit**: ein `ExpandedChanged` läuft dort nie.
@@ -460,15 +483,15 @@ das FAQ keine eigene Route und kein eigenes Modul hat.
   `details` noch `summary` — irrelevant, die Tags entstehen im Razor, nie im gespeicherten HTML.
 - **Der Deep-Link braucht den Query-Teil, nicht nur das Fragment.** Ein `#anker` erreicht den Server nie, also
   könnte er auf einer statischen Seite keinen zugeklappten Abschnitt öffnen. Der Suchtreffer verlinkt
-  `/info/faq?frage=<anker>#<anker>`: Query für den Server, Fragment für den Browser. Gebaut wird er nur über
+  `/faq?frage=<anker>#<anker>`: Query für den Server, Fragment für den Browser. Gebaut wird er nur über
   `PublicFaq.Href`.
 - **Der Anker wird einmal geprägt und dann in Ruhe gelassen** (Spalte `Anker`, unique). Ihn beim Lesen aus der
   Frage abzuleiten wäre bequemer und falsch: die Eindeutigmachung (`-2`, `-3`) hängt an der Reihenfolge der
   Geschwister, also würde ein Umbenennen, Verschieben oder Löschen den Anker einer *anderen* Frage still
   verschieben — nachdem der Link in Discord steht. Dass keine Antwort einen konkurrierenden Anker fälschen
   kann, garantiert `HtmlCleanup`: `id` steht nicht auf der Attribut-Whitelist.
-- **Zwei Tore auf dem Lesepfad, beide im Service** (`GetPublishedAsync`): Modul `Infoseiten` an **und** die
-  Seite `/info/faq` veröffentlicht. Das zweite gehört dorthin und nicht in die Seite, weil die öffentliche
+- **Zwei Tore auf dem Lesepfad, beide im Service** (`GetPublishedAsync`): Modul `Faq` an **und** die
+  redaktionelle Zeile `faq` veröffentlicht. Das zweite gehört dorthin und nicht in die Seite, weil die öffentliche
   Suche denselben Snapshot liest — sonst blieben die Fragen einer zurückgezogenen Seite findbar und der
   Treffer landete auf „Seite nicht gefunden". Beide Prüfungen liegen **außerhalb** des 10-s-Caches.
 - **Kein Entwurf/Veröffentlichen-Paar, nur `Sichtbar` je Rubrik und je Frage.** Eine FAQ-Antwort ist keine

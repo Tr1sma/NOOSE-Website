@@ -22,6 +22,7 @@ public class PublicRoutesTests
     [InlineData("/datenschutz")]
     [InlineData("/nutzungsbedingungen")]
     [InlineData("/info/auftrag")]
+    [InlineData("/faq")]
     [InlineData("/gefahr/personen")]
     [InlineData("/robots.txt")]
     public void Public_paths_are_indexable(string path)

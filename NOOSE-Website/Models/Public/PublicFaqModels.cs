@@ -27,8 +27,18 @@ public sealed record PublicFaqRubrikView(
                 && Entries.Any(e => string.Equals(e.Anchor, anchor, StringComparison.OrdinalIgnoreCase)));
 }
 
+/// <summary>Heading, intro text and publication date of the FAQ page itself.</summary>
+/// <remarks>
+/// The FAQ has a route and a module of its own but no text of its own: this comes from the editorial row the FAQ
+/// owns, read inside the FAQ service rather than through the page service, so the Information module cannot switch
+/// the heading off underneath a FAQ that is still on.
+/// </remarks>
+/// <param name="IsDraft">The agent preview is looking at the unpublished draft.</param>
+public sealed record PublicFaqHead(string Title, string Html, DateTime? PublishedAt, bool IsDraft = false);
+
 /// <summary>Everything the FAQ shows, in display order.</summary>
-public sealed record PublicFaqSnapshot(IReadOnlyList<PublicFaqRubrikView> Rubriken)
+/// <param name="Page">Null while the FAQ page is not published; the sections are then empty as well.</param>
+public sealed record PublicFaqSnapshot(IReadOnlyList<PublicFaqRubrikView> Rubriken, PublicFaqHead? Page = null)
 {
     public static PublicFaqSnapshot Empty { get; } = new([]);
 
@@ -64,9 +74,10 @@ public sealed record PublicFaqRubrikRow(
     IReadOnlyList<PublicFaqEntryRow> Entries);
 
 /// <summary>What the editorial panel needs to draw itself.</summary>
-/// <param name="PageIsPublished">The page the FAQ lives on is live; false means nothing of this is reachable.</param>
-/// <param name="ModuleIsOn">The Information module is switched on; the second gate, reported separately so the
-/// panel can name the one that is actually shut.</param>
+/// <param name="PageIsPublished">The editorial row the FAQ takes its text from is live; false means nothing of
+/// this is reachable.</param>
+/// <param name="ModuleIsOn">The FAQ module is switched on; the second gate, reported separately so the panel can
+/// name the one that is actually shut.</param>
 public sealed record PublicFaqAdminView(
     bool PageIsPublished,
     bool ModuleIsOn,

@@ -1,0 +1,151 @@
+﻿@page "/faq"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicFaqService Faq
+
+<PageTitle>@(_faq.Page?.Title ?? "Häufige Fragen") · NOOSE</PageTitle>
+
+@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and the
+   route would answer without this tag *@
+@if (_faq.Page is null)
+{
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
+}
+
+@* The draft preview sits OUTSIDE the gate, like the editorial pages: IPublicFaqService.GetPreviewAsync is
+   deliberately not gated, because preparing answers while the module is still off is the point of a draft.
+   Keyed on IsDraft rather than on Preview, so published content can never escape the gate - and a draft only
+   ever comes back from GetPreviewAsync, whose first statement is Permission.RequireClassifiedRead. *@
+@if (_faq.Page is { IsDraft: true } draft)
+{
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    <MudStack Spacing="4">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
+            Vorschau des Entwurfs — dieser Stand ist öffentlich nicht sichtbar.
+        </MudAlert>
+        <MudText Typo="Typo.h4">@draft.Title</MudText>
+        <MudDivider />
+        @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+        <div class="dokument-html">@((MarkupString)draft.Html)</div>
+        <PublicFaqAccordion Snapshot="_faq" Open="@OpenQuestion" />
+    </MudStack>
+</MudPaper>
+}
+else
+{
+<PublicModuleGate Module="@PublicModules.Faq" Title="Häufige Fragen">
+<MudPaper Elevation="4" Class="pa-4 pa-sm-8">
+    @if (_faq.Page is { } live)
+    {
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h4">@live.Title</MudText>
+            <MudDivider />
+            @* raw markup, not RichHtml: that component resolves @@{Typ:GUID} mentions and would print internal record names outside *@
+            <div class="dokument-html">@((MarkupString)live.Html)</div>
+            @if (_faq.IsEmpty)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Derzeit ist keine Frage veröffentlicht.
+                </MudAlert>
+            }
+            else
+            {
+                <PublicFaqAccordion Snapshot="_faq" Open="@OpenQuestion" />
+            }
+            @if (live.PublishedAt is { } published)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Stand: @published.ToLocalTime().ToString("dd.MM.yyyy")
+                </MudText>
+            }
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6">Noch keine Antworten</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Das FAQ ist derzeit nicht veröffentlicht.
+            </MudText>
+            <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Home">Zur Startseite</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+</PublicModuleGate>
+}
+
+@code {
+    /// <summary>Agent-side preview of the draft; falls back to the published copy for everyone else.</summary>
+    /// <remarks>
+    /// Bound as a string on purpose: Blazor answers a value it cannot parse into a <c>bool</c> with a 500, and this
+    /// route is reachable by anyone who can type a query string.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = "vorschau")]
+    public string? PreviewFlag { get; set; }
+
+    /// <summary>Anchor of the FAQ question to render expanded.</summary>
+    /// <remarks>
+    /// The page renders statically, so a fragment - which never reaches the server - could not open a closed
+    /// section. The search hit therefore carries both: this query part for the server, the fragment for the
+    /// browser to scroll with. Bound as a string and only ever compared, never written back into the page.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = PublicFaq.OpenParameter)]
+    public string? OpenQuestion { get; set; }
+
+    private bool Preview => PreviewFlag is "1" or "true" or "ja";
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private PublicFaqSnapshot _faq = PublicFaqSnapshot.Empty;
+    private bool _loaded;
+
+    // guarded rather than in OnInitializedAsync: the query parts alone change the route, so Blazor reuses the
+    // instance and re-runs this, and re-reading the snapshot per parameter change would buy nothing
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        _faq = await LoadAsync();
+    }
+
+    private async Task<PublicFaqSnapshot> LoadAsync()
+    {
+        // the preview shows what is switched off as well, marked; without it there is no way to look at a
+        // question before making it visible
+        if (Preview && AuthStateTask is not null)
+        {
+            try
+            {
+                return await Faq.GetPreviewAsync((await AuthStateTask).User);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // an anonymous visitor appending ?vorschau=1 simply gets the published sections
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+
+        try
+        {
+            return await Faq.GetPublishedAsync();
+        }
+        catch
+        {
+            /* best effort */
+            return PublicFaqSnapshot.Empty;
+        }
+    }
+}

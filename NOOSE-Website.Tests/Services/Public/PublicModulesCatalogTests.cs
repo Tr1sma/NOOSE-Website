@@ -1,4 +1,4 @@
-using NOOSE_Website.Services.Public;
+﻿using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Public;
 
@@ -91,6 +91,19 @@ public class PublicModulesCatalogTests
         Assert.True(poster.Available);
         Assert.False(poster.DefaultEnabled);
         Assert.Null(poster.NavRoute);
+    }
+
+    [Fact]
+    public void TheFaq_IsAModuleOfItsOwn_WithARouteOfItsOwn()
+    {
+        // it used to be a corner of the Information module under /info/faq; a switch of its own is the point of
+        // the move, so a merge back into Infoseiten has to turn this red
+        var faq = PublicModules.All.Single(m => m.Key == PublicModules.Faq);
+
+        Assert.True(faq.Available);
+        Assert.False(faq.DefaultEnabled);
+        Assert.Equal(PublicFaq.Route, faq.NavRoute);
+        Assert.NotEqual(PublicModules.InfoPages, faq.Key);
     }
 
     [Fact]

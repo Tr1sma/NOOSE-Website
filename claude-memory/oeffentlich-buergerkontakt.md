@@ -5,7 +5,8 @@
 > Kernregeln: **Anonymität ist eine Projektion und eine Audit-Regel, keine UI-Bedingung**
 > (`Services/Public/TipAnonymity.cs`); Rate-Limits stehen **im Dienst**, nicht in der Middleware
 > (Einreichung läuft über SignalR); Bürger-Zeilen tragen baulich **keinen** Agenten;
-> `Public*`-Benachrichtigungen sind **nicht routbar** (Discord-Kanal würde den Hinweisgeber outen).
+> `Public*`-Benachrichtigungen sind **nicht routbar** (Discord-Kanal würde den Hinweisgeber outen) —
+> gepingt wird über je eine eigene, glockenlose Kategorie fürs *Anlegen* (`PublicTipCreated`, `PublicTicketCreated`).
 > Geld: [oeffentlich-geld.md](oeffentlich-geld.md) · Grundlagen: [oeffentlich-grundlagen.md](oeffentlich-grundlagen.md)
 
 ## Phase 7 — Bürgerhinweise
@@ -46,8 +47,22 @@
     `/dateien/hinweise/{id}` mit `.RequireAuthorization()` — anders als die Fahndungs-Fotoroute, deren
     Autorisierung die Publikationsprüfung ist. Eigentümer und Bearbeiter bekommen etwas, alle anderen eine `404`.
   - **`PublicTipReceived`/`PublicTipAnswered` sind nicht routbar.** `NotifyManyAsync` pusht jede routbare Kategorie
-    nach Discord, und ein eingehender Hinweis im öffentlichen Kanal outet den Hinweisgeber. Benachrichtigt wird die
-    Führung; alle anderen haben das Nav-Badge (`tips`).
+    nach Discord, und `PublicTipReceived` trägt **beide** Ereignisse (Einreichung *und* Bürgerantwort) — geroutet
+    pingte also jede Zeile eines laufenden Hinweises mit. Benachrichtigt wird die Führung; alle anderen haben das
+    Nav-Badge (`tips`).
+  - **Gepingt wird trotzdem — über eine eigene Kategorie** (2026-09-04, Muster `PublicTicketCreated`).
+    `PublicTipCreated` ist routbar und pingt die Rolle aus `/einstellungen?tab=discord` (Default: die generische
+    NOOSE-Rolle), und zwar **nur beim Einreichen**: der Push hängt in `TipService.NotifyDeskAsync` — dem einzigen
+    Melder, der ausschließlich beim Einreichen läuft — und nicht im `NotificationService`. Vier Folgen, die man
+    nicht „aufräumen" darf: **(1)** `PublicTipReceived` bleibt unroutbar (Grund eine Zeile höher). **(2)**
+    `PublicTipCreated` legt **keine Glocken-Zeile** an; sie ist reiner Routing-Schlüssel, damit Channel und
+    Rollen-ID im Admin-Panel eine eigene Zeile bekommen. **(3)** Der Push übergibt **keinen** `headline` und
+    `ShouldIncludeHeadline` wird **nicht** erweitert — im Kanal steht der generische Satz aus `Notice(type)` plus
+    der anmeldepflichtige Link, nie Text, Bürger, Gesuchter oder Aktenzeichen. **(4)** Eine **Ergreifungsmeldung
+    pingt hier nicht mit** (`SubmitAsync` verzweigt auf `NotifyCaptureAsync`), sie hat mit
+    `PublicCaptureReported` ihre eigene routbare Kategorie — beides zusammen wäre ein Doppel-Ping.
+    Bleibt als Restrisiko der **Zeitpunkt**: der Kanal verrät, *wann* ein Hinweis eintraf. Deshalb trägt die
+    Zeile im Panel das „intern"-Chip — der Webhook gehört in einen zugriffsbeschränkten Channel.
   - **Der Hinweis ist seit Phase 16 durchsuchbar, seine Nachrichten nicht.** `HinweisNachricht` bleibt in
     `SearchCatalog.NotSearchable`: gefunden wird der Hinweis, nicht die einzelne Zeile. Der Provider trägt die
     Anonymitätszusage strukturell, indem er kein Bürgerfeld liest.

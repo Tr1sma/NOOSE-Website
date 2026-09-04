@@ -28,8 +28,10 @@ public class PublicWantedModelTests
         typeof(PublicPageLink),
         typeof(PublicPageView),
         typeof(PublicPageSnapshot),
-        // the FAQ of /info/faq: sections, their questions and the answers an anonymous visitor unfolds
+        // the FAQ of /faq: heading and intro of the page, its sections, their questions and the answers an
+        // anonymous visitor unfolds
         typeof(PublicFaqSnapshot),
+        typeof(PublicFaqHead),
         typeof(PublicFaqRubrikView),
         typeof(PublicFaqEntryView),
         // the public shell renders these two as well: the nav tabs and the career page's requirement list

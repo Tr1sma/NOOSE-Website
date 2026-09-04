@@ -44,7 +44,7 @@ public sealed class PublicFaqServiceTests
         return new PublicFaqService(factory, new PublicModuleService(factory, cache), cache);
     }
 
-    /// <summary>Module switches seeded, the editorial module on, and the FAQ page published.</summary>
+    /// <summary>Module switches seeded, the FAQ module on, and the editorial row it owns published.</summary>
     private static async Task<SqliteTestContext> SeededAsync(bool moduleOn = true, bool pagePublished = true)
     {
         var ctx = new SqliteTestContext();
@@ -52,7 +52,7 @@ public sealed class PublicFaqServiceTests
         await PublicModuleSeeder.SeedAsync(db);
         if (moduleOn)
         {
-            (await db.OeffentlicheModule.SingleAsync(m => m.Key == PublicModules.InfoPages)).IsEnabled = true;
+            (await db.OeffentlicheModule.SingleAsync(m => m.Key == PublicModules.Faq)).IsEnabled = true;
         }
         db.OeffentlicheSeiten.Add(new OeffentlicheSeite
         {
@@ -114,6 +114,83 @@ public sealed class PublicFaqServiceTests
         await service.SaveEntryAsync(Entry(rubrikId), Leader());
 
         Assert.True((await service.GetPublishedAsync()).IsEmpty);
+    }
+
+    [Fact]
+    public async Task TheInformationModule_NoLongerGatesTheFaq()
+    {
+        // the FAQ left /info for a page and a switch of its own; closing the editorial pages must not close it
+        using var ctx = await SeededAsync();
+        await using (var db = ctx.NewContext())
+        {
+            (await db.OeffentlicheModule.SingleAsync(m => m.Key == PublicModules.InfoPages)).IsEnabled = false;
+            await db.SaveChangesAsync();
+        }
+        var service = NewService(ctx);
+        var rubrikId = await service.SaveRubrikAsync(Rubrik(), Leader());
+        await service.SaveEntryAsync(Entry(rubrikId), Leader());
+
+        Assert.False((await service.GetPublishedAsync()).IsEmpty);
+    }
+
+    // ---- the page head ----
+
+    [Fact]
+    public async Task ThePublishedSnapshot_CarriesTheHeadingAndIntroOfItsOwnPage()
+    {
+        // /faq renders from this one service: the Information module must not be able to blank the text over a
+        // FAQ that is switched on, so the head travels with the sections instead of through the page service
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+
+        var head = (await service.GetPublishedAsync()).Page;
+
+        Assert.NotNull(head);
+        Assert.Equal("Häufige Fragen", head!.Title);
+        Assert.Equal("<p>Einleitung</p>", head.Html);
+        Assert.False(head.IsDraft);
+    }
+
+    [Fact]
+    public async Task TheHeading_SurvivesAFaqWithoutASingleSection()
+    {
+        // the page is published, it just has nothing under it yet - dropping the head would answer "not published"
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+
+        var snapshot = await service.GetPublishedAsync();
+
+        Assert.True(snapshot.IsEmpty);
+        Assert.NotNull(snapshot.Page);
+    }
+
+    [Fact]
+    public async Task WithoutAPublishedPage_ThereIsNoHeadEither()
+    {
+        using var ctx = await SeededAsync(pagePublished: false);
+        var service = NewService(ctx);
+
+        Assert.Null((await service.GetPublishedAsync()).Page);
+    }
+
+    [Fact]
+    public async Task ThePreview_CarriesTheDraftText_PastBothGates()
+    {
+        using var ctx = await SeededAsync(moduleOn: false, pagePublished: false);
+        await using (var db = ctx.NewContext())
+        {
+            (await db.OeffentlicheSeiten.SingleAsync(p => p.Slug == PublicFaq.PageSlug)).DraftHtml = "<p>Entwurf</p>";
+            await db.SaveChangesAsync();
+        }
+        var service = NewService(ctx);
+        var rubrikId = await service.SaveRubrikAsync(Rubrik(visible: false), Leader());
+        await service.SaveEntryAsync(Entry(rubrikId, visible: false), Leader());
+
+        var snapshot = await service.GetPreviewAsync(Leader());
+
+        Assert.Equal("<p>Entwurf</p>", snapshot.Page?.Html);
+        Assert.True(snapshot.Page?.IsDraft);
+        Assert.Single(snapshot.Rubriken);
     }
 
     // ---- visibility ----

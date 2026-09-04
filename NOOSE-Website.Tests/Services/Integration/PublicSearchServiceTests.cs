@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
@@ -441,14 +441,14 @@ public sealed class PublicSearchServiceTests
         var hit = Assert.Single(group.Hits);
         Assert.Equal("Bekomme ich eine Belohnung?", hit.Title);
         // the query opens the section on a statically rendered page; the fragment only scrolls
-        Assert.Equal("/info/faq?frage=bekomme-ich-eine-belohnung#bekomme-ich-eine-belohnung", hit.Href);
+        Assert.Equal("/faq?frage=bekomme-ich-eine-belohnung#bekomme-ich-eine-belohnung", hit.Href);
         Assert.Equal("Hinweise", hit.Reference);
     }
 
     [Fact]
     public async Task WithNoFaqPublished_TheGroupIsAbsent()
     {
-        // the snapshot is empty whenever the module is off or /info/faq is not published; no dead hits either way
+        // the snapshot is empty whenever the module is off or the FAQ page is not published; no dead hits either way
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
         await AddAsync(ctx, Notice("FA-1", PublicWantedStatus.Veroeffentlicht, "Kupferdraht"));

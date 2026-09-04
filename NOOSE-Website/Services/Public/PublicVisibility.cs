@@ -44,11 +44,12 @@ public static class PublicVisibility
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
             ["OeffentlicheFaqRubrik"] = "Titel, Beschreibungszeile und Icon eines sichtbar geschalteten "
-                + "FAQ-Abschnitts auf /info/faq. Eine ausgeschaltete Rubrik geht samt ihrer Fragen nicht "
+                + "FAQ-Abschnitts auf /faq. Eine ausgeschaltete Rubrik geht samt ihrer Fragen nicht "
                 + "hinaus; einen Aktenbezug hat die Zeile nicht.",
             ["OeffentlicheFaqEintrag"] = "Frage, Antworttext und der Anker, unter dem die Frage adressiert "
                 + "wird — alles nur, solange Frage und Rubrik sichtbar geschaltet sind und die Seite "
-                + "/info/faq veröffentlicht ist. Einen Aktenbezug hat die Zeile nicht.",
+                + "faq veröffentlicht ist, die Überschrift und Einleitung von /faq liefert. Einen "
+                + "Aktenbezug hat die Zeile nicht.",
             ["Pressemitteilung"] = "Öffentliches Aktenzeichen, Titel, Teaser und der veröffentlichte Inhalt einer "
                 + "amtlichen Verlautbarung. Der Entwurf, der veröffentlichende Agent und der Discord-Stempel bleiben "
                 + "drinnen; einen Aktenbezug hat die Zeile nicht.",

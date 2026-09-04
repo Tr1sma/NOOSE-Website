@@ -114,6 +114,11 @@ public enum NotificationType
     /// <summary>A citizen reported catching a wanted person. Routable, and the one citizen submission that is:
     /// somebody is holding a wanted person right now. The post stays generic and names nobody.</summary>
     PublicCaptureReported = 34,
+
+    /// <summary>A tip arrived at the desk. Routable — the role ping for a fresh submission; rings no bell of its
+    /// own, <see cref="PublicTipReceived"/> is the desk notice. This one exists so the submission pings and a
+    /// citizen's reply on a running tip does not. The post stays generic and names neither citizen nor subject.</summary>
+    PublicTipCreated = 35,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -147,6 +152,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedExpired => "Ausschreibung abgelaufen",
         NotificationType.PublicWantedBountyRaised => "Kopfgeld erhöht",
         NotificationType.PublicTipReceived => "Bürgerhinweis",
+        NotificationType.PublicTipCreated => "Neuer Bürgerhinweis",
         NotificationType.PublicTipAnswered => "Antwort zu deinem Hinweis",
         NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
         NotificationType.PublicTicketOpened => "Neues Bürger-Ticket",
@@ -188,6 +194,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedExpired => Icons.Material.Filled.TimerOff,
         NotificationType.PublicWantedBountyRaised => Icons.Material.Filled.Paid,
         NotificationType.PublicTipReceived => Icons.Material.Filled.TipsAndUpdates,
+        NotificationType.PublicTipCreated => Icons.Material.Filled.TipsAndUpdates,
         NotificationType.PublicTipAnswered => Icons.Material.Filled.MarkEmailUnread,
         NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
         NotificationType.PublicTicketOpened => Icons.Material.Filled.Forum,

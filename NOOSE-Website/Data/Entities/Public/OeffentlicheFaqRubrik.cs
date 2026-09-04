@@ -1,13 +1,12 @@
-using NOOSE_Website.Models.Abstractions;
+﻿using NOOSE_Website.Models.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Public;
 
 /// <summary>One main section of the public FAQ; it groups questions and carries no answer of its own.</summary>
 /// <remarks>
-/// The FAQ lives on the editorial page <c>/info/faq</c>, so a rubric has no address and no publish pair: the page
-/// decides whether any of this is reachable at all, and <see cref="IsVisible"/> decides whether this one section is
-/// part of it. Saving is therefore immediate — there is no dated statement here that a second click would protect,
+/// The FAQ is one page, <c>/faq</c>, so a rubric has no address and no publish pair: the page decides whether any
+/// of this is reachable at all, and <see cref="IsVisible"/> decides whether this one section is part of it. Saving is therefore immediate — there is no dated statement here that a second click would protect,
 /// which is what the draft/published split exists for on a press release.
 /// <para>
 /// Hard-deleted, like <see cref="OeffentlichesFuehrungsprofil"/>: this is editorial furniture, not a record, and a

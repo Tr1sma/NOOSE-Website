@@ -40,8 +40,14 @@ public static class DiscordRouting
         // case number and nothing else - naming who is holding a wanted criminal, in a channel players read,
         // invites revenge, and the reporter is not anonymous on this path
         NotificationType.PublicCaptureReported,
-        // PublicTipReceived/PublicTipAnswered are absent for the same reason and a sharper one: a tip is a
-        // citizen's submission, and its arrival in a public channel would out the person who filed it.
+        // the desk's role ping for a fresh tip, and the ticket construction is why it is a category of its own:
+        // PublicTipReceived stays unroutable (routing it would ping on every citizen reply too), so this key
+        // carries the channel and the role id while the post itself is the generic notice plus the login-gated
+        // link - no citizen, no subject, no case number. Point it at an internal channel: the arrival time alone
+        // is a hint about who just filed
+        NotificationType.PublicTipCreated,
+        // PublicTipReceived/PublicTipAnswered stay absent: the first would fire on replies as well (see above),
+        // and an answer is addressed to exactly one citizen.
         // PublicObjectionReceived/PublicObjectionDecided likewise: the first names a citizen disputing a public
         // accusation, the second is addressed to exactly one of them
     };

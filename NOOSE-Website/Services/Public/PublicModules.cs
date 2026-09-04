@@ -26,6 +26,7 @@ public static class PublicModules
     // --- agency ---
     public const string Careers = "Karriere";
     public const string InfoPages = "Infoseiten";
+    public const string Faq = "Faq";
     public const string Press = "Presse";
     public const string SituationReports = "Lageberichte";
     public const string Warnings = "Warnungen";
@@ -70,10 +71,14 @@ public static class PublicModules
         new(Careers, "Karriere", "Informationen zum Auswahlverfahren und der Bewerbungs-Zugang.",
             Icons.Material.Filled.WorkOutline, "/karriere", PublicModuleGroup.Behoerde, 100, true, true,
             "Wir nehmen derzeit keine Bewerbungen an."),
-        new(InfoPages, "Information", "Redaktionelle Seiten zu Auftrag, Befugnissen, Zuständigkeiten sowie das "
-            + "gegliederte FAQ auf /info/faq.",
+        new(InfoPages, "Information", "Redaktionelle Seiten zu Auftrag, Befugnissen und Zuständigkeiten.",
             Icons.Material.Filled.MenuBook, "/info", PublicModuleGroup.Behoerde, 110, false, true,
             "Die Informationsseiten sind derzeit nicht verfügbar."),
+        // a switch of its own, not a corner of Information: the FAQ answers what people ask before they write to
+        // us, so it has to be closable — and openable — without touching the editorial pages next to it
+        new(Faq, "Häufige Fragen", "Gegliedertes FAQ mit Rubriken und aufklappbaren Fragen auf /faq.",
+            Icons.Material.Filled.QuestionAnswer, "/faq", PublicModuleGroup.Behoerde, 115, false, true,
+            "Das FAQ ist derzeit nicht verfügbar."),
         new(Press, "Presse", "Pressemitteilungen der Behörde.",
             Icons.Material.Filled.Feed, "/presse", PublicModuleGroup.Behoerde, 120, false, true, OffGeneric),
         // the ONE outward surface that names agents. Off by default like everything else, and every single entry

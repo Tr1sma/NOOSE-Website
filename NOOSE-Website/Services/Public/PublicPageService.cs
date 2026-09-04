@@ -290,9 +290,12 @@ public class PublicPageService(
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+            // the FAQ row is held out of every Information read: it answers on /faq under a module of its own, so
+            // leaving it here would list it in the menu, serve the same text a second time under /info/faq and
+            // offer the outside search two hits for one page
             var rows = await db.OeffentlicheSeiten
                 .AsNoTracking()
-                .Where(p => p.Status == PublicPageStatus.Veroeffentlicht)
+                .Where(p => p.Status == PublicPageStatus.Veroeffentlicht && p.Slug != PublicFaq.PageSlug)
                 .OrderBy(p => p.SortOrder)
                 .ThenBy(p => p.Title)
                 .ToListAsync(cancellationToken);

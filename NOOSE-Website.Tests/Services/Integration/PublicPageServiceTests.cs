@@ -243,12 +243,12 @@ public sealed class PublicPageServiceTests
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
-        await PublishedAsync(service, Input("faq", "Häufige Fragen", sortOrder: 40));
+        await PublishedAsync(service, Input("zustaendigkeiten", "Zuständigkeiten", sortOrder: 40));
         await PublishedAsync(service, Input("befugnisse", "Befugnisse", sortOrder: 20));
         await PublishedAsync(service, Input("auftrag", "Auftrag", sortOrder: 20));
 
         var menu = await service.GetMenuAsync();
-        Assert.Equal(["auftrag", "befugnisse", "faq"], menu.Select(m => m.Slug));
+        Assert.Equal(["auftrag", "befugnisse", "zustaendigkeiten"], menu.Select(m => m.Slug));
     }
 
     [Fact]
@@ -257,11 +257,27 @@ public sealed class PublicPageServiceTests
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
-        await PublishedAsync(service, Input("faq", "Häufige Fragen", sortOrder: 10, menuTitle: "FAQ"));
+        await PublishedAsync(service, Input("zustaendigkeiten", "Zuständigkeiten", sortOrder: 10, menuTitle: "Zuständig"));
         await PublishedAsync(service, Input("auftrag", "Auftrag", sortOrder: 20));
 
         var menu = await service.GetMenuAsync();
-        Assert.Equal(["FAQ", "Auftrag"], menu.Select(m => m.MenuTitle));
+        Assert.Equal(["Zuständig", "Auftrag"], menu.Select(m => m.MenuTitle));
+    }
+
+    [Fact]
+    public async Task TheFaqRow_IsHeldOutOfEveryInformationRead()
+    {
+        // it answers on /faq under a module of its own; leaving it here would list it in the Information menu,
+        // serve the same text a second time under /info/faq and hand the public search two hits for one page
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+
+        await PublishedAsync(service, Input(PublicFaq.PageSlug, "Häufige Fragen", sortOrder: 40));
+        await PublishedAsync(service, Input("auftrag", "Auftrag", sortOrder: 10));
+
+        Assert.Equal(["auftrag"], (await service.GetMenuAsync()).Select(m => m.Slug));
+        Assert.Null(await service.GetAsync(PublicFaq.PageSlug));
+        Assert.NotNull(await service.GetAsync("auftrag"));
     }
 
     [Fact]

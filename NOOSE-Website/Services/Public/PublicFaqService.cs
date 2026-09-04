@@ -21,8 +21,8 @@ public class PublicFaqService(
     {
         // The module switch is checked outside the content cache: caching "module is off" as an empty snapshot
         // would keep the FAQ dark for a whole cache window after someone turns the module back on. The second
-        // gate - the page being published - sits inside LoadAsync, where the context is already open.
-        if (!await modules.IsEnabledAsync(PublicModules.InfoPages, cancellationToken))
+        // gate - the editorial row being published - sits inside LoadAsync, where the context is already open.
+        if (!await modules.IsEnabledAsync(PublicModules.Faq, cancellationToken))
         {
             return PublicFaqSnapshot.Empty;
         }
@@ -35,7 +35,12 @@ public class PublicFaqService(
 
         // deliberately past both gates: looking at a question before switching it visible is the point of a preview
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await BuildAsync(db, visibleOnly: false, cancellationToken);
+        var head = await db.OeffentlicheSeiten
+            .AsNoTracking()
+            .Where(p => p.Slug == PublicFaq.PageSlug)
+            .Select(p => new PublicFaqHead(p.Title, p.DraftHtml ?? string.Empty, p.PublishedAt, true))
+            .FirstOrDefaultAsync(cancellationToken);
+        return await BuildAsync(db, head, visibleOnly: false, cancellationToken);
     }
 
     public async Task<PublicFaqAdminView> GetAllAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -73,7 +78,7 @@ public class PublicFaqService(
         var pageLive = await db.OeffentlicheSeiten
             .AnyAsync(p => p.Slug == PublicFaq.PageSlug && p.Status == PublicPageStatus.Veroeffentlicht,
                 cancellationToken);
-        var moduleOn = await modules.IsEnabledAsync(PublicModules.InfoPages, cancellationToken);
+        var moduleOn = await modules.IsEnabledAsync(PublicModules.Faq, cancellationToken);
 
         return new PublicFaqAdminView(pageLive, moduleOn, rubriken
             .Select(r => new PublicFaqRubrikRow(
@@ -378,12 +383,15 @@ public class PublicFaqService(
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
             // the second gate, read here rather than in the caller so the public search inherits it: a question of
-            // a retracted page would otherwise stay findable and link into "Seite nicht gefunden"
-            var pageLive = await db.OeffentlicheSeiten
-                .AnyAsync(p => p.Slug == PublicFaq.PageSlug && p.Status == PublicPageStatus.Veroeffentlicht,
-                    cancellationToken);
-            snapshot = pageLive
-                ? await BuildAsync(db, visibleOnly: true, cancellationToken)
+            // a retracted page would otherwise stay findable and link into "Seite nicht gefunden". The same row
+            // carries the heading and the intro, so it is projected rather than counted.
+            var head = await db.OeffentlicheSeiten
+                .AsNoTracking()
+                .Where(p => p.Slug == PublicFaq.PageSlug && p.Status == PublicPageStatus.Veroeffentlicht)
+                .Select(p => new PublicFaqHead(p.Title, p.ContentHtml ?? string.Empty, p.PublishedAt, false))
+                .FirstOrDefaultAsync(cancellationToken);
+            snapshot = head is not null
+                ? await BuildAsync(db, head, visibleOnly: true, cancellationToken)
                 : PublicFaqSnapshot.Empty;
         }
         catch (Exception)
@@ -396,7 +404,7 @@ public class PublicFaqService(
         return snapshot;
     }
 
-    private static async Task<PublicFaqSnapshot> BuildAsync(AppDbContext db, bool visibleOnly, CancellationToken cancellationToken)
+    private static async Task<PublicFaqSnapshot> BuildAsync(AppDbContext db, PublicFaqHead? head, bool visibleOnly, CancellationToken cancellationToken)
     {
         var rubriken = await db.OeffentlicheFaqRubriken
             .AsNoTracking()
@@ -406,7 +414,8 @@ public class PublicFaqService(
             .ToListAsync(cancellationToken);
         if (rubriken.Count == 0)
         {
-            return PublicFaqSnapshot.Empty;
+            // the heading survives an empty FAQ: the page is published, it just has nothing under it yet
+            return new PublicFaqSnapshot([], head);
         }
 
         // flat WHERE ... IN, never a collection projection: Pomelo translates no LATERAL against MySQL
@@ -442,7 +451,7 @@ public class PublicFaqService(
             .Where(r => !visibleOnly || r.Entries.Count > 0)
             .ToList();
 
-        return new PublicFaqSnapshot(views);
+        return new PublicFaqSnapshot(views, head);
     }
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

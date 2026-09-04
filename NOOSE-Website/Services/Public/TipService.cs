@@ -25,6 +25,7 @@ public class TipService(
     INotificationService notifications,
     ITipPriorityService priority,
     IPublicTemplateService templates,
+    IDiscordWebhookService discord,
     TipsBroadcaster broadcaster) : ITipService
 {
     private const string CaseNumberPrefix = "H";
@@ -1253,6 +1254,7 @@ public class TipService(
 
     // leadership hears about a new tip; everyone else has the inbox badge. A bell for every agent on every
     // submission would train the whole office to ignore the bell
+    // Discord push sits here, not in the notification service: this notifier runs on the submission only
     private async Task NotifyDeskAsync(AppDbContext db, Hinweis row, CancellationToken ct)
     {
         try
@@ -1260,6 +1262,8 @@ public class TipService(
             var recipients = await DeskRecipientsAsync(db, ct);
             await notifications.NotifyManyAsync(recipients, NotificationType.PublicTipReceived,
                 $"Neuer Bürgerhinweis {row.CaseNumber}", $"/hinweise/{row.Id}", null, ct);
+            await discord.PushAsync(NotificationType.PublicTipCreated, $"/hinweise/{row.Id}", null,
+                cancellationToken: ct);
         }
         catch
         {

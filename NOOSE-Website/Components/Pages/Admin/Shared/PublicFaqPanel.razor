@@ -1,10 +1,10 @@
-﻿@* The FAQ of /info/faq: sections, the questions under them, and what is switched on. *@
+﻿@* The FAQ of /faq: sections, the questions under them, and what is switched on. *@
 @inject IPublicFaqService FaqService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Die Fragen erscheinen als aufklappbare Abschnitte unter dem Text der Seite <code>/info/faq</code>. Ein Abschnitt
+    Die Fragen erscheinen als aufklappbare Abschnitte unter dem Text der eigenen Seite <code>/faq</code>. Ein Abschnitt
     gruppiert Fragen, jede Frage klappt einzeln auf. Anders als bei den redaktionellen Seiten gibt es hier keinen
     Veröffentlichen-Schritt: <em>Speichern wirkt sofort</em>, und was noch nicht hinaus soll, bleibt über den
     Schalter „sichtbar“ aus. Gelöschte Fragen landen in keinem Papierkorb.
@@ -19,21 +19,21 @@ else
     @if (!_view.ModuleIsOn)
     {
         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
-            Das Modul „Information“ ist abgeschaltet — <code>/info/faq</code> ist derzeit für niemanden erreichbar.
+            Das Modul „Häufige Fragen“ ist abgeschaltet — <code>/faq</code> ist derzeit für niemanden erreichbar.
             <MudLink Href="/einstellungen?tab=oeffentliche-module" Typo="Typo.body2">Module &amp; Not-Aus</MudLink>
         </MudAlert>
     }
     else if (!_view.PageIsPublished)
     {
         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
-            Die Seite <code>/info/faq</code> ist nicht veröffentlicht — das FAQ ist nach außen unsichtbar, egal wie
-            viele Fragen hier stehen.
+            Die Seite <code>faq</code> ist nicht veröffentlicht — sie liefert Überschrift und Einleitungstext
+            von <code>/faq</code>, also ist das FAQ nach außen unsichtbar, egal wie viele Fragen hier stehen.
             <MudLink Href="/einstellungen?tab=oeffentliche-seiten" Typo="Typo.body2">Öffentliche Seiten</MudLink>
         </MudAlert>
     }
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
-        <MudButton Href="/info/faq?vorschau=1" Target="_blank" Variant="Variant.Text" Color="Color.Default"
+        <MudButton Href="/faq?vorschau=1" Target="_blank" Variant="Variant.Text" Color="Color.Default"
                    StartIcon="@Icons.Material.Filled.Visibility">Vorschau</MudButton>
         <MudSpacer />
         @if (_mayEdit)
@@ -195,7 +195,7 @@ else
                                                     </div>
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                            Adresse: <code>/info/faq?frage=@entry.Anchor</code>
+                                                            Adresse: <code>/faq?frage=@entry.Anchor</code>
                                                         </MudText>
                                                         <MudSpacer />
                                                         @if (_mayEdit)

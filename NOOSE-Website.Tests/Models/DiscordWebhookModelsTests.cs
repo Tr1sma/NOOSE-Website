@@ -28,6 +28,7 @@ public class DiscordWebhookModelsTests
         NotificationType.PublicTicketCreated,
         NotificationType.PublicPressPublished,
         NotificationType.PublicCaptureReported,
+        NotificationType.PublicTipCreated,
     };
 
     // Enum members NOT in the routable list.
@@ -38,6 +39,9 @@ public class DiscordWebhookModelsTests
         NotificationType.RecordModified,
         NotificationType.AppointmentAssigned,
         NotificationType.AbsenceFiled,
+        // the desk notice fires on a citizen reply too, so routing it would ping on every line of a running tip
+        NotificationType.PublicTipReceived,
+        NotificationType.PublicTipAnswered,
         // an internal operating fact: NotifyManyAsync pushes every routable category, so a routable one here would
         // post each expiry into the public channel
         NotificationType.PublicWantedExpired,
@@ -307,6 +311,7 @@ public class DiscordWebhookModelsTests
             NotificationType.PublicTicketCreated,
             NotificationType.PublicPressPublished,
             NotificationType.PublicCaptureReported,
+            NotificationType.PublicTipCreated,
         };
 
         Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);
@@ -333,6 +338,22 @@ public class DiscordWebhookModelsTests
         // the fallback role, i.e. NOOSE - a capture concerns the whole house, not one branch
         Assert.Equal(DiscordRouting.DefaultRole(NotificationType.Announcement),
             DiscordRouting.DefaultRole(NotificationType.PublicCaptureReported));
+    }
+
+    [Fact]
+    public void NewTip_pingsTheConfiguredRoleWhileTheDeskNoticeStaysUnroutable()
+    {
+        Assert.True(DiscordRouting.IsRoutable(NotificationType.PublicTipCreated));
+        Assert.True(DiscordRouting.PingsRole(NotificationType.PublicTipCreated));
+        Assert.False(DiscordRouting.PingsRecipients(NotificationType.PublicTipCreated));
+        Assert.False(DiscordRouting.PingsNobody(NotificationType.PublicTipCreated));
+        Assert.Contains(NotificationType.PublicTipCreated, DiscordRouting.RoleRoutableTypes);
+        // the fallback role, i.e. NOOSE - the desk is the whole house, not one branch
+        Assert.Equal(DiscordRouting.DefaultRole(NotificationType.Announcement),
+            DiscordRouting.DefaultRole(NotificationType.PublicTipCreated));
+        // routing either of these would ping on a citizen's reply as well
+        Assert.False(DiscordRouting.IsRoutable(NotificationType.PublicTipReceived));
+        Assert.False(DiscordRouting.IsRoutable(NotificationType.PublicTipAnswered));
     }
 
     // ----- DiscordWebhookConfig record -----

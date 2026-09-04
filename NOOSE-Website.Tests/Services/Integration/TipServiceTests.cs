@@ -54,6 +54,7 @@ public sealed class TipServiceTests
         PublicModuleService Modules,
         ITipAttachmentStorageService Storage,
         INotificationService Notifications,
+        IDiscordWebhookService Discord,
         IMemoryCache Cache,
         TestDbContextFactory Factory);
 
@@ -90,9 +91,11 @@ public sealed class TipServiceTests
             .Returns("gespeichert.jpg");
 
         var notifications = Substitute.For<INotificationService>();
+        var discord = Substitute.For<IDiscordWebhookService>();
         var service = new TipService(factory, modules, new BuergerService(factory), wanted, caseNumbers,
-            storage, notifications, tipPriority, new PublicTemplateService(factory), new TipsBroadcaster());
-        return new Host(service, tipPriority, wanted, modules, storage, notifications, cache, factory);
+            storage, notifications, tipPriority, new PublicTemplateService(factory), discord,
+            new TipsBroadcaster());
+        return new Host(service, tipPriority, wanted, modules, storage, notifications, discord, cache, factory);
     }
 
     /// <summary>Seeds module switches, one person file and one complete citizen profile.</summary>
@@ -330,6 +333,38 @@ public sealed class TipServiceTests
         Assert.Equal(ProfileId, row.CitizenProfileId);
         Assert.Equal(TipStatus.Neu, row.Status);
         Assert.Null(row.WantedId);
+    }
+
+    [Fact]
+    public async Task Submitting_pings_the_configured_role_on_Discord_without_naming_the_citizen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+
+        // no headline and no recipients: the channel gets the generic notice plus the login-gated link, never
+        // the text, the subject or the case number
+        await host.Discord.Received(1).PushAsync(NotificationType.PublicTipCreated, $"/hinweise/{id}",
+            null, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_citizen_reply_pings_nobody_on_Discord()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+        await host.Service.AskCitizenAsync(id, "Können Sie das Kennzeichen nennen?", Agent());
+        host.Discord.ClearReceivedCalls();
+
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Es war ein weißer Van, HB 42 XY.", Citizen());
+
+        // only the submission is an event for the channel; a running thread would turn the ping into noise
+        await host.Discord.DidNotReceive().PushAsync(Arg.Any<NotificationType>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1327,6 +1362,21 @@ public sealed class TipServiceTests
         var row = await db.Hinweise.SingleAsync(h => h.CaseNumber == caseNumber);
         Assert.False(row.WantsAnonymity);
         Assert.Equal(TipKind.Ergreifung, row.Kind);
+    }
+
+    [Fact]
+    public async Task ACaptureReport_doesNotUseTheTipDeskPing()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+
+        await ReportCaptureAsync(host, notice);
+
+        // it has its own routable category (PublicCaptureReported, pushed by the notification service), so
+        // routing it through the tip desk as well would ping the role twice for one submission
+        await host.Discord.DidNotReceive().PushAsync(NotificationType.PublicTipCreated, Arg.Any<string?>(),
+            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

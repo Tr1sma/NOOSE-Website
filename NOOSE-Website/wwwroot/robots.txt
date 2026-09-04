@@ -10,6 +10,7 @@ Allow: /karriere
 Allow: /datenschutz
 Allow: /nutzungsbedingungen
 Allow: /info
+Allow: /faq
 Allow: /gefahr
 Allow: /gesucht
 Allow: /gefasst

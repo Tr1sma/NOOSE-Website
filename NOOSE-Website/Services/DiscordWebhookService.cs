@@ -411,6 +411,7 @@ public class DiscordWebhookService(
         // the internal desk, not the citizen portal: the ping goes to leadership
         NotificationType.PublicTicketCreated => "/tickets",
         NotificationType.PublicCaptureReported => "/hinweise",
+        NotificationType.PublicTipCreated => "/hinweise",
         _ => "/dashboard",
     };
 
@@ -432,6 +433,7 @@ public class DiscordWebhookService(
         NotificationType.PublicPressPublished => "📰 Neue Pressemitteilung.",
         NotificationType.PublicTicketCreated => "📨 Ein neues Ticket liegt im Eingang.",
         NotificationType.PublicCaptureReported => "🚨 Ein Bürger meldet die Ergreifung einer gesuchten Person.",
+        NotificationType.PublicTipCreated => "💡 Ein neuer Bürgerhinweis liegt im Eingang.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

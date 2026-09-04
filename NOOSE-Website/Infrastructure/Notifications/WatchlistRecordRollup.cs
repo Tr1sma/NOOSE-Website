@@ -102,8 +102,8 @@ public static class WatchlistRecordRollup
             // releases, standing warnings and released monthly texts are outward text, while module switches, a
             // citizen's own account and the warning value list are configuration — none of them is casework
             case OeffentlicheSeite:
-            // the FAQ hangs off that editorial page, not off a file: a rubric is a heading and a question is
-            // outward text, so no follower of a record could be meant by either
+            // the FAQ is a page of its own, not a file: a rubric is a heading and a question is outward
+            // text, so no follower of a record could be meant by either
             case OeffentlicheFaqRubrik:
             case OeffentlicheFaqEintrag:
             case Pressemitteilung:

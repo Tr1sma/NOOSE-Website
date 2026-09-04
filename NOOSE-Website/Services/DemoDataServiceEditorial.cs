@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
@@ -135,7 +135,7 @@ public partial class DemoDataService
         ]),
     ];
 
-    /// <summary>Seeds the structured FAQ under /info/faq; idempotent over the section titles.</summary>
+    /// <summary>Seeds the structured FAQ under /faq; idempotent over the section titles.</summary>
     private static async Task<int> SeedPublicFaqAsync(AppDbContext db, CancellationToken ct)
     {
         var known = (await db.OeffentlicheFaqRubriken.Select(r => r.Title).ToListAsync(ct))

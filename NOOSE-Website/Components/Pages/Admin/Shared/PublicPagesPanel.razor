@@ -9,7 +9,9 @@
     Besucher erst beim Veröffentlichen. Titel und Menü-Einstellungen wirken dagegen sofort, und die Adresse einer
     veröffentlichten Seite lässt sich erst nach dem Zurückziehen ändern. Vor dem Veröffentlichen lässt sich jeder Entwurf
     als Agent über die Vorschau ansehen; anonym ist er nicht erreichbar. Die Seiten erscheinen nur, solange das
-    Modul „Information" eingeschaltet ist.
+    Modul „Information" eingeschaltet ist. Eine Ausnahme: die Seite <code>faq</code> liefert Überschrift und
+    Einleitung der eigenen Seite <code>/faq</code> und hängt am Modul „Häufige Fragen" — im Menü unter
+    <code>/info</code> taucht sie nicht auf.
 </MudText>
 
 @if (_load)
@@ -24,7 +26,7 @@ else if (_edit is not null)
         <MudSpacer />
         @if (!_isNew)
         {
-            <MudButton Href="@($"/info/{_savedSlug}?vorschau=1")" Target="_blank" Variant="Variant.Text"
+            <MudButton Href="@($"{PublicFaq.PageHref(_savedSlug)}?vorschau=1")" Target="_blank" Variant="Variant.Text"
                        Color="Color.Default" StartIcon="@Icons.Material.Filled.Visibility">Vorschau</MudButton>
         }
         <MudButton OnClick="SaveDraftAsync" Variant="Variant.Filled" Color="Color.Primary"
@@ -107,7 +109,7 @@ else
                     }
                 </MudStack>
             </MudTd>
-            <MudTd DataLabel="Adresse"><code>/info/@context.Slug</code></MudTd>
+            <MudTd DataLabel="Adresse"><code>@PublicFaq.PageHref(context.Slug)</code></MudTd>
             <MudTd DataLabel="Status">
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     @if (context.Status == PublicPageStatus.Veroeffentlicht)
@@ -137,7 +139,7 @@ else
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                     <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Default"
-                                   Href="@($"/info/{context.Slug}?vorschau=1")" Target="_blank" aria-label="Entwurf ansehen" />
+                                   Href="@($"{PublicFaq.PageHref(context.Slug)}?vorschau=1")" Target="_blank" aria-label="Entwurf ansehen" />
                     @if (_mayEdit)
                     {
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
@@ -288,7 +290,7 @@ else
     private async Task PublishAsync(PublicPageEdit row)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Seite veröffentlichen?",
-            $"Der aktuelle Entwurf von „{row.Title}“ wird unter /info/{row.Slug} öffentlich sichtbar.",
+            $"Der aktuelle Entwurf von „{row.Title}“ wird unter {PublicFaq.PageHref(row.Slug)} öffentlich sichtbar.",
             "Veröffentlichen", Color.Success);
         if (!ok)
         {

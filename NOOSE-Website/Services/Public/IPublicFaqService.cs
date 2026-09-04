@@ -8,13 +8,19 @@ namespace NOOSE_Website.Services.Public;
 /// No draft/published pair here, unlike a press release or a warning: a FAQ answer is not a dated statement, so a
 /// second click to publish would only be a way to forget one. Visibility is a switch per section and per question,
 /// and saving takes effect at once.
+/// <para>
+/// The heading and intro of <see cref="PublicFaq.Route"/> come along in the same snapshot, read from the editorial
+/// row the FAQ owns. The page renders from this one service so the Information module cannot blank the text over a
+/// FAQ that is switched on.
+/// </para>
 /// </remarks>
 public interface IPublicFaqService
 {
     /// <summary>Everything visible, cached; empty while the module is off or the FAQ page is not published.</summary>
     Task<PublicFaqSnapshot> GetPublishedAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>The same, plus what is switched off, for an agent's preview; ignores both gates on purpose.</summary>
+    /// <summary>The same, plus what is switched off and the draft text, for an agent's preview; ignores both
+    /// gates on purpose.</summary>
     Task<PublicFaqSnapshot> GetPreviewAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Everything the editorial panel needs; the questions carry no answer.</summary>

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
@@ -28,6 +28,9 @@ public static class PublicPageSeeder
         new("zustaendigkeiten", "Zuständigkeiten", "Zuständigkeiten", "Groups", 30,
             "<p>Hier steht, welche Anliegen das NOOSE bearbeitet und welche an andere Behörden gehören.</p>"
             + "<p><em>Dieser Text ist ein Platzhalter und muss vor der Veröffentlichung ersetzt werden.</em></p>"),
+        // the odd one out: this row is not an Information page but the heading and intro of /faq, which has a
+        // module and a route of its own. Held out of the /info menu by PublicPageService; retracting it takes
+        // the whole FAQ down, which is why the FAQ panel names it
         new("faq", "Häufige Fragen", "FAQ", "Forum", 40,
             "<p>Antworten auf die Fragen, die uns am häufigsten erreichen.</p><p><em>Dieser Text ist ein "
             + "Platzhalter und muss vor der Veröffentlichung ersetzt werden.</em></p>"),
