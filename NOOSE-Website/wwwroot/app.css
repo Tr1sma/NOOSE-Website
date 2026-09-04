@@ -3,6 +3,11 @@ html, body {
     background-color: #0E1116;
 }
 
+/* FocusOnNavigate parks focus on the new page heading; the UA ring there reads as a stray box */
+:is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
+    outline: none;
+}
+
 /* Hilfsklasse: zeigt anklickbare Elemente (Tabellenzeilen, Dok-Karten) als klickbar an. */
 .cursor-pointer {
     cursor: pointer;
