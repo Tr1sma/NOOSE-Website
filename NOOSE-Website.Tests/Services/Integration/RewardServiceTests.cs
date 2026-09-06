@@ -701,4 +701,67 @@ public sealed class RewardServiceTests
         Assert.False(row.SelfPaid);
         Assert.NotNull(row.BookingCaseNumber);
     }
+
+    // ---- the capture status is not a payment ----
+
+    [Fact]
+    public async Task The_capture_status_cannot_be_set_by_hand()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        var tip = await WorkedTipAsync(host, caseNumber);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Tips.SetStatusAsync(tip, TipStatus.FuehrteZurErgreifung, Leader()));
+
+        Assert.Contains("Auszahlung", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(TipStatus.FuehrteZurErgreifung, TipRules.AllowedTargets(TipStatus.InPruefung));
+        Assert.Equal(TipStatus.InPruefung, await TipStatusAsync(ctx, tip));
+    }
+
+    [Fact]
+    public async Task A_tip_left_on_the_capture_status_without_a_receipt_is_still_payable()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        await host.Bounty.AddOfficialAsync(id, 50_000m, KassenKonto.Gruengeld, null, Leader());
+        var tip = await WorkedTipAsync(host, caseNumber);
+        await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
+        await host.Wanted.CapturedAsync(id, Leader());
+        // the state the old hand-set menu left behind: captured, but no money ever moved
+        await using (var db = ctx.NewContext())
+        {
+            var row = await db.Hinweise.SingleAsync(h => h.Id == tip);
+            row.Status = TipStatus.FuehrteZurErgreifung;
+            await db.SaveChangesAsync();
+        }
+
+        var draft = await host.Reward.GetDraftAsync(id, Leader());
+
+        Assert.Equal(tip, Assert.Single(draft.Payable).TipId);
+        Assert.Empty(draft.Blocked);
+        await host.Reward.PayoutAsync(Split(id, (tip, 50_000m)), Leader());
+        Assert.Equal(50_000m, Assert.Single(await RewardsAsync(ctx)).Amount);
+    }
+
+    [Fact]
+    public async Task A_paid_tip_is_blocked_by_its_receipt()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        await host.Bounty.AddOfficialAsync(id, 50_000m, KassenKonto.Gruengeld, null, Leader());
+        var tip = await WorkedTipAsync(host, caseNumber);
+        await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
+        await host.Wanted.CapturedAsync(id, Leader());
+        await host.Reward.PayoutAsync(Split(id, (tip, 50_000m)), Leader());
+
+        var draft = await host.Reward.GetDraftAsync(id, Leader());
+
+        Assert.Empty(draft.Payable);
+        Assert.Contains("Bereits belohnt", Assert.Single(draft.Blocked).Reason, StringComparison.Ordinal);
+        Assert.True(draft.AlreadyPaid);
+    }
 }

@@ -60,6 +60,18 @@ public class RewardService(
             })
             .ToListAsync(cancellationToken);
 
+        // the receipt is what says a tip was paid, not its status: the capture status was once settable by hand, and
+        // reading it as "already rewarded" locked a whole bounty away with no money ever having moved
+        var tipIds = rows.Select(r => r.Id).ToList();
+        var rewarded = tipIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await db.HinweisBelohnungen.AsNoTracking()
+                .Where(b => tipIds.Contains(b.TipId))
+                .Select(b => b.TipId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.Ordinal);
+
         var payable = new List<RewardDraftTip>();
         var blocked = new List<RewardDraftBlocked>();
         foreach (var row in rows)
@@ -70,12 +82,12 @@ public class RewardService(
                 blocked.Add(new RewardDraftBlocked(row.Id, row.CaseNumber, "Anonymität nicht aufgelöst"));
                 continue;
             }
-            if (row.Status == TipStatus.FuehrteZurErgreifung)
+            if (rewarded.Contains(row.Id))
             {
                 blocked.Add(new RewardDraftBlocked(row.Id, row.CaseNumber, "Bereits belohnt"));
                 continue;
             }
-            if (!TipRules.IsTransitionAllowed(row.Status, TipStatus.FuehrteZurErgreifung))
+            if (!TipRules.MayBeRewarded(row.Status))
             {
                 blocked.Add(new RewardDraftBlocked(row.Id, row.CaseNumber,
                     $"Status {TipStatusDisplay.Name(row.Status)} lässt sich nicht auf belohnt setzen"));
@@ -241,7 +253,8 @@ public class RewardService(
                 throw new InvalidOperationException(
                     $"Hinweis {payee.CaseNumber}: die Anonymität muss vor einer Auszahlung aufgelöst sein.");
             }
-            if (!TipRules.IsTransitionAllowed(payee.Status, TipStatus.FuehrteZurErgreifung))
+            // paying twice is refused by AlreadyPaidAsync above, which settles a notice as a whole
+            if (!TipRules.MayBeRewarded(payee.Status))
             {
                 throw new InvalidOperationException($"Hinweis {payee.CaseNumber} steht auf "
                     + $"{TipStatusDisplay.Name(payee.Status)} und lässt sich nicht belohnen.");

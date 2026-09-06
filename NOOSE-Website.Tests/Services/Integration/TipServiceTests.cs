@@ -858,12 +858,31 @@ public sealed class TipServiceTests
         var host = NewHost(ctx);
         var id = await TipIdAsync(host, await SubmitAsync(host));
 
-        // Neu straight to "führte zur Ergreifung" skips every check the phase exists for
+        // Neu straight to "bestätigt" skips every check the phase exists for
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.Service.SetStatusAsync(id, TipStatus.FuehrteZurErgreifung, Agent()));
+            () => host.Service.SetStatusAsync(id, TipStatus.Bestaetigt, Agent()));
 
         await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Agent());
-        await host.Service.SetStatusAsync(id, TipStatus.FuehrteZurErgreifung, Agent());
+        await host.Service.SetStatusAsync(id, TipStatus.Bestaetigt, Agent());
+    }
+
+    [Fact]
+    public async Task The_capture_status_is_reserved_for_the_payout()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Agent());
+
+        // the transition table still opens this door, because the reward service walks through it; by hand the
+        // status meant a bounty nobody could pay out any more
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetStatusAsync(id, TipStatus.FuehrteZurErgreifung, Agent()));
+
+        Assert.Contains("Auszahlung", error.Message, StringComparison.Ordinal);
+        await using var db = ctx.NewContext();
+        Assert.Equal(TipStatus.InPruefung,
+            await db.Hinweise.Where(h => h.Id == id).Select(h => h.Status).SingleAsync());
     }
 
     [Fact]

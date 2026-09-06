@@ -756,6 +756,13 @@ public class TipService(
         CancellationToken cancellationToken = default)
     {
         Permission.RequireTipHandling(actor);
+        // gated here and not only in the menu: this path travels over SignalR. Set by hand the status locked the
+        // whole bounty away, because the reward dialog read it as a tip that had already been paid.
+        if (status == TipStatus.FuehrteZurErgreifung)
+        {
+            throw new InvalidOperationException(
+                $"„{TipStatusDisplay.Name(status)}“ entsteht durch die Auszahlung der Belohnung, nicht von Hand.");
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
         if (!TipRules.IsTransitionAllowed(row.Status, status))
@@ -997,7 +1004,7 @@ public class TipService(
     {
         Permission.RequireTipHandling(actor);
         var row = await GetOrThrowAsync(db, tipId, cancellationToken);
-        if (!TipRules.IsTransitionAllowed(row.Status, TipStatus.FuehrteZurErgreifung))
+        if (!TipRules.MayBeRewarded(row.Status))
         {
             throw new InvalidOperationException(
                 $"Ein Hinweis im Status „{TipStatusDisplay.Name(row.Status)}“ lässt sich nicht als belohnt schließen.");

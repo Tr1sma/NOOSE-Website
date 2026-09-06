@@ -124,7 +124,8 @@ public interface ITipService
     /// <remarks>
     /// The caller owns the transaction, because the status change and the money must commit together — same shape as
     /// <c>IKassenService.BookAsync(db, …)</c>. Saves into that context; it never commits. The status rules stay here rather than being copied into the reward
-    /// service, and <see cref="TipStatus.FuehrteZurErgreifung"/> is a one-way door in <see cref="TipRules"/>.
+    /// service: <see cref="TipRules.MayBeRewarded"/> decides, and a second payment is kept off by the receipt rather
+    /// than by <see cref="TipStatus.FuehrteZurErgreifung"/>.
     /// </remarks>
     Task<TipRewardTarget> MarkRewardedAsync(AppDbContext db, string tipId, decimal amount, string receiptNumber,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);

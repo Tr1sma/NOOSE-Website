@@ -82,7 +82,22 @@ public static class TipRules
         };
     }
 
+    /// <summary>May a payout close this tip? Whether money already moved is decided by its reward rows, not here.</summary>
+    /// <remarks>
+    /// <see cref="TipStatus.FuehrteZurErgreifung"/> passes although the transition table calls it a dead end: the
+    /// status used to be settable by hand, so a tip can sit there having never been paid, and the one-way door would
+    /// leave that bounty unreachable for good.
+    /// </remarks>
+    public static bool MayBeRewarded(TipStatus from)
+        => from == TipStatus.FuehrteZurErgreifung || IsTransitionAllowed(from, TipStatus.FuehrteZurErgreifung);
+
     /// <summary>Statuses an agent may set by hand, given the current one.</summary>
+    /// <remarks>
+    /// <see cref="TipStatus.FuehrteZurErgreifung"/> is deliberately absent: the payout writes it, and setting it by
+    /// hand dropped the tip out of the reward dialog as "already rewarded" without any money having moved.
+    /// </remarks>
     public static IReadOnlyList<TipStatus> AllowedTargets(TipStatus from)
-        => TipStatusDisplay.All.Where(t => IsTransitionAllowed(from, t)).ToList();
+        => TipStatusDisplay.All
+            .Where(t => t != TipStatus.FuehrteZurErgreifung && IsTransitionAllowed(from, t))
+            .ToList();
 }

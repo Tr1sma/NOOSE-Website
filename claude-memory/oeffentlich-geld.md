@@ -82,6 +82,15 @@
     der Idempotenz-Token (Muster Ablauf-Worker), gesetzt per Compare-and-swap wie in `PayInAsync`, mit
     `ManualAudit.Row` je Anteil, weil `ExecuteUpdate` den Interceptor umgeht. **`Ausgezahlt` heißt erledigt, nicht
     restlos geleert** — sonst zählt `GetCoverageAsync` einen abgeschlossenen Fall für immer als offene Verpflichtung.
+  - **`FuehrteZurErgreifung` schreibt ausschließlich die Auszahlung, und der Beleg — nicht der Status — sperrt die
+    zweite.** Der Status stand früher im Handmenü von `/hinweise/{id}` (`TipRules.AllowedTargets`), während
+    `RewardService.GetDraftAsync` ihn als „Bereits belohnt" las: wer ihn von Hand setzte, hat das komplette Kopfgeld
+    unerreichbar gemacht — `IsTransitionAllowed` ist für ihn eine Einbahnstraße, es gab keinen Weg zurück. Live
+    passiert (NOOSE-FA-2026-0007 „Randy Aspergus", 1.000.000 $, per DB-Korrektur gelöst). Deshalb jetzt **drei**
+    Zeilen: `AllowedTargets` bietet ihn nicht mehr an, `TipService.SetStatusAsync` weist ihn ab (die UI allein
+    reicht nicht — der Pfad läuft über SignalR), und `GetDraftAsync` blockt anhand einer vorhandenen
+    `HinweisBelohnung`. Wer den Zustand prüft, fragt `TipRules.MayBeRewarded` — das lässt einen Hinweis, der ohne
+    Beleg auf dem Status steht, bewusst durch, sonst bleiben die Altfälle für immer unauszahlbar.
   - **Die Verteilregel steht einmal**, in `Services/Public/RewardAllocation.cs`: zuerst Geld ohne persönliche
     Übergabe (`Gesichert`, `NooseKasse`), dann unbezahlte private Zusagen (`AgentPrivat` + `Zugesagt` ⇒ keine
     Buchung, `SelbstAusgezahltAm`), je Gruppe ältester Anteil zuerst, `AnteilId` als Gleichstand-Entscheider —
