@@ -121,7 +121,7 @@
 
     private async Task NewAsync()
     {
-        var input = await DocDialog.ShowAsync(DialogService, User.IsLeadership());
+        var input = await DocDialog.ShowAsync(DialogService, User.IsLeadership(), PersonId);
         if (input is null)
         {
             return;

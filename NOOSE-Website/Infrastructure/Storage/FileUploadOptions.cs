@@ -40,6 +40,18 @@ public class FileUploadOptions
     public string[] AllowedContentTypes { get; set; } =
         ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+    /// <summary>Images pasted into text fields; own base path so the delivery endpoint cannot reach a file photo.</summary>
+    public string TextImagesPath { get; set; } = "App_Data/uploads/textbilder";
+
+    /// <summary>Max size of a pasted image; the base64 round trip over SignalR has to stay under the hub cap.</summary>
+    public long TextImageMaxBytes { get; set; } = 8 * 1024 * 1024;
+
+    /// <summary>Attachments on a ticket message; own base path so one endpoint cannot reach the tip store.</summary>
+    public string TicketsPath { get; set; } = "App_Data/uploads/tickets";
+
+    /// <summary>Max size of one ticket attachment; the browser upload streams, so this is the real cap.</summary>
+    public long TicketAttachmentMaxBytes { get; set; } = 8 * 1024 * 1024;
+
     /// <summary>Sources upload path.</summary>
     public string SourcesPath { get; set; } = "App_Data/uploads/quellen";
 

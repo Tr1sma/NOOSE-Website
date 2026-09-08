@@ -1,5 +1,8 @@
 ﻿@inject ITicketService Tickets
 @inject IPublicTemplateService Templates
+@inject IMentionService MentionService
+@inject ITicketAttachmentStorageService AttachmentStore
+@inject ITicketAssistService Assist
 @inject TicketBroadcaster Broadcaster
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -14,7 +17,7 @@
         </MudStack>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             @(IsInternal
-                ? "Nur für die Führungsebene sichtbar."
+                ? $"Nur für die Führungsebene sichtbar. {MentionInput.Hint}"
                 : $"Der Bürger sieht diese Zeilen als Nachricht von „{TicketRules.AgencySender}“ — nie mit Codename.")
         </MudText>
 
@@ -54,9 +57,18 @@
                             @if (_editingId == message.Id)
                             {
                                 @* plain text on purpose: the citizen thread has no sanitizer, line breaks are the formatting *@
-                                <MudTextField @bind-Value="_editText" Lines="3" Variant="Variant.Outlined"
-                                              MaxLength="@TicketRules.MaxMessageLength" AutoFocus="true"
-                                              Label="@(IsInternal ? "Notiz" : "Antwort an den Bürger")" />
+                                @if (IsInternal)
+                                {
+                                    <MentionInput @bind-Text="_editText" Lines="3" AutoFocus="true"
+                                                  MaxLength="@TicketRules.MaxMessageLength" Label="Notiz" />
+                                }
+                                else
+                                {
+                                    @* plain text on purpose: the citizen thread has no sanitizer, line breaks are the formatting *@
+                                    <MudTextField @bind-Value="_editText" Lines="3" Variant="Variant.Outlined"
+                                                  MaxLength="@TicketRules.MaxMessageLength" AutoFocus="true"
+                                                  Label="Antwort an den Bürger" />
+                                }
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
                                     <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                                OnClick="CancelEdit">Abbrechen</MudButton>
@@ -67,9 +79,25 @@
                                     </MudButton>
                                 </MudStack>
                             }
+                            else if (IsInternal)
+                            {
+                                @* tokens resolve only here; the citizen thread refuses them at the service *@
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;" HtmlTag="div">
+                                    <MentionText Segments="@SegmentsFor(message)" />
+                                </MudText>
+                            }
                             else
                             {
                                 <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                            }
+                            @if (message.HasAttachment)
+                            {
+                                @* the desk addresses the file by row id; the citizen's own view uses its position *@
+                                <MudButton Href="@($"/dateien/tickets/{message.Id}?inline=true")" Target="_blank"
+                                           Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Image">
+                                    @(message.AttachmentName ?? "Anhang")
+                                </MudButton>
                             }
                         </MudStack>
                     </MudPaper>
@@ -80,13 +108,44 @@
         @* a closed ticket takes no new message, but an old one of your own stays correctable *@
         @if (CanWrite && !Closed)
         {
-            <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Antwort an den Bürger")"
-                          Lines="3" Variant="Variant.Outlined" MaxLength="@TicketRules.MaxMessageLength" />
+            @if (IsInternal)
+            {
+                @* the @-picker only, deliberately without the pasted-image opt-in: a text image is gated through
+                   RecordsReference, which resolves a ticket as classified, so a participant below the desk could
+                   paste a picture they then cannot see. The attachment below is gated by TicketVisibility and is
+                   the right path for a screenshot here *@
+                <MentionInput @bind-Text="_draft" Label="Notiz" Lines="3"
+                              MaxLength="@TicketRules.MaxMessageLength" />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_draft" Label="Antwort an den Bürger"
+                              Lines="3" Variant="Variant.Outlined" MaxLength="@TicketRules.MaxMessageLength" />
+            }
+            <ImageAttachmentPicker @bind-Picked="_attachment" MaxBytes="@AttachmentStore.MaxBytes"
+                                   Disabled="_busy" />
+            @if (_suggestCost is { } cost)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    NOOSEI-Entwurf: @cost.ToString("N0") Token
+                    @if (_suggestQuota is { } quota)
+                    {
+                        <text> · Restkontingent: @quota.Remaining.ToString("N0")</text>
+                    }
+                </MudText>
+            }
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudButton OnClick="SendAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Send">
                     @(IsInternal ? "Notiz speichern" : "Senden")
                 </MudButton>
+                @* same rule as the template menu: it fills the field, the agent sends *@
+                @if (!IsInternal && Assist.IsAvailable)
+                {
+                    <MudButton OnClick="SuggestAsync" Disabled="_busy" Variant="Variant.Outlined"
+                               Color="Color.Secondary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.AutoAwesome">NOOSEI-Entwurf</MudButton>
+                }
                 @* the template only fills the field; sending stays a deliberate act *@
                 @if (_templates.Count > 0)
                 {
@@ -135,6 +194,9 @@
     private IReadOnlyList<PublicTemplateRow> _templates = Array.Empty<PublicTemplateRow>();
     private bool _templatesLoaded;
     private string _draft = string.Empty;
+    private ImageAttachmentPicker.PickedImage? _attachment;
+    private long? _suggestCost;
+    private LlmQuotaStatus? _suggestQuota;
     private bool _load = true;
     private bool _busy;
     private string? _loadedId;
@@ -142,7 +204,15 @@
     private string _editText = string.Empty;
     private bool _editSaving;
 
+    private Dictionary<string, IReadOnlyList<MentionSegment>> _segments = new(StringComparer.Ordinal);
+
     private bool IsInternal => Audience == TicketMessageAudience.Intern;
+
+    /// <summary>Resolved segments of one internal line; plain text until the batch has run.</summary>
+    private IReadOnlyList<MentionSegment> SegmentsFor(TicketMessageRow message)
+        => _segments.TryGetValue(message.Id, out var found)
+            ? found
+            : [new MentionSegment(false, message.Text)];
 
     protected override void OnInitialized() => Broadcaster.Modified += OnModified;
 
@@ -181,6 +251,16 @@
         try
         {
             _messages = await Tickets.GetMessagesAsync(TicketId, Audience, User);
+            if (IsInternal)
+            {
+                // one batch for the whole thread, like the comment panel: one round trip instead of one per line
+                var resolved = await MentionService.ResolveManyAsync(
+                    _messages.Select(m => (string?)m.Text).ToList(), User.MayClassifiedRead(), User.GetAgentId(),
+                    partnerAgency: User.GetPartnerAgency());
+                _segments = _messages
+                    .Select((m, i) => (m.Id, Segments: resolved[i]))
+                    .ToDictionary(x => x.Id, x => x.Segments, StringComparer.Ordinal);
+            }
         }
         catch (Exception ex)
         {
@@ -192,20 +272,47 @@
         }
     }
 
+    /// <summary>Fills the composer with a NOOSEI draft; sending it stays the agent's own act.</summary>
+    private async Task SuggestAsync()
+    {
+        _busy = true;
+        try
+        {
+            var suggestion = await Assist.SuggestReplyAsync(TicketId, User);
+            _draft = suggestion.Text;
+            _suggestCost = suggestion.QuotaTokens;
+            _suggestQuota = suggestion.Quota;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private async Task SendAsync()
     {
         _busy = true;
         try
         {
+            // a fresh stream per send: the service reads it once, and a retry after an error needs its own
+            var upload = _attachment is { } picked
+                ? new TicketAttachmentUpload(new MemoryStream(picked.Content), picked.ContentType,
+                    picked.OriginalName, picked.Size)
+                : null;
             if (IsInternal)
             {
-                await Tickets.PostInternalNoteAsync(TicketId, _draft, User);
+                await Tickets.PostInternalNoteAsync(TicketId, _draft, User, upload);
             }
             else
             {
-                await Tickets.ReplyToCitizenAsync(TicketId, _draft, User);
+                await Tickets.ReplyToCitizenAsync(TicketId, _draft, User, upload);
             }
             _draft = string.Empty;
+            _attachment = null;
             await LoadAsync();
         }
         catch (Exception ex)

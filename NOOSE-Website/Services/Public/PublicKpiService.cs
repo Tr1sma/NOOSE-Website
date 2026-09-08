@@ -109,6 +109,7 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
             .Select(t => new
             {
                 t.CreatedAt,
+                t.Category,
                 FirstHumanReply = db.TicketNachrichten.Where(TicketRules.AgencyRows)
                     .Where(m => m.TicketId == t.Id && m.CreatedAt > t.CreatedAt)
                     .Min(m => (DateTime?)m.CreatedAt),
@@ -136,6 +137,14 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
             .Select(at => (int)Math.Max(0, (now - at).TotalMinutes))
             .ToList();
 
+        // the window's cohort, like Opened: a concern nobody raised is absent rather than reported as zero
+        var byCategory = cohort
+            .GroupBy(t => t.Category)
+            .Select(g => new PublicKpiTicketCategory(g.Key, g.Count()))
+            .OrderByDescending(c => c.Opened)
+            .ThenBy(c => c.Category)
+            .ToList();
+
         return new PublicKpiTickets(
             cohort.Count,
             minutes.Count,
@@ -143,7 +152,8 @@ public sealed class PublicKpiService(IDbContextFactory<AppDbContext> dbFactory) 
             // null rather than zero: nothing answered is not an instant answer
             minutes.Count == 0 ? null : Percentile(minutes, 0.5),
             minutes.Count == 0 ? null : Percentile(minutes, 0.95),
-            waiting.Count == 0 ? null : waiting.Max());
+            waiting.Count == 0 ? null : waiting.Max(),
+            byCategory);
     }
 
     /// <summary>Attention drawn by the published notices; null when the reader may not open the cross-list.</summary>

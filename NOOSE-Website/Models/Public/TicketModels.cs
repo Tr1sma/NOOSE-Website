@@ -1,4 +1,5 @@
 ﻿using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -35,23 +36,32 @@ public record CitizenTicketDetail(
 /// is the one thing a rewritten agency line owes the reader — a text they may already have read can change, and
 /// saying so costs no identity.
 /// </remarks>
-public record CitizenTicketMessage(DateTime CreatedAt, string Text, bool FromCitizen, DateTime? EditedAt);
+/// <param name="AttachmentName">The sender's own file name; the download is addressed by position, never by row id.</param>
+public record CitizenTicketMessage(DateTime CreatedAt, string Text, bool FromCitizen, DateTime? EditedAt,
+    bool HasAttachment, string? AttachmentName);
 
 // ---- inward: the desk's view ----
 
 /// <summary>One ticket in the leadership desk.</summary>
+/// <param name="WaitingSince">UTC stamp of the newest citizen line; null once the agency answered it.</param>
+/// <param name="Priority">Effective order: the hand-set value when there is one, else the automatic one.</param>
+/// <param name="PriorityIsManual">Whether <paramref name="Priority"/> was decided rather than computed.</param>
 public record TicketRow(
     string Id,
     string CaseNumber,
     string Subject,
     TicketStatus Status,
     TicketArt Kind,
+    TicketKategorie Category,
     DateTime CreatedAt,
     DateTime LastActivityAt,
     string CitizenName,
     string? HandlerCodename,
     bool AwaitingAnswer,
-    int UnreadCount);
+    int UnreadCount,
+    DateTime? WaitingSince,
+    int Priority,
+    bool PriorityIsManual);
 
 /// <summary>One ticket, opened by a handler.</summary>
 /// <param name="CitizenName">Empty for an internal ticket: there is no citizen behind it.</param>
@@ -61,6 +71,7 @@ public record TicketDetail(
     string Subject,
     TicketStatus Status,
     TicketArt Kind,
+    TicketKategorie Category,
     DateTime CreatedAt,
     DateTime LastActivityAt,
     string CitizenName,
@@ -69,7 +80,10 @@ public record TicketDetail(
     string? HandlerCodename,
     string? OpenedByCodename,
     DateTime? ClosedAt,
-    string? ClosedByCodename);
+    string? ClosedByCodename,
+    TicketAbschlussgrund? ClosingReason,
+    string? ClosingNote,
+    int? PriorityOverride);
 
 /// <summary>One agent attached to a ticket, as the desk lists them.</summary>
 public record TicketParticipantRow(string Id, string AgentId, string Codename, string? RealName, DateTime AddedAt);
@@ -87,13 +101,27 @@ public record TicketMessageRow(
     string? AuthorCodename,
     DateTime CreatedAt,
     DateTime? EditedAt,
-    bool Mine);
+    bool Mine,
+    bool HasAttachment,
+    string? AttachmentName);
+
+/// <summary>A file arriving with one ticket message; the stream is read once and never kept.</summary>
+public sealed record TicketAttachmentUpload(Stream Content, string ContentType, string? OriginalName, long Size);
+
+/// <summary>What the delivery endpoint needs; null from the service means "gone" and "not yours" alike.</summary>
+public sealed record TicketAttachmentAccess(string FileNameSaved, string? ContentType, string? OriginalName);
+
+/// <summary>A drafted answer plus what it cost; nothing is sent until the agent presses send.</summary>
+public sealed record TicketDraftSuggestion(string Text, long QuotaTokens, LlmQuotaStatus Quota);
 
 /// <summary>Form input when a citizen opens a ticket.</summary>
 public class TicketInput
 {
     public string Subject { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
+
+    /// <summary>What the concern is about; an internal ticket leaves it on the default.</summary>
+    public TicketKategorie Category { get; set; } = TicketKategorie.Sonstiges;
 }
 
 /// <summary>One internal ticket in the list of the agent attached to it.</summary>

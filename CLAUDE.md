@@ -246,7 +246,7 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=10`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=12`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
 - **Ablehnen, Schließen und eine nicht bestandene Sicherheitsüberprüfung sperren 14 Tage.** Die Dauer, das
   Aktiv-Prädikat (`IstBlacklist || GesperrtBis > jetzt`, es gibt keine `IstAktiv`-Spalte) und die
   Lokal→UTC-Umrechnung des `MudDatePicker` liegen zusammen in `Services/BewerbungssperreRules.cs`. Die Sperre
@@ -259,7 +259,23 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   Nachricht still ab. `TextAssistService` lehnt eine NOOSEI-Korrektur deshalb hart ab, wenn Anzahl **oder**
   Schreibweise dieser Tokens abweicht (Kontext `RecruitingTemplate`).
 - **`NOOSE-Website/BuildNumber.txt` erhöht sich automatisch bei jedem echten Build** (`dotnet build`/`watch`/`publish`, MSBuild-Target in der `.csproj`; IDE-Design-Time-Builds sind ausgenommen) und wird als `1.0.<Zahl>` auf `/einstellungen?tab=status` angezeigt. Datei ist **gitignored** (`.gitignore` Zeile 386) → taucht nie in `git status` auf und wird nicht mitcommittet; die Prod-Nummer wächst allein über `deploy.ps1`.
+- **Bild-Paste in ein Plaintext-Feld legt die Datei ab und schreibt nur ein Token.** `MentionInput` nimmt per
+  Strg+V ein Clipboard-Bild an, sobald `ImageOwnerType`/`ImageOwnerId` gesetzt sind (Opt-in wie der @-Picker);
+  `TextImageService` speichert nach `App_Data/uploads/textbilder`, legt eine `Textbilder`-Zeile an und gibt
+  `@{TextImage:GUID}` zurück. Die **Trägerakte entscheidet über die Sichtbarkeit**, nicht der Token-Besitzer:
+  `RecordsReference` löst das Bild wie eine Quelle über den Träger auf (Soft-Delete und fremde Taskforce fallen
+  damit automatisch raus), Sonderfälle sind `Document` (drei VS-Flags + Entzug ⇒ `Documents.OnlyVisible`) und
+  `Agent` (Personalakte trägt kein Flag ⇒ Führung). Ein Feld, das seine Trägerakte nicht benennen kann, darf
+  kein Bild annehmen. `textbild.js` mit `?v=` bumpen. Verdrahtet: Kommentare (polymorph, auch im Bearbeiten-Modus),
+  Taskforce-Chat und die Person-Dialoge `DocDialog`/`ObservationDialog` — die hängen das Bild an die
+  **Personenakte**, weil Dok und Observation kein eigenes VS-Flag tragen und beim Einfügen noch keine Id haben.
+  `DocCreateDialog` bleibt bewusst außen vor: dort wird die Person erst im Dialog gewählt.
 - **`graph.js`-JSON-Keys = englische CLR-Typnamen** (`nameof`), nicht die deutschen Display-Namen; C#- und JS-Map müssen synchron bleiben.
+- **Die Quill-Werkzeugleiste ist `position: sticky` und hängt an der Höhe der `MudAppBar`.**
+  `app.css` setzt `top: var(--noose-rte-toolbar-top, 64px)`; im Dialog überschreibt
+  `.mud-dialog .ql-toolbar.ql-snow` die Variable auf `0px`, unter dem sm-Breakpoint auf `56px`. Wird die
+  App-Bar höher, klebt die Leiste darunter fest — beides gehört zusammen geändert. Kein `?v=` nötig:
+  `app.css` läuft über `@Assets["app.css"]` und wird von `MapStaticAssets` gefingerprinted.
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
 - **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen. Dokumentierte Ausnahmen von dieser Guard-Pflicht: `FactionRecency.StampAsync`, `PublicWantedService.CountViewAsync`, `TipPriorityService` und `RecomputeConfirmedTipsAsync` — abgeleitete Werte hinter einem schon abgesicherten Schreibpfad.

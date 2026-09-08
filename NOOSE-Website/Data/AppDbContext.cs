@@ -62,6 +62,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- cross-cutting: tags, comments, sources ----
     public DbSet<Source> Sources => Set<Source>();
+
+    /// <summary>Images pasted into plain-text fields, referenced from the text by a mention token.</summary>
+    public DbSet<TextImage> TextImages => Set<TextImage>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagMapping> TagMappings => Set<TagMapping>();
     public DbSet<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey> SearchPhoneticKeys => Set<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey>();
@@ -498,6 +501,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasKey(z => new { z.Prefix, z.Year });
             b.Property(z => z.Prefix).HasMaxLength(8);
             b.Property(z => z.Year).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<TextImage>(b =>
+        {
+            b.Property(x => x.EntityType).HasMaxLength(128);
+            b.Property(x => x.EntityId).HasMaxLength(64);
+            b.Property(x => x.FileNameSaved).HasMaxLength(128).IsRequired();
+            b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+            b.HasIndex(x => new { x.EntityType, x.EntityId });
         });
 
         modelBuilder.Entity<Source>(b =>
@@ -1022,7 +1034,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<FinancingRequest>(b =>
         {
             b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
-            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.AgentId).HasMaxLength(255);
             b.Property(x => x.Justification).HasMaxLength(2000).IsRequired();
             b.Property(x => x.RequestedGross).HasPrecision(18, 2);
             b.Property(x => x.RequestedSubsidy).HasPrecision(18, 2);
@@ -1061,12 +1073,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<FinancingBudgetPeriod>(b =>
         {
-            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.AgentId).HasMaxLength(255);
             b.Property(x => x.BaseBudget).HasPrecision(18, 2);
             b.Property(x => x.CarryIn).HasPrecision(18, 2);
             b.Property(x => x.Consumed).HasPrecision(18, 2);
             b.Property(x => x.CarryOut).HasPrecision(18, 2);
-            // carries the race safety of the period close
+            // carries the race safety of the period close; orphaned periods share a NULL agent, which MySQL
+            // does not count as a duplicate
             b.HasIndex(x => new { x.AgentId, x.Year, x.Month }).IsUnique();
             b.HasOne(x => x.Agent).WithMany()
                 .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
@@ -1668,13 +1681,14 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<BuergerProfil>(b =>
         {
-            b.Property(p => p.UserId).HasMaxLength(64).IsRequired();
+            b.Property(p => p.UserId).HasMaxLength(64);
             b.Property(p => p.FirstName).HasMaxLength(64);
             b.Property(p => p.LastName).HasMaxLength(64);
             b.Property(p => p.BlockedReason).HasColumnType("longtext");
             b.Property(p => p.BlockedById).HasMaxLength(64);
             b.Property(p => p.LinkedPersonId).HasMaxLength(64);
-            // one citizen profile per identity user
+            // one citizen profile per identity user; a deleted account leaves the profile with a NULL here,
+            // and MySQL allows repeated NULLs in a unique index
             b.HasIndex(p => p.UserId).IsUnique();
             b.HasIndex(p => p.IsBlocked);
             b.HasOne(p => p.User).WithMany()
@@ -1935,6 +1949,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.HandlerId).HasMaxLength(64);
             b.Property(t => t.OpenedByAgentId).HasMaxLength(64);
             b.Property(t => t.ClosedById).HasMaxLength(64);
+            b.Property(t => t.ClosingNote).HasMaxLength(1000);
             // Restrict throughout: a ticket outlives the account and the handler it names
             b.HasOne(t => t.CitizenProfile).WithMany()
                 .HasForeignKey(t => t.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
@@ -1950,6 +1965,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             // both caps of the quota read these
             b.HasIndex(t => new { t.CitizenProfileId, t.Status });
             b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+            // the desk filters by concern inside a status tab, and the KPI counts per concern
+            b.HasIndex(t => new { t.Category, t.Status, t.LastActivityAt });
         });
 
         modelBuilder.Entity<OeffentlichesFuehrungsprofil>(b =>
@@ -1989,6 +2006,9 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(m => m.TicketId).HasMaxLength(64);
             b.Property(m => m.AuthorAgentId).HasMaxLength(64);
             b.Property(m => m.Text).HasColumnType("longtext");
+            b.Property(m => m.AttachmentFileName).HasMaxLength(128);
+            b.Property(m => m.AttachmentOriginalName).HasMaxLength(255);
+            b.Property(m => m.AttachmentContentType).HasMaxLength(128);
             b.HasOne(m => m.Ticket).WithMany()
                 .HasForeignKey(m => m.TicketId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(m => m.AuthorAgent).WithMany()

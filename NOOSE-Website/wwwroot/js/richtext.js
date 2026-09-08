@@ -142,16 +142,48 @@ function haengeScrollWaechterAn(element) {
     element.__nooseScrollWaechter = true;
 }
 
+// what quill's image blot writes instead of a src outside its own http/https/data whitelist
+const QUILL_ABGEWIESEN = '//:0';
+
+// data uri of the first image on the clipboard, null when there is none or it cannot be read
+function liesZwischenablageBild(daten) {
+    const bild = Array.from((daten && daten.files) || []).find(d => d.type.startsWith('image/'));
+    if (!bild) {
+        return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+        const leser = new FileReader();
+        leser.onload = () => resolve(leser.result);
+        leser.onerror = () => resolve(null);
+        leser.readAsDataURL(bild);
+    });
+}
+
+function zaehleBilder(html) {
+    return (html.match(/<img\b/gi) || []).length;
+}
+
 // quill 1.x drops pasted image files (screenshots)
 function haengeBildEinfuegungAn(element) {
     element.addEventListener('paste', (ereignis) => {
         const daten = ereignis.clipboardData;
-        if (!daten || daten.getData('text/html')) {
+        const editor = element.__nooseQuill;
+        if (!editor || !daten) {
+            return;
+        }
+        const html = daten.getData('text/html');
+        if (html) {
+            // Word, Outlook and a copied web image put html AND the bitmap on the clipboard. The html carries the
+            // surrounding text, so it has to be pasted — but its src is a file:// path, a cid: or a foreign URL,
+            // and quill as well as the server sanitizer drop those, which lost the picture on save. The bitmap is
+            // kept as the fallback for exactly that, and only for a single picture: one bitmap cannot stand in for
+            // two of them.
+            element.__nooseZwischenbild = zaehleBilder(html) === 1 ? liesZwischenablageBild(daten) : null;
             return; // html pastes go through the img matcher
         }
+        element.__nooseZwischenbild = null;
         const bild = Array.from(daten.files || []).find(d => d.type.startsWith('image/'));
-        const editor = bild && element.__nooseQuill;
-        if (!editor) {
+        if (!bild) {
             return;
         }
         ereignis.preventDefault();
@@ -167,25 +199,37 @@ function haengeBildEinfuegungAn(element) {
 }
 
 // pasted images with external or blob src: inline as data uri — links rot, blob: dies with the tab
-function registriereBildMatcher(editor) {
+function registriereBildMatcher(editor, element) {
     editor.clipboard.addMatcher('img', (node, delta) => {
         const quelle = (node.getAttribute('src') || '').trim();
         if (!quelle || quelle.startsWith('data:')) {
             return delta;
         }
         // matchers stay sync; replace async, original src is the fallback
-        setTimeout(() => ersetzeDurchDataUrl(editor, quelle), 1);
+        setTimeout(() => ersetzeDurchDataUrl(editor, quelle, element), 1);
         return delta;
     });
 }
 
+// a src this page can never read; fetching it only costs a round trip and a console error
+function istUnerreichbar(quelle) {
+    return /^(file|cid):/i.test(quelle) || /^[a-z]:[\\/]/i.test(quelle);
+}
+
 // fetch + swap every matching img blot
-async function ersetzeDurchDataUrl(editor, quelle) {
+async function ersetzeDurchDataUrl(editor, quelle, element) {
+    // the bitmap of the same paste: the only readable copy when the src itself is not
+    const rueckfall = element && element.__nooseZwischenbild
+        ? await element.__nooseZwischenbild.catch(() => null)
+        : null;
     let dataUrl;
     try {
+        if (istUnerreichbar(quelle)) {
+            throw new Error('src unreachable');
+        }
         const antwort = await fetch(quelle);
         if (!antwort.ok) {
-            return;
+            throw new Error('src http ' + antwort.status);
         }
         const blob = await antwort.blob();
         if (!blob.type.startsWith('image/')) {
@@ -198,11 +242,24 @@ async function ersetzeDurchDataUrl(editor, quelle) {
             leser.readAsDataURL(blob);
         });
     } catch (e) {
-        return; // cors etc: keep original src
+        if (!rueckfall) {
+            return; // cors, offline, no bitmap: keep the original src
+        }
+        dataUrl = rueckfall;
     }
+    // the original src first, then the rewrite: quill resolves a relative src against the page and keeps it,
+    // but replaces anything outside its http/https/data whitelist with QUILL_ABGEWIESEN before we get here
+    if (!tauscheBlots(editor, quelle, dataUrl)) {
+        tauscheBlots(editor, QUILL_ABGEWIESEN, dataUrl);
+    }
+}
+
+// swap every connected img blot carrying that src; false when the document holds none
+function tauscheBlots(editor, domQuelle, dataUrl) {
     const Delta = window.Quill.import('delta');
+    let getauscht = false;
     for (const img of Array.from(editor.root.querySelectorAll('img'))) {
-        if ((img.getAttribute('src') || '') !== quelle || !img.isConnected) {
+        if ((img.getAttribute('src') || '') !== domQuelle || !img.isConnected) {
             continue;
         }
         const blot = window.Quill.find(img);
@@ -212,10 +269,12 @@ async function ersetzeDurchDataUrl(editor, quelle) {
         try {
             const index = editor.getIndex(blot);
             editor.updateContents(new Delta().retain(index).insert({ image: dataUrl }).delete(1), 'user');
+            getauscht = true;
         } catch (e) {
             /* blot already gone */
         }
     }
+    return getauscht;
 }
 
 function ladeQuill() {
@@ -508,7 +567,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     entschaerfeFokus(editor.clipboard && editor.clipboard.container);
     haengeScrollWaechterAn(element);
     haengeBildEinfuegungAn(element);
-    registriereBildMatcher(editor);
+    registriereBildMatcher(editor, element);
 
     if (minHeight) {
         editor.root.style.minHeight = minHeight;

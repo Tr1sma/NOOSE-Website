@@ -644,7 +644,7 @@ public class EvidenceService(
                 ownerHref = r.Href;
             }
 
-            var handler = codenames.TryGetValue(e.HandlerAgentId, out var cn) && !string.IsNullOrWhiteSpace(cn)
+            var handler = codenames.TryGetValue(e.HandlerAgentId ?? string.Empty, out var cn) && !string.IsNullOrWhiteSpace(cn)
                 ? cn : "(unbekannt)";
 
             var lines = e.Lines.Select(l => new EvidenceLineDisplay(

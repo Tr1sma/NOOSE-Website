@@ -34,6 +34,17 @@ public class TicketNachricht : IAuditable, ISoftDelete
     public string? AuthorAgentId { get; set; }
     public Agent? AuthorAgent { get; set; }
 
+    /// <summary>Server-assigned file name of the attachment; null when the line carries none.</summary>
+    [Column("Anhang")]
+    public string? AttachmentFileName { get; set; }
+
+    /// <summary>The sender's own file name, for display only; it is content and stays out of the audit row.</summary>
+    [Column("AnhangName")]
+    public string? AttachmentOriginalName { get; set; }
+
+    [Column("AnhangTyp")]
+    public string? AttachmentContentType { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

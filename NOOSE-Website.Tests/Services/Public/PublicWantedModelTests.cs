@@ -178,6 +178,14 @@ public class PublicWantedModelTests
             + "die Antwort bewusst nicht.",
         [typeof(PublicFaqRubrikInput)] = "Formulareingabe des Rubrik-Dialogs.",
         [typeof(PublicFaqEntryInput)] = "Formulareingabe des Frage-Dialogs, mit dem rohen Antwort-HTML.",
+        [typeof(TicketAttachmentUpload)] = "Übergabewert eines Uploads zwischen Formular und Dienst; er trägt "
+            + "einen Stream und wird nie projiziert.",
+        [typeof(TicketAttachmentAccess)] = "Dateiname und Typ einer Anhangskopie; der Endpunkt streamt daraus, "
+            + "ausgeliefert wird der Inhalt, nie dieses Modell.",
+        [typeof(TicketDraftSuggestion)] = "Entwurf für das Kompositionsfeld des Desks, samt Kontingent-Kosten. "
+            + "Er wird nie gesendet - das tut der Agent über ReplyToCitizenAsync.",
+        [typeof(PublicKpiTicketCategory)] = "Eine Zeile der Kennzahl-Verteilung im Führungs-Panel; sie zählt "
+            + "Anliegen und nennt niemanden.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>
@@ -321,5 +329,55 @@ public class PublicWantedModelTests
 
         Assert.Equal(2, properties.Length);
         Assert.All(properties, p => Assert.Equal(typeof(string), p.PropertyType));
+    }
+
+    private static PublicWantedCard Card(string caseNumber, DateTime published)
+        => new(caseNumber, PublicWantedKind.Fahndung, caseNumber, null, false, HazardLevel.Medium, published, []);
+
+    private static PublicWantedBoard BoardWith(params (string CaseNumber, decimal Total, bool IsCap)[] bounties)
+        => PublicWantedBoard.Empty with
+        {
+            BountyByCaseNumber = bounties.ToDictionary(b => b.CaseNumber,
+                b => new PublicBounty(b.Total, b.IsCap), StringComparer.OrdinalIgnoreCase),
+        };
+
+    [Fact]
+    public void RankedByBounty_PutsTheBiggestAmountFirstAndTheHeadsWithoutMoneyLast()
+    {
+        var board = BoardWith(("A", 2_500m, false), ("C", 10_000m, false));
+        var cards = new[]
+        {
+            Card("A", new DateTime(2026, 3, 1)),
+            Card("B", new DateTime(2026, 5, 1)),
+            Card("C", new DateTime(2026, 1, 1)),
+        };
+
+        var ranked = board.RankedByBounty(cards);
+
+        Assert.Equal(["C", "A", "B"], ranked.Select(c => c.CaseNumber));
+    }
+
+    [Fact]
+    public void RankedByBounty_LetsAFixedSumBeatACeilingOfTheSameSize()
+    {
+        // "bis 5.000 $" promises less than 5.000 $, so it loses the tie
+        var board = BoardWith(("Deckel", 5_000m, true), ("Fest", 5_000m, false));
+        var cards = new[] { Card("Deckel", new DateTime(2026, 6, 1)), Card("Fest", new DateTime(2026, 1, 1)) };
+
+        var ranked = board.RankedByBounty(cards);
+
+        Assert.Equal(["Fest", "Deckel"], ranked.Select(c => c.CaseNumber));
+    }
+
+    [Fact]
+    public void RankedByBounty_FallsBackToPublicationOrderWhenTheBountyModuleDroppedTheAmounts()
+    {
+        // the switch empties the dictionary, and the order must not still spell out the hidden ranking
+        var board = PublicWantedBoard.Empty;
+        var cards = new[] { Card("Alt", new DateTime(2026, 1, 1)), Card("Neu", new DateTime(2026, 7, 1)) };
+
+        var ranked = board.RankedByBounty(cards);
+
+        Assert.Equal(["Neu", "Alt"], ranked.Select(c => c.CaseNumber));
     }
 }

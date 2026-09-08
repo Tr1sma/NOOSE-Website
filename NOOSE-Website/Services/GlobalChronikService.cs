@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Cases;
@@ -392,7 +392,7 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
             var (category, title) = TimelineDisplay.MapAudit(p.Row.EntityType, p.Row.Action);
             var detail = details.TryGetValue((p.Row.EntityType, p.Row.EntityId), out var d) ? Render(d, records) : null;
             // the feed reads at a glance; the full before/after stays in the audit log view
-            var changes = AuditDisplay.Parse(p.Row.ChangesJson, maxValueLength: 90);
+            var changes = AuditDisplay.Parse(p.Row.ChangesJson, maxValueLength: 90, entityType: p.Row.EntityType);
             // same rule as the record timeline: a tip's actor is the submitting account, and naming it here would
             // out an agent who reported through his civilian identity
             var actor = TipAnonymity.HidesActor(p.Row.EntityType) ? null : p.Row.AgentName;

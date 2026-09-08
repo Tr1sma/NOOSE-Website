@@ -59,6 +59,23 @@ public static class RecordsReference
             }
         }
 
+        // pasted text images: the picture inherits the secrecy of the record it hangs on, like a source does
+        var imageIds = refs.Where(r => r.Type == nameof(TextImage)).Select(r => r.Id).Distinct().ToList();
+        if (imageIds.Count > 0)
+        {
+            var images = await db.TextImages.Where(b => imageIds.Contains(b.Id))
+                .Select(b => new { b.Id, b.EntityType, b.EntityId })
+                .ToListAsync(ct);
+            var carrierRefs = images.Select(b => (b.EntityType, b.EntityId)).Distinct().ToList();
+            await ResolveRecordsAsync(db, carrierRefs, map, mayAllTaskforces, meId, ct);
+            foreach (var b in images)
+            {
+                map.TryGetValue((b.EntityType, b.EntityId), out var carrier);
+                map[(nameof(TextImage), b.Id)] = new Resolution("Bild", carrier.Classified,
+                    $"/dateien/textbilder/{b.Id}");
+            }
+        }
+
         return map;
     }
 

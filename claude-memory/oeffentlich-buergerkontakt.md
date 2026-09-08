@@ -449,3 +449,64 @@
   - Kind-bewusste Beschriftung gibt es nur an den zwei Stellen, die die Zeile in der Hand haben
     (`TrashProjection.Tip`, `RecordsReference`). `AuditEntityDisplay`, `TimelineDisplay` und `SearchCatalog` sind
     auf den Typnamen verschlüsselt und bleiben bewusst generisch bei „Bürgerhinweis".
+
+## Phase 19–22: das Ticket wird ein Anliegen-Management
+
+Fünf neue Achsen am Ticket, alle intern. Nach außen ist **nichts** dazugekommen: der Bürger sieht weiter
+Betreff, Status-Wort und den Schriftwechsel — plus, neu, seinen eigenen Anhang.
+
+- **Kategorie** (`TicketKategorie`, Spalte `Kategorie`): der Bürger wählt beim Öffnen, das Desk korrigiert
+  über `SetCategoryAsync`. Enum statt Verwaltungsliste, Präzedenz `TicketArt` — ein weiteres Anliegen ist ein
+  Enum-Wert, keine Migration. `Sonstiges = 0`, damit Bestand und jedes interne Ticket ohne Rateschritt landen,
+  und `CategoryBand` stellt es bewusst **nicht** ganz unten ein: ein unsortiertes Anliegen kann alles sein.
+- **Priorität**: nur die **hand-gesetzte** Zahl liegt in der DB (`PrioritaetManuell`). Die automatische
+  altert stündlich — ein gestempelter Wert wäre binnen eines Tages falsch und bräuchte einen Sweep, also
+  rechnet `TicketPriority.Compute` sie im Desk über die ≤200 geladenen Zeilen. Bewusst anders als beim
+  Hinweis, dessen Priorität das öffentliche Board sortiert. Folge, die im Kommentar steht: `byPriority`
+  ordnet das **geholte Fenster**, nicht den Bestand.
+- **Abschlussgrund** (`TicketAbschlussgrund` + `Abschlussnotiz`): `SetStatusAsync` verweigert das Schließen
+  ohne Grund, und Wiedereröffnen räumt `GeschlossenAm`, `GeschlossenVonId`, Grund **und** Notiz gemeinsam —
+  ein wiedereröffnetes Ticket darf nicht weiter behaupten, es sei Spam gewesen. Die Notiz steht in
+  `AuditRedaction`: `/nachweis` liest jeder interne Agent.
+- **Automatik** (`Infrastructure/Tickets/TicketFollowupWorker`): bei `WartetAufBuerger` **eine** Erinnerung
+  nach `NudgeAfter`, danach Zwangsschluss mit „Kein Kontakt" nach `AutoCloseAfter`. Der Stempel
+  `NachgefasstAm` ist der Grund, dass es bei einer Erinnerung bleibt; er wird geleert, sobald der Bürger
+  antwortet oder der Status die Wartezone verlässt. Das Erinnern setzt **`LetzteAktivitaetAm` nicht** — sonst
+  verschiebt der Sweep seine eigene Frist. Der automatische Schluss trägt **kein** `GeschlossenVonId`: er
+  leiht sich keinen Namen. `SweepAsync` ist `public static` mit der Uhr als Parameter, weil ein
+  `BackgroundService` sonst nicht prüfbar ist.
+- **Erwähnungen nur im internen Thread.** `AttachMentionedAsync` hängt genannte Agenten selbst an — ohne
+  `RequireTicketHandling`, weil der Schreiber schon bewiesen hat, dass er auf diesem Ticket schreiben darf;
+  das Angebot bleibt trotzdem `OnlySelectable`, und ein nicht auswählbarer Token wird **übersprungen**, nicht
+  zur Ablehnung der Notiz. Auf jeder bürgerlesbaren Zeile weist `RequireNoMentions` hart ab — Öffnen,
+  Bürger-Antwort, Behörden-Antwort und das Bearbeiten einer Behörden-Zeile. Grund ist seit Phase 77 doppelt:
+  die Token-Achse ist mit den **Textbildern** geteilt, deren Endpoint `Policies.InternalAgent` verlangt und die
+  `PublicVisibility` als „nach außen nie" führt. Ein Token draußen wäre ein totes Bild und ein Hinweis,
+  dass es etwas gibt.
+- **Der Ticket-Thread bekommt trotzdem kein Bild-Opt-in.** `MentionInput` könnte es (`ImageOwnerType`), aber
+  `TextImageService.MaySeeOwnerAsync` gated über `RecordsReference`, und dort ist ein Ticket
+  `Classified = true` — die Sichtbarkeit wäre also `MayClassifiedRead`, während der Picker schon bei
+  `MayWrite` erscheint. Ein beteiligter Rang-3-Agent dürfte einfügen und sähe sein eigenes Bild danach nicht.
+  Für einen Screenshot ist der **Anhang** der richtige Weg: der hängt an `TicketVisibility` und damit an
+  genau der Menge, die den Thread liest.
+- **Anhänge** liegen als drei Spalten auf `TicketNachricht` (`Anhang`, `AnhangName`, `AnhangTyp`), nicht in
+  einer eigenen Tabelle: dasselbe Muster wie beim Hinweis, und die richtige Körnung für einen Chat ist die
+  Nachricht. Eigener Pfad und eigene Grenze in `FileUploadOptions`, eigener Store, ein **eigener** Endpoint —
+  der Textbild-Endpoint ist `InternalAgent`-gegated, ein Ticket-Anhang muss aber der eigene Bürger wieder
+  laden können. Der Bürger adressiert über **Aktenzeichen + Position** im eigenen Thread, nie über eine
+  Row-Id; das Desk über die Nachrichten-Id, gegated nach Audience. Deckel `MaxAttachments` gilt **pro
+  Ticket** über beide Threads — pro Nachricht wäre er keiner. `AnhangName` ist Bürgerinhalt und steht in
+  `AuditRedaction`.
+- **Bearbeiter ≠ Beteiligte.** `AssignAsync` setzt den einen `BearbeiterId` (treibt „Nur meine" und die
+  Antwort-Glocke), `AddParticipantsAsync` die vielen Beteiligten mit eigenen Lesemarken. Den
+  Beteiligten-Picker als Zuweisungspfad zweitzuverwenden vermischt zwei Achsen.
+- **Ein Ticket wird zum Vorgang, nicht zum Hinweis.** `TicketConversionService` legt einen `Case` an und
+  verknüpft **vom Vorgang zum Ticket** — das Ticket bleibt Link-*Ziel*, `/tickets/{Id}` hat weiter kein
+  Link-Panel. Der Weg zum Hinweis fehlt bewusst: `Hinweis.BuergerProfilId` ist nicht nullable, ein aus einem
+  Ticket erzeugter Hinweis würde also entweder eine Zuordnung erfinden, die der Bürger nie eingereicht hat
+  (samt Auftauchen in seiner eigenen Hinweisliste und in seiner Quote), oder eine leere Referenz schreiben.
+- **NOOSEI entwirft, der Agent sendet.** `TicketAssistService.SuggestReplyAsync` geht über
+  `INooseiGateway.AskAsync` (`LlmFeature.Compose`, kein eigener Feature-Wert und damit keine neuen
+  Token-Regeln), bekommt **nur** den Bürger-Thread zu sehen und füllt das Kompositionsfeld. Der Entwurf wird
+  von Mention-Token befreit und auf `MaxMessageLength` gekappt, bevor er im Feld landet — sonst hielte der
+  Agent eine Nachricht in der Hand, die der eigene Service beim Senden abweist.

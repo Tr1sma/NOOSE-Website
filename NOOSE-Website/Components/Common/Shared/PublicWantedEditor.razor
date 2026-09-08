@@ -38,108 +38,131 @@ else
                                StartIcon="@Icons.Material.Filled.OpenInNew">Öffentliche Seite</MudButton>
                 }
             }
+            <MudSpacer />
+            @HeaderContent
         </MudStack>
 
-        <MudGrid>
-            <MudItem xs="12" md="6">
-                @* MaxLength, because the service cuts silently: without it a shortened name reaches the poster *@
-                <MudTextField @bind-Value="_input.DisplayName" Label="@NameLabel" Variant="Variant.Outlined"
-                              MaxLength="@PublicWantedRules.MaxDisplayName"
-                              Counter="@PublicWantedRules.MaxDisplayName"
-                              Required="true" RequiredError="Anzeigename ist erforderlich" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.AliasText" Label="@AliasLabel" Variant="Variant.Outlined"
-                              MaxLength="@PublicWantedRules.MaxAliasText"
-                              Counter="@PublicWantedRules.MaxAliasText"
-                              HelperText="Nur was nach außen darf — nichts davon wird automatisch aus der Akte übernommen." />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined"
-                              MaxLength="@PublicWantedRules.MaxLastArea" />
-                @if (_options.Areas.Count > 0)
-                {
-                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
-                        @foreach (var area in _options.Areas.Take(6))
+        @* three panels instead of one column: the flat stack put a 7-field grid, two bounty tables and a
+           240px editor under each other. KeepPanelsAlive for two reasons — unsaved typing must survive a tab
+           change, and richtext.js keeps its clipboard fallback on the DOM element, which a rebuild would drop *@
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pt-4"
+                 KeepPanelsAlive="true" ActivePanelIndex="_tab" ActivePanelIndexChanged="TabChanged">
+            <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.Badge">
+                <MudStack Spacing="3">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            @* MaxLength, because the service cuts silently: without it a shortened name reaches the poster *@
+                            <MudTextField @bind-Value="_input.DisplayName" Label="@NameLabel" Variant="Variant.Outlined"
+                                          MaxLength="@PublicWantedRules.MaxDisplayName"
+                                          Counter="@PublicWantedRules.MaxDisplayName"
+                                          Required="true" RequiredError="Anzeigename ist erforderlich" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_input.AliasText" Label="@AliasLabel" Variant="Variant.Outlined"
+                                          MaxLength="@PublicWantedRules.MaxAliasText"
+                                          Counter="@PublicWantedRules.MaxAliasText"
+                                          HelperText="Nur was nach außen darf — nichts davon wird automatisch aus der Akte übernommen." />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined"
+                                          MaxLength="@PublicWantedRules.MaxLastArea" />
+                            @if (_options.Areas.Count > 0)
+                            {
+                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+                                    @foreach (var area in _options.Areas.Take(6))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 OnClick="@(() => _input.LastArea = area)">@area</MudChip>
+                                    }
+                                </MudStack>
+                            }
+                        </MudItem>
+                        @if (_draft.Kind != PublicWantedKind.Waffe)
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                     OnClick="@(() => _input.LastArea = area)">@area</MudChip>
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_input.VehicleText" Label="@VehicleLabel" Variant="Variant.Outlined"
+                                              MaxLength="@PublicWantedRules.MaxVehicleText" />
+                            </MudItem>
+                        }
+                        @* no photo picker for an item notice: the only photo store in the house holds mugshots of the owner,
+                           and the service refuses a source id here rather than dropping it quietly *@
+                        @if (!WantedKinds.IsItem(_draft.Kind))
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="string" @bind-Value="_input.PhotoSourceId" Label="Foto" Clearable="true"
+                                           Variant="Variant.Outlined"
+                                           HelperText="Wird beim Veröffentlichen kopiert; ein späteres Löschen des Aktenfotos ändert den Steckbrief nicht.">
+                                    @foreach (var photo in _options.Photos)
+                                    {
+                                        <MudSelectItem T="string" Value="@photo.Id">Foto vom @photo.Label</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+                        <MudItem xs="12" md="6">
+                            <MudDatePicker @bind-Date="_input.ExpiresAt" Label="Ablaufdatum (optional)" Variant="Variant.Outlined"
+                                           Clearable="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            @* the score only proposes: without a picker here the poster carried whatever the sweep computed,
+                               and nothing in the house could correct it *@
+                            @* ToStringFunc, or the closed field falls back to the enum name and reads "Critical" in a German UI *@
+                            <MudSelect T="HazardLevel" @bind-Value="_hazard" Label="Gefahrenstufe" Variant="Variant.Outlined"
+                                       ToStringFunc="@(l => HazardLevelLogic.Name(l))"
+                                       HelperText="Steht nach außen auf dem Steckbrief. Vorbelegt aus dem Bedrohungs-Score; „Stufe aktualisieren“ setzt sie darauf zurück.">
+                                @foreach (var level in HazardLevelLogic.All)
+                                {
+                                    <MudSelectItem T="HazardLevel" Value="@level">@HazardLevelLogic.Name(level)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudText Typo="Typo.subtitle2">Warnhinweise</MudText>
+                        @if (_mayWrite)
+                        {
+                            <MudButton OnClick="HintsAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       Disabled="_busy" StartIcon="@Icons.Material.Filled.Warning">Auswählen</MudButton>
                         }
                     </MudStack>
-                }
-            </MudItem>
-            @if (_draft.Kind != PublicWantedKind.Waffe)
-            {
-                <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="_input.VehicleText" Label="@VehicleLabel" Variant="Variant.Outlined"
-                                  MaxLength="@PublicWantedRules.MaxVehicleText" />
-                </MudItem>
-            }
-            @* no photo picker for an item notice: the only photo store in the house holds mugshots of the owner,
-               and the service refuses a source id here rather than dropping it quietly *@
-            @if (!WantedKinds.IsItem(_draft.Kind))
-            {
-                <MudItem xs="12" md="6">
-                    <MudSelect T="string" @bind-Value="_input.PhotoSourceId" Label="Foto" Clearable="true"
-                               Variant="Variant.Outlined"
-                               HelperText="Wird beim Veröffentlichen kopiert; ein späteres Löschen des Aktenfotos ändert den Steckbrief nicht.">
-                        @foreach (var photo in _options.Photos)
-                        {
-                            <MudSelectItem T="string" Value="@photo.Id">Foto vom @photo.Label</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudItem>
-            }
-            <MudItem xs="12" md="6">
-                <MudDatePicker @bind-Date="_input.ExpiresAt" Label="Ablaufdatum (optional)" Variant="Variant.Outlined"
-                               Clearable="true" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                @* the score only proposes: without a picker here the poster carried whatever the sweep computed,
-                   and nothing in the house could correct it *@
-                @* ToStringFunc, or the closed field falls back to the enum name and reads "Critical" in a German UI *@
-                <MudSelect T="HazardLevel" @bind-Value="_hazard" Label="Gefahrenstufe" Variant="Variant.Outlined"
-                           ToStringFunc="@(l => HazardLevelLogic.Name(l))"
-                           HelperText="Steht nach außen auf dem Steckbrief. Vorbelegt aus dem Bedrohungs-Score; „Stufe aktualisieren“ setzt sie darauf zurück.">
-                    @foreach (var level in HazardLevelLogic.All)
+                    @if (SelectedHints().Count > 0)
                     {
-                        <MudSelectItem T="HazardLevel" Value="@level">@HazardLevelLogic.Name(level)</MudSelectItem>
+                        <WarnhinweisChips Hints="@SelectedHints()" />
                     }
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Warnhinweise zugeordnet.</MudText>
+                    }
+                </MudStack>
+            </MudTabPanel>
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-            <MudText Typo="Typo.subtitle2">Warnhinweise</MudText>
-            @if (_mayWrite)
-            {
-                <MudButton OnClick="HintsAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
-                           Disabled="_busy" StartIcon="@Icons.Material.Filled.Warning">Auswählen</MudButton>
-            }
-        </MudStack>
-        @if (SelectedHints().Count > 0)
-        {
-            <WarnhinweisChips Hints="@SelectedHints()" />
-        }
-        else
-        {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Warnhinweise zugeordnet.</MudText>
-        }
+            @* badge marks a notice without a stored accusation, so nobody publishes from a tab never opened *@
+            <MudTabPanel Text="Vorwurf" Icon="@Icons.Material.Filled.Gavel"
+                         BadgeData="@(string.IsNullOrWhiteSpace(_draft.ChargeHtml) ? "!" : null)"
+                         BadgeColor="Color.Warning">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
+                    </MudText>
+                    @* mounted on first visit, or quill would initialise inside a hidden panel; StoreAsync keeps the
+                       stored accusation while _editor is null, so a never-opened tab changes nothing *@
+                    @if (_chargeSeen)
+                    {
+                        @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
+                        <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.ChargeHtml" MinHeight="240px" />
+                    }
+                </MudStack>
+            </MudTabPanel>
 
-        <MudDivider />
-        @* its own service, its own table, its own save path — never part of UpdateSnapshotAsync. No reload of this
-           editor afterwards: nothing here renders bounty data, and LoadAsync would reset _input and throw away
-           whatever the author has typed into the fields above but not saved yet. *@
-        <BountyPanel WantedId="@_draft.Id" User="User" MayWrite="_mayWrite"
-                     IsCaptured="@(_draft.Status == PublicWantedStatus.Gefasst)" />
-        <MudDivider />
-
-        <MudText Typo="Typo.subtitle2">Vorwurf</MudText>
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
-        </MudText>
-        @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
-        <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.ChargeHtml" MinHeight="240px" />
+            <MudTabPanel Text="Kopfgeld" Icon="@Icons.Material.Filled.Payments">
+                @* its own service, its own table, its own save path — never part of UpdateSnapshotAsync. No reload of this
+                   editor afterwards: nothing here renders bounty data, and LoadAsync would reset _input and throw away
+                   whatever the author has typed into the fields above but not saved yet. *@
+                <BountyPanel WantedId="@_draft.Id" User="User" MayWrite="_mayWrite"
+                             IsCaptured="@(_draft.Status == PublicWantedStatus.Gefasst)" />
+            </MudTabPanel>
+        </MudTabs>
 
         @if (!_mayWrite)
         {
@@ -150,7 +173,7 @@ else
         }
         else
         {
-        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
             <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
                        StartIcon="@Icons.Material.Filled.Save">Speichern</MudButton>
 
@@ -173,15 +196,26 @@ else
             {
                 <MudButton OnClick="CapturedAsync" Variant="Variant.Outlined" Color="Color.Success" Disabled="_busy"
                            StartIcon="@Icons.Material.Filled.CheckCircle">Gefasst</MudButton>
-                <MudButton OnClick="RefreshHazardAsync" Variant="Variant.Text" Color="Color.Default" Disabled="_busy"
-                           StartIcon="@Icons.Material.Filled.Refresh">Stufe aktualisieren</MudButton>
             }
             <MudSpacer />
-            @* both outward states are retract-before-delete in the service, so neither offers the button *@
-            @if (_draft.Status is not (PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Gefasst))
+            @* secondary and destructive out of the primary row; the two entries are mutually exclusive by status,
+               so the menu is gone entirely once a notice is Gefasst *@
+            @if (_draft.Status != PublicWantedStatus.Gefasst)
             {
-                <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error" Disabled="_busy"
-                           StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Default" Dense="true"
+                         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    @if (_draft.Status == PublicWantedStatus.Veroeffentlicht)
+                    {
+                        <MudMenuItem OnClick="RefreshHazardAsync" Disabled="_busy"
+                                     Icon="@Icons.Material.Filled.Refresh">Stufe aktualisieren</MudMenuItem>
+                    }
+                    else
+                    {
+                        @* both outward states are retract-before-delete in the service, so neither offers the entry *@
+                        <MudMenuItem OnClick="DeleteAsync" Disabled="_busy" IconColor="Color.Error"
+                                     Icon="@Icons.Material.Filled.Delete">Löschen</MudMenuItem>
+                    }
+                </MudMenu>
             }
         </MudStack>
         }
@@ -197,6 +231,16 @@ else
 
     /// <summary>Raised after a delete, when there is nothing left to edit.</summary>
     [Parameter] public EventCallback Closed { get; set; }
+
+    /// <summary>Host-supplied trailer for the status row; the file page puts the view counter and its links here.</summary>
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+
+    private const int ChargeTab = 1;
+
+    private int _tab;
+
+    // sticky on purpose: resetting it would empty the panel the author is looking at when the row changes
+    private bool _chargeSeen;
 
     private PublicWantedDraft? _draft;
     private PublicWantedOptions _options = PublicWantedOptions.Empty;
@@ -261,9 +305,18 @@ else
         }
     }
 
+    private void TabChanged(int index)
+    {
+        _tab = index;
+        if (index == ChargeTab)
+        {
+            _chargeSeen = true;
+        }
+    }
+
     private async Task<bool> StoreAsync()
     {
-        // null would tell the service to keep the stored accusation; the editor always has the current text
+        // null keeps the stored accusation, which is exactly right while the accusation tab was never opened
         _input.ChargeHtml = _editor is null ? _draft?.ChargeHtml : await _editor.GetHtmlAsync();
         _input.HazardLevel = _hazard;
         await Wanted.UpdateSnapshotAsync(_input, User);

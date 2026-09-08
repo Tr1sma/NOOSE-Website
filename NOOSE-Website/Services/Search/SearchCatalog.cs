@@ -392,6 +392,7 @@ public static class SearchCatalog
         {
             // --- no text of their own ---
             ["PersonPhoto"] = "Binärdatei ohne Text.",
+            ["TextImage"] = "Binärdatei ohne Text; der Text, der sie einbettet, ist selbst durchsuchbar.",
             ["FactionPhoto"] = "Binärdatei ohne Text.",
             ["PersonAlias"] = "Match-Feld der Personenakte, keine eigene Kategorie.",
             ["PersonPhone"] = "Deep-Scan-Match-Feld der Personenakte.",

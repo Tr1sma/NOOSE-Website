@@ -248,6 +248,54 @@ public class AgentManagementServiceTests
         Assert.True(a.IsHRB);
     }
 
+    private static void PersistPartner(SqliteTestContext ctx, string id = "t")
+        => Persist(ctx, NewAgent(id, AgentStatus.Active, cfg: a =>
+        {
+            a.PartnerAgency = PartnerAgency.DoJ;
+            a.PartnerRank = PartnerRank.Member;
+        }));
+
+    private static void PersistApplication(SqliteTestContext ctx, string applicantUserId)
+    {
+        using var db = ctx.NewContext();
+        db.Bewerbungen.Add(new NOOSE_Website.Data.Entities.Recruiting.Bewerbung
+        {
+            CaseNumber = "NOOSE-B-2026-0001", ApplicantUserId = applicantUserId, Name = "Trevor Ward",
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task PromoteApplicantToAgentAsync_HiresAPartnerAndEndsThePartnerRole()
+    {
+        // a partner applied without ever leaving status Active, so it reaches the hire panel from there
+        using var f = Make();
+        PersistPartner(f.Ctx);
+        PersistApplication(f.Ctx, "t");
+
+        await f.Svc.PromoteApplicantToAgentAsync("t", Rank.SpecialAgent, false, false, Admin());
+
+        var a = Reload(f, "t");
+        Assert.Equal(AgentStatus.Active, a.Status);
+        Assert.Equal(Rank.SpecialAgent, a.Rank);
+        Assert.Null(a.PartnerAgency);
+        Assert.Null(a.PartnerRank);
+    }
+
+    [Fact]
+    public async Task PromoteApplicantToAgentAsync_RejectsAPartnerThatNeverApplied()
+    {
+        // status Applicant is the applicant's proof of having gone through recruiting; a partner needs the row
+        using var f = Make();
+        PersistPartner(f.Ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.PromoteApplicantToAgentAsync("t", Rank.SpecialAgent, false, false, Admin()));
+
+        var a = Reload(f, "t");
+        Assert.Equal(PartnerAgency.DoJ, a.PartnerAgency);
+    }
+
     // ---- citizen starts an application ----
 
     private static Agent NewCitizen(string id = "c")

@@ -14,7 +14,7 @@ public class FinancingRequest : IAuditable, ISoftDelete
     public string CaseNumber { get; set; } = string.Empty;
 
     /// <summary>Requesting agent; also the payout recipient.</summary>
-    public string AgentId { get; set; } = string.Empty;
+    public string? AgentId { get; set; }
     public Agent? Agent { get; set; }
 
     public FinancingStatus Status { get; set; } = FinancingStatus.Requested;

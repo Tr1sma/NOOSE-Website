@@ -14,7 +14,7 @@
         @if (CanManage)
         {
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd"
-                       OnClick="AddAsync">Agent beteiligen</MudButton>
+                       OnClick="AddAsync">Agents beteiligen</MudButton>
         }
     </MudStack>
 
@@ -83,15 +83,15 @@
     private async Task AddAsync()
     {
         var exclusion = _agents.Select(a => a.AgentId).ToList();
-        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
-        if (choice is null)
+        var picked = await TicketAgentsAddDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee());
+        if (picked is null)
         {
             return;
         }
         try
         {
-            await Tickets.AddParticipantAsync(TicketId, choice.AgentId, User);
-            Snackbar.Add("Agent beteiligt.", Severity.Success);
+            var added = await Tickets.AddParticipantsAsync(TicketId, picked, User);
+            Snackbar.Add(added == 1 ? "Agent beteiligt." : $"{added} Agents beteiligt.", Severity.Success);
             await LoadAsync();
             await Changed.InvokeAsync();
         }

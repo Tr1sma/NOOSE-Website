@@ -159,6 +159,7 @@ public static class PublicVisibility
             // --- attachments to records ---
             ["Source"] = "Quellenangabe an einer Akte; nach außen nie.",
             ["Comment"] = "Interner Kommentar an einer Akte; nach außen nie.",
+            ["TextImage"] = "Eingefügtes Bild an einem internen Text; die Trägerakte entscheidet, nach außen nie.",
             ["Link"] = "Verknüpfung zwischen Akten; nach außen nie.",
             ["Tag"] = Configuration,
             ["TagMapping"] = Assignment,

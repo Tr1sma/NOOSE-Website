@@ -14,7 +14,7 @@ public class FinancingBudgetPeriod
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    public string AgentId { get; set; } = string.Empty;
+    public string? AgentId { get; set; }
     public Agent? Agent { get; set; }
 
     [Column("Jahr")]

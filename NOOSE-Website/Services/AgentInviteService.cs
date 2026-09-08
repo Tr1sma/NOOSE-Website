@@ -64,12 +64,25 @@ public class AgentInviteService(IDbContextFactory<AppDbContext> dbFactory, UserM
         }
 
         var agent = await userManager.FindByIdAsync(userId);
-        if (agent is null || agent.Status != AgentStatus.Applicant)
+        if (agent is null)
+        {
+            return false;
+        }
+
+        // a hired partner converts through the same link: it applied while staying Active, so it never carried
+        // status Applicant. The partner role ends exactly here, with the save that moves the account to Pending.
+        // Only with an application on file — otherwise a partner who merely opens somebody else's invite link
+        // would silently lose its partner access.
+        bool partnerJoining = agent.Status == AgentStatus.Active && agent.PartnerAgency is not null
+            && await HasApplicationAsync(userId, cancellationToken);
+        if (agent.Status != AgentStatus.Applicant && !partnerJoining)
         {
             return false;
         }
 
         agent.Status = AgentStatus.Pending;
+        agent.PartnerAgency = null;
+        agent.PartnerRank = null;
         var update = await userManager.UpdateAsync(agent);
         if (!update.Succeeded)
         {
@@ -103,6 +116,12 @@ public class AgentInviteService(IDbContextFactory<AppDbContext> dbFactory, UserM
         return await db.AgentInvites.AsNoTracking()
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<bool> HasApplicationAsync(string userId, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Bewerbungen.AnyAsync(b => b.ApplicantUserId == userId, cancellationToken);
     }
 
     private static bool IsValid(AgentInvite? invite)

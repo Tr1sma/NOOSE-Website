@@ -15,7 +15,7 @@ public class AgentAbduction : IAuditable, ISoftDelete
 
     /// <summary>The abducted agent.</summary>
     [Column("OpferAgentId")]
-    public string VictimAgentId { get; set; } = string.Empty;
+    public string? VictimAgentId { get; set; }
     public Agent? VictimAgent { get; set; }
 
     /// <summary>Perpetrator record type: nameof(Faction)/nameof(PersonGroup)/nameof(Person). Loose link, no FK.</summary>

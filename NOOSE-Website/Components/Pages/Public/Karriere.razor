@@ -103,6 +103,25 @@
                         </MudButton>
                     </MudStack>
                 }
+                else if (authCtx.User.MayApply())
+                {
+                    @* the applicant branch above already returned, so this is a partner: no re-login and no status
+                       change, the application is a row of its own and the partner access stays as it is *@
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Du bist mit einem Partnerkonto angemeldet. Du kannst dich damit bewerben — dein
+                        Partnerzugang bleibt während des Verfahrens unverändert bestehen.
+                    </MudAlert>
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudButton Href="/portal" Variant="Variant.Filled" Color="Color.Primary"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Badge">
+                            Jetzt bewerben
+                        </MudButton>
+                        <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Default"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Shield">
+                            Zum Agent-Portal
+                        </MudButton>
+                    </MudStack>
+                }
                 else
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">

@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using NOOSE_Website.Data;
 
 namespace NOOSE_Website.Tests.Services;
 
@@ -22,20 +23,7 @@ public class AgentDeleteCoverageTests
     /// Pre-existing debt outside the public area, listed so it is visible rather than silent. Each of these makes a
     /// hard delete of an account that touched the feature fail; none of them is reachable from the public surface.
     /// </remarks>
-    private static readonly Dictionary<string, string> Unhandled = new(StringComparer.Ordinal)
-    {
-        ["Absence.AgentId"] = "Abmeldungen: eigene Historie, noch nicht entschieden ob löschen oder entkoppeln",
-        ["AgentAbduction.VictimAgentId"] = "Entführungen: Vorfallshistorie, noch nicht entschieden",
-        ["EvidenceEntry.HandlerAgentId"] = "Asservate: Bearbeiter einer Beweiskette, darf nicht stillschweigend fallen",
-        ["Feedback.AgentId"] = "Feedback: eigene Einsendungen, noch nicht entschieden",
-        ["FinancingBudgetPeriod.AgentId"] = "Finanzierung: Geldhistorie ist append-only",
-        ["FinancingRequest.AgentId"] = "Finanzierung: Geldhistorie ist append-only",
-        ["Informant.HandlerId"] = "Informanten: Führungsagent einer Quelle, sicherheitsrelevant",
-        ["LlmQuotaAdjustment.AgentId"] = "KI-Kontingent: Abrechnungshistorie",
-        ["LlmQuotaPeriod.AgentId"] = "KI-Kontingent: Abrechnungshistorie",
-        ["LlmRequestLog.AgentId"] = "KI-Protokoll: Nachweispflicht",
-        ["NooseiConversation.AgentId"] = "KI-Unterhaltungen: besitzer-privat, Hard-Delete wäre der richtige Weg",
-    };
+    private static readonly Dictionary<string, string> Unhandled = new(StringComparer.Ordinal);
 
     private static string ServiceSource([CallerFilePath] string here = "")
     {
@@ -72,18 +60,59 @@ public class AgentDeleteCoverageTests
         return keys;
     }
 
+    /// <summary>CLR entity name to the DbSet property the cleanup addresses it by.</summary>
+    private static Dictionary<string, string> DbSetNames()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var property in typeof(AppDbContext).GetProperties())
+        {
+            var type = property.PropertyType;
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(DbSet<>))
+            {
+                map[type.GetGenericArguments()[0].Name] = property.Name;
+            }
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// True if the cleanup really clears this pointer: the entity's own DbSet, its property, and a bulk write —
+    /// all inside one statement. A bare property-name search passed <c>BuergerProfil.UserId</c> off another table's
+    /// <c>UsedByUserId</c>, and every <c>AgentId</c> off any of the fourteen membership tables; without the write
+    /// the merely reading statement that collects the conversation ids would pass for a cleanup of its own.
+    /// </summary>
+    private static bool IsCleared(string source, string dbSet, string property)
+    {
+        var needle = "db." + dbSet + ".";
+        for (var at = source.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = source.IndexOf(needle, at + 1, StringComparison.Ordinal))
+        {
+            // one statement, not the whole file: the next semicolon ends it
+            var end = source.IndexOf(';', at);
+            var statement = end < 0 ? source[at..] : source[at..end];
+            if (statement.Contains("x." + property, StringComparison.Ordinal)
+                && (statement.Contains("ExecuteDelete", StringComparison.Ordinal)
+                    || statement.Contains("ExecuteUpdate", StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     [Fact]
     public void EveryRestrictPointerToAnAgent_IsHandledOrListedAsOpen()
     {
         var source = ServiceSource();
         var keys = AgentRestrictKeys();
+        var dbSets = DbSetNames();
         // a wrong model or a renamed entity would otherwise leave this green forever
         Assert.NotEmpty(keys);
 
         var offenders = keys
             .Where(k => !Unhandled.ContainsKey($"{k.Entity}.{k.Property}"))
-            // the cleanup addresses a table by its property name; naming it is the decision this test asks for
-            .Where(k => !source.Contains(k.Property, StringComparison.Ordinal))
+            // the cleanup addresses a table through its own DbSet; naming it is the decision this test asks for
+            .Where(k => !dbSets.TryGetValue(k.Entity, out var set) || !IsCleared(source, set, k.Property))
             .Select(k => $"{k.Entity}.{k.Property}")
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)

@@ -10,7 +10,8 @@
     @if (_mayWrite)
     {
         <MudStack Spacing="2">
-            <MentionInput @bind-Text="_newText" Placeholder="@Placeholder" OnSubmit="AddAsync" />
+            <MentionInput @bind-Text="_newText" Placeholder="@Placeholder" OnSubmit="AddAsync"
+                          ImageOwnerType="@EntityType" ImageOwnerId="@EntityId" />
             <MudStack Row="true" Justify="Justify.FlexEnd">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newText))">
@@ -63,7 +64,8 @@
                 {
                     <div class="mt-1">
                         <MentionInput @bind-Text="_editText" Lines="3" AutoFocus="true"
-                                      Placeholder="@PlaceholderEdit" OnSubmit="SaveEditAsync" />
+                                      Placeholder="@PlaceholderEdit" OnSubmit="SaveEditAsync"
+                                      ImageOwnerType="@EntityType" ImageOwnerId="@EntityId" />
                         <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-1">
                             <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                        OnClick="CancelEdit">Abbrechen</MudButton>

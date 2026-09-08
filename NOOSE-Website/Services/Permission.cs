@@ -569,10 +569,10 @@ public static class Permission
         }
     }
 
-    /// <summary>Require applicant status (portal owner actions).</summary>
+    /// <summary>Require an account that may act in the applicant portal (applicant, or a partner who applies).</summary>
     public static void RequireApplicant(ClaimsPrincipal actor)
     {
-        if (!actor.IsApplicant())
+        if (!actor.MayApply())
         {
             throw new UnauthorizedAccessException(
                 "Diese Aktion ist nur für Bewerber verfügbar.");

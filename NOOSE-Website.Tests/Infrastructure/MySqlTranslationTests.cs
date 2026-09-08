@@ -1077,7 +1077,8 @@ public sealed class MySqlTranslationTests : IDisposable
             .OrderBy(m => m.CreatedAt)
             .Select(m => new TicketMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
                 m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
-                me != null && m.CreatedById != null && m.CreatedById == me))
+                me != null && m.CreatedById != null && m.CreatedById == me,
+                m.AttachmentFileName != null, m.AttachmentOriginalName))
             .ToQueryString();
 
         foreach (var sql in new[] { tip, ticket })
@@ -1100,13 +1101,45 @@ public sealed class MySqlTranslationTests : IDisposable
         var ticket = _db.TicketNachrichten.AsNoTracking()
             .Where(m => m.TicketId == "t1" && m.Audience == TicketMessageAudience.Buerger)
             .OrderBy(m => m.CreatedAt)
-            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
+            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt,
+                m.AttachmentFileName != null, m.AttachmentOriginalName))
             .ToQueryString();
 
         foreach (var sql in new[] { tip, ticket })
         {
             Assert.Contains("GeaendertAm", sql, StringComparison.Ordinal);
             Assert.DoesNotContain("AutorAgentId", sql, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>The composite order plus Skip translates; the thread's positions address its attachments.</summary>
+    /// <remarks>
+    /// Whether the service uses the tie-break is pinned by <c>TicketServiceTests</c>; this is the usual question of
+    /// this file, namely whether Pomelo turns the pair into one ORDER BY with a LIMIT/OFFSET rather than pulling
+    /// the thread into memory.
+    /// </remarks>
+    [Fact]
+    public void TheCitizenThreadAndItsAttachmentRoute_TranslateTheirCompositeOrder()
+    {
+        var thread = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.TicketId == "t1" && m.Audience == TicketMessageAudience.Buerger)
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt,
+                m.AttachmentFileName != null, m.AttachmentOriginalName))
+            .ToQueryString();
+
+        var route = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.TicketId == "t1" && m.Audience == TicketMessageAudience.Buerger)
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+            .Skip(1)
+            .Select(m => new { m.AttachmentFileName, m.AttachmentContentType, m.AttachmentOriginalName })
+            .ToQueryString();
+
+        foreach (var sql in new[] { thread, route })
+        {
+            var order = sql[sql.LastIndexOf("ORDER BY", StringComparison.Ordinal)..];
+            Assert.Contains("ErstelltAm", order, StringComparison.Ordinal);
+            Assert.Contains("`Id`", order, StringComparison.Ordinal);
         }
     }
 

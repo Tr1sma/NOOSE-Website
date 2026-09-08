@@ -1,0 +1,77 @@
+@* Picks one image to travel with a message; validates type and size before it leaves the browser. *@
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+    <MudFileUpload T="IBrowserFile" FilesChanged="PickAsync" Accept="image/*">
+        <CustomContent>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.AttachFile" Disabled="@Disabled"
+                       OnClick="@context.OpenFilePickerAsync">
+                Bild anhängen
+            </MudButton>
+        </CustomContent>
+    </MudFileUpload>
+    @if (Picked is { } picked)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                 OnClose="@(() => ChangeAsync(null))" CloseIcon="@Icons.Material.Filled.Close">
+            @picked.OriginalName
+        </MudChip>
+    }
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Nur Bilder, max. @(MaxBytes / (1024 * 1024)) MB.
+    </MudText>
+</MudStack>
+
+@code {
+    /// <summary>What was picked, held by the parent so sending can clear it.</summary>
+    [Parameter] public PickedImage? Picked { get; set; }
+
+    [Parameter] public EventCallback<PickedImage?> PickedChanged { get; set; }
+
+    /// <summary>Server-side cap of the store this will end up in.</summary>
+    [Parameter, EditorRequired] public long MaxBytes { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>One picked image, already read into memory; the service re-checks type and size.</summary>
+    public sealed record PickedImage(byte[] Content, string ContentType, string OriginalName, long Size);
+
+    private async Task PickAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+        if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            Snackbar.Add("Nur Bilder können angehängt werden.", Severity.Warning);
+            return;
+        }
+        if (MaxBytes > 0 && file.Size > MaxBytes)
+        {
+            Snackbar.Add($"Das Bild ist zu groß (maximal {MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            using var buffer = new MemoryStream();
+            await using (var stream = file.OpenReadStream(MaxBytes > 0 ? MaxBytes : long.MaxValue))
+            {
+                await stream.CopyToAsync(buffer);
+            }
+            await ChangeAsync(new PickedImage(buffer.ToArray(), file.ContentType, file.Name, file.Size));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private Task ChangeAsync(PickedImage? picked)
+    {
+        Picked = picked;
+        return PickedChanged.InvokeAsync(picked);
+    }
+}

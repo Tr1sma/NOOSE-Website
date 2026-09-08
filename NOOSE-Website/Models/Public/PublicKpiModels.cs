@@ -1,3 +1,5 @@
+using NOOSE_Website.Models.Enums;
+
 namespace NOOSE_Website.Models.Public;
 
 /// <summary>What the public area produced over one window, for the leadership panel.</summary>
@@ -52,10 +54,14 @@ public sealed record PublicKpiRewards(
 /// <param name="MedianReplyMinutes">Time to the first HUMAN agency reply; the entry confirmation does not count.
 /// Null when nothing was answered in the window — "not measured" and "answered instantly" are different claims.</param>
 public sealed record PublicKpiTickets(
-    int Opened, int Answered, int Waiting, int? MedianReplyMinutes, int? P95ReplyMinutes, int? OldestWaitingMinutes)
+    int Opened, int Answered, int Waiting, int? MedianReplyMinutes, int? P95ReplyMinutes, int? OldestWaitingMinutes,
+    IReadOnlyList<PublicKpiTicketCategory> ByCategory)
 {
-    public static PublicKpiTickets Empty { get; } = new(0, 0, 0, null, null, null);
+    public static PublicKpiTickets Empty { get; } = new(0, 0, 0, null, null, null, []);
 }
+
+/// <summary>How many of the window's tickets carried one concern; only concerns that occurred are listed.</summary>
+public sealed record PublicKpiTicketCategory(TicketKategorie Category, int Opened);
 
 /// <summary>How much attention the published notices drew.</summary>
 /// <remarks>

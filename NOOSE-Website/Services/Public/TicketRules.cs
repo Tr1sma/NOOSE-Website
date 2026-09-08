@@ -24,6 +24,16 @@ public static class TicketRules
     /// <summary>Length of one message in either thread; deliberately the same number as a tip message.</summary>
     public const int MaxMessageLength = TipRules.MaxMessageLength;
 
+    /// <summary>Internal remark on a closure; the column is sized to the same number.</summary>
+    public const int ClosingNoteMaxLength = 1000;
+
+    /// <summary>Attachments one ticket may carry across both threads.</summary>
+    /// <remarks>
+    /// Counted per ticket rather than per message: the cap exists so a conversation cannot become a file drop, and
+    /// per-message it would be no cap at all.
+    /// </remarks>
+    public const int MaxAttachments = 10;
+
     /// <summary>Tickets a citizen may have running at once.</summary>
     public const int MaxOpen = 2;
 
@@ -32,8 +42,40 @@ public static class TicketRules
 
     public static readonly TimeSpan QuotaWindow = TimeSpan.FromHours(24);
 
+    /// <summary>A ticket waiting on the citizen is reminded once after this.</summary>
+    public static readonly TimeSpan NudgeAfter = TimeSpan.FromDays(3);
+
+    /// <summary>And closed as "no contact" after this, counted from the last activity.</summary>
+    public static readonly TimeSpan AutoCloseAfter = TimeSpan.FromDays(7);
+
+    /// <summary>An unanswered citizen line is due after this.</summary>
+    public static readonly TimeSpan ReactionDue = TimeSpan.FromHours(12);
+
+    /// <summary>And overdue after this.</summary>
+    public static readonly TimeSpan ReactionOverdue = TimeSpan.FromHours(24);
+
     /// <summary>Still running; drives the desk badge, the open cap and the citizen's reply button.</summary>
     public static bool IsOpen(TicketStatus status) => status != TicketStatus.Geschlossen;
+
+    /// <summary>Traffic light over how long the newest citizen line has gone unanswered.</summary>
+    /// <remarks>
+    /// A closed ticket and one whose newest line is the agency's are both <see cref="TicketReaction.Keine"/>: the
+    /// column answers "who is waiting", so a ticket nobody waits on must not compete for attention with one that
+    /// does. Both timestamps are UTC — the desk renders local, the comparison must not.
+    /// </remarks>
+    public static TicketReaction Reaction(TicketStatus status, DateTime? waitingSinceUtc, DateTime nowUtc)
+    {
+        if (!IsOpen(status) || waitingSinceUtc is not { } since)
+        {
+            return TicketReaction.Keine;
+        }
+        var waited = nowUtc - since;
+        if (waited >= ReactionOverdue)
+        {
+            return TicketReaction.Ueberfaellig;
+        }
+        return waited >= ReactionDue ? TicketReaction.Faellig : TicketReaction.Frisch;
+    }
 
     /// <summary>Query twin of <see cref="IsOpen"/>; the open cap counts exactly these rows.</summary>
     public static readonly Expression<Func<Ticket, bool>> OpenRows =

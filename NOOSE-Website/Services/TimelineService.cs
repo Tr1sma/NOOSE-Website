@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -113,7 +113,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             // identity — naming him on the file he reported about is exactly what the promise forbids
             var actor = TipAnonymity.HidesActor(log.EntityType) ? null : log.AgentName;
             raw.Add(new Raw(log.Timestamp, kat, title, null, actor, null, null,
-                AuditDisplay.Parse(log.ChangesJson)));
+                AuditDisplay.Parse(log.ChangesJson, entityType: log.EntityType)));
         }
 
         // ---- 2) classification history ----

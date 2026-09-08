@@ -97,13 +97,18 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
             {
                 var active = await db.Users
                     .Where(u => recipientIds.Contains(u.Id) && u.Status == AgentStatus.Active)
-                    .Select(u => new { u.Id, u.IsAdmin, u.Rank })
+                    .Select(u => new { u.Id, u.IsAdmin, u.Rank, u.PartnerAgency })
                     .ToListAsync(cancellationToken);
                 var allowed = new List<string>();
                 foreach (var u in active)
                 {
                     var uLeadership = u.IsAdmin || u.Rank is >= Rank.SupervisorySpecialAgent;
-                    if (await Visibility.IsRecordVisibleAsync(db, w.EntityType, w.EntityId, uLeadership, cancellationToken, u.Id))
+                    // the bool shim cannot carry IsInternalAgent, and the types gated on it — a citizen ticket, a
+                    // citizen tip — read it as "not an in-house account" and hide the record from everyone. Same
+                    // flags as the shim otherwise, so no other type changes answer
+                    var viewer = new ViewerScope(uLeadership, uLeadership, u.Id, null, MayAgenda: uLeadership,
+                        IsInternalAgent: u.PartnerAgency is null);
+                    if (await Visibility.IsRecordVisibleAsync(db, w.EntityType, w.EntityId, viewer, cancellationToken))
                     {
                         allowed.Add(u.Id);
                     }

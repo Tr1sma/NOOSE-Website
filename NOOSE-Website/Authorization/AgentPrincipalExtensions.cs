@@ -128,6 +128,15 @@ public static class AgentPrincipalExtensions
     /// <summary>Public applicant (status Applicant): portal-only access, never an internal agent.</summary>
     public static bool IsApplicant(this ClaimsPrincipal user) => user.GetStatus() == AgentStatus.Applicant;
 
+    /// <summary>May act in the applicant portal: an applicant, or a partner applying without giving up partner access.</summary>
+    /// <remarks>
+    /// A partner keeps status Active while applying — the application is a row of its own, not an account state — so
+    /// the portal cannot gate on <see cref="IsApplicant"/> alone. Mirrors the partner carve-out of
+    /// <c>ReadOnlyBarrierInterceptor</c> (partner, but neither supervision nor demo), so guard and interceptor agree.
+    /// </remarks>
+    public static bool MayApply(this ClaimsPrincipal user)
+        => user.IsApplicant() || (user.IsPartner() && !user.IsOnlyReader() && !user.IsDemo());
+
     /// <summary>May access recruiting management = HRB member or leadership.</summary>
     public static bool IsHrbOrLeadership(this ClaimsPrincipal user) => user.IsHRB() || user.IsLeadership();
 

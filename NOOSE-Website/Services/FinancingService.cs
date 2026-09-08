@@ -199,6 +199,11 @@ public class FinancingService(
                 ? "Über diesen Antrag wurde bereits entschieden — die Genehmigung lässt sich zurücknehmen."
                 : $"Ein Antrag im Zustand „{FinancingStatusDisplay.Name(request.Status)}“ kann nicht entschieden werden.");
         }
+        if (request.AgentId is null)
+        {
+            throw new InvalidOperationException(
+                "Der Antragsteller wurde gelöscht — über diesen Antrag kann nicht mehr entschieden werden.");
+        }
         var target = approved ? FinancingStatus.Approved : FinancingStatus.Rejected;
         RequireTransition(request.Status, target);
 
@@ -546,7 +551,8 @@ public class FinancingService(
             row.Lines = row.Lines.OrderBy(l => l.Sorting).ToList();
         }
         return rows
-            .Select(r => new FinancingRequestDisplay(r, codenames.GetValueOrDefault(r.AgentId, "(unbekannt)")))
+            .Select(r => new FinancingRequestDisplay(r,
+                r.AgentId is null ? "(unbekannt)" : codenames.GetValueOrDefault(r.AgentId, "(unbekannt)")))
             .ToList();
     }
 

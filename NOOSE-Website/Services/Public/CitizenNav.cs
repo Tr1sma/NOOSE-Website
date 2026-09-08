@@ -24,7 +24,7 @@ public static class CitizenNav
         new("Mein Konto", "/buerger/profil", Icons.Material.Filled.Badge),
     ];
 
-    /// <summary>Shown on top for an applicant; their own portal is a second personal area, not a citizen page.</summary>
+    /// <summary>Shown on top for anyone who may apply; their own portal is a second personal area, not a citizen page.</summary>
     public static readonly CitizenNavEntry Application =
         new("Meine Bewerbung", "/portal", Icons.Material.Filled.Badge);
 
@@ -35,6 +35,6 @@ public static class CitizenNav
         {
             return [];
         }
-        return user.IsApplicant() ? [Application, .. Citizen] : Citizen;
+        return user.MayApply() ? [Application, .. Citizen] : Citizen;
     }
 }

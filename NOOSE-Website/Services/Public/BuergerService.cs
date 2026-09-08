@@ -145,7 +145,7 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
 
         var rows = await query.OrderByDescending(p => p.CreatedAt).ToListAsync(cancellationToken);
         return rows.Select(p => new CitizenRow(
-            p.Id, p.UserId, p.FirstName, p.LastName, p.User?.DiscordUsername,
+            p.Id, p.UserId ?? string.Empty, p.FirstName, p.LastName, p.User?.DiscordUsername,
             p.IsBlocked, p.BlockedReason, p.BlockedAt,
             p.User?.Status == AgentStatus.Blocked,
             p.ConfirmedTips, p.LinkedPersonId,

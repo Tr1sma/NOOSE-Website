@@ -170,7 +170,7 @@
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        if (!_user.IsApplicant())
+        if (!_user.MayApply())
         {
             Nav.NavigateTo("/karriere", forceLoad: true);
             return;

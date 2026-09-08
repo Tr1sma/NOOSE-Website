@@ -35,6 +35,7 @@ using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Statistics;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
+using NOOSE_Website.Infrastructure.Tickets;
 using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
 using NOOSE_Website.Infrastructure.Public;
@@ -173,6 +174,10 @@ builder.Services.AddScoped<IAgentAvatarStorageService, AgentAvatarStorageService
 builder.Services.AddScoped<IPublicWantedPhotoStorageService, PublicWantedPhotoStorageService>();
 builder.Services.AddScoped<IPublicLeadershipPhotoStorageService, PublicLeadershipPhotoStorageService>();
 builder.Services.AddScoped<ITipAttachmentStorageService, TipAttachmentStorageService>();
+builder.Services.AddScoped<ITicketAttachmentStorageService, TicketAttachmentStorageService>();
+builder.Services.AddScoped<ITicketAssistService, TicketAssistService>();
+builder.Services.AddScoped<ITicketConversionService, TicketConversionService>();
+builder.Services.AddScoped<ITextImageStorageService, TextImageStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
@@ -195,10 +200,12 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IRecencyService, RecencyService>();
 builder.Services.AddScoped<IFollowupService, FollowupService>();
 builder.Services.AddHostedService<FollowupDueWorker>();
+builder.Services.AddHostedService<TicketFollowupWorker>();
 builder.Services.AddHostedService<JobDueSoonWorker>();
 builder.Services.AddScoped<ISourceService, SourceService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
+builder.Services.AddScoped<ITextImageService, TextImageService>();
 builder.Services.AddScoped<ICustomFieldDefinitionService, CustomFieldDefinitionService>();
 builder.Services.AddScoped<ICustomFieldValueService, CustomFieldValueService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
@@ -418,6 +425,16 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+    // same shape for the ticket attachments: the upload goes over SignalR, so this bounds the downloads only
+    options.AddPolicy(TicketFileEndpointRouteBuilderExtensions.TicketRateLimitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.User.GetAgentId() ?? CallerKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
     // The public search rebuilds its haystacks per request, and it is a Razor route: it carries no endpoint
     // metadata a named policy could attach to, so it has to be gated here. Everything else - above all the
     // SignalR and framework paths - stays unlimited.
@@ -497,6 +514,8 @@ app.MapNooseRecruitingFileEndpoints();
 app.MapNoosePublicWantedFileEndpoints();
 app.MapNoosePublicLeadershipFileEndpoints();
 app.MapNooseTipFileEndpoints();
+app.MapNooseTicketFileEndpoints();
+app.MapNooseTextImageFileEndpoints();
 
 // apply pending migrations on startup
 using (var scope = app.Services.CreateScope())

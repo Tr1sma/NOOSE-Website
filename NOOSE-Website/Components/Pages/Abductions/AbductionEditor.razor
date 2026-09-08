@@ -181,7 +181,7 @@ else
             if (display is not null)
             {
                 var a = display.Abduction;
-                _input.VictimAgentId = a.VictimAgentId;
+                _input.VictimAgentId = a.VictimAgentId ?? string.Empty;
                 _input.PerpetratorType = a.PerpetratorType;
                 _input.PerpetratorId = a.PerpetratorId;
                 _input.Timestamp = a.Timestamp;

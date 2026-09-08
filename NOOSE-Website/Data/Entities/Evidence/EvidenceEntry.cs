@@ -26,7 +26,7 @@ public class EvidenceEntry : IAuditable, ISoftDelete
 
     /// <summary>Agent who booked the entry.</summary>
     [Column("BearbeiterId")]
-    public string HandlerAgentId { get; set; } = string.Empty;
+    public string? HandlerAgentId { get; set; }
     public Agent? HandlerAgent { get; set; }
 
     /// <summary>When the deposit/withdrawal happened (stored UTC).</summary>

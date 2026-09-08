@@ -142,10 +142,12 @@
         => Enum.TryParse<HazardLevel>(LevelFilter, ignoreCase: true, out var level) && Enum.IsDefined(level)
             ? level : null;
 
-    private List<PublicWantedCard> Filtered => Cards
+    /// <summary>The visible cards, biggest advertised bounty first.</summary>
+    /// <remarks>Ordered off the board, not the card: the amounts live there and are dropped there when the bounty
+    /// module is off, which then falls back to publication order.</remarks>
+    private IReadOnlyList<PublicWantedCard> Filtered => _board.RankedByBounty(Cards
         .Where(c => Kind is null || c.Kind == Kind)
-        .Where(c => Level is null || c.HazardLevel == Level)
-        .ToList();
+        .Where(c => Level is null || c.HazardLevel == Level));
 
     protected override async Task OnParametersSetAsync()
     {

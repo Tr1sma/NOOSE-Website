@@ -113,6 +113,19 @@ public sealed record PublicWantedBoard(
     public PublicBounty? BountyFor(string? caseNumber)
         => caseNumber is not null && BountyByCaseNumber.TryGetValue(caseNumber, out var bounty) ? bounty : null;
 
+    /// <summary>The given cards with the biggest advertised bounty first.</summary>
+    /// <remarks>
+    /// Ranks off <see cref="BountyByCaseNumber"/>, so a board whose bounty module is off keeps publication order
+    /// instead of leaking the ranking the hidden amounts would give away. A ceiling loses a tie against a fixed
+    /// sum: "bis 5.000 $" promises less than 5.000 $.
+    /// </remarks>
+    public IReadOnlyList<PublicWantedCard> RankedByBounty(IEnumerable<PublicWantedCard> cards)
+        => cards
+            .OrderByDescending(c => BountyFor(c.CaseNumber)?.Total ?? 0m)
+            .ThenBy(c => BountyFor(c.CaseNumber)?.IsCap ?? false)
+            .ThenByDescending(c => c.PublishedAt)
+            .ToList();
+
     /// <summary>Precomputed searchable plain text of one notice; empty when the board carries none.</summary>
     /// <remarks>
     /// Filled once per cache fill so the public search does not strip the markup of every accusation on every

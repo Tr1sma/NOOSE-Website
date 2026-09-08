@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -672,5 +673,81 @@ public sealed class FollowupServiceTests
         var result = await svc.GetMyDueAsync(Junior("me"));
 
         Assert.Empty(result);
+    }
+
+    // ---------- tickets as a followup target ----------
+
+    private static Ticket MakeTicket(string id = "t1") => new()
+    {
+        Id = id,
+        CaseNumber = "NOOSE-T-2026-0001",
+        Subject = "Anliegen einer Bürgerin",
+        Kind = TicketArt.Intern,
+        Status = TicketStatus.Offen,
+        LastActivityAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+    };
+
+    [Fact]
+    public async Task GetForRecordAsync_ShowsATicketFollowupToTheDesk()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Tickets.Add(MakeTicket());
+            db.Followups.Add(MakeFollowup(nameof(Ticket), "t1", f => f.Note = "nachfassen"));
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetForRecordAsync(nameof(Ticket), "t1", Leader());
+
+        Assert.Equal("nachfassen", Assert.Single(result).Note);
+    }
+
+    [Fact]
+    public async Task GetForRecordAsync_HidesATicketFollowupFromAnUninvolvedAgent()
+    {
+        // the ticket gate is the desk or the one attached agent; a bystander must not learn the row exists
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Tickets.Add(MakeTicket());
+            db.Followups.Add(MakeFollowup(nameof(Ticket), "t1", f => f.Note = "nachfassen"));
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        Assert.Empty(await svc.GetForRecordAsync(nameof(Ticket), "t1", Junior()));
+    }
+
+    [Fact]
+    public async Task GetForRecordAsync_ShowsATicketFollowupToAnAttachedAgent()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Tickets.Add(MakeTicket());
+            db.TicketBeteiligte.Add(new TicketParticipant { TicketId = "t1", AgentId = "me" });
+            db.Followups.Add(MakeFollowup(nameof(Ticket), "t1", f => f.Note = "nachfassen"));
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        Assert.Single(await svc.GetForRecordAsync(nameof(Ticket), "t1", Junior("me")));
+    }
+
+    [Fact]
+    public async Task CreateAsync_RefusesAFollowupOnATicketTheActorMayNotOpen()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Tickets.Add(MakeTicket());
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.CreateAsync(nameof(Ticket), "t1",
+            new FollowupInput(Future, "nachfassen", null), Junior()));
     }
 }

@@ -67,7 +67,7 @@ public static class TrashProjection
 
     // abductions identify by Aktenzeichen; the victim codename is the detail
     public static TrashItem Abduction(AgentAbduction x)
-        => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId,
+        => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId ?? "(gelöschter Agent)",
             AbductionOutcomeDisplay.Name(x.Outcome), x.DeletedAt);
 
     public static TrashItem Informant(InformantTrashItem x)

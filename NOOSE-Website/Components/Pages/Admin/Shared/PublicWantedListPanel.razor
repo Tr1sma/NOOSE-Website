@@ -30,7 +30,7 @@ else if (_editId is not null)
         <MudText Typo="Typo.h6">Ausschreibung bearbeiten</MudText>
     </MudStack>
     <MudPaper Outlined="true" Class="pa-4">
-        <PublicWantedEditor Id="@_editId" User="_user" Changed="LoadAsync" Closed="CloseEditor" />
+        <PublicWantedEditor Id="@_editId" User="_user" Changed="ReloadQuietlyAsync" Closed="CloseEditor" />
     </MudPaper>
 }
 else
@@ -137,9 +137,18 @@ else
         _load = false;
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadAsync(showSpinner: true);
+
+    /// <summary>Refresh without the spinner; it sits above the open editor in the same branch chain, so raising
+    /// it tears the editor down and the rebuilt one starts back on its first tab.</summary>
+    private Task ReloadQuietlyAsync() => LoadAsync(showSpinner: false);
+
+    private async Task LoadAsync(bool showSpinner)
     {
-        _load = true;
+        if (showSpinner)
+        {
+            _load = true;
+        }
         try
         {
             _rows = await WantedService.GetAllAsync(_user);

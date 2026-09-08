@@ -46,8 +46,10 @@
                         Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
                     </MudAlert>
                 }
+                @* a dok has no secrecy flag of its own, so a pasted picture hangs on the person akte *@
                 <MentionInput Text="@(_input.Reason ?? string.Empty)" TextChanged="@(v => _input.Reason = v)"
-                              Label="Grund" Lines="2" HelperText="@MentionInput.Hint" />
+                              Label="Grund" Lines="2" HelperText="@MentionInput.Hint"
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
 
                 @* Prefer linking an existing record; otherwise free text. *@
                 @if (_orgHidden)
@@ -86,7 +88,8 @@
                 <MudTextField @bind-Value="_input.Faction" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
                               HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
                 <MentionInput Text="@(_input.ReceivedInformation ?? string.Empty)" TextChanged="@(v => _input.ReceivedInformation = v)"
-                              Label="Erhaltene Informationen" Lines="3" />
+                              Label="Erhaltene Informationen" Lines="3"
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
                 <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
             </MudStack>
         </MudForm>
@@ -104,6 +107,9 @@
     [Parameter] public PersonDocInput? Exists { get; set; }
 
     [Parameter] public bool IsLeadership { get; set; }
+
+    /// <summary>Person the dok belongs to; carries the visibility of a pasted image.</summary>
+    [Parameter] public string? PersonId { get; set; }
 
     [Parameter] public string? ExistsOrgName { get; set; }
     [Parameter] public string? ExistsOrgCaseNumber { get; set; }
@@ -216,9 +222,13 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog and returns the input, or null on cancel.</summary>
-    public static async Task<PersonDocInput?> ShowAsync(IDialogService dialog, bool isLeadership)
+    public static async Task<PersonDocInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? personId)
     {
-        var parameters = new DialogParameters<DocDialog> { { x => x.IsLeadership, isLeadership } };
+        var parameters = new DialogParameters<DocDialog>
+        {
+            { x => x.IsLeadership, isLeadership },
+            { x => x.PersonId, personId },
+        };
         var reference = await dialog.ShowAsync<DocDialog>("Neues Dok", parameters);
         var result = await reference.Result;
         return result is { Canceled: false, Data: PersonDocInput e } ? e : null;
@@ -245,6 +255,7 @@
             { x => x.IsLeadership, isLeadership },
             { x => x.ExistsOrgName, orgName },
             { x => x.ExistsOrgCaseNumber, orgCaseNumber },
+            { x => x.PersonId, doc.PersonId },
         };
         var reference = await dialog.ShowAsync<DocDialog>("Dok bearbeiten", parameters);
         var result = await reference.Result;

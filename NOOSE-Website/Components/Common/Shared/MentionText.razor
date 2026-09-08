@@ -18,6 +18,21 @@
                      Icon="@Icons.Material.Filled.Lock" Class="mx-1">Verschlusssache</MudChip>
         }
     }
+    else if (seg.Type == nameof(TextImage))
+    {
+        @* a pasted picture, rendered where it was pasted; the print view names it instead of paging on it *@
+        if (Plain || string.IsNullOrEmpty(seg.Href))
+        {
+            <text>[Bild]</text>
+        }
+        else
+        {
+            <MudLink Href="@seg.Href" Target="_blank" Underline="Underline.None">
+                <MudImage Src="@seg.Href" Alt="Eingefügtes Bild" ObjectFit="ObjectFit.Contain"
+                          Class="rounded my-1 d-block" Style="max-height:240px;max-width:100%;" />
+            </MudLink>
+        }
+    }
     else if (Plain)
     {
         @seg.Text

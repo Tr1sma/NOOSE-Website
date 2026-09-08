@@ -16,8 +16,8 @@ public partial class DemoDataService
     private static async Task<(Dictionary<string, BuergerProfil> Map, int Added)> SeedCitizenProfilesAsync(
         AppDbContext db, CancellationToken ct)
     {
-        var map = (await db.BuergerProfile.IgnoreQueryFilters().ToListAsync(ct))
-            .GroupBy(p => p.UserId, StringComparer.Ordinal)
+        var map = (await db.BuergerProfile.IgnoreQueryFilters().Where(p => p.UserId != null).ToListAsync(ct))
+            .GroupBy(p => p.UserId!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
         var added = 0;

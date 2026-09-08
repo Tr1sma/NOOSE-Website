@@ -327,9 +327,9 @@ public sealed class ReadAreaTool(
     /// </remarks>
     private async Task TicketsAsync(StringBuilder sb, int max, ClaimsPrincipal actor, CancellationToken ct)
     {
-        var open = await tickets.GetInboxAsync(TicketInboxScope.Offen, null, false, actor, ct);
-        var working = await tickets.GetInboxAsync(TicketInboxScope.Bearbeitung, null, false, actor, ct);
-        var waiting = await tickets.GetInboxAsync(TicketInboxScope.Wartet, null, false, actor, ct);
+        var open = await tickets.GetInboxAsync(TicketInboxScope.Offen, null, false, actor, cancellationToken: ct);
+        var working = await tickets.GetInboxAsync(TicketInboxScope.Bearbeitung, null, false, actor, cancellationToken: ct);
+        var waiting = await tickets.GetInboxAsync(TicketInboxScope.Wartet, null, false, actor, cancellationToken: ct);
 
         // the desk lists are capped, so these are the rows that came back, not the stock — the badge on /tickets is
         // the number that counts them

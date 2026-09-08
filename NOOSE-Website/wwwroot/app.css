@@ -124,10 +124,38 @@ html, body {
     border-color: var(--mud-palette-lines-default);
 }
 
+/* sticky, because selecting a word far down and then scrolling up to hit bold lost the toolbar. It sticks
+   inside its own wrapper, so it is pinned exactly while the editor is on screen and no longer. The offset
+   clears the fixed MudAppBar; inside a dialog there is none, so the variable is overridden below. */
 .ql-toolbar.ql-snow {
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
     background-color: var(--mud-palette-background-grey);
+    position: sticky;
+    top: var(--noose-rte-toolbar-top, 64px);
+    /* above the editor text, below the mention picker (10) and every MudBlazor overlay */
+    z-index: 3;
+}
+
+/* the dialog content is its own scroll container and carries no app bar */
+.mud-dialog .ql-toolbar.ql-snow {
+    --noose-rte-toolbar-top: 0px;
+}
+
+/* MudAppBar is 56px below the sm breakpoint */
+@media (max-width: 599.95px) {
+    .ql-toolbar.ql-snow {
+        --noose-rte-toolbar-top: 56px;
+    }
+}
+
+/* Rounded="true" on a host MudTabs clips overflow to keep its corner radius (MeetingDetail's Protokoll tab,
+   PublicWantedEditor's Vorwurf tab). That clip is also an ancestor of the toolbar above, and CSS sticky goes
+   inert under ANY ancestor whose overflow is not visible — silently, no error, the toolbar just scrolls off
+   again. :has() scopes the escape hatch to exactly the tab widgets that carry a Quill editor, so every other
+   rounded-tabs page keeps its clipped corners untouched. */
+.mud-tabs-rounded:has(.ql-toolbar) {
+    overflow: visible;
 }
 
 .ql-container.ql-snow {

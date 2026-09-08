@@ -16,7 +16,7 @@ public class BuergerProfil : IAuditable, ISoftDelete
 
     /// <summary>Identity user (the citizen's Discord account, status Civilian).</summary>
     [Column("BenutzerId")]
-    public string UserId { get; set; } = string.Empty;
+    public string? UserId { get; set; }
     public Agent? User { get; set; }
 
     [Column("Vorname")]

@@ -19,7 +19,7 @@
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
                            StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AddAgentAsync">
-                    Agent beteiligen
+                    Agents beteiligen
                 </MudButton>
                 @if (_participants.Count > 0)
                 {
@@ -59,10 +59,10 @@
 
     private async Task AddAgentAsync()
     {
-        var choice = await AgentAllocateDialog.ShowAsync(DialogService, _participants, User.MayRealNameSee(), false);
-        if (choice is not null)
+        var picked = await TicketAgentsAddDialog.ShowAsync(DialogService, _participants, User.MayRealNameSee());
+        if (picked is not null)
         {
-            _participants.Add(choice.AgentId);
+            _participants.AddRange(picked);
         }
     }
 

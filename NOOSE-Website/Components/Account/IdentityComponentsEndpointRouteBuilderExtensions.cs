@@ -134,8 +134,10 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 await RefreshMasterDataAsync(userManager, agent, info);
                 await EnsureBootstrapAdminSafeAsync(userManager, agent, configuration, logger);
 
-                // a returning applicant who follows an invite link becomes a pending agent
-                if (agent.Status == AgentStatus.Applicant
+                // a returning applicant who follows an invite link becomes a pending agent; a hired partner applied
+                // without ever leaving status Active, so it reaches the same conversion from there
+                if ((agent.Status == AgentStatus.Applicant
+                        || (agent.Status == AgentStatus.Active && agent.PartnerAgency is not null))
                     && string.Equals(source, "invite", StringComparison.OrdinalIgnoreCase)
                     && await inviteService.RedeemForExistingAsync(inviteToken, agent.Id))
                 {

@@ -148,10 +148,10 @@ public class FinancingStatisticsService(
         }
 
         var consumedByAgent = await db.FinancingRequests.AsNoTracking()
-            .Where(r => r.BudgetYear == year && r.BudgetMonth == month
+            .Where(r => r.BudgetYear == year && r.BudgetMonth == month && r.AgentId != null
                 && (r.Status == FinancingStatus.Approved || r.Status == FinancingStatus.Paid))
             .GroupBy(r => r.AgentId)
-            .Select(g => new { AgentId = g.Key, Sum = g.Sum(r => r.ApprovedSubsidy ?? 0m) })
+            .Select(g => new { AgentId = g.Key!, Sum = g.Sum(r => r.ApprovedSubsidy ?? 0m) })
             .ToListAsync(cancellationToken);
         var consumed = consumedByAgent.ToDictionary(x => x.AgentId, x => x.Sum);
 

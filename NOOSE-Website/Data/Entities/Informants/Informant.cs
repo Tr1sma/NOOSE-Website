@@ -42,7 +42,7 @@ public class Informant : IAuditable, ISoftDelete
     public InformantStatus Status { get; set; } = InformantStatus.Active;
 
     /// <summary>Assigned handler (Führungsagent). Restrict — never cascade off the Agent table.</summary>
-    public string HandlerId { get; set; } = string.Empty;
+    public string? HandlerId { get; set; }
 
     public List<InformantMeeting> Meetings { get; set; } = new();
 

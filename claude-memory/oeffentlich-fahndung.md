@@ -85,6 +85,12 @@
     den Score und löscht das Flag. `UpdateSnapshotAsync` setzt es **nur bei echter Änderung** (sonst friert das
     bloße Speichern eines unberührten Editors die Stufe ein) und ruft dann `StampForNoticeAsync` — die Stufe ist
     ein Faktor der Posteingangs-Reihenfolge jedes Hinweises an dieser Ausschreibung.
+  - **`/gesucht` sortiert nach Kopfgeld, und zwar über `PublicWantedBoard.RankedByBounty`, nicht über die Karte.**
+    Die Beträge liegen im `BountyByCaseNumber` des Boards, nicht auf `PublicWantedCard` — und genau dort lässt der
+    Modul-Schalter sie weg. Deshalb fällt die Liste bei ausgeschaltetem Kopfgeld-Modul automatisch auf die
+    Veröffentlichungsreihenfolge zurück, statt die verborgene Rangfolge weiter auszubuchstabieren. Eine
+    Obergrenze verliert den Gleichstand gegen eine feste Summe („bis 5.000 $" verspricht weniger als 5.000 $).
+    `/gefahr/personen` sortiert bewusst weiter nach Gefahrenstufe — das ist eine andere Frage als „wo gibt es Geld".
   - **Publizieren schreibt kein `ManualAudit.Row` gegen die Personenakte** (entgegen Leitsatz 9 in
     `PublicPlan.md`): die Zeile ist `IAuditable`, und eine zweite, `Person`-getypte Zeile fiele in
     `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als „Akte geändert". Der Zeitstrahl kommt über
@@ -316,3 +322,35 @@
   - **`/buerger/einspruch` begrüßt einen anonymen Besucher mit dem Discord-Login**, nicht mit einer
     Umleitung auf die Startseite: die Seite wird von einem öffentlichen Steckbrief aus verlinkt, und eine
     Umleitung sähe aus wie ein kaputter Link. Muster `TipForm`, mit `returnUrl` zurück auf die Ausschreibung.
+
+## Der Abschnitt in der Personenakte ist zweigeteilt
+
+`PersonDetail` hatte **einen** Abschnitt `oeffentlich` mit beiden Panels darin — zusammen ~770 Zeilen Markup
+als flache Spalte, inklusive eines vollständig verschachtelten zweiten Editors je Fahrzeug und Waffe.
+
+- Jetzt zwei Abschnitte: `oeffentlich` („Öffentliche Fahndung", nur `PublicWantedPanel`) und `sachfahndung`
+  („Sachfahndung", nur `PublicItemNoticePanel`). **Beide** bleiben innerhalb von `@if (!_isPartner)` und
+  **beide** stehen weiter nicht in `_tabs` und nicht in `PartnerTabCatalog` — der neue Slug darf dort nie
+  auftauchen, sonst wird er konfigurierbar bzw. partner-sichtbar. Geprüft: kein `?tab=oeffentlich`-Link im
+  Repo zeigt auf eine Personenakte, alle gehen auf `/fahndung`.
+- `PublicWantedEditor` gliedert sich in **drei Tabs** (Steckbrief · Vorwurf · Kopfgeld) mit dauerhaft
+  sichtbarer Kopf- und Aktionsleiste. `KeepPanelsAlive="true"` hat zwei Gründe: ungespeicherter Text darf
+  einen Tabwechsel überleben, **und** `richtext.js` hält seinen Clipboard-Zwischenzustand am DOM-Element
+  (`__nooseQuill`, `__nooseZwischenbild`) — ein neu gebautes Element verliert ihn mitten im Einfügen.
+- Quill hängt hinter `@if (_chargeSeen)` und wird erst beim ersten Öffnen des Tabs montiert, sonst
+  initialisiert er in einem versteckten Container. Gefahrlos, weil `StoreAsync` den Fall schon kannte:
+  `_editor is null` behält den gespeicherten Vorwurf. `_chargeSeen` wird bewusst **nie zurückgesetzt** —
+  beim Wechsel auf eine andere Ausschreibung würde das den gerade offenen Tab leeren.
+- Ein Badge am Vorwurf-Tab markiert eine Ausschreibung ohne gespeicherten Vorwurf. Die inhaltliche Prüfung
+  bleibt trotzdem im Publish-Pfad des Service.
+- **Kein URL-Sync** in diesen Tabs: `TabUrlState.ParameterName` ist hartkodiert `"tab"` und kollidiert mit
+  dem `RecordSectionRail`.
+- Die Aktionsleiste hat ein ⋮-Menü für „Stufe aktualisieren" und „Löschen". Die Bedingungen sind wörtlich
+  die alten; die zwei Einträge schließen sich nach Status aus, weshalb das Menü bei `Gefasst` ganz
+  verschwindet.
+- `PublicWantedPanel` und `PublicItemNoticePanel` bringen **kein eigenes `MudPaper`** mehr mit — der Rail
+  liefert die Fläche schon. Die zwei Erklärabsätze stehen wortgleich in einem Tooltip am Info-Icon; der
+  Wortlaut hält die Snapshot-Regel und darf nicht gekürzt werden. Der Aufruf-Zähler ist ein Chip in der
+  Kopfleiste des Editors, über den neuen `HeaderContent`-Slot, und bleibt eine interne Zahl.
+- Im `BountyPanel` ist die zweite Tabelle („Ausgezahlte Belohnung") eingeklappt; die Anteilstabelle bleibt
+  offen. Nach außen geht weiter nur die Gesamtsumme.

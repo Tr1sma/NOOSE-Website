@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.CurrentUser;
@@ -291,6 +292,113 @@ public sealed class ReadOnlyBarrierInterceptorTests
         await using var db = Guarded(ctx, OnlyReader());
 
         db.Documents.Add(new Document { Id = "d1", Title = "Vermerk", CreatedById = "aufsicht" });
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task A_partner_may_file_its_own_application()
+    {
+        // applying does not cost the partner role, so the row arrives from an account the barrier otherwise stops
+        using var ctx = new SqliteTestContext();
+        await using var db = Guarded(ctx, Partner());
+
+        db.Bewerbungen.Add(new Bewerbung
+        {
+            CaseNumber = "NOOSE-BEW-2026-0001", ApplicantUserId = PartnerId, Name = "Trevor Ward",
+        });
+
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await ctx.NewContext().Bewerbungen.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_partner_may_answer_in_its_own_application_thread()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var seed = ctx.NewContext())
+        {
+            seed.Bewerbungen.Add(new Bewerbung
+            {
+                Id = "bew1", CaseNumber = "NOOSE-BEW-2026-0001", ApplicantUserId = PartnerId, Name = "Trevor Ward",
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var db = Guarded(ctx, Partner());
+        db.BewerbungMessages.Add(new BewerbungMessage
+        {
+            BewerbungId = "bew1", Text = "Nachreichung", AuthorIsApplicant = true,
+        });
+
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await ctx.NewContext().BewerbungMessages.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_partner_may_save_and_resave_its_own_test_answer()
+    {
+        // the aptitude test autosaves, so the same row is written again until the attempt is handed in
+        using var ctx = new SqliteTestContext();
+        await using (var open = FullChain(ctx, Partner()))
+        {
+            open.BewerbungTestAnswers.Add(new BewerbungTestAnswer { Id = "a1", AssignmentId = "z1", QuestionId = "f1" });
+            await open.SaveChangesAsync();
+        }
+
+        await using var db = FullChain(ctx, Partner());
+        var answer = await db.BewerbungTestAnswers.SingleAsync();
+        answer.FreeTextAnswer = "geänderte Antwort";
+
+        await db.SaveChangesAsync();
+        Assert.Equal("geänderte Antwort", (await ctx.NewContext().BewerbungTestAnswers.SingleAsync()).FreeTextAnswer);
+    }
+
+    [Fact]
+    public async Task A_partner_may_not_touch_an_application_somebody_else_filed()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var seed = ctx.NewContext())
+        {
+            seed.Bewerbungen.Add(new Bewerbung
+            {
+                Id = "bew1", CaseNumber = "NOOSE-BEW-2026-0001", ApplicantUserId = "fremd", Name = "Wer anders",
+                CreatedById = "fremd",
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var db = Guarded(ctx, Partner());
+        (await db.Bewerbungen.SingleAsync()).Name = "Trevor Ward";
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task The_read_only_supervision_may_not_file_an_application()
+    {
+        // an oversight seat is not a candidate; the application axis is the partner's alone
+        using var ctx = new SqliteTestContext();
+        await using var db = Guarded(ctx, OnlyReader());
+
+        db.Bewerbungen.Add(new Bewerbung
+        {
+            CaseNumber = "NOOSE-BEW-2026-0001", ApplicantUserId = "aufsicht", Name = "Owl",
+        });
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task The_demo_visitor_may_not_file_an_application()
+    {
+        using var ctx = new SqliteTestContext();
+        await using var db = Guarded(ctx, Demo());
+
+        db.Bewerbungen.Add(new Bewerbung
+        {
+            CaseNumber = "NOOSE-BEW-2026-0001", ApplicantUserId = "demo-agent", Name = "Demo",
+        });
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => db.SaveChangesAsync());
     }

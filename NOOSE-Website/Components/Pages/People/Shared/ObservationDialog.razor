@@ -27,10 +27,13 @@
                 </MudGrid>
 
                 <MudTextField @bind-Value="_input.Location" Label="Ort" Variant="Variant.Outlined" />
+                @* an observation has no secrecy flag of its own, so a pasted picture hangs on the person akte *@
                 <MentionInput Text="@(_input.Sighting ?? string.Empty)" TextChanged="@(v => _input.Sighting = v)"
-                              Label="Beobachtung" Lines="3" HelperText="@MentionInput.Hint" />
+                              Label="Beobachtung" Lines="3" HelperText="@MentionInput.Hint"
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
                 <MentionInput Text="@(_input.Result ?? string.Empty)" TextChanged="@(v => _input.Result = v)"
-                              Label="Ergebnis / Folgerung" Lines="2" />
+                              Label="Ergebnis / Folgerung" Lines="2"
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
 
                 <MudAutocomplete T="Agent" Label="Beobachtender Agent" @bind-Value="_agent"
                                  SearchFunc="@SearchAgents" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
@@ -97,6 +100,9 @@
     [Parameter] public bool IsLeadership { get; set; }
 
     [Parameter] public string? DefaultAgentId { get; set; }
+
+    /// <summary>Person the observation belongs to; carries the visibility of a pasted image.</summary>
+    [Parameter] public string? PersonId { get; set; }
 
     [Parameter] public string? ExistsOrgName { get; set; }
     [Parameter] public string? ExistsOrgCaseNumber { get; set; }
@@ -229,12 +235,14 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog (create) and returns the input, or null on cancel.</summary>
-    public static async Task<ObservationInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? defaultAgentId)
+    public static async Task<ObservationInput?> ShowAsync(IDialogService dialog, bool isLeadership,
+        string? defaultAgentId, string? personId)
     {
         var parameters = new DialogParameters<ObservationDialog>
         {
             { x => x.IsLeadership, isLeadership },
             { x => x.DefaultAgentId, defaultAgentId },
+            { x => x.PersonId, personId },
         };
         var reference = await dialog.ShowAsync<ObservationDialog>("Neue Observation", parameters);
         var result = await reference.Result;
@@ -262,6 +270,7 @@
             { x => x.IsLeadership, isLeadership },
             { x => x.ExistsOrgName, orgName },
             { x => x.ExistsOrgCaseNumber, orgCaseNumber },
+            { x => x.PersonId, obs.PersonId },
         };
         var reference = await dialog.ShowAsync<ObservationDialog>("Observation bearbeiten", parameters);
         var result = await reference.Result;

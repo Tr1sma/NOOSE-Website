@@ -109,7 +109,7 @@ public class AbductionService(
 
         return list.Select(a =>
         {
-            var codename = codenames.TryGetValue(a.VictimAgentId, out var cn) && !string.IsNullOrWhiteSpace(cn)
+            var codename = codenames.TryGetValue(a.VictimAgentId ?? string.Empty, out var cn) && !string.IsNullOrWhiteSpace(cn)
                 ? cn : "(unbekannter Agent)";
             resolved.TryGetValue((a.PerpetratorType, a.PerpetratorId), out var perp);
             activeCounts.TryGetValue(a.Id, out var count);

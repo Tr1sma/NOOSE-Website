@@ -308,7 +308,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnName("Wahrheitsserum");
 
                     b.Property<string>("VictimAgentId")
-                        .IsRequired()
                         .HasColumnType("varchar(255)")
                         .HasColumnName("OpferAgentId");
 
@@ -2554,6 +2553,73 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("TagZuordnungen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.TextImage", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("EntitaetId");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("EntitaetTyp");
+
+                    b.Property<string>("FileNameSaved")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("DateinameGespeichert");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("GroesseBytes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityType", "EntityId");
+
+                    b.ToTable("Textbilder");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.ThreatScoreConfig", b =>
                 {
                     b.Property<string>("Id")
@@ -2723,7 +2789,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnName("GeloeschtVonId");
 
                     b.Property<string>("HandlerAgentId")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("BearbeiterId");
@@ -3419,7 +3484,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(255)");
 
                     b.Property<string>("AgentId")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
@@ -3561,7 +3625,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(255)");
 
                     b.Property<string>("AgentId")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
@@ -4113,7 +4176,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnName("FraktionId");
 
                     b.Property<string>("HandlerId")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
 
@@ -6839,7 +6901,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnName("GeaendertVonId");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)")
                         .HasColumnName("BenutzerId");
@@ -8286,6 +8347,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(32)")
                         .HasColumnName("Aktenzeichen");
 
+                    b.Property<int>("Category")
+                        .HasColumnType("int")
+                        .HasColumnName("Kategorie");
+
                     b.Property<DateTime?>("CitizenLastReadAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("ZuletztGelesenBuergerAm");
@@ -8303,6 +8368,15 @@ namespace NOOSE_Website.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)")
                         .HasColumnName("GeschlossenVonId");
+
+                    b.Property<string>("ClosingNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("Abschlussnotiz");
+
+                    b.Property<int?>("ClosingReason")
+                        .HasColumnType("int")
+                        .HasColumnName("Abschlussgrund");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
@@ -8345,10 +8419,18 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("GeaendertVonId");
 
+                    b.Property<DateTime?>("NudgedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("NachgefasstAm");
+
                     b.Property<string>("OpenedByAgentId")
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)")
                         .HasColumnName("EroeffnetVonAgentId");
+
+                    b.Property<int?>("PriorityOverride")
+                        .HasColumnType("int")
+                        .HasColumnName("PrioritaetManuell");
 
                     b.Property<int>("Status")
                         .HasColumnType("int")
@@ -8375,6 +8457,8 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.HasIndex("Status", "LastActivityAt");
 
+                    b.HasIndex("Category", "Status", "LastActivityAt");
+
                     b.HasIndex("Kind", "Status", "LastActivityAt");
 
                     b.ToTable("Tickets");
@@ -8384,6 +8468,21 @@ namespace NOOSE_Website.Data.Migrations
                 {
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AttachmentContentType")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("AnhangTyp");
+
+                    b.Property<string>("AttachmentFileName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("Anhang");
+
+                    b.Property<string>("AttachmentOriginalName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("AnhangName");
 
                     b.Property<int>("Audience")
                         .HasColumnType("int")
@@ -9901,8 +10000,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", "VictimAgent")
                         .WithMany()
                         .HasForeignKey("VictimAgentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("VictimAgent");
                 });
@@ -10039,8 +10137,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", "HandlerAgent")
                         .WithMany()
                         .HasForeignKey("HandlerAgentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("HandlerAgent");
                 });
@@ -10173,8 +10270,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
                         .WithMany()
                         .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Agent");
                 });
@@ -10184,8 +10280,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
                         .WithMany()
                         .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Agent");
                 });
@@ -10276,8 +10371,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
                         .WithMany()
                         .HasForeignKey("HandlerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("NOOSE_Website.Data.Entities.People.Person", null)
                         .WithMany()
@@ -10676,8 +10770,7 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("User");
                 });

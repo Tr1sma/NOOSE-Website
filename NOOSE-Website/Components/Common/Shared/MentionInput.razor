@@ -1,7 +1,13 @@
 @* Text field with @-mention picker; inserts @{Type:Id} tokens, Ctrl+Enter submits. *@
 @using System.Text.RegularExpressions
 @inject IMentionService MentionService
+@inject ITextImageService TextImages
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
+@* display:contents keeps the wrapper out of layout: Class="flex-grow-1" still lands on a flex item *@
+<div @ref="_wrapper" style="display:contents">
 <MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
               Label="@Label" Placeholder="@Placeholder" HelperText="@HelperText" Variant="Variant.Outlined"
               Lines="@Lines" MaxLength="@MaxLength" Counter="@Counter" Disabled="@Disabled" Class="@Class"
@@ -9,6 +15,7 @@
               Adornment="@(_isPartner ? Adornment.None : Adornment.End)" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
               OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
               OnKeyDown="OnKeyDown" />
+</div>
 
 @if (_pickerOpen && _candidates.Count > 0)
 {
@@ -53,17 +60,42 @@
     [Parameter] public string? RequiredError { get; set; }
     [Parameter] public bool AutoFocus { get; set; }
 
+    /// <summary>Record type an image pasted into this field belongs to; null keeps image paste off.</summary>
+    /// <remarks>
+    /// Opt-in like the @-picker: the pair below decides who may later see the picture, so a field that cannot name
+    /// its carrying record must not accept one. A single-line reason field is also simply the wrong place for it.
+    /// </remarks>
+    [Parameter] public string? ImageOwnerType { get; set; }
+
+    /// <summary>Record id the pasted image belongs to; see <see cref="ImageOwnerType"/>.</summary>
+    [Parameter] public string? ImageOwnerId { get; set; }
+
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
     private string? _meId;
     private bool _isPartner;
     private bool _mayClassifiedRead;
     private bool _mayRealName;
+    private bool _mayWrite;
+    private ClaimsPrincipal? _user;
+
+    private ElementReference _wrapper;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MentionInput>? _ref;
+    private bool _disposed;
+    private bool _attaching;
+
+    // the read-only supervision would only run into the service guard, and a partner posts plain text
+    private bool ImagePasteEnabled =>
+        !string.IsNullOrWhiteSpace(ImageOwnerType) && !string.IsNullOrWhiteSpace(ImageOwnerId)
+        && _mayWrite && !_isPartner;
 
     protected override async Task OnInitializedAsync()
     {
         if (AuthStateTask is not null)
         {
             var user = (await AuthStateTask).User;
+            _user = user;
+            _mayWrite = user.MayWrite();
             _meId = user.GetAgentId();
             // partners post plain text: the @-picker is unscoped, so it stays disabled for them
             _isPartner = user.IsPartner();
@@ -191,4 +223,96 @@
         await TextChanged.InvokeAsync(_text);
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // not firstRender-only: the auth state may still be pending then, which would leave the module unattached
+        if (!ImagePasteEnabled || _attaching || _disposed)
+        {
+            return;
+        }
+        _attaching = true; // set before the first await, or a second render imports the module twice
+        try
+        {
+            // ?v= cache-buster: bump it on every textbild.js change (dynamic imports bypass asset fingerprinting)
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/textbild.js?v=1");
+            _ref = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("attach", _wrapper, _ref);
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+        catch (Exception)
+        {
+            /* best effort: without the module Ctrl+V simply pastes text */
+        }
+    }
+
+    /// <summary>Stores the pasted bitmap and drops its token where the caret was.</summary>
+    [JSInvokable]
+    public async Task OnImagePastedAsync(string base64, string contentType, int caret)
+    {
+        if (!ImagePasteEnabled || _user is null)
+        {
+            return;
+        }
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(base64);
+        }
+        catch (FormatException)
+        {
+            return;
+        }
+
+        string? token;
+        try
+        {
+            token = await TextImages.SaveAsync(ImageOwnerType!, ImageOwnerId!, bytes, contentType, _user);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            token = null;
+        }
+        if (token is null)
+        {
+            Snackbar.Add("Bild konnte nicht eingefügt werden.", Severity.Warning);
+            return;
+        }
+
+        // the caret sat in the pre-paste text, so it still indexes it; -1 means the field never reported one
+        var at = caret >= 0 && caret <= _text.Length ? caret : _text.Length;
+        _text = _text.Insert(at, token + " ");
+        await TextChanged.InvokeAsync(_text);
+        await ReferencesRefreshAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>Reported by the module instead of marshalling megabytes that would be rejected anyway.</summary>
+    [JSInvokable]
+    public void OnImageTooLarge()
+        => Snackbar.Add("Das Bild ist zu groß (max. 8 MB).", Severity.Warning);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("detach", _wrapper);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception)
+        {
+            /* circuit already gone */
+        }
+        _ref?.Dispose();
+    }
 }

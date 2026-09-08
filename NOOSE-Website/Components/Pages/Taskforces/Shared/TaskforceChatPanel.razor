@@ -50,7 +50,8 @@
     @if (_mayPost)
     {
         <div>
-            <MentionInput @bind-Text="_text" Placeholder="@Placeholder" OnSubmit="SendAsync" />
+            <MentionInput @bind-Text="_text" Placeholder="@Placeholder" OnSubmit="SendAsync"
+                          ImageOwnerType="@nameof(Taskforce)" ImageOwnerId="@TaskforceId" />
             <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="SendAsync" Disabled="@(_sends || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>

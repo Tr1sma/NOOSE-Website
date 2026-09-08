@@ -1,10 +1,12 @@
 ﻿using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Chat;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
@@ -21,6 +23,10 @@ public sealed class TicketServiceTests
     private const string ProfileId = "profil1";
     private const string OtherUserId = "buerger2";
     private const string OtherProfileId = "profil2";
+
+    // a mention token only carries a 36-char GUID, which is the shape Identity gives an account in production
+    private const string NamedAgentId = "11111111-1111-1111-1111-111111111111";
+    private const string NamedSupervisionId = "22222222-2222-2222-2222-222222222222";
 
     private static ClaimsPrincipal Leader()
         => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).WithCodename("Falcon").Build();
@@ -41,6 +47,18 @@ public sealed class TicketServiceTests
     private static ClaimsPrincipal Citizen(string id = CitizenUserId)
         => ClaimsPrincipalBuilder.Agent(id).WithStatus(AgentStatus.Civilian).Build();
 
+    /// <summary>Adds an account whose id has the shape a mention token can address.</summary>
+    private static async Task NamedAgentAsync(SqliteTestContext ctx, string id, bool teamLead = false)
+    {
+        await using var db = ctx.NewContext();
+        db.Users.Add(Seed.Agent(id, Rank.SpecialAgent, configure: a =>
+        {
+            a.Codename = teamLead ? "Owl" : "Kestrel";
+            a.IsTeamLead = teamLead;
+        }));
+        await db.SaveChangesAsync();
+    }
+
     private sealed class FixedUser : ICurrentUserService
     {
         public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
@@ -53,7 +71,38 @@ public sealed class TicketServiceTests
         PublicModuleService Modules,
         INotificationService Notifications,
         IDiscordWebhookService Discord,
+        FakeAttachments Attachments,
         TestDbContextFactory Factory);
+
+    /// <summary>Attachment store in memory; the facts here are about the columns and the gates, not the disk.</summary>
+    private sealed class FakeAttachments : ITicketAttachmentStorageService
+    {
+        public long MaxBytes { get; set; } = 1024;
+
+        public Dictionary<string, byte[]> Saved { get; } = new(StringComparer.Ordinal);
+
+        public bool IsAllowedType(string contentType)
+            => contentType is "image/png" or "image/jpeg" or "image/webp" or "image/gif";
+
+        public async Task<string> SaveAsync(Stream content, string contentType,
+            CancellationToken cancellationToken = default)
+        {
+            using var buffer = new MemoryStream();
+            await content.CopyToAsync(buffer, cancellationToken);
+            var name = $"{Guid.NewGuid():N}.png";
+            Saved[name] = buffer.ToArray();
+            return name;
+        }
+
+        public Stream OpenRead(string fileNameSaved) => new MemoryStream(Saved[fileNameSaved]);
+
+        public void Delete(string fileNameSaved) => Saved.Remove(fileNameSaved);
+    }
+
+    /// <summary>A tiny image upload; the store is a fake, so the bytes only have to be non-empty.</summary>
+    private static TicketAttachmentUpload Upload(string name = "beweis.png", long size = 4,
+        string contentType = "image/png")
+        => new(new MemoryStream(new byte[] { 1, 2, 3, 4 }), contentType, name, size);
 
     /// <summary>The service with the audit interceptor attached, as in production.</summary>
     /// <remarks>
@@ -78,9 +127,10 @@ public sealed class TicketServiceTests
 
         var notifications = Substitute.For<INotificationService>();
         var discord = Substitute.For<IDiscordWebhookService>();
+        var attachments = new FakeAttachments();
         var service = new TicketService(factory, modules, new BuergerService(factory), caseNumbers,
-            notifications, new PublicTemplateService(factory), discord, new TicketBroadcaster());
-        return new Host(service, modules, notifications, discord, factory);
+            notifications, new PublicTemplateService(factory), discord, attachments, new TicketBroadcaster());
+        return new Host(service, modules, notifications, discord, attachments, factory);
     }
 
     /// <summary>Seeds the module switch and two complete citizen profiles.</summary>
@@ -118,12 +168,13 @@ public sealed class TicketServiceTests
     }
 
     private static Task<string> OpenAsync(Host host, string? subject = null, string? text = null,
-        ClaimsPrincipal? actor = null)
+        ClaimsPrincipal? actor = null, TicketKategorie category = TicketKategorie.Anzeige)
         => host.Service.OpenAsync(
             new TicketInput
             {
                 Subject = subject ?? "Frage zu meinem Fahrzeug",
                 Text = text ?? "Mein Kennzeichen steht auf der Fahndung, obwohl das Fahrzeug verkauft wurde.",
+                Category = category,
             },
             actor ?? Citizen());
 
@@ -319,7 +370,7 @@ public sealed class TicketServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => OpenAsync(host));
 
-        await host.Service.SetStatusAsync(await IdAsync(host, first), TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(await IdAsync(host, first), TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
         // the daily cap is 3, so exactly one more fits through
         var third = await OpenAsync(host);
         Assert.StartsWith("NOOSE-T-", third, StringComparison.Ordinal);
@@ -335,7 +386,7 @@ public sealed class TicketServiceTests
             var caseNumber = await OpenAsync(host);
             var id = await IdAsync(host, caseNumber);
             // closing frees the open cap, deleting must not free the daily one
-            await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+            await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
             await host.Service.DeleteAsync(id, Leader());
         }
 
@@ -431,6 +482,156 @@ public sealed class TicketServiceTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => host.Service.AddParticipantAsync(id, "junior", Junior()));
+    }
+
+    /// <summary>Two more ordinary agents, so a whole direction has members to hand to the batch.</summary>
+    private static async Task SeedDirectionAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        db.Users.Add(Seed.Agent("tru1", Rank.SpecialAgent, configure: a =>
+        {
+            a.Codename = "Hawk";
+            a.IsTRU = true;
+        }));
+        db.Users.Add(Seed.Agent("tru2", Rank.SpecialAgent, configure: a =>
+        {
+            a.Codename = "Kite";
+            a.IsTRU = true;
+        }));
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task TheDeskAttachesSeveralAgentsInOneGo()
+    {
+        using var ctx = await SeededAsync();
+        await SeedDirectionAsync(ctx);
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        var added = await host.Service.AddParticipantsAsync(id, ["junior", "tru1", "tru2"], Leader());
+
+        Assert.Equal(3, added);
+        Assert.Equal(3, (await host.Service.GetParticipantsAsync(id, Leader())).Count);
+    }
+
+    [Fact]
+    public async Task AttachingADirectionSkipsWhoIsAlreadyOnTheTicket()
+    {
+        // the direction buttons overlap with the single picks by design; the second pass must not throw or double
+        using var ctx = await SeededAsync();
+        await SeedDirectionAsync(ctx);
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.AddParticipantAsync(id, "tru1", Leader());
+
+        var added = await host.Service.AddParticipantsAsync(id, ["tru1", "tru2"], Leader());
+
+        Assert.Equal(1, added);
+        Assert.Equal(2, (await host.Service.GetParticipantsAsync(id, Leader())).Count);
+    }
+
+    [Fact]
+    public async Task OneUnselectableAgentRefusesTheWholeBatch()
+    {
+        using var ctx = await SeededAsync();
+        await using (var db = ctx.NewContext())
+        {
+            // read-only supervision is out of every picker, so it must be out of the batch too
+            db.Users.Add(Seed.Agent("aufsicht", Rank.Director, configure: a =>
+            {
+                a.Codename = "Owl";
+                a.IsTeamLead = true;
+            }));
+            await db.SaveChangesAsync();
+        }
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.AddParticipantsAsync(id, ["junior", "aufsicht"], Leader()));
+
+        // nothing half-attached: the good id in the batch stays off the ticket as well
+        Assert.Empty(await host.Service.GetParticipantsAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task OnlyTheDeskMayAttachSeveralAgents()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.AddParticipantsAsync(id, ["junior"], Junior()));
+    }
+
+    [Fact]
+    public async Task TheDeskPutsAnotherAgentOnTheTicketAsHandler()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.AssignAsync(id, "junior", Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Equal("junior", detail!.HandlerId);
+        // an open ticket that now has a handler is in handling, exactly as self-assignment leaves it
+        Assert.Equal(TicketStatus.InBearbeitung, detail.Status);
+        // the new handler learns of it; whoever moved the ticket already knows
+        await host.Notifications.Received(1).NotifyOnceAsync("junior",
+            NotificationType.PublicTicketInternal, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AssigningTheHandlerAttachesNoParticipant()
+    {
+        // two axes: one handler drives "only mine" and the reply bell, participants carry their own read marks
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.AssignAsync(id, "junior", Leader());
+
+        Assert.Empty(await host.Service.GetParticipantsAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task AnUnselectableAgentCannotBecomeHandler()
+    {
+        using var ctx = await SeededAsync();
+        await using (var db = ctx.NewContext())
+        {
+            // read-only supervision is out of every picker, so the raw id must not get past the write path either
+            db.Users.Add(Seed.Agent("aufsicht", Rank.Director, configure: a =>
+            {
+                a.Codename = "Owl";
+                a.IsTeamLead = true;
+            }));
+            await db.SaveChangesAsync();
+        }
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.AssignAsync(id, "aufsicht", Leader()));
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Null(detail!.HandlerId);
+        Assert.Equal(TicketStatus.Offen, detail.Status);
+    }
+
+    [Fact]
+    public async Task OnlyTheDeskMayAssignAHandler()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.AssignAsync(id, "junior", Junior()));
     }
 
     [Fact]
@@ -546,6 +747,597 @@ public sealed class TicketServiceTests
 
         Assert.Equal(TicketArt.Intern, row.Kind);
         Assert.Equal("Wren", row.CitizenName);
+    }
+
+    [Fact]
+    public async Task TheDeskListCarriesTheStampTheReactionLightReads()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+
+        var waiting = Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+        Assert.True(waiting.AwaitingAnswer);
+        Assert.NotNull(waiting.WaitingSince);
+
+        await host.Service.ReplyToCitizenAsync(id, "Wir prüfen das und melden uns.", Leader());
+
+        // answered: nobody waits any more, so the light goes out with the stamp
+        var answered = Assert.Single(
+            await host.Service.GetInboxAsync(TicketInboxScope.Wartet, null, false, Leader()));
+        Assert.False(answered.AwaitingAnswer);
+        Assert.Null(answered.WaitingSince);
+    }
+
+    [Fact]
+    public async Task AnInternalTicketNeverWaitsOnACitizen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+
+        var row = Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+
+        Assert.Null(row.WaitingSince);
+    }
+
+    // ---- attachments ----
+
+    [Fact]
+    public async Task TheCitizensFileTravelsWithTheOpeningMessage()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsync(
+            new TicketInput
+            {
+                Subject = "Beschädigtes Fahrzeug",
+                Text = "Ich lege ein Foto des Schadens bei, damit es nachvollziehbar ist.",
+            },
+            Citizen(), Upload());
+
+        var own = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        var line = own!.Messages.First(m => m.FromCitizen);
+        Assert.True(line.HasAttachment);
+        Assert.Equal("beweis.png", line.AttachmentName);
+        Assert.Single(host.Attachments.Saved);
+    }
+
+    [Fact]
+    public async Task TheCitizenReachesTheirOwnFileByPositionAndNeverByRowId()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await host.Service.OpenAsync(
+            new TicketInput
+            {
+                Subject = "Beschädigtes Fahrzeug",
+                Text = "Ich lege ein Foto des Schadens bei, damit es nachvollziehbar ist.",
+            },
+            Citizen(), Upload());
+
+        var access = await host.Service.GetOwnAttachmentAsync(caseNumber, 0, Citizen());
+        Assert.Equal("beweis.png", access!.OriginalName);
+
+        // a position without a file, and a stranger's ticket, answer the same way
+        Assert.Null(await host.Service.GetOwnAttachmentAsync(caseNumber, 5, Citizen()));
+        Assert.Null(await host.Service.GetOwnAttachmentAsync(caseNumber, 0, Citizen(OtherUserId)));
+    }
+
+    [Fact]
+    public async Task ADeskFileIsReadableByTheDeskAndNotByABystander()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.PostInternalNoteAsync(id, "Screenshot der Meldung dazu.", Leader(), Upload("intern.png"));
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        Assert.True(note.HasAttachment);
+        Assert.Equal("intern.png", (await host.Service.GetAttachmentAsync(note.Id, Leader()))!.OriginalName);
+
+        // an agent who is not on the ticket gets the same null as for a file that is gone
+        Assert.Null(await host.Service.GetAttachmentAsync(note.Id, Junior()));
+        // and so does a citizen, who has no business on the message-id route at all
+        Assert.Null(await host.Service.GetAttachmentAsync(note.Id, Citizen()));
+    }
+
+    [Fact]
+    public async Task AnAttachedAgentReachesTheFileOnTheirOwnTicket()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.AddParticipantAsync(id, "junior", Leader());
+        await host.Service.PostInternalNoteAsync(id, "Screenshot der Meldung dazu.", Leader(), Upload("intern.png"));
+        var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+
+        Assert.NotNull(await host.Service.GetAttachmentAsync(note.Id, Junior()));
+    }
+
+    [Fact]
+    public async Task AForeignFileTypeAndAnUnstatedSizeAreBothRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.PostInternalNoteAsync(
+            id, "Anhang dazu.", Leader(), Upload("liste.pdf", contentType: "application/pdf")));
+
+        // fail closed: a size a caller can omit is no bound at all
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.PostInternalNoteAsync(
+            id, "Anhang dazu.", Leader(), Upload(size: 0)));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.PostInternalNoteAsync(
+            id, "Anhang dazu.", Leader(), Upload(size: host.Attachments.MaxBytes + 1)));
+
+        Assert.Empty(host.Attachments.Saved);
+    }
+
+    [Fact]
+    public async Task OneTicketCarriesOnlySoManyFiles()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        for (var i = 0; i < TicketRules.MaxAttachments; i++)
+        {
+            await host.Service.PostInternalNoteAsync(id, $"Anhang Nummer {i} dazu.", Leader(), Upload());
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.PostInternalNoteAsync(id, "Einer zu viel dazu.", Leader(), Upload()));
+
+        Assert.Equal(TicketRules.MaxAttachments, host.Attachments.Saved.Count);
+    }
+
+    [Fact]
+    public async Task ThePositionOfAnAttachmentSurvivesASharedTimestamp()
+    {
+        // the regression: the opening message and the automatic confirmation are written in one SaveChanges, so
+        // the interceptor stamps them identically. Ordered by the timestamp alone, the position the citizen sees
+        // and the one the download route resolves were two different rows
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+
+        DateTime stamp;
+        await using (var db = ctx.NewContext())
+        {
+            var opening = await db.TicketNachrichten.SingleAsync(m => m.TicketId == id);
+            stamp = opening.CreatedAt;
+            db.TicketNachrichten.Remove(opening);
+            await db.SaveChangesAsync();
+        }
+        await using (var db = ctx.NewContext())
+        {
+            // inserted in the opposite order to the one the ids give, and with one shared stamp: insertion order
+            // would put "zzz" first, the tie-break puts "aaa" first. The file hangs on "aaa", so a service that
+            // ordered by the timestamp alone would resolve position 0 to the wrong row
+            db.TicketNachrichten.Add(new TicketNachricht
+            {
+                Id = "zzz-zweite-zeile",
+                TicketId = id,
+                Audience = TicketMessageAudience.Buerger,
+                Text = "Zweite Zeile ohne Anhang.",
+                AuthorIsCitizen = true,
+                CreatedAt = stamp,
+            });
+            await db.SaveChangesAsync();
+        }
+        await using (var db = ctx.NewContext())
+        {
+            db.TicketNachrichten.Add(new TicketNachricht
+            {
+                Id = "aaa-erste-zeile",
+                TicketId = id,
+                Audience = TicketMessageAudience.Buerger,
+                Text = "Erste Zeile mit Foto.",
+                AuthorIsCitizen = true,
+                CreatedAt = stamp,
+                AttachmentFileName = "gespeichert.png",
+                AttachmentOriginalName = "nachtrag.png",
+                AttachmentContentType = "image/png",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var own = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        Assert.Equal(2, own!.Messages.Count);
+        // the tie-break decides, not the insertion order
+        Assert.True(own.Messages[0].HasAttachment);
+
+        // exactly the position the page renders is the one the route resolves
+        Assert.Equal("nachtrag.png", (await host.Service.GetOwnAttachmentAsync(caseNumber, 0, Citizen()))!.OriginalName);
+        Assert.Null(await host.Service.GetOwnAttachmentAsync(caseNumber, 1, Citizen()));
+    }
+
+    // ---- mentions in the internal thread ----
+
+    [Fact]
+    public async Task AMentionInAnInternalNoteAttachesAndRingsTheNamedAgent()
+    {
+        using var ctx = await SeededAsync();
+        await NamedAgentAsync(ctx, NamedAgentId);
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.PostInternalNoteAsync(id,
+            $"Bitte prüfen, {MentionParser.Token(nameof(Agent), NamedAgentId)}", Leader());
+
+        var participants = await host.Service.GetParticipantsAsync(id, Leader());
+        Assert.Equal(NamedAgentId, Assert.Single(participants).AgentId);
+        await host.Notifications.Received(1).NotifyOnceAsync(NamedAgentId,
+            NotificationType.PublicTicketInternal, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NamingSomebodyTwiceAttachesThemOnce()
+    {
+        using var ctx = await SeededAsync();
+        await NamedAgentAsync(ctx, NamedAgentId);
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        var token = MentionParser.Token(nameof(Agent), NamedAgentId);
+
+        await host.Service.PostInternalNoteAsync(id, $"Erst {token}", Leader());
+        await host.Service.PostInternalNoteAsync(id, $"Und nochmal {token}", Leader());
+
+        Assert.Single(await host.Service.GetParticipantsAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task MentioningYourselfRingsNobody()
+    {
+        // the exclusion in AttachMentionedAsync only matters for an author whose id is a real GUID, since a
+        // mention token cannot even address the fixture's short "lead"/"junior" ids
+        using var ctx = await SeededAsync();
+        await NamedAgentAsync(ctx, NamedAgentId, teamLead: false);
+        var host = NewHost(ctx);
+        var author = ClaimsPrincipalBuilder.Agent(NamedAgentId).WithRank(Rank.Director).Build();
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.PostInternalNoteAsync(id,
+            $"Notiz an mich selbst {MentionParser.Token(nameof(Agent), NamedAgentId)}", author);
+
+        // the desk covers participation regardless, so the point here is the notification, not the roster
+        await host.Notifications.DidNotReceive().NotifyOnceAsync(NamedAgentId,
+            NotificationType.PublicTicketInternal, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AnUnselectableAgentIsSkippedRatherThanRefusingTheNote()
+    {
+        using var ctx = await SeededAsync();
+        await NamedAgentAsync(ctx, NamedSupervisionId, teamLead: true);
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.PostInternalNoteAsync(id,
+            $"Zur Kenntnis {MentionParser.Token(nameof(Agent), NamedSupervisionId)}", Leader());
+
+        // the note is written, the read-only supervision simply does not land on the ticket
+        Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
+        Assert.Empty(await host.Service.GetParticipantsAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task ATokenIsRefusedOnEveryCitizenFacingLine()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+        var token = MentionParser.Token(nameof(Agent), NamedAgentId);
+
+        // the agency answer
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.ReplyToCitizenAsync(id, $"Guten Tag {token}, wir prüfen das.", Leader()));
+
+        // the citizen's own reply
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.ReplyAsCitizenAsync(caseNumber, $"Danke {token} für die Rückmeldung.", Citizen()));
+
+        // and opening one
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.OpenAsync(
+            new TicketInput
+            {
+                Subject = "Anliegen mit Token",
+                Text = $"Bitte an {token} weiterleiten, das ist mein Anliegen dazu.",
+            },
+            Citizen(OtherUserId)));
+    }
+
+    [Fact]
+    public async Task EditingAnAgencyLineCannotSmuggleATokenIn()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.ReplyToCitizenAsync(id, "Wir prüfen das und melden uns.", Leader());
+        var line = (await host.Service.GetMessagesAsync(id, TicketMessageAudience.Buerger, Leader()))
+            .Single(m => !m.FromCitizen);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.Service.EditMessageAsync(line.Id,
+            $"Wir prüfen das, {MentionParser.Token(nameof(Agent), NamedAgentId)}.", Leader()));
+    }
+
+    // ---- follow-up reminder resets ----
+
+    [Fact]
+    public async Task AFreshReplyClearsAStaleReminderStamp()
+    {
+        // regression: a ticket already in WartetAufBuerger re-enters it without ever passing through another
+        // status, so SetStatusAsync's own "leaving the wait" guard never fires here — this write is the only
+        // other place the flag can go stale, or the worker skips the reminder on a whole new stretch of silence
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.ReplyToCitizenAsync(id, "Erste Antwort.", Leader());
+        await using (var db = ctx.NewContext())
+        {
+            var row = await db.Tickets.SingleAsync(t => t.Id == id);
+            row.NudgedAt = DateTime.UtcNow.AddDays(-10); // simulates a reminder already sent on the first stretch
+            await db.SaveChangesAsync();
+        }
+
+        await host.Service.ReplyToCitizenAsync(id, "Zweite Antwort, noch keine Rückmeldung nötig.", Leader());
+
+        await using var check = ctx.NewContext();
+        var after = await check.Tickets.SingleAsync(t => t.Id == id);
+        Assert.Equal(TicketStatus.WartetAufBuerger, after.Status);
+        Assert.Null(after.NudgedAt);
+    }
+
+    // ---- priority ----
+
+    [Fact]
+    public async Task TheDeskOrderIsComputedNotStored()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await OpenAsync(host, subject: "Vermisste Schwester", category: TicketKategorie.Vermisstenmeldung);
+        await OpenAsync(host, subject: "Frage zur Fahndung", category: TicketKategorie.Auskunft);
+
+        var byPriority = await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader(),
+            byPriority: true);
+
+        // the missing person outranks the request for information, though both arrived in the same second
+        Assert.Equal("Vermisste Schwester", byPriority[0].Subject);
+        Assert.All(byPriority, r => Assert.False(r.PriorityIsManual));
+        Assert.All(byPriority, r => Assert.InRange(r.Priority, TicketPriority.Min, TicketPriority.Max));
+    }
+
+    [Fact]
+    public async Task AHandSetOrderBeatsTheComputedOne()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var missing = await IdAsync(host,
+            await OpenAsync(host, subject: "Vermisste Schwester", category: TicketKategorie.Vermisstenmeldung));
+        var question = await IdAsync(host,
+            await OpenAsync(host, subject: "Frage zur Fahndung", category: TicketKategorie.Auskunft));
+
+        await host.Service.SetPriorityAsync(question, TicketPriority.Max, Leader());
+
+        var byPriority = await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader(),
+            byPriority: true);
+        Assert.Equal("Frage zur Fahndung", byPriority[0].Subject);
+        Assert.True(byPriority[0].PriorityIsManual);
+        Assert.Equal(TicketPriority.Max, byPriority[0].Priority);
+
+        var detail = await host.Service.GetAsync(missing, Leader());
+        Assert.Null(detail!.PriorityOverride);
+    }
+
+    [Fact]
+    public async Task ClearingTheHandSetOrderHandsTheRowBack()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.SetPriorityAsync(id, 90, Leader());
+
+        await host.Service.SetPriorityAsync(id, null, Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Null(detail!.PriorityOverride);
+        var row = Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+        Assert.False(row.PriorityIsManual);
+    }
+
+    [Fact]
+    public async Task AnOutOfRangeOrderIsClampedRatherThanRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.SetPriorityAsync(id, 9_000, Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TicketPriority.Max, detail!.PriorityOverride);
+    }
+
+    [Fact]
+    public async Task SettingTheOrderIsNotActivityAndOnlyTheDeskMay()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        var before = await host.Service.GetAsync(id, Leader());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SetPriorityAsync(id, 50, Junior()));
+
+        await host.Service.SetPriorityAsync(id, 50, Leader());
+        var after = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(before!.LastActivityAt, after!.LastActivityAt);
+    }
+
+    // ---- closing reason ----
+
+    [Fact]
+    public async Task ClosingWithoutAReasonIsRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader()));
+
+        // and the ticket stays open: the refusal happens before the write
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TicketStatus.Offen, detail!.Status);
+        Assert.Null(detail.ClosedAt);
+    }
+
+    [Fact]
+    public async Task TheClosureKeepsItsReasonAndNote()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(),
+            TicketAbschlussgrund.Spam, "  Massenmail, drittes Konto  ");
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TicketAbschlussgrund.Spam, detail!.ClosingReason);
+        Assert.Equal("Massenmail, drittes Konto", detail.ClosingNote);
+        Assert.NotNull(detail.ClosedAt);
+    }
+
+    [Fact]
+    public async Task ReopeningClearsTheWholeClosure()
+    {
+        // one set, not a history: a reopened ticket must not keep claiming it was closed as spam
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(),
+            TicketAbschlussgrund.Spam, "Massenmail");
+
+        await host.Service.SetStatusAsync(id, TicketStatus.InBearbeitung, Leader());
+
+        var detail = await host.Service.GetAsync(id, Leader());
+        Assert.Null(detail!.ClosedAt);
+        Assert.Null(detail.ClosedByCodename);
+        Assert.Null(detail.ClosingReason);
+        Assert.Null(detail.ClosingNote);
+    }
+
+    [Fact]
+    public async Task TheCitizenIsNeverToldWhy()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var caseNumber = await OpenAsync(host);
+        var id = await IdAsync(host, caseNumber);
+
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(),
+            TicketAbschlussgrund.Spam, "Massenmail");
+
+        // the outward record has no field for it at all; this pins that the wording stays the neutral one
+        var own = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        Assert.Equal(TicketStatus.Geschlossen, own!.Status);
+        Assert.Equal("Abgeschlossen", TicketStatusDisplay.CitizenName(own.Status));
+        Assert.DoesNotContain("Massenmail", string.Join(" ", own.Messages.Select(m => m.Text)));
+    }
+
+    [Fact]
+    public async Task AnOverlongClosingNoteIsRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(),
+                TicketAbschlussgrund.Erledigt, new string('x', TicketRules.ClosingNoteMaxLength + 1)));
+    }
+
+    // ---- category ----
+
+    [Fact]
+    public async Task TheCitizensPickTravelsOntoTheTicket()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host, category: TicketKategorie.Vermisstenmeldung));
+
+        var detail = await host.Service.GetAsync(id, Leader());
+
+        Assert.Equal(TicketKategorie.Vermisstenmeldung, detail!.Category);
+    }
+
+    [Fact]
+    public async Task AnInternalTicketLandsOnTheDefaultConcern()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await host.Service.OpenAsAgentAsync(
+            new TicketInput { Subject = "Frage zur Dienstplanung", Text = "Ich brauche eine Entscheidung dazu." },
+            [], Junior());
+
+        var row = Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+
+        Assert.Equal(TicketKategorie.Sonstiges, row.Category);
+    }
+
+    [Fact]
+    public async Task TheDeskCorrectsTheConcern()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host, category: TicketKategorie.Auskunft));
+        var before = await host.Service.GetAsync(id, Leader());
+
+        await host.Service.SetCategoryAsync(id, TicketKategorie.Beschwerde, Leader());
+
+        var after = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TicketKategorie.Beschwerde, after!.Category);
+        // a correction of the filing is not activity: it must not jump the ticket to the top of the desk
+        Assert.Equal(before!.LastActivityAt, after.LastActivityAt);
+        // and it says nothing to the citizen
+        await host.Notifications.DidNotReceive().NotifyOnceAsync(Arg.Any<string>(),
+            NotificationType.PublicTicketAnswered, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OnlyTheDeskMayCorrectTheConcern()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await IdAsync(host, await OpenAsync(host));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SetCategoryAsync(id, TicketKategorie.Beschwerde, Junior()));
+    }
+
+    [Fact]
+    public async Task TheDeskFiltersOneConcernOutOfATab()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await OpenAsync(host, subject: "Vermisste Schwester", category: TicketKategorie.Vermisstenmeldung);
+        await OpenAsync(host, subject: "Frage zur Fahndung", category: TicketKategorie.Auskunft);
+
+        var all = await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader());
+        var missing = await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader(),
+            TicketKategorie.Vermisstenmeldung);
+
+        Assert.Equal(2, all.Count);
+        Assert.Equal(TicketKategorie.Vermisstenmeldung, Assert.Single(missing).Category);
     }
 
     // ---- internal tickets ----
@@ -667,7 +1459,7 @@ public sealed class TicketServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             host.Service.ReplyToCitizenAsync(id, "Wir prüfen das.", Supervision()));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Supervision()));
+            host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Supervision(), TicketAbschlussgrund.Erledigt));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             host.Service.PostInternalNoteAsync(id, "Notiz", Supervision()));
     }
@@ -757,7 +1549,7 @@ public sealed class TicketServiceTests
         var host = NewHost(ctx);
         var caseNumber = await OpenAsync(host);
         var id = await IdAsync(host, caseNumber);
-        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
 
         Assert.False((await host.Service.GetOwnDetailAsync(caseNumber, Citizen()))!.MayReply);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -804,7 +1596,7 @@ public sealed class TicketServiceTests
             NotificationType.PublicTicketAnswered, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
 
-        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
         await host.Notifications.Received(1).NotifyOnceAsync(CitizenUserId,
             NotificationType.PublicTicketAnswered, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -817,7 +1609,7 @@ public sealed class TicketServiceTests
         var host = NewHost(ctx);
         var id = await IdAsync(host, await OpenAsync(host));
 
-        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             host.Service.SetStatusAsync(id, TicketStatus.Offen, Leader()));
     }
@@ -954,7 +1746,7 @@ public sealed class TicketServiceTests
         var id = await IdAsync(host, await OpenAsync(host));
         await host.Service.PostInternalNoteAsync(id, "Vermerk der Führung.", Leader());
         var note = Assert.Single(await host.Service.GetMessagesAsync(id, TicketMessageAudience.Intern, Leader()));
-        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(id, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
         var before = (await host.Service.GetAsync(id, Leader()))!;
 
         await host.Service.EditMessageAsync(note.Id, "Vermerk berichtigt.", Leader());
@@ -1067,7 +1859,7 @@ public sealed class TicketServiceTests
         await OpenAsync(host);
 
         Assert.Equal(2, await host.Service.GetOpenCountAsync());
-        await host.Service.SetStatusAsync(first, TicketStatus.Geschlossen, Leader());
+        await host.Service.SetStatusAsync(first, TicketStatus.Geschlossen, Leader(), TicketAbschlussgrund.Erledigt);
         Assert.Equal(1, await host.Service.GetOpenCountAsync());
 
         Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));

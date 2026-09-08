@@ -190,12 +190,12 @@ public static class CounterIntelEventLoader
         foreach (var batch in Batches(actorIds))
         {
             var found = await db.BuergerProfile.AsNoTracking().IgnoreQueryFilters()
-                .Where(b => batch.Contains(b.UserId) && b.LinkedPersonId != null)
+                .Where(b => b.UserId != null && batch.Contains(b.UserId) && b.LinkedPersonId != null)
                 .Select(b => new { b.UserId, b.LinkedPersonId })
                 .ToListAsync(ct);
             foreach (var b in found)
             {
-                actorPersons[b.UserId] = b.LinkedPersonId!;
+                actorPersons[b.UserId!] = b.LinkedPersonId!;
             }
         }
 

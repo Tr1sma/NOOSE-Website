@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
@@ -12,9 +13,9 @@ namespace NOOSE_Website.Infrastructure.Authorization;
 
 /// <summary>Blocks all writes for read-only supervisors and partners; registered first in the interceptor chain.</summary>
 /// <remarks>
-/// Two carve-outs, on two different axes: a partner authors agency content (create only), and every account here
-/// except the demo visitor files what belongs to its own civilian identity. Editing again is limited to the row the
-/// account created itself, so neither carve-out reaches a stranger's row.
+/// Three carve-outs, on three different axes: a partner authors agency content (create only), a partner files its
+/// own application to join, and every account here except the demo visitor files what belongs to its own civilian
+/// identity. Editing again is limited to the row the account created itself, so no carve-out reaches a stranger's row.
 /// </remarks>
 public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
@@ -45,8 +46,21 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
         typeof(HinweisNachricht),
     ];
 
+    // What the private person behind a PARTNER account files about JOINING: the application, its replies and the
+    // aptitude test. A third axis, because it is neither agency content nor part of the civilian identity — and
+    // because the read-only supervision stays out: that account is an oversight seat, not a candidate.
+    private static readonly HashSet<Type> PartnerApplicationAuthorable =
+    [
+        typeof(Bewerbung),
+        typeof(BewerbungMessage),
+        typeof(BewerbungTestAnswer),
+    ];
+
     // Rows either side may change again afterwards — their own only; the create side is handled above.
     private static readonly HashSet<Type> PartnerEditableOwn = [typeof(Document)];
+
+    // a saved draft is written again on every autosave until the attempt is handed in
+    private static readonly HashSet<Type> PartnerApplicationEditableOwn = [typeof(BewerbungTestAnswer)];
 
     private static readonly HashSet<Type> CitizenEditableOwn =
     [
@@ -97,6 +111,7 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             }
             if (entry.State == EntityState.Added
                 && ((partnerMayAuthor && PartnerAuthorable.Contains(type))
+                    || (partnerMayAuthor && PartnerApplicationAuthorable.Contains(type))
                     || (mayActAsCitizen && CitizenAuthorable.Contains(type))))
             {
                 continue;
@@ -104,6 +119,7 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             // a row they created themselves may be changed again (create handled above)
             if (entry.State == EntityState.Modified
                 && ((partnerMayAuthor && PartnerEditableOwn.Contains(type))
+                    || (partnerMayAuthor && PartnerApplicationEditableOwn.Contains(type))
                     || (mayActAsCitizen && CitizenEditableOwn.Contains(type)))
                 && entry.Entity is IAuditable own && own.CreatedById == user.Id)
             {

@@ -145,7 +145,8 @@ public static class NooseiToolHost
                     .Returns(Task.FromResult(new List<DocumentTemplate>()))),
             tickets ?? Quiet<ITicketService>(s =>
                 s.GetInboxAsync(Arg.Any<TicketInboxScope>(), Arg.Any<string?>(), Arg.Any<bool>(),
-                    Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    Arg.Any<ClaimsPrincipal>(), Arg.Any<TicketKategorie?>(), Arg.Any<bool>(),
+                    Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<TicketRow>>([]))),
             press ?? Quiet<IPressReleaseService>(s =>
                 s.GetAllAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())

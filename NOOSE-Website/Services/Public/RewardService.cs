@@ -195,7 +195,10 @@ public class RewardService(
 
         // owner or leadership; anybody else gets the same "not found", or the route is an existence oracle for payouts
         var first = rows[0];
-        if (!actor.IsLeadership() && first.CitizenUserId != actor.GetAgentId())
+        // a null CitizenUserId means the account behind the tip was deleted: nobody owns the receipt any more,
+        // and comparing two nulls would hand it to an anonymous caller
+        if (!actor.IsLeadership()
+            && (first.CitizenUserId is null || first.CitizenUserId != actor.GetAgentId()))
         {
             return null;
         }

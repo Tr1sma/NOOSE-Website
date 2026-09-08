@@ -1,5 +1,6 @@
 ﻿@* Opens a citizen ticket to leadership. Under Pages/Portal so the citizen-surface scan covers it too. *@
 @inject ITicketService Tickets
+@inject ITicketAttachmentStorageService AttachmentStore
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -13,10 +14,23 @@
                 du erhältst die Antwort hier im Bürgerbereich.
             </MudText>
 
+            <MudSelect T="TicketKategorie" @bind-Value="_category" Label="Worum geht es?"
+                       Variant="Variant.Outlined"
+                       ToStringFunc="@(c => TicketKategorieDisplay.Name(c))"
+                       HelperText="@TicketKategorieDisplay.Hint(_category)">
+                @foreach (var option in TicketKategorieDisplay.All)
+                {
+                    <MudSelectItem T="TicketKategorie" Value="@option">@TicketKategorieDisplay.Name(option)</MudSelectItem>
+                }
+            </MudSelect>
+
             <MudTextField @bind-Value="_subject" Label="Betreff" Variant="Variant.Outlined"
                           MaxLength="@TicketRules.SubjectMaxLength" Immediate="true" />
             <MudTextField @bind-Value="_text" Label="Dein Anliegen" Lines="6" Variant="Variant.Outlined"
                           MaxLength="@TicketRules.MaxMessageLength" Immediate="true" />
+
+            <ImageAttachmentPicker @bind-Picked="_attachment" MaxBytes="@AttachmentStore.MaxBytes"
+                                   Disabled="_busy" />
 
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Mindestens @TicketRules.SubjectMinLength Zeichen im Betreff und
@@ -37,8 +51,12 @@
 
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
+    // the same default the entity and TicketInput carry: an unchanged pick must not claim a crime report and
+    // walk off with its priority band. A guess either way - the desk re-files it
+    private TicketKategorie _category = TicketKategorie.Sonstiges;
     private string _subject = string.Empty;
     private string _text = string.Empty;
+    private ImageAttachmentPicker.PickedImage? _attachment;
     private bool _busy;
 
     private bool MayOpen => _subject.Trim().Length >= TicketRules.SubjectMinLength
@@ -49,8 +67,12 @@
         _busy = true;
         try
         {
+            var upload = _attachment is { } picked
+                ? new TicketAttachmentUpload(new MemoryStream(picked.Content), picked.ContentType,
+                    picked.OriginalName, picked.Size)
+                : null;
             var caseNumber = await Tickets.OpenAsync(
-                new TicketInput { Subject = _subject, Text = _text }, User);
+                new TicketInput { Subject = _subject, Text = _text, Category = _category }, User, upload);
             Snackbar.Add($"Ticket {caseNumber} eröffnet.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(caseNumber));
         }

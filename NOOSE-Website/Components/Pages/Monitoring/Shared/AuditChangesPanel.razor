@@ -1,4 +1,4 @@
-@* Change log: who altered which record, with the field-level before/after. Leadership and read-only supervision. *@
+﻿@* Change log: who altered which record, with the field-level before/after. Leadership and read-only supervision. *@
 @inject IAuditLogQueryService AuditQuery
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -50,7 +50,9 @@ else
             </MudTd>
             <MudTd DataLabel="Änderungen">
                 @{
-                    var changes = AuditDisplay.Parse(context.ChangesJson);
+                    @* the type decides the enum: Category alone is an absence reason, a ticket concern and an
+                       appointment kind at once *@
+                    var changes = AuditDisplay.Parse(context.ChangesJson, entityType: context.EntityType);
                 }
                 @if (changes.Count == 0)
                 {

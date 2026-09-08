@@ -256,7 +256,7 @@ else
                 var e = display.Entry;
                 _input.Type = e.Type;
                 _input.Notes = e.Notes;
-                _input.HandlerAgentId = e.HandlerAgentId;
+                _input.HandlerAgentId = e.HandlerAgentId ?? string.Empty;
                 _ownerKind = e.OwnerType;
                 if (e.OwnerType != Noose && !string.IsNullOrEmpty(e.OwnerId))
                 {

@@ -9,7 +9,18 @@
                   Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start"
                   AdornmentIcon="@Icons.Material.Filled.Search" DebounceInterval="300"
                   OnDebounceIntervalElapsed="ReloadAsync" Style="max-width:340px;" />
+    <MudSelect T="TicketKategorie?" @bind-Value="_category" Label="Kategorie" Clearable="true"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;"
+               ToStringFunc="@(c => c is { } v ? TicketKategorieDisplay.Name(v) : "Alle")"
+               @bind-Value:after="ReloadAsync">
+        @foreach (var option in TicketKategorieDisplay.All)
+        {
+            <MudSelectItem T="TicketKategorie?" Value="@option">@TicketKategorieDisplay.Name(option)</MudSelectItem>
+        }
+    </MudSelect>
     <MudSwitch T="bool" @bind-Value="_onlyMine" Color="Color.Primary" Label="Nur meine"
+               @bind-Value:after="ReloadAsync" />
+    <MudSwitch T="bool" @bind-Value="_byPriority" Color="Color.Primary" Label="Nach Priorität"
                @bind-Value:after="ReloadAsync" />
 </MudStack>
 
@@ -24,14 +35,19 @@ else if (_rows.Count == 0)
 }
 else
 {
-    <MudTable Items="_rows" Hover="true" Dense="true" Style="cursor:pointer;"
+    @* Breakpoint like the equally wide notice list: nine columns stack into their DataLabels on a tablet
+       instead of scrolling the table container sideways *@
+    <MudTable Items="_rows" Hover="true" Dense="true" Style="cursor:pointer;" Breakpoint="Breakpoint.Sm"
               OnRowClick="@((TableRowClickEventArgs<TicketRow> e) => Open(e.Item))">
         <HeaderContent>
             <MudTh>Aktenzeichen</MudTh>
             <MudTh>Betreff</MudTh>
             <MudTh>Bürger</MudTh>
+            <MudTh>Kategorie</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Bearbeiter</MudTh>
+            <MudTh>Priorität</MudTh>
+            <MudTh>Wartet seit</MudTh>
             <MudTh>Letzte Aktivität</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -52,12 +68,46 @@ else
             </MudTd>
             <MudTd DataLabel="Betreff">@context.Subject</MudTd>
             <MudTd DataLabel="Bürger">@context.CitizenName</MudTd>
+            <MudTd DataLabel="Kategorie">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                    @TicketKategorieDisplay.Name(context.Category)
+                </MudChip>
+            </MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
                     @TicketStatusDisplay.Name(context.Status)
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Bearbeiter">@(string.IsNullOrWhiteSpace(context.HandlerCodename) ? "—" : context.HandlerCodename)</MudTd>
+            <MudTd DataLabel="Priorität">
+                <MudTooltip Text="@(context.PriorityIsManual
+                                    ? "Von Hand gesetzt; die automatische Reihenfolge greift hier nicht."
+                                    : "Automatisch aus Kategorie, Wartezeit und Vertrauen des Kontos.")">
+                    <MudChip T="string" Size="Size.Small"
+                             Variant="@(context.PriorityIsManual ? Variant.Filled : Variant.Outlined)"
+                             Color="@PriorityColour(context.Priority)">
+                        @context.Priority
+                    </MudChip>
+                </MudTooltip>
+            </MudTd>
+            <MudTd DataLabel="Wartet seit">
+                @{
+                    var reaction = TicketRules.Reaction(context.Status, context.WaitingSince, DateTime.UtcNow);
+                }
+                @if (reaction == TicketReaction.Keine)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+                else
+                {
+                    <MudTooltip Text="@($"Unbeantwortet seit {context.WaitingSince!.Value.ToLocalTime():dd.MM.yyyy HH:mm}")">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Color="@ReactionColour(reaction)">
+                            @TicketReactionDisplay.Name(reaction) · @Waited(context.WaitingSince!.Value)
+                        </MudChip>
+                    </MudTooltip>
+                }
+            </MudTd>
             <MudTd DataLabel="Letzte Aktivität">@context.LastActivityAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
         </RowTemplate>
     </MudTable>
@@ -74,7 +124,9 @@ else
     private ClaimsPrincipal _user = default!;
     private IReadOnlyList<TicketRow> _rows = Array.Empty<TicketRow>();
     private string? _search;
+    private TicketKategorie? _category;
     private bool _onlyMine;
+    private bool _byPriority;
     private bool _load = true;
 
     protected override async Task OnInitializedAsync()
@@ -89,7 +141,7 @@ else
         _load = true;
         try
         {
-            _rows = await Tickets.GetInboxAsync(Scope, _search, _onlyMine, _user);
+            _rows = await Tickets.GetInboxAsync(Scope, _search, _onlyMine, _user, _category, _byPriority);
         }
         catch (Exception ex)
         {
@@ -113,6 +165,34 @@ else
         => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
 
     public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    /// <summary>Bands of the computed range, so the colour means the same thing on every tab.</summary>
+    private static Color PriorityColour(int priority) => priority switch
+    {
+        >= 60 => Color.Error,
+        >= 30 => Color.Warning,
+        >= 12 => Color.Info,
+        _ => Color.Default,
+    };
+
+    private static Color ReactionColour(TicketReaction reaction) => reaction switch
+    {
+        TicketReaction.Ueberfaellig => Color.Error,
+        TicketReaction.Faellig => Color.Warning,
+        TicketReaction.Frisch => Color.Info,
+        _ => Color.Default,
+    };
+
+    /// <summary>Coarse age of an unanswered line: minutes, then hours, then days.</summary>
+    private static string Waited(DateTime sinceUtc)
+    {
+        var waited = DateTime.UtcNow - sinceUtc;
+        if (waited < TimeSpan.FromHours(1))
+        {
+            return $"{Math.Max(1, (int)waited.TotalMinutes)} min";
+        }
+        return waited < TimeSpan.FromDays(1) ? $"{(int)waited.TotalHours} h" : $"{(int)waited.TotalDays} d";
+    }
 
     private static Color StatusColour(TicketStatus status) => status switch
     {

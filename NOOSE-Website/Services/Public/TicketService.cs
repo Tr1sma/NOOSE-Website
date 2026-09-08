@@ -2,8 +2,10 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Chat;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 
@@ -22,6 +24,7 @@ public class TicketService(
     INotificationService notifications,
     IPublicTemplateService templates,
     IDiscordWebhookService discord,
+    ITicketAttachmentStorageService storage,
     TicketBroadcaster broadcaster) : ITicketService
 {
     private const string CaseNumberPrefix = "T";
@@ -30,7 +33,7 @@ public class TicketService(
     // ---- citizen ----
 
     public async Task<string> OpenAsync(TicketInput input, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default)
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default)
     {
         // module first: while the desk is closed, whether this account could open one is nobody else's business
         await modules.RequireEnabledAsync(PublicModules.Tickets, cancellationToken);
@@ -51,6 +54,7 @@ public class TicketService(
             throw new InvalidOperationException(
                 $"Eine Nachricht fasst höchstens {TicketRules.MaxMessageLength} Zeichen.");
         }
+        RequireNoMentions(text);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
@@ -81,9 +85,14 @@ public class TicketService(
         // written at all, and there is deliberately no fallback text in code
         var confirmation = await templates.GetAutomaticAsync(PublicTemplateKind.TicketEingang, cancellationToken);
 
+        // before the transaction, like the confirmation: the file is on disk either way, and a refused upload must
+        // not leave a ticket behind. No ticket id yet, so the per-ticket count cannot apply to the first message
+        var file = await StoreAttachmentAsync(db, null, attachment, cancellationToken);
+
         var row = new Ticket
         {
             Kind = TicketArt.Fuehrungsebene,
+            Category = input.Category,
             CitizenProfileId = profile.Id,
             Subject = subject,
             Status = TicketStatus.Offen,
@@ -102,6 +111,9 @@ public class TicketService(
             Audience = TicketMessageAudience.Buerger,
             Text = text,
             AuthorIsCitizen = true,
+            AttachmentFileName = file.FileName,
+            AttachmentOriginalName = file.OriginalName,
+            AttachmentContentType = file.ContentType,
         });
         if (confirmation is not null)
         {
@@ -170,6 +182,7 @@ public class TicketService(
         var row = new Ticket
         {
             Kind = TicketArt.Intern,
+            Category = input.Category,
             CitizenProfileId = null,
             OpenedByAgentId = me,
             Subject = subject,
@@ -265,39 +278,67 @@ public class TicketService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AddParticipantAsync(string id, string agentId, ClaimsPrincipal actor,
+    public Task AddParticipantAsync(string id, string agentId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+        => AddParticipantsAsync(id, [agentId], actor, cancellationToken);
+
+    public async Task<int> AddParticipantsAsync(string id, IReadOnlyList<string> agentIds, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
         Permission.RequireTicketHandling(actor);
+        var wanted = agentIds.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToList();
+        if (wanted.Count == 0)
+        {
+            return 0;
+        }
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
 
-        // the same predicate the picker offers; a raw id off the wire must not get past it
+        // the same predicate the picker offers; raw ids off the wire must not get past it
         var selectable = await db.Users.OnlySelectable()
-            .AnyAsync(u => u.Id == agentId, cancellationToken);
-        if (!selectable)
+            .Where(u => wanted.Contains(u.Id))
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+        if (selectable.Count != wanted.Count)
         {
-            throw new InvalidOperationException("Dieser Agent kann nicht beteiligt werden.");
-        }
-        if (await db.TicketBeteiligte.AnyAsync(p => p.TicketId == id && p.AgentId == agentId, cancellationToken))
-        {
-            return;
+            // all or nothing: a partial attach would leave the caller guessing who is on the ticket
+            throw new InvalidOperationException(wanted.Count == 1
+                ? "Dieser Agent kann nicht beteiligt werden."
+                : "Mindestens ein gewählter Agent kann nicht beteiligt werden.");
         }
 
-        db.TicketBeteiligte.Add(new TicketParticipant { TicketId = id, AgentId = agentId });
+        var already = await db.TicketBeteiligte
+            .Where(p => p.TicketId == id && selectable.Contains(p.AgentId))
+            .Select(p => p.AgentId)
+            .ToListAsync(cancellationToken);
+        var fresh = selectable.Except(already, StringComparer.Ordinal).ToList();
+        if (fresh.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var agentId in fresh)
+        {
+            db.TicketBeteiligte.Add(new TicketParticipant { TicketId = id, AgentId = agentId });
+        }
         await db.SaveChangesAsync(cancellationToken);
 
-        try
+        foreach (var agentId in fresh)
         {
-            // one notice, or the added agent never learns that they are on it
-            await notifications.NotifyOnceAsync(agentId, NotificationType.PublicTicketInternal,
-                $"Du wurdest am Ticket {row.CaseNumber} beteiligt", $"/tickets/{row.Id}", cancellationToken);
-        }
-        catch
-        {
-            /* best effort */
+            try
+            {
+                // one notice each, or the added agent never learns that they are on it
+                await notifications.NotifyOnceAsync(agentId, NotificationType.PublicTicketInternal,
+                    $"Du wurdest am Ticket {row.CaseNumber} beteiligt", $"/tickets/{row.Id}", cancellationToken);
+            }
+            catch
+            {
+                /* best effort */
+            }
         }
         broadcaster.Report(row.Id, row.CaseNumber, TicketMessageAudience.Intern);
+        return fresh.Count;
     }
 
     public async Task RemoveParticipantAsync(string participantId, ClaimsPrincipal actor,
@@ -377,9 +418,13 @@ public class TicketService(
 
         var messages = await db.TicketNachrichten.AsNoTracking()
             .Where(m => m.TicketId == row.Id && m.Audience == TicketMessageAudience.Buerger)
-            .OrderBy(m => m.CreatedAt)
+            // the id decides ties, and there are ties: the opening message and the automatic confirmation are
+            // written in one SaveChanges, so the interceptor stamps them with the same timestamp. Without it the
+            // position rendered here and the one the attachment route resolves are two different rows
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
             // no author is projected because none exists outside; every agency line is the constant sender
-            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt))
+            .Select(m => new CitizenTicketMessage(m.CreatedAt, m.Text, m.AuthorIsCitizen, m.ModifiedAt,
+                m.AttachmentFileName != null, m.AttachmentOriginalName))
             .ToListAsync(cancellationToken);
 
         return new CitizenTicketDetail(row.CaseNumber, row.Subject, row.Status, row.CreatedAt,
@@ -392,13 +437,14 @@ public class TicketService(
     /// strand a running conversation. Closed is closed, though — a new concern gets a new ticket.
     /// </remarks>
     public async Task ReplyAsCitizenAsync(string caseNumber, string text, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default)
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default)
     {
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
         // same set that may open one: whoever holds the thread may answer in it
         Permission.RequireCitizenSubmission(actor);
 
         var body = CleanMessage(text);
+        RequireNoMentions(body);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Tickets
             .FirstOrDefaultAsync(t => t.CaseNumber == caseNumber && t.CitizenProfileId == profile.Id, cancellationToken)
@@ -409,18 +455,24 @@ public class TicketService(
                 "Dieses Ticket ist abgeschlossen. Bitte öffne für ein neues Anliegen ein neues Ticket.");
         }
 
+        var file = await StoreAttachmentAsync(db, row.Id, attachment, cancellationToken);
         db.TicketNachrichten.Add(new TicketNachricht
         {
             TicketId = row.Id,
             Audience = TicketMessageAudience.Buerger,
             Text = body,
             AuthorIsCitizen = true,
+            AttachmentFileName = file.FileName,
+            AttachmentOriginalName = file.OriginalName,
+            AttachmentContentType = file.ContentType,
         });
         // only this one edge moves: an untouched ticket stays open, because nobody is working it yet
         if (row.Status == TicketStatus.WartetAufBuerger)
         {
             row.Status = TicketStatus.InBearbeitung;
         }
+        // they answered, so the reminder is spent
+        row.NudgedAt = null;
         row.LastActivityAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -468,7 +520,8 @@ public class TicketService(
     // ---- desk (leadership) ----
 
     public async Task<IReadOnlyList<TicketRow>> GetInboxAsync(TicketInboxScope scope, string? search, bool onlyMine,
-        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+        ClaimsPrincipal actor, TicketKategorie? category = null, bool byPriority = false,
+        CancellationToken cancellationToken = default)
     {
         Permission.RequireTicketRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -484,6 +537,10 @@ public class TicketService(
         {
             var me = actor.GetAgentId();
             query = query.Where(t => t.HandlerId == me);
+        }
+        if (category is { } wantedCategory)
+        {
+            query = query.Where(t => t.Category == wantedCategory);
         }
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -504,9 +561,13 @@ public class TicketService(
                 t.Subject,
                 t.Status,
                 t.Kind,
+                t.Category,
+                t.PriorityOverride,
                 t.CreatedAt,
                 t.LastActivityAt,
                 t.AgentLastReadAt,
+                // nullable: an internal ticket has no citizen, so it carries no track record either
+                ConfirmedTips = (int?)t.CitizenProfile!.ConfirmedTips,
                 FirstName = t.CitizenProfile!.FirstName,
                 LastName = t.CitizenProfile!.LastName,
                 OpenedByCodename = t.OpenedByAgent!.Codename,
@@ -518,14 +579,36 @@ public class TicketService(
         var fromCitizen = await MessagesByTicketAsync(db, ids, fromCitizen: true, cancellationToken);
         var last = await LastMessageAsync(db, ids, cancellationToken);
 
-        return rows
-            .Select(r => new TicketRow(r.Id, r.CaseNumber, r.Subject, r.Status, r.Kind, r.CreatedAt, r.LastActivityAt,
-                // an internal ticket has no citizen; the column would otherwise be blank on every one of them
-                r.Kind == TicketArt.Intern ? r.OpenedByCodename ?? "Intern" : Name(r.FirstName, r.LastName),
-                r.HandlerCodename,
-                last.TryGetValue(r.Id, out var newest) && newest.FromCitizen,
-                UnreadFor(fromCitizen, r.Id, r.AgentLastReadAt)))
+        var now = DateTime.UtcNow;
+        var projected = rows
+            .Select(r =>
+            {
+                var awaiting = last.TryGetValue(r.Id, out var newest) && newest.FromCitizen;
+                DateTime? waitingSince = awaiting ? newest.At : null;
+                // computed here rather than stored: the automatic order ages by the hour, and a stamped number
+                // would need a sweep to stay true. A hand-set one wins outright
+                var priority = r.PriorityOverride
+                    ?? TicketPriority.Compute(r.Category, waitingSince is { } since ? now - since : null,
+                        r.ConfirmedTips ?? 0);
+                return new TicketRow(r.Id, r.CaseNumber, r.Subject, r.Status, r.Kind, r.Category, r.CreatedAt,
+                    r.LastActivityAt,
+                    // an internal ticket has no citizen; the column would otherwise be blank on every one of them
+                    r.Kind == TicketArt.Intern ? r.OpenedByCodename ?? "Intern" : Name(r.FirstName, r.LastName),
+                    r.HandlerCodename,
+                    awaiting,
+                    UnreadFor(fromCitizen, r.Id, r.AgentLastReadAt),
+                    // the stamp the reaction light reads; the lookup above already carries it, so no second query
+                    waitingSince,
+                    priority,
+                    r.PriorityOverride is not null);
+            })
             .ToList();
+
+        // reordered after the cap, so this ranks the fetched window and not the whole stock — the same window the
+        // desk has always shown. Activity stays the tie-break
+        return byPriority
+            ? projected.OrderByDescending(r => r.Priority).ThenByDescending(r => r.LastActivityAt).ToList()
+            : projected;
     }
 
     public async Task<IReadOnlyList<TicketPickRow>> SearchForLinkAsync(string? term, ClaimsPrincipal actor,
@@ -582,6 +665,7 @@ public class TicketService(
                 t.Subject,
                 t.Status,
                 t.Kind,
+                t.Category,
                 t.CreatedAt,
                 t.LastActivityAt,
                 FirstName = t.CitizenProfile!.FirstName,
@@ -593,6 +677,9 @@ public class TicketService(
                 OpenedByCodename = t.OpenedByAgent!.Codename,
                 t.ClosedAt,
                 t.ClosedById,
+                t.ClosingReason,
+                t.ClosingNote,
+                t.PriorityOverride,
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null)
@@ -609,9 +696,11 @@ public class TicketService(
                 .Select(u => u.Codename)
                 .FirstOrDefaultAsync(cancellationToken);
 
-        return new TicketDetail(row.Id, row.CaseNumber, row.Subject, row.Status, row.Kind, row.CreatedAt,
+        return new TicketDetail(row.Id, row.CaseNumber, row.Subject, row.Status, row.Kind, row.Category,
+            row.CreatedAt,
             row.LastActivityAt, Name(row.FirstName, row.LastName), row.Blocked ?? false, row.HandlerId,
-            row.HandlerCodename, row.OpenedByCodename, row.ClosedAt, closedBy);
+            row.HandlerCodename, row.OpenedByCodename, row.ClosedAt, closedBy,
+            row.ClosingReason, row.ClosingNote, row.PriorityOverride);
     }
 
     /// <inheritdoc />
@@ -637,10 +726,11 @@ public class TicketService(
         var me = actor.GetAgentId();
         return await db.TicketNachrichten.AsNoTracking()
             .Where(m => m.TicketId == id && m.Audience == audience)
-            .OrderBy(m => m.CreatedAt)
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
             .Select(m => new TicketMessageRow(m.Id, m.Audience, m.Text, m.AuthorIsCitizen,
                 m.AuthorAgent!.Codename, m.CreatedAt, m.ModifiedAt,
-                me != null && m.CreatedById != null && m.CreatedById == me))
+                me != null && m.CreatedById != null && m.CreatedById == me,
+                m.AttachmentFileName != null, m.AttachmentOriginalName))
             .ToListAsync(cancellationToken);
     }
 
@@ -659,7 +749,85 @@ public class TicketService(
         broadcaster.Report(row.Id, row.CaseNumber);
     }
 
+    public async Task SetPriorityAsync(string id, int? priority, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTicketHandling(actor);
+        var wanted = priority is { } value ? TicketPriority.Clamp(value) : (int?)null;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await GetOrThrowAsync(db, id, cancellationToken);
+        if (row.PriorityOverride == wanted)
+        {
+            return;
+        }
+
+        row.PriorityOverride = wanted;
+        // no activity stamp: reordering the desk is not news to the citizen and must not bury what is waiting
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(row.Id, row.CaseNumber, TicketMessageAudience.Intern);
+    }
+
+    public async Task SetCategoryAsync(string id, TicketKategorie category, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTicketHandling(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await GetOrThrowAsync(db, id, cancellationToken);
+        if (row.Category == category)
+        {
+            return;
+        }
+
+        row.Category = category;
+        // no activity stamp and no bell: a correction of the filing is not news to the citizen, and moving the
+        // ticket to the top of the desk for it would bury what people are actually waiting on
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(row.Id, row.CaseNumber, TicketMessageAudience.Intern);
+    }
+
+    public async Task AssignAsync(string id, string agentId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTicketHandling(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await GetOrThrowAsync(db, id, cancellationToken);
+
+        // the same predicate the picker offers; a raw id off the wire must not get past it
+        var selectable = await db.Users.OnlySelectable()
+            .AnyAsync(u => u.Id == agentId, cancellationToken);
+        if (!selectable)
+        {
+            throw new InvalidOperationException("Dieser Agent kann das Ticket nicht übernehmen.");
+        }
+        if (row.HandlerId == agentId)
+        {
+            return;
+        }
+
+        row.HandlerId = agentId;
+        if (row.Status == TicketStatus.Offen)
+        {
+            row.Status = TicketStatus.InBearbeitung;
+        }
+        row.LastActivityAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            // the new handler only; whoever moved it already knows
+            await notifications.NotifyOnceAsync(agentId, NotificationType.PublicTicketInternal,
+                $"Du bearbeitest jetzt das Ticket {row.CaseNumber}", $"/tickets/{row.Id}", cancellationToken);
+        }
+        catch
+        {
+            /* best effort */
+        }
+        // both threads, like self-assignment: Offen to InBearbeitung is a status the citizen sees too
+        broadcaster.Report(row.Id, row.CaseNumber);
+    }
+
     public async Task SetStatusAsync(string id, TicketStatus status, ClaimsPrincipal actor,
+        TicketAbschlussgrund? reason = null, string? note = null,
         CancellationToken cancellationToken = default)
     {
         Permission.RequireTicketHandling(actor);
@@ -672,12 +840,31 @@ public class TicketService(
                 + "ist nicht vorgesehen.");
         }
 
+        var closing = status == TicketStatus.Geschlossen;
+        if (closing && reason is null)
+        {
+            throw new InvalidOperationException("Bitte wähle einen Abschlussgrund.");
+        }
+        if (closing && note is { Length: > TicketRules.ClosingNoteMaxLength })
+        {
+            throw new InvalidOperationException(
+                $"Die Abschlussnotiz fasst höchstens {TicketRules.ClosingNoteMaxLength} Zeichen.");
+        }
+
         row.Status = status;
         row.HandlerId ??= actor.GetAgentId();
         row.LastActivityAt = DateTime.UtcNow;
-        // the two fields describe the current closure, not a history of them
-        row.ClosedAt = status == TicketStatus.Geschlossen ? DateTime.UtcNow : null;
-        row.ClosedById = status == TicketStatus.Geschlossen ? actor.GetAgentId() : null;
+        // all four fields describe the current closure, not a history of them: reopening clears the set together,
+        // or a reopened ticket keeps claiming it was closed as spam
+        row.ClosedAt = closing ? DateTime.UtcNow : null;
+        row.ClosedById = closing ? actor.GetAgentId() : null;
+        row.ClosingReason = closing ? reason : null;
+        row.ClosingNote = closing ? note.TrimToNull() : null;
+        // the reminder belongs to one stretch of waiting; a ticket that starts waiting again earns a fresh one
+        if (status != TicketStatus.WartetAufBuerger)
+        {
+            row.NudgedAt = null;
+        }
         await db.SaveChangesAsync(cancellationToken);
 
         // only the two statuses that say something to the citizen ring a bell: an internal move from open to
@@ -690,7 +877,7 @@ public class TicketService(
     }
 
     public async Task PostInternalNoteAsync(string id, string text, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default)
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default)
     {
         Permission.RequireTicketParticipation(actor);
         var body = CleanMessage(text);
@@ -701,25 +888,162 @@ public class TicketService(
         }
         var row = await GetOrThrowAsync(db, id, cancellationToken);
         var me = actor.GetAgentId();
+        var file = await StoreAttachmentAsync(db, row.Id, attachment, cancellationToken);
         db.TicketNachrichten.Add(new TicketNachricht
         {
             TicketId = row.Id,
             Audience = TicketMessageAudience.Intern,
             Text = body,
             AuthorAgentId = me,
+            AttachmentFileName = file.FileName,
+            AttachmentOriginalName = file.OriginalName,
+            AttachmentContentType = file.ContentType,
         });
         // no activity stamp: an internal note is not something the citizen is waiting on
+        var named = await AttachMentionedAsync(db, row, body, me, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         await NotifyInternalAsync(db, row, me, cancellationToken);
+        await NotifyNamedAsync(row, named, cancellationToken);
         broadcaster.Report(row.Id, row.CaseNumber, TicketMessageAudience.Intern);
     }
 
+    /// <summary>Validates and stores a file arriving with a message; returns the three columns to write.</summary>
+    /// <remarks>
+    /// Type, stated size and the per-ticket count are all checked here and nowhere else: the upload travels over
+    /// SignalR and never reaches the rate limiter, so the middleware cannot be the bound. A stated size of zero
+    /// fails closed — a bound a caller skips by omitting the number is no bound.
+    /// </remarks>
+    private async Task<(string? FileName, string? OriginalName, string? ContentType)> StoreAttachmentAsync(
+        AppDbContext db, string? ticketId, TicketAttachmentUpload? upload, CancellationToken ct)
+    {
+        if (upload is null)
+        {
+            return (null, null, null);
+        }
+        if (string.IsNullOrWhiteSpace(upload.ContentType) || !storage.IsAllowedType(upload.ContentType))
+        {
+            throw new InvalidOperationException("Als Anhang sind nur Bilder (JPG, PNG, WEBP, GIF) erlaubt.");
+        }
+        if (upload.Size <= 0)
+        {
+            throw new InvalidOperationException("Zur Größe des Anhangs liegt keine Angabe vor.");
+        }
+        // MaxBytes of 0 means the store declares no limit, not a limit of zero
+        if (storage.MaxBytes > 0 && upload.Size > storage.MaxBytes)
+        {
+            throw new InvalidOperationException(
+                $"Das Bild ist zu groß (maximal {storage.MaxBytes / (1024 * 1024)} MB).");
+        }
+        if (ticketId is not null)
+        {
+            // per ticket, across both threads: per message the cap would be no cap at all
+            var carried = await db.TicketNachrichten.AsNoTracking()
+                .CountAsync(m => m.TicketId == ticketId && m.AttachmentFileName != null, ct);
+            if (carried >= TicketRules.MaxAttachments)
+            {
+                throw new InvalidOperationException(
+                    $"Dieses Ticket trägt bereits {TicketRules.MaxAttachments} Anhänge.");
+            }
+        }
+
+        var fileName = await storage.SaveAsync(upload.Content, upload.ContentType, ct);
+        return (fileName, CleanFileName(upload.OriginalName), upload.ContentType);
+    }
+
+    /// <summary>Trims a sender-chosen file name to the column; it is display only and never a path.</summary>
+    private static string? CleanFileName(string? name)
+    {
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return null;
+        }
+        return trimmed.Length > 255 ? trimmed[..255] : trimmed;
+    }
+
+    /// <summary>Refuses a mention token on a line the citizen will read.</summary>
+    /// <remarks>
+    /// The token axis is shared: since text images are stored as mention tokens too, one leaking into a citizen
+    /// line would render as a dead picture behind an InternalAgent-only endpoint, and its mere presence would say
+    /// that something is there. MentionParser is used as a rejection check only, the way the template renderer
+    /// uses it. Same wording for both, because the citizen never sees either kind.
+    /// </remarks>
+    private static void RequireNoMentions(string? text)
+    {
+        if (MentionParser.Parse(text).Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Erwähnungen und eingefügte Bilder sind nur in den internen Notizen möglich.");
+        }
+    }
+
+    /// <summary>Puts the agents named in an internal note onto the ticket; returns the ones newly attached.</summary>
+    /// <remarks>
+    /// No handling guard: the caller already proved they may write on this ticket, and pulling in a colleague they
+    /// named by hand is part of that act - a participant who may not manage the roster may still say "look at this".
+    /// The offer is still AgentSelection's: a token typed by hand carries a raw id, so the same OnlySelectable
+    /// predicate decides, and an unselectable one is skipped rather than refusing the note. Rows are added to the
+    /// caller's context and committed by its own SaveChanges.
+    /// </remarks>
+    private static async Task<List<string>> AttachMentionedAsync(AppDbContext db, Ticket row, string body,
+        string? author, CancellationToken ct)
+    {
+        var wanted = MentionParser.Parse(body)
+            .Where(t => t.Type == nameof(Agent))
+            .Select(t => t.Id)
+            .Where(x => x != author)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (wanted.Count == 0)
+        {
+            return [];
+        }
+
+        var selectable = await db.Users.OnlySelectable()
+            .Where(u => wanted.Contains(u.Id))
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+        if (selectable.Count == 0)
+        {
+            return [];
+        }
+
+        var already = await db.TicketBeteiligte.AsNoTracking()
+            .Where(p => p.TicketId == row.Id && selectable.Contains(p.AgentId))
+            .Select(p => p.AgentId)
+            .ToListAsync(ct);
+        var fresh = selectable.Except(already, StringComparer.Ordinal).ToList();
+        foreach (var agentId in fresh)
+        {
+            db.TicketBeteiligte.Add(new TicketParticipant { TicketId = row.Id, AgentId = agentId });
+        }
+        return fresh;
+    }
+
+    /// <summary>Rings the agents a note pulled onto the ticket; NotifyInternalAsync does not reach them yet.</summary>
+    private async Task NotifyNamedAsync(Ticket row, List<string> named, CancellationToken ct)
+    {
+        foreach (var agentId in named)
+        {
+            try
+            {
+                await notifications.NotifyOnceAsync(agentId, NotificationType.PublicTicketInternal,
+                    $"Du wurdest am Ticket {row.CaseNumber} erwähnt", $"/tickets/{row.Id}", ct);
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+    }
+
     public async Task ReplyToCitizenAsync(string id, string text, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default)
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default)
     {
         Permission.RequireTicketHandling(actor);
         var body = CleanMessage(text);
+        RequireNoMentions(body);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await GetOrThrowAsync(db, id, cancellationToken);
         if (row.Kind == TicketArt.Intern)
@@ -732,6 +1056,7 @@ public class TicketService(
             throw new InvalidOperationException("Dieses Ticket ist geschlossen. Bitte öffne es zuerst wieder.");
         }
 
+        var file = await StoreAttachmentAsync(db, row.Id, attachment, cancellationToken);
         db.TicketNachrichten.Add(new TicketNachricht
         {
             TicketId = row.Id,
@@ -739,10 +1064,17 @@ public class TicketService(
             Text = body,
             // no author: the citizen-facing row structurally carries no agent, so the outward view has nothing to hide
             AuthorAgentId = null,
+            AttachmentFileName = file.FileName,
+            AttachmentOriginalName = file.OriginalName,
+            AttachmentContentType = file.ContentType,
         });
         row.HandlerId ??= actor.GetAgentId();
         row.Status = TicketStatus.WartetAufBuerger;
         row.LastActivityAt = DateTime.UtcNow;
+        // a fresh agency line starts a new stretch of waiting; this path re-enters WartetAufBuerger without
+        // passing through another status first (SetStatusAsync's own guard never sees it), so a stale reminder
+        // stamp from an earlier stretch would silently swallow the follow-up worker's one reminder on this one
+        row.NudgedAt = null;
         await db.SaveChangesAsync(cancellationToken);
 
         await NotifyCitizenAsync(db, row, cancellationToken);
@@ -784,6 +1116,8 @@ public class TicketService(
         else
         {
             Permission.RequireTicketHandling(actor);
+            // an edit is the same door as a new line, so it closes on the same rule
+            RequireNoMentions(body);
         }
 
         // not covered by the author check below: an account files tickets out of its own civilian identity, and
@@ -845,6 +1179,81 @@ public class TicketService(
             await db.TicketBeteiligte.Where(p => p.TicketId == id && p.AgentId == me)
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.LastReadAt, DateTime.UtcNow), cancellationToken);
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One null for "gone" and for "not yours", like every other file endpoint in the house. The audience of the
+    /// row decides which gate applies: an internal note is behind the internal read, a citizen-facing line behind
+    /// the plain ticket read, so an attached agent reaches the thread they are on and nothing else.
+    /// </remarks>
+    public async Task<TicketAttachmentAccess?> GetAttachmentAsync(string messageId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        if (!actor.IsInternalAgent() || string.IsNullOrWhiteSpace(messageId))
+        {
+            return null;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.Id == messageId)
+            .Select(m => new
+            {
+                m.TicketId,
+                m.Audience,
+                m.AttachmentFileName,
+                m.AttachmentContentType,
+                m.AttachmentOriginalName,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (row?.AttachmentFileName is null)
+        {
+            return null;
+        }
+
+        var mayRead = row.Audience == TicketMessageAudience.Intern
+            ? await TicketVisibility.MayReadInternalAsync(db, row.TicketId, actor, cancellationToken)
+            : await TicketVisibility.MayReadAsync(db, row.TicketId, actor, cancellationToken);
+        return mayRead
+            ? new TicketAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName)
+            : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Addressed by case number and the position in the thread, never by row id: the citizen's own projection
+    /// carries no id, and handing one out would be an existence oracle. The position is counted over exactly the
+    /// rows that projection returns, so index n here is the n-th line the citizen can see.
+    /// </remarks>
+    public async Task<TicketAttachmentAccess?> GetOwnAttachmentAsync(string caseNumber, int index,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        var profile = await buerger.GetOwnAsync(actor, cancellationToken);
+        if (profile is null || string.IsNullOrWhiteSpace(caseNumber) || index < 0)
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var ticketId = await db.Tickets.AsNoTracking()
+            .Where(t => t.CaseNumber == caseNumber && t.CitizenProfileId == profile.Id)
+            .Select(t => t.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (ticketId is null)
+        {
+            return null;
+        }
+
+        var row = await db.TicketNachrichten.AsNoTracking()
+            .Where(m => m.TicketId == ticketId && m.Audience == TicketMessageAudience.Buerger)
+            // exactly the order of GetOwnDetailAsync; index n here must be the n-th line rendered there
+            .OrderBy(m => m.CreatedAt).ThenBy(m => m.Id)
+            .Skip(index)
+            .Select(m => new { m.AttachmentFileName, m.AttachmentContentType, m.AttachmentOriginalName })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row?.AttachmentFileName is null
+            ? null
+            : new TicketAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

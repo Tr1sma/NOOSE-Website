@@ -245,7 +245,11 @@ else
             _isOwner = loaded.AgentId == _user.GetAgentId();
             if (_mayDecide)
             {
-                _budget = await Budgets.GetStatusAsync(loaded.AgentId);
+                // an orphaned request has no requester left, so there is no budget to fold
+                if (loaded.AgentId is not null)
+                {
+                    _budget = await Budgets.GetStatusAsync(loaded.AgentId);
+                }
                 // read once per load: the balance is a fold over the whole ledger
                 _gruengeld = await Kasse.GetBalanceAsync(KassenKonto.Gruengeld);
             }

@@ -4,7 +4,9 @@
    the ticket exists. *@
 @attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject ITicketService Tickets
+@inject ITicketConversionService Conversion
 @inject TicketBroadcaster Broadcaster
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @implements IDisposable
@@ -34,6 +36,20 @@ else
                     <MudButton OnClick="AssignAsync" Variant="Variant.Filled" Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.AssignmentInd">Übernehmen</MudButton>
                 }
+                <MudButton OnClick="AssignToAsync" Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.PersonSearch">Zuweisen</MudButton>
+                <MudMenu Label="Kategorie" Variant="Variant.Outlined" Color="Color.Default"
+                         StartIcon="@Icons.Material.Filled.Category">
+                    @foreach (var option in TicketKategorieDisplay.All)
+                    {
+                        <MudMenuItem OnClick="@(() => SetCategoryAsync(option))"
+                                     Disabled="@(option == _ticket.Category)">
+                            @TicketKategorieDisplay.Name(option)
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+                <MudButton OnClick="SetPriorityAsync" Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.LowPriority">Priorität</MudButton>
                 <MudMenu Label="Status setzen" Variant="Variant.Outlined" Color="Color.Default"
                          StartIcon="@Icons.Material.Filled.Flag">
                     @foreach (var target in TicketRules.AllowedTargets(_ticket.Status))
@@ -43,6 +59,10 @@ else
                         </MudMenuItem>
                     }
                 </MudMenu>
+                <MudButton OnClick="ToCaseAsync" Disabled="_busy" Variant="Variant.Outlined"
+                           Color="Color.Secondary" StartIcon="@Icons.Material.Filled.FolderSpecial">
+                    Vorgang anlegen
+                </MudButton>
                 <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error"
                            StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
             }
@@ -62,6 +82,18 @@ else
                                      Color="@(_ticket.Kind == TicketArt.Intern ? Color.Secondary : Color.Default)">
                                 @TicketArtDisplay.Name(_ticket.Kind)
                             </MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.Category">
+                                @TicketKategorieDisplay.Name(_ticket.Category)
+                            </MudChip>
+                            @if (_ticket.PriorityOverride is { } fixedPriority)
+                            {
+                                @* only the hand-set value lives on the ticket; the automatic order is the desk's *@
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                                         Icon="@Icons.Material.Filled.LowPriority">
+                                    Priorität @fixedPriority
+                                </MudChip>
+                            }
                             @if (_ticket.Kind != TicketArt.Intern && _ticket.CitizenIsBlocked)
                             {
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
@@ -98,9 +130,22 @@ else
                         @if (_ticket.ClosedAt is not null)
                         {
                             <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
-                                Geschlossen am @_ticket.ClosedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                                @(_ticket.ClosedByCodename is null ? string.Empty : $" von {_ticket.ClosedByCodename}")
-                                — der Bürger kann darauf nicht mehr antworten.
+                                <MudStack Spacing="1">
+                                    <div>
+                                        Geschlossen am @_ticket.ClosedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                        @(_ticket.ClosedByCodename is null ? string.Empty : $" von {_ticket.ClosedByCodename}")
+                                        — der Bürger kann darauf nicht mehr antworten.
+                                    </div>
+                                    @* internal wording: outward the ticket says "Abgeschlossen" and nothing else *@
+                                    @if (_ticket.ClosingReason is { } why)
+                                    {
+                                        <div>Grund: @TicketAbschlussgrundDisplay.Name(why)</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_ticket.ClosingNote))
+                                    {
+                                        <MudText Typo="Typo.caption">@_ticket.ClosingNote</MudText>
+                                    }
+                                </MudStack>
                             </MudAlert>
                         }
                     </MudStack>
@@ -109,6 +154,12 @@ else
                 <MudPaper Outlined="true" Class="pa-4">
                     <TicketAgentsPanel TicketId="@_ticket.Id" User="@_user" CanManage="@_canManage"
                                        Changed="ReloadQuietlyAsync" />
+                </MudPaper>
+
+                @* the one record projection a ticket gets: an agent's own reminder, not an entry on any timeline.
+                   The due notice names the case number and nothing else — RecordsReference keeps the subject out *@
+                <MudPaper Outlined="true" Class="pa-4">
+                    <FollowupPanel EntityType="@nameof(Ticket)" EntityId="@_ticket.Id" User="_user" />
                 </MudPaper>
             </MudStack>
         </MudItem>
@@ -151,6 +202,7 @@ else
     private bool _canWriteInternal;
 
     private string? _loadedId;
+    private bool _busy;
 
     protected override void OnInitialized() => Broadcaster.Modified += OnModified;
 
@@ -210,11 +262,115 @@ else
         }
     }
 
-    private async Task SetStatusAsync(TicketStatus status)
+    /// <summary>Lifts the concern into a case and links the two; the ticket itself stays where it is.</summary>
+    private async Task ToCaseAsync()
+    {
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Vorgang aus diesem Ticket anlegen?",
+                "Der Schriftwechsel wird in die Beschreibung übernommen und der Vorgang mit dem Ticket verknüpft. "
+                + "Das Ticket bleibt bestehen.", "Vorgang anlegen"))
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var created = await Conversion.ToCaseAsync(Id, _user);
+            Snackbar.Add($"Vorgang {created.CaseNumber} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/vorgaenge/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Puts another agent on the ticket as handler; participants stay a separate list.</summary>
+    private async Task AssignToAsync()
+    {
+        string[] exclusion = _ticket?.HandlerId is { Length: > 0 } handler ? [handler] : [];
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, _user.MayRealNameSee(), false);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await Tickets.AssignAsync(Id, choice.AgentId, _user);
+            Snackbar.Add("Bearbeiter gesetzt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <summary>Sets or clears the hand-set order; an empty entry hands the row back to the automatic one.</summary>
+    private async Task SetPriorityAsync()
+    {
+        var entered = await ReasonDialog.ShowAsync(DialogService, "Priorität von Hand setzen",
+            $"Zahl von {TicketPriority.Min} bis {TicketPriority.Max}. Leer lassen setzt die Ausgabe wieder auf die "
+            + "automatische Reihenfolge aus Kategorie, Wartezeit und Vertrauen des Kontos.",
+            "Übernehmen", "Priorität", preset: _ticket?.PriorityOverride?.ToString(), lines: 1);
+        if (entered is null)
+        {
+            return;
+        }
+        int? wanted = null;
+        if (!string.IsNullOrWhiteSpace(entered))
+        {
+            if (!int.TryParse(entered.Trim(), out var parsed))
+            {
+                Snackbar.Add("Bitte eine Zahl eingeben.", Severity.Error);
+                return;
+            }
+            wanted = parsed;
+        }
+        try
+        {
+            await Tickets.SetPriorityAsync(Id, wanted, _user);
+            await LoadAsync();
+            Snackbar.Add(wanted is null ? "Priorität wieder automatisch." : "Priorität gesetzt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SetCategoryAsync(TicketKategorie category)
     {
         try
         {
-            await Tickets.SetStatusAsync(Id, status, _user);
+            await Tickets.SetCategoryAsync(Id, category, _user);
+            await LoadAsync();
+            Snackbar.Add($"Kategorie: {TicketKategorieDisplay.Name(category)}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SetStatusAsync(TicketStatus status)
+    {
+        TicketCloseDialog.Choice? closure = null;
+        if (status == TicketStatus.Geschlossen)
+        {
+            // the service refuses a closure without a reason, so the dialog is the only way in
+            closure = await TicketCloseDialog.ShowAsync(DialogService);
+            if (closure is null)
+            {
+                return;
+            }
+        }
+        try
+        {
+            await Tickets.SetStatusAsync(Id, status, _user, closure?.Reason, closure?.Note);
             await LoadAsync();
             Snackbar.Add($"Status: {TicketStatusDisplay.Name(status)}", Severity.Success);
         }

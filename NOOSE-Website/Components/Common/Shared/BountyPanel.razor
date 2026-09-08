@@ -125,46 +125,59 @@
 
     @if (_rewards.Count > 0)
     {
-        <MudDivider />
-        <MudText Typo="Typo.subtitle2">Ausgezahlte Belohnung</MudText>
-        <MudSimpleTable Dense="true" Hover="true" Striped="false" Elevation="0">
-            <thead>
-                <tr>
-                    <th>Beleg</th>
-                    <th>Hinweis</th>
-                    <th>Empfänger</th>
-                    <th>Betrag</th>
-                    <th>Buchung</th>
-                    <th>Am</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var reward in _rewards)
-                {
-                    <tr>
-                        <td>@reward.ReceiptNumber</td>
-                        <td><MudLink Href="@($"/hinweise/{reward.TipId}")">@reward.TipCaseNumber</MudLink></td>
-                        <td>@(reward.CitizenName ?? "—")</td>
-                        <td>@Money.Format(reward.Amount)</td>
-                        <td>
-                            @if (reward.SelfPaid)
+        @* collapsed: the paid history is a receipt trail, the shares table above is the live figure *@
+        <MudExpansionPanels Elevation="0" Outlined="true">
+            <MudExpansionPanel>
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudText Typo="Typo.subtitle2">Ausgezahlte Belohnung</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Success">
+                            @_rewards.Count · @Money.Format(_rewards.Sum(r => r.Amount))
+                        </MudChip>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudSimpleTable Dense="true" Hover="true" Striped="false" Elevation="0">
+                        <thead>
+                            <tr>
+                                <th>Beleg</th>
+                                <th>Hinweis</th>
+                                <th>Empfänger</th>
+                                <th>Betrag</th>
+                                <th>Buchung</th>
+                                <th>Am</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var reward in _rewards)
                             {
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
-                                    selbst ausgezahlt
-                                </MudChip>
+                                <tr>
+                                    <td>@reward.ReceiptNumber</td>
+                                    <td><MudLink Href="@($"/hinweise/{reward.TipId}")">@reward.TipCaseNumber</MudLink></td>
+                                    <td>@(reward.CitizenName ?? "—")</td>
+                                    <td>@Money.Format(reward.Amount)</td>
+                                    <td>
+                                        @if (reward.SelfPaid)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                                                selbst ausgezahlt
+                                            </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                @(reward.BookingCaseNumber ?? "—")@(reward.Account is { } acc ? $" · {KassenKontoDisplay.Name(acc)}" : string.Empty)
+                                            </MudText>
+                                        }
+                                    </td>
+                                    <td>@reward.PaidAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                </tr>
                             }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @(reward.BookingCaseNumber ?? "—")@(reward.Account is { } acc ? $" · {KassenKontoDisplay.Name(acc)}" : string.Empty)
-                                </MudText>
-                            }
-                        </td>
-                        <td>@reward.PaidAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
+                        </tbody>
+                    </MudSimpleTable>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
     }
     else if (MayWrite && IsLeadership && _summary.Advertised > 0 && !IsCaptured)
     {

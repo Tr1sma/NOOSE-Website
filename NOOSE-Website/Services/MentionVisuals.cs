@@ -32,6 +32,7 @@ public static class MentionVisuals
         nameof(Meeting) => Icons.Material.Filled.Groups,
         nameof(Document) => Icons.Material.Filled.Article,
         nameof(Source) => Icons.Material.Filled.AttachFile,
+        nameof(TextImage) => Icons.Material.Filled.Image,
         nameof(Agent) => Icons.Material.Filled.Person,
         _ => Icons.Material.Filled.Link,
     };

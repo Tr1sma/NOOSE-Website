@@ -119,12 +119,20 @@ public class AgentManagementService(
         Permission.RequireLeadership(actor);
 
         var agent = await GetOrThrow(applicantUserId);
-        if (agent.Status != AgentStatus.Applicant)
+        // a partner applies without ever leaving status Active, so it arrives here as an Active account with an
+        // agency rather than as an Applicant; the partner role ends with the same save that hands out the rank.
+        // The application has to exist: status Applicant is the applicant's own proof of having gone through
+        // recruiting, and without this the panel would convert any partner at all.
+        bool partnerJoining = agent.Status == AgentStatus.Active && agent.PartnerAgency is not null
+            && await db.Bewerbungen.AnyAsync(b => b.ApplicantUserId == applicantUserId);
+        if (agent.Status != AgentStatus.Applicant && !partnerJoining)
         {
             throw new InvalidOperationException("Nur Bewerber können hochgestuft werden.");
         }
         var altRank = agent.Rank;
         agent.Status = AgentStatus.Active;
+        agent.PartnerAgency = null;
+        agent.PartnerRank = null;
         agent.Rank = rank;
         agent.IsTRU = isTRU;
         agent.IsHRB = isHRB;
@@ -799,6 +807,52 @@ public class AgentManagementService(
         await db.AgentNotes.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.AgentPromotionRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.AgentModuleCompletions.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+
+        // The account's own working state: nothing here means anything without the account it belonged to, so
+        // the rows go rather than the pointer. Badges, quota and KI logs are derived or per-account bookkeeping;
+        // an absence, a meeting attendance and a document access revocation only ever describe this one agent.
+        await db.Absences.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.Feedbacks.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AgentBadges.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.DocumentAccessExclusions.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.MeetingAttendances.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.MeetingSignOffs.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.LlmQuotaAdjustments.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.LlmQuotaPeriods.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.LlmRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteDeleteAsync(cancellationToken);
+        // messages first: the cascade off the thread is a MySQL one, and SQLite runs with foreign keys off
+        var conversationIds = await db.NooseiConversations.IgnoreQueryFilters()
+            .Where(x => x.AgentId == agentId).Select(x => x.Id).ToListAsync(cancellationToken);
+        if (conversationIds.Count > 0)
+        {
+            await db.NooseiMessages.IgnoreQueryFilters().Where(x => conversationIds.Contains(x.ConversationId))
+                .ExecuteDeleteAsync(cancellationToken);
+            await db.NooseiConversations.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        // Records that outlive the account and only carry it as a pointer. The citizen profile is the sharpest
+        // case: a tip and an objection hold a Restrict FK to the profile and a tip carries an anonymity promise,
+        // so the profile stays and loses its account instead. Same shape for a seized item's handler, an
+        // informant's handler, an abduction victim and the money history - the row is the record, not the agent.
+        await db.BuergerProfile.IgnoreQueryFilters().Where(x => x.UserId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UserId, (string?)null), cancellationToken);
+        await db.EvidenceEntries.IgnoreQueryFilters().Where(x => x.HandlerAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerAgentId, (string?)null), cancellationToken);
+        await db.Informants.IgnoreQueryFilters().Where(x => x.HandlerId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HandlerId, (string?)null), cancellationToken);
+        await db.AgentAbductions.IgnoreQueryFilters().Where(x => x.VictimAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.VictimAgentId, (string?)null), cancellationToken);
+        await db.FinancingRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AgentId, (string?)null), cancellationToken);
+        await db.FinancingBudgetPeriods.IgnoreQueryFilters().Where(x => x.AgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AgentId, (string?)null), cancellationToken);
 
         // Public area: every one of these is a "who did this" pointer on a row that is history - a publication, a
         // payment, a decision, a message to a citizen - so the row survives the account and only the pointer is

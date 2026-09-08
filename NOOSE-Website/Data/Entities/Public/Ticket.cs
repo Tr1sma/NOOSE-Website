@@ -24,6 +24,10 @@ public class Ticket : IAuditable, ISoftDelete
     [Column("Art")]
     public TicketArt Kind { get; set; } = TicketArt.Fuehrungsebene;
 
+    /// <summary>What the concern is about; picked by the citizen, correctable by the desk.</summary>
+    [Column("Kategorie")]
+    public TicketKategorie Category { get; set; } = TicketKategorie.Sonstiges;
+
     /// <summary>Null for an internal ticket; an agent's own concern has no citizen behind it.</summary>
     [Column("BuergerProfilId")]
     public string? CitizenProfileId { get; set; }
@@ -61,6 +65,28 @@ public class Ticket : IAuditable, ISoftDelete
     /// <summary>Who closed it; this is the only place that name is kept.</summary>
     [Column("GeschlossenVonId")]
     public string? ClosedById { get; set; }
+
+    /// <summary>When the citizen was last reminded that the ticket waits on them; cleared when they answer.</summary>
+    /// <remarks>Its own stamp rather than a count: the automatic follow-up reminds once, and without it the
+    /// hourly sweep would ring the same bell every hour it stays overdue.</remarks>
+    [Column("NachgefasstAm")]
+    public DateTime? NudgedAt { get; set; }
+
+    /// <summary>Order set by hand; while it is present the automatic order is not used for this row.</summary>
+    /// <remarks>
+    /// Only the hand-set value is stored. The automatic one ages by the hour and is computed by the desk, so
+    /// there is no stamped number here to go stale and no sweep needed to keep it right.
+    /// </remarks>
+    [Column("PrioritaetManuell")]
+    public int? PriorityOverride { get; set; }
+
+    /// <summary>Why it was closed; set with the closure and cleared again on reopening.</summary>
+    [Column("Abschlussgrund")]
+    public TicketAbschlussgrund? ClosingReason { get; set; }
+
+    /// <summary>Internal remark on the closure; never travels outward, and stays out of the audit row.</summary>
+    [Column("Abschlussnotiz")]
+    public string? ClosingNote { get; set; }
 
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

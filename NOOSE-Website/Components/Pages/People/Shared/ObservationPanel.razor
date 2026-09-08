@@ -114,7 +114,7 @@
 
     private async Task NewAsync()
     {
-        var input = await ObservationDialog.ShowAsync(DialogService, User.IsLeadership(), User.GetAgentId());
+        var input = await ObservationDialog.ShowAsync(DialogService, User.IsLeadership(), User.GetAgentId(), PersonId);
         if (input is null)
         {
             return;

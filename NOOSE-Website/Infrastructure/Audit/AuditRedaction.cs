@@ -19,6 +19,10 @@ public static class AuditRedaction
     {
         $"{nameof(HinweisNachricht)}.{nameof(HinweisNachricht.Text)}",
         $"{nameof(TicketNachricht)}.{nameof(TicketNachricht.Text)}",
+        // the closing remark names what the desk thought of a concern, and /nachweis is read house-wide
+        $"{nameof(Ticket)}.{nameof(Ticket.ClosingNote)}",
+        // a file name the citizen chose is their content, exactly like the message it hangs on
+        $"{nameof(TicketNachricht)}.{nameof(TicketNachricht.AttachmentOriginalName)}",
     };
 
     /// <summary>Whether this field's before/after pair stays out of the audit row.</summary>

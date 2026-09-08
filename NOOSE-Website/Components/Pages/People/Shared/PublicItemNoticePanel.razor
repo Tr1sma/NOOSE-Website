@@ -5,108 +5,112 @@
 @inject IPublicWantedService Wanted
 @inject ISnackbar Snackbar
 
-<MudPaper Class="pa-4" Elevation="1">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-        <MudIcon Icon="@Icons.Material.Filled.DirectionsCar"
-                 Color="@(_rows.Any(r => r.Status == PublicWantedStatus.Veroeffentlicht) ? Color.Error : Color.Default)" />
-        <MudText Typo="Typo.subtitle1">Gesuchte Fahrzeuge &amp; Waffen</MudText>
-    </MudStack>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-        Nach außen geht das Kennzeichen beziehungsweise die Bezeichnung, nicht der Name der Halterin — und kein
-        Foto. Intern bleibt der Aktenbezug: wird die Akte zur Verschlusssache, geht auch das Kennzeichen offline.
-    </MudText>
+@* no MudPaper of its own: RecordSectionRail already hands the section a padded surface *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-3">
+    <MudIcon Icon="@Icons.Material.Filled.DirectionsCar"
+             Color="@(_rows.Any(r => r.Status == PublicWantedStatus.Veroeffentlicht) ? Color.Error : Color.Default)" />
+    <MudText Typo="Typo.subtitle1">Gesuchte Fahrzeuge &amp; Waffen</MudText>
+    <MudSpacer />
+    <MudTooltip Text="@OutwardHint">
+        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Class="mud-text-secondary" />
+    </MudTooltip>
+</MudStack>
 
-    @if (_load)
-    {
-        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-    }
-    else if (!_mayOpen)
-    {
-        @* never "there is none": that would be a statement about a file this role may not read here *@
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-            Öffentliche Ausschreibungen sieht nur ein interner Agent.
-        </MudAlert>
-    }
-    else
-    {
-        <MudStack Spacing="3">
-            @if (_rows.Count == 0)
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!_mayOpen)
+{
+    @* never "there is none": that would be a statement about a file this role may not read here *@
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+        Öffentliche Ausschreibungen sieht nur ein interner Agent.
+    </MudAlert>
+}
+else
+{
+    <MudStack Spacing="3">
+        @if (_rows.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Für diese Akte ist kein Fahrzeug und keine Waffe ausgeschrieben.
+            </MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Outlined="true">
+                @foreach (var row in _rows)
+                {
+                    <MudExpansionPanel Expanded="@_open.Contains(row.Id)"
+                                       ExpandedChanged="@(open => Toggle(row.Id, open))">
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                <MudIcon Size="Size.Small" Icon="@KindIcon(row.Kind)" />
+                                <MudText Typo="Typo.body1">@row.DisplayName</MudText>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@StatusColour(row.Status)">
+                                    @PublicWantedStatusDisplay.Name(row.Status)
+                                </MudChip>
+                                @if (!string.IsNullOrWhiteSpace(row.CaseNumber))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CaseNumber</MudText>
+                                }
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            @* only the open panel builds an editor: each one carries a Quill instance and its
+                               own bounty panel, and a file may advertise several vehicles at once *@
+                            @if (_open.Contains(row.Id))
+                            {
+                                <PublicWantedEditor Id="@row.Id" User="User" Changed="ReloadQuietlyAsync"
+                                                    Closed="ReloadQuietlyAsync" />
+                            }
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
+
+        @if (_mayWrite)
+        {
+            <MudDivider />
+            @if (_sources.Count == 0)
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Für diese Akte ist kein Fahrzeug und keine Waffe ausgeschrieben.
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Der Steckbrief dieser Akte führt kein Fahrzeug und keine Waffe.
                 </MudText>
             }
             else
             {
-                <MudExpansionPanels MultiExpansion="true" Elevation="0" Outlined="true">
-                    @foreach (var row in _rows)
-                    {
-                        <MudExpansionPanel Expanded="@_open.Contains(row.Id)"
-                                           ExpandedChanged="@(open => Toggle(row.Id, open))">
-                            <TitleContent>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-                                    <MudIcon Size="Size.Small" Icon="@KindIcon(row.Kind)" />
-                                    <MudText Typo="Typo.body1">@row.DisplayName</MudText>
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                                             Color="@StatusColour(row.Status)">
-                                        @PublicWantedStatusDisplay.Name(row.Status)
-                                    </MudChip>
-                                    @if (!string.IsNullOrWhiteSpace(row.CaseNumber))
-                                    {
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CaseNumber</MudText>
-                                    }
-                                </MudStack>
-                            </TitleContent>
-                            <ChildContent>
-                                @* only the open panel builds an editor: each one carries a Quill instance and its
-                                   own bounty panel, and a file may advertise several vehicles at once *@
-                                @if (_open.Contains(row.Id))
-                                {
-                                    <PublicWantedEditor Id="@row.Id" User="User" Changed="ReloadAsync"
-                                                        Closed="ReloadAsync" />
-                                }
-                            </ChildContent>
-                        </MudExpansionPanel>
-                    }
-                </MudExpansionPanels>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                    <MudSelect T="string" @bind-Value="_selected" Label="Aus dem Steckbrief" Dense="true"
+                               Variant="Variant.Outlined" Style="min-width:280px;">
+                        @foreach (var source in _sources)
+                        {
+                            <MudSelectItem T="string" Value="@source.Id" Disabled="@source.Advertised">
+                                @PublicWantedKindDisplay.Name(source.Kind): @source.Label
+                                @(source.Advertised ? " (bereits ausgeschrieben)" : string.Empty)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton OnClick="CreateAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               Disabled="@(_busy || string.IsNullOrEmpty(_selected))"
+                               StartIcon="@Icons.Material.Filled.Add">Ausschreibung anlegen</MudButton>
+                </MudStack>
             }
-
-            @if (_mayWrite)
-            {
-                <MudDivider />
-                @if (_sources.Count == 0)
-                {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        Der Steckbrief dieser Akte führt kein Fahrzeug und keine Waffe.
-                    </MudText>
-                }
-                else
-                {
-                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                        <MudSelect T="string" @bind-Value="_selected" Label="Aus dem Steckbrief" Dense="true"
-                                   Variant="Variant.Outlined" Style="min-width:280px;">
-                            @foreach (var source in _sources)
-                            {
-                                <MudSelectItem T="string" Value="@source.Id" Disabled="@source.Advertised">
-                                    @PublicWantedKindDisplay.Name(source.Kind): @source.Label
-                                    @(source.Advertised ? " (bereits ausgeschrieben)" : string.Empty)
-                                </MudSelectItem>
-                            }
-                        </MudSelect>
-                        <MudButton OnClick="CreateAsync" Variant="Variant.Filled" Color="Color.Primary"
-                                   Disabled="@(_busy || string.IsNullOrEmpty(_selected))"
-                                   StartIcon="@Icons.Material.Filled.Add">Ausschreibung anlegen</MudButton>
-                    </MudStack>
-                }
-            }
-        </MudStack>
-    }
-</MudPaper>
+        }
+    </MudStack>
+}
 
 @code {
     [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
     [Parameter] public EventCallback Changed { get; set; }
+
+    /// <summary>What travels outward for an item notice; unchanged from the paragraph it replaced.</summary>
+    private const string OutwardHint =
+        "Nach außen geht das Kennzeichen beziehungsweise die Bezeichnung, nicht der Name der Halterin — und kein "
+        + "Foto. Intern bleibt der Aktenbezug: wird die Akte zur Verschlusssache, geht auch das Kennzeichen offline.";
 
     private IReadOnlyList<PublicWantedEdit> _rows = [];
     private IReadOnlyList<PublicWantedItemSource> _sources = [];
@@ -135,9 +139,14 @@
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    private Task LoadAsync() => LoadAsync(showSpinner: true);
+
+    private async Task LoadAsync(bool showSpinner)
     {
-        _load = true;
+        if (showSpinner)
+        {
+            _load = true;
+        }
         try
         {
             _rows = _mayOpen ? await Wanted.GetItemsForPersonAsync(PersonId, User) : [];
@@ -175,6 +184,14 @@
     private async Task ReloadAsync()
     {
         await LoadAsync();
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>Refresh without the spinner; it would tear down every open accordion and rebuild each editor
+    /// inside it back on its first tab.</summary>
+    private async Task ReloadQuietlyAsync()
+    {
+        await LoadAsync(showSpinner: false);
         await Changed.InvokeAsync();
     }
 

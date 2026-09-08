@@ -56,6 +56,11 @@ public sealed class BewerbungServiceTests
     private static ClaimsPrincipal Applicant(string id = "u1")
         => ClaimsPrincipalBuilder.Agent(id).WithStatus(AgentStatus.Applicant).Build();
 
+    // Partner account: status Active with an agency, so it may apply while keeping partner access.
+    private static ClaimsPrincipal Partner(string id = "partner-1")
+        => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.SpecialAgent).WithStatus(AgentStatus.Active)
+            .AsPartner(PartnerAgency.DoJ, PartnerRank.Member).Build();
+
     private static Bewerbung Bew(string id = "b1", string applicantUserId = "u1", string name = "Max Mustermann",
         BewerbungStatus status = BewerbungStatus.Eingereicht, Action<Bewerbung>? configure = null)
     {
@@ -139,6 +144,23 @@ public sealed class BewerbungServiceTests
         var stored = Assert.Single(db.Bewerbungen.ToList());
         Assert.Equal("Max Mustermann", stored.Name);
         Assert.Equal("Mein Anschreiben", stored.CoverLetter);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_Partner_CreatesApplication_AndLeavesTheAccountAlone()
+    {
+        // a partner applies without becoming an applicant: the row is the application, the account keeps its agency
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        var model = new BewerbungSubmitModel { Name = "Trevor Ward", CoverLetter = "Wechsel zur NOOSE" };
+
+        var created = await svc.SubmitAsync(model, null, null, null, Partner("partner-1"));
+
+        Assert.Equal("partner-1", created.ApplicantUserId);
+        Assert.Equal(BewerbungStatus.Eingereicht, created.Status);
+        using var db = ctx.NewContext();
+        Assert.Single(db.Bewerbungen.ToList());
     }
 
     [Fact]

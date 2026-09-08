@@ -53,7 +53,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
                 i.Reliability, i.Status, i.HandlerId, i.ContactInfo, i.Notes,
             })
             .ToListAsync(cancellationToken);
-        var handlers = await HandlerDisplayAsync(db, rows.Select(r => r.HandlerId), actor.MayRealNameSee(), cancellationToken);
+        var handlers = await HandlerDisplayAsync(db, rows.Select(r => r.HandlerId ?? string.Empty), actor.MayRealNameSee(), cancellationToken);
         var people = await LinkedPeopleAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
         var factions = await LinkedFactionsAsync(db, rows.Select(r => r.FactionId), actor, cancellationToken);
         var mayEdit = actor.MayWrite();
@@ -64,7 +64,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
                 var person = r.PersonId is null ? null : people.GetValueOrDefault(r.PersonId);
                 return new InformantDisplay(
                     r.Id, r.CaseNumber, Label(person?.Name, r.RealName, r.CaseNumber), r.Description, r.Reliability, r.Status,
-                    r.HandlerId, handlers.GetValueOrDefault(r.HandlerId),
+                    r.HandlerId ?? string.Empty, handlers.GetValueOrDefault(r.HandlerId ?? string.Empty),
                     person?.Id, person?.Name, person?.CaseNumber,
                     r.FactionId, r.FactionId is null ? null : factions.GetValueOrDefault(r.FactionId),
                     r.ContactInfo, r.Notes,
@@ -92,15 +92,16 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             return null;
         }
-        var handlerName = (await HandlerDisplayAsync(db, new[] { inf.HandlerId }, actor.MayRealNameSee(), cancellationToken))
-            .GetValueOrDefault(inf.HandlerId);
+        var handlerName = (await HandlerDisplayAsync(db, new[] { inf.HandlerId ?? string.Empty },
+                actor.MayRealNameSee(), cancellationToken))
+            .GetValueOrDefault(inf.HandlerId ?? string.Empty);
         var people = await LinkedPeopleAsync(db, new[] { inf.PersonId }, actor, cancellationToken);
         var person = inf.PersonId is null ? null : people.GetValueOrDefault(inf.PersonId);
         var factions = await LinkedFactionsAsync(db, new[] { inf.FactionId }, actor, cancellationToken);
 
         return new InformantDisplay(
             inf.Id, inf.CaseNumber, Label(person?.Name, inf.RealName, inf.CaseNumber), inf.Description,
-            inf.Reliability, inf.Status, inf.HandlerId, handlerName,
+            inf.Reliability, inf.Status, inf.HandlerId ?? string.Empty, handlerName,
             person?.Id, person?.Name, person?.CaseNumber,
             inf.FactionId, inf.FactionId is null ? null : factions.GetValueOrDefault(inf.FactionId),
             inf.ContactInfo, inf.Notes,

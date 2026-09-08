@@ -16,7 +16,9 @@ public interface ITicketService
     // ---- citizen ----
 
     /// <summary>Opens a ticket with its first message and returns the case number.</summary>
-    Task<string> OpenAsync(TicketInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    /// <param name="attachment">Optional image travelling with the first message.</param>
+    Task<string> OpenAsync(TicketInput input, ClaimsPrincipal actor, TicketAttachmentUpload? attachment = null,
+        CancellationToken cancellationToken = default);
 
     // ---- internal ticket (agent) ----
 
@@ -36,6 +38,15 @@ public interface ITicketService
     Task AddParticipantAsync(string id, string agentId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Attaches several agents at once; returns how many were newly attached.</summary>
+    /// <remarks>
+    /// All or nothing on the selectability check: a whole direction goes on the ticket in one write, so a single
+    /// unselectable id refuses the batch instead of half-attaching it. Ids already on the ticket are skipped, not
+    /// refused — the direction buttons overlap with what is already there by design.
+    /// </remarks>
+    Task<int> AddParticipantsAsync(string id, IReadOnlyList<string> agentIds, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     Task RemoveParticipantAsync(string participantId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 
@@ -48,7 +59,7 @@ public interface ITicketService
 
     /// <summary>Citizen answer in the shared thread; refused once the ticket is closed.</summary>
     Task ReplyAsCitizenAsync(string caseNumber, string text, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default);
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default);
 
     /// <summary>Moves the citizen's read mark; only the owner may.</summary>
     Task MarkCitizenReadAsync(string caseNumber, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
@@ -58,8 +69,19 @@ public interface ITicketService
 
     // ---- desk (leadership) ----
 
+    /// <param name="category">Narrows the tab to one concern; null shows every one of them.</param>
+    /// <param name="byPriority">Orders by the desk priority instead of the newest activity.</param>
     Task<IReadOnlyList<TicketRow>> GetInboxAsync(TicketInboxScope scope, string? search, bool onlyMine,
-        ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+        ClaimsPrincipal actor, TicketKategorie? category = null, bool byPriority = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sets or clears the hand-set desk order; null hands the row back to the automatic one.</summary>
+    Task SetPriorityAsync(string id, int? priority, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Corrects what a concern is about; the citizen's pick is a guess, not a classification.</summary>
+    Task SetCategoryAsync(string id, TicketKategorie category, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Tickets for the link picker, latest activity first, across every status.</summary>
     /// <remarks>
@@ -81,14 +103,33 @@ public interface ITicketService
 
     Task AssignSelfAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Puts another agent on the ticket as its handler.</summary>
+    /// <remarks>
+    /// The handler is one agent and drives the "only mine" filter and the reply bell; participants are a
+    /// different axis with its own read marks. Assigning does not attach the handler as a participant.
+    /// </remarks>
+    Task AssignAsync(string id, string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Moves the status; closing demands a reason, reopening clears it again.</summary>
+    /// <param name="reason">Required on the move to closed, ignored on every other move.</param>
+    /// <param name="note">Internal remark on the closure; kept out of the audit row and never sent outward.</param>
     Task SetStatusAsync(string id, TicketStatus status, ClaimsPrincipal actor,
+        TicketAbschlussgrund? reason = null, string? note = null,
         CancellationToken cancellationToken = default);
 
     Task PostInternalNoteAsync(string id, string text, ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default);
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default);
 
     /// <summary>Agency answer to the citizen; the row carries no agent, so it reads as the constant sender outside.</summary>
     Task ReplyToCitizenAsync(string id, string text, ClaimsPrincipal actor,
+        TicketAttachmentUpload? attachment = null, CancellationToken cancellationToken = default);
+
+    /// <summary>What the delivery endpoint needs for one message's attachment, or null when it is not readable.</summary>
+    Task<TicketAttachmentAccess?> GetAttachmentAsync(string messageId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The same, for the citizen's own thread, addressed by case number and position.</summary>
+    Task<TicketAttachmentAccess?> GetOwnAttachmentAsync(string caseNumber, int index, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 
     /// <summary>Rewrites one line of either thread; its author only, and never a line the citizen wrote.</summary>

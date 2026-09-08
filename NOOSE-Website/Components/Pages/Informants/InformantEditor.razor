@@ -191,8 +191,9 @@ else
             _reliability = d.Reliability;
             _status = d.Status;
             _handlerId = d.HandlerId;
-            // a handler who left the roster is no longer offered — carry them in so the field is not blank
-            if (_handlers.All(h => h.Id != d.HandlerId))
+            // a handler who left the roster is no longer offered — carry them in so the field is not blank.
+            // An empty id means the account was deleted: no option to carry, or the picker grows a blank row.
+            if (_handlerId.Length > 0 && _handlers.All(h => h.Id != d.HandlerId))
             {
                 _handlers.Add(new InformantHandlerOption(d.HandlerId, d.HandlerName ?? d.HandlerId));
             }

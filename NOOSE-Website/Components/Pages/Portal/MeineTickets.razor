@@ -3,6 +3,7 @@
 @layout BuergerLayout
 @attribute [AllowAnonymous]
 @inject ITicketService Tickets
+@inject ITicketAttachmentStorageService AttachmentStore
 @inject IBuergerService Buerger
 @inject IPublicModuleService Modules
 @inject TicketBroadcaster Broadcaster
@@ -79,8 +80,10 @@ else if (_ready)
                 <MudDivider />
 
                 <MudStack Spacing="2">
-                    @foreach (var message in _detail.Messages)
+                    @* indexed, because an attachment is addressed by its position in exactly this list *@
+                    @for (var index = 0; index < _detail.Messages.Count; index++)
                     {
+                        var message = _detail.Messages[index];
                         <MudPaper Outlined="true" Class="pa-3"
                                   Style="@(message.FromCitizen ? "margin-left:15%;" : "margin-right:15%;")">
                             <MudStack Spacing="1">
@@ -94,6 +97,15 @@ else if (_ready)
                                     }
                                 </MudText>
                                 <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                                @if (message.HasAttachment)
+                                {
+                                    @* addressed by case number and position: the outward record carries no row id *@
+                                    <MudButton Href="@($"/dateien/tickets/az/{_detail.CaseNumber}/{index}?inline=true")"
+                                               Target="_blank" Variant="Variant.Text" Color="Color.Default"
+                                               Size="Size.Small" StartIcon="@Icons.Material.Filled.Image">
+                                        @(message.AttachmentName ?? "Anhang")
+                                    </MudButton>
+                                }
                             </MudStack>
                         </MudPaper>
                     }
@@ -109,6 +121,8 @@ else if (_ready)
                 {
                     <MudTextField @bind-Value="_reply" Label="Antwort" Lines="3" Variant="Variant.Outlined"
                                   MaxLength="@TicketRules.MaxMessageLength" />
+                    <ImageAttachmentPicker @bind-Picked="_attachment" MaxBytes="@AttachmentStore.MaxBytes"
+                                           Disabled="_busy" />
                     <div>
                         <MudButton OnClick="ReplyAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Send">Antwort senden</MudButton>
@@ -184,6 +198,7 @@ else if (_ready)
     private bool _loadFailed;
     private CitizenTicketDetail? _detail;
     private string _reply = string.Empty;
+    private ImageAttachmentPicker.PickedImage? _attachment;
     private bool _ready;
     private bool _busy;
     private bool _moduleOn;
@@ -290,8 +305,13 @@ else if (_ready)
         _busy = true;
         try
         {
-            await Tickets.ReplyAsCitizenAsync(CaseNumber, _reply, _user);
+            var upload = _attachment is { } picked
+                ? new TicketAttachmentUpload(new MemoryStream(picked.Content), picked.ContentType,
+                    picked.OriginalName, picked.Size)
+                : null;
+            await Tickets.ReplyAsCitizenAsync(CaseNumber, _reply, _user, upload);
             _reply = string.Empty;
+            _attachment = null;
             _detail = await Tickets.GetOwnDetailAsync(CaseNumber, _user);
             Snackbar.Add("Antwort gesendet.", Severity.Success);
         }

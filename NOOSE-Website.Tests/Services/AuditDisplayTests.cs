@@ -1,4 +1,6 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
+using NOOSE_Website.Data.Entities.Appointments;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Tests.Services;
@@ -378,6 +380,70 @@ public class AuditDisplayTests
         var change = Single($$"""{"Description":["{{longText}}","b"]}""");
 
         Assert.Equal(300, change.Alt.Length);
+    }
+
+    // ---- the entity type disambiguates shared property names ---------------
+
+    [Fact]
+    public void Category_WithoutAnEntityType_StaysTheAbsenceReason()
+    {
+        // the per-record timelines pass none, and only an absence reaches them
+        var change = Assert.Single(AuditDisplay.Parse("""{"Category":[0,2]}"""));
+
+        Assert.Equal("Kategorie", change.Field);
+        Assert.Equal("Urlaub", change.Alt);
+        Assert.Equal("Krank", change.New);
+    }
+
+    [Fact]
+    public void ATicketCategoryIsNotReadAsAnAbsenceReason()
+    {
+        var change = Assert.Single(
+            AuditDisplay.Parse("""{"Category":[1,3]}""", entityType: nameof(Ticket)));
+
+        Assert.Equal("Anzeige", change.Alt);
+        Assert.Equal("Beschwerde", change.New);
+    }
+
+    [Fact]
+    public void AnAppointmentCategoryIsNotReadAsAnAbsenceReason()
+    {
+        var change = Assert.Single(
+            AuditDisplay.Parse("""{"Category":[0,2]}""", entityType: nameof(Appointment)));
+
+        Assert.Equal("Gerichtstermin", change.Alt);
+        Assert.Equal("Einsatz", change.New);
+    }
+
+    [Fact]
+    public void ATicketStatusAndClosingReasonAreNamed()
+    {
+        var changes = AuditDisplay.Parse(
+            """{"Status":[1,3],"ClosingReason":[null,2]}""", entityType: nameof(Ticket));
+
+        var status = changes.Single(c => c.Field == "Status");
+        Assert.Equal("In Bearbeitung", status.Alt);
+        Assert.Equal("Geschlossen", status.New);
+        var reason = changes.Single(c => c.Field == "Abschlussgrund");
+        Assert.Equal(Dash, reason.Alt);
+        Assert.Equal("Spam", reason.New);
+    }
+
+    [Fact]
+    public void AStatusOnAnotherRecordKeepsItsRawValue()
+    {
+        // Status is not a single axis either; naming it for every entity would be the same mistake
+        var change = Assert.Single(AuditDisplay.Parse("""{"Status":[1,3]}""", entityType: "Person"));
+
+        Assert.Equal("1", change.Alt);
+        Assert.Equal("3", change.New);
+    }
+
+    [Fact]
+    public void TheFollowupStampOfATicketStaysOutOfTheProtocol()
+    {
+        // hourly worker bookkeeping, exactly like NotifiedAt on a followup
+        Assert.Empty(AuditDisplay.Parse("""{"NudgedAt":[null,"2026-09-07T10:00:00Z"]}"""));
     }
 
     // ---- FieldChange record shape ------------------------------------------

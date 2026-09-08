@@ -1,0 +1,56 @@
+@* Closing a ticket: the reason is required, the note is the desk's own remark on it. *@
+@using NOOSE_Website.Services.Public
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Der Bürger sieht weiterhin nur „Abgeschlossen“. Grund und Notiz bleiben im Haus.
+            </MudText>
+
+            <MudSelect T="TicketAbschlussgrund" @bind-Value="_reason" Label="Abschlussgrund"
+                       Variant="Variant.Outlined"
+                       ToStringFunc="@(r => TicketAbschlussgrundDisplay.Name(r))">
+                @foreach (var option in TicketAbschlussgrundDisplay.All)
+                {
+                    <MudSelectItem T="TicketAbschlussgrund" Value="@option">
+                        @TicketAbschlussgrundDisplay.Name(option)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_note" Label="Notiz (optional)" Lines="3" Variant="Variant.Outlined"
+                          MaxLength="@TicketRules.ClosingNoteMaxLength"
+                          Counter="@TicketRules.ClosingNoteMaxLength" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   StartIcon="@Icons.Material.Filled.Check">Ticket schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private TicketAbschlussgrund _reason = TicketAbschlussgrund.Erledigt;
+    private string? _note;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Choice(_reason, _note)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>The picked reason and the optional internal note.</summary>
+    public record Choice(TicketAbschlussgrund Reason, string? Note);
+
+    /// <summary>Shows the form; returns the choice or null on cancel.</summary>
+    public static async Task<Choice?> ShowAsync(IDialogService dialog)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var reference = await dialog.ShowAsync<TicketCloseDialog>("Ticket schließen",
+            new DialogParameters<TicketCloseDialog>(), options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Choice choice } ? choice : null;
+    }
+}

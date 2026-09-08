@@ -113,6 +113,20 @@ else
         </MudItem>
     </MudGrid>
 
+    @if (report.Tickets.ByCategory.Count > 0)
+    {
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mb-4">
+            @* named, or the chips are loose numbers: they break down "Eröffnet" above and nothing else *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Eröffnet nach Kategorie:</MudText>
+            @foreach (var slice in report.Tickets.ByCategory)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                    @TicketKategorieDisplay.Name(slice.Category): @slice.Opened.ToString("N0")
+                </MudChip>
+            }
+        </MudStack>
+    }
+
     @if (report.Views is { } views)
     {
         <MudText Typo="Typo.overline" Class="mud-text-secondary">Aufrufe der Ausschreibungen</MudText>
