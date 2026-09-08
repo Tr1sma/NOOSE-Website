@@ -276,6 +276,10 @@
     private async Task SuggestAsync()
     {
         _busy = true;
+        // cleared first: a refusal leaves the toast and nothing else, where the previous run's remaining
+        // quota would otherwise still stand there as if it were current
+        _suggestCost = null;
+        _suggestQuota = null;
         try
         {
             var suggestion = await Assist.SuggestReplyAsync(TicketId, User);
@@ -313,6 +317,9 @@
             }
             _draft = string.Empty;
             _attachment = null;
+            // the line belongs to the draft that just left; above an empty composer it reads as the next one
+            _suggestCost = null;
+            _suggestQuota = null;
             await LoadAsync();
         }
         catch (Exception ex)
