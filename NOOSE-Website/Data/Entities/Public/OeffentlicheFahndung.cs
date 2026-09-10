@@ -100,6 +100,16 @@ public class OeffentlicheFahndung : IAuditable, ISoftDelete
     [Column("GefasstAm")]
     public DateTime? CapturedAt { get; set; }
 
+    /// <summary>Reward figure to show in the public total; roleplay backdrop, never money that moved.</summary>
+    /// <remarks>
+    /// Set when the notice is marked captured. It feeds <c>PublicStatistics.RewardsPaid</c> and nothing else: no cash
+    /// booking backs it, no receipt exists for it, and the internal reward views and the KPI panel stay on the real
+    /// <c>HinweisBelohnungen</c> rows. Null means "not stated" rather than "nothing was paid" — the same distinction
+    /// the published figures draw everywhere else. Same discipline as <c>RewardsPaidBaseline</c>.
+    /// </remarks>
+    [Column("OeffentlichAusgezahlt")]
+    public decimal? PublicPaidOut { get; set; }
+
     /// <summary>Declared, never written here: an audited increment per anonymous view writes one log row per request.</summary>
     [Column("AufrufZaehler")]
     public int ViewCount { get; set; }

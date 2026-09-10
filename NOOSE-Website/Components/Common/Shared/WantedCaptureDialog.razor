@@ -1,0 +1,70 @@
+@* Marks a notice captured and takes the reward figure its public total is to show. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:380px;max-width:480px;">
+            @if (!Correction)
+            {
+                <MudText Typo="Typo.body2">
+                    Die Ausschreibung verschwindet damit vom öffentlichen Board.
+                </MudText>
+            }
+
+            <MudNumericField T="decimal?" @bind-Value="_amount" Label="Öffentlich als ausgezahlt anzeigen ($)"
+                             Variant="Variant.Outlined" Min="0" Step="10000" Clearable="true"
+                             HelperText="Erscheint nur in der Gesamtsumme auf der Startseite. Leer lassen, wenn nichts angezeigt werden soll." />
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Reine Anzeigezahl: keine Kassenbuchung, kein Beleg, kein belohnter Hinweis. Das echte Kopfgeld zahlst
+                du getrennt über die Belohnung aus.
+            </MudAlert>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="Apply">
+            @(Correction ? "Übernehmen" : "Als gefasst markieren")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Whether an already captured notice is being corrected rather than captured now.</summary>
+    [Parameter] public bool Correction { get; set; }
+
+    [Parameter] public decimal? Amount { get; set; }
+
+    private decimal? _amount;
+
+    protected override void OnInitialized() => _amount = Amount;
+
+    private void Apply() => MudDialog.Close(DialogResult.Ok(new WantedCaptureDialogResult(_amount)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>What the dialog collected; a null result means the author cancelled, a null amount means "none".</summary>
+    public record WantedCaptureDialogResult(decimal? Amount);
+
+    /// <summary>Asks for the capture and the figure at once; null when cancelled.</summary>
+    public static Task<WantedCaptureDialogResult?> ShowCaptureAsync(IDialogService dialog)
+        => ShowAsync(dialog, "Als gefasst markieren?", correction: false, amount: null);
+
+    /// <summary>Reopens the figure of a captured notice so a wrong one does not stand for ever.</summary>
+    public static Task<WantedCaptureDialogResult?> ShowCorrectionAsync(IDialogService dialog, decimal? amount)
+        => ShowAsync(dialog, "Angezeigte Belohnung ändern", correction: true, amount);
+
+    private static async Task<WantedCaptureDialogResult?> ShowAsync(IDialogService dialog, string title,
+        bool correction, decimal? amount)
+    {
+        var parameters = new DialogParameters<WantedCaptureDialog>
+        {
+            { x => x.Correction, correction },
+            { x => x.Amount, amount },
+        };
+        var reference = await dialog.ShowAsync<WantedCaptureDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: WantedCaptureDialogResult data } ? data : null;
+    }
+}

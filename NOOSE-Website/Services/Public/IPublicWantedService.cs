@@ -88,8 +88,18 @@ public interface IPublicWantedService
     /// <summary>Take a notice offline with a reason; works while the module is off.</summary>
     Task RetractAsync(string id, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Mark a published notice as captured.</summary>
-    Task CapturedAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    /// <summary>Mark a published notice as captured, optionally with the reward figure the public total shows.</summary>
+    /// <remarks>
+    /// <paramref name="publicPaidOut"/> is roleplay backdrop, not money: it books nothing, issues no receipt and
+    /// stays out of every internal reward view. It reaches <c>PublicStatistics.RewardsPaid</c> and nothing else.
+    /// </remarks>
+    Task CapturedAsync(string id, ClaimsPrincipal actor, decimal? publicPaidOut = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Correct that publicly shown figure on a captured notice; null takes it out of the total again.</summary>
+    /// <remarks>Captured notices only — money shown for an arrest that never happened is a false public claim.</remarks>
+    Task SetPublicPaidOutAsync(string id, decimal? publicPaidOut, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Recompute the published hazard level from the file's current score, dropping a manual choice.</summary>
     Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

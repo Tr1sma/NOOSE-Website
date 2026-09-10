@@ -82,6 +82,23 @@
     der Idempotenz-Token (Muster Ablauf-Worker), gesetzt per Compare-and-swap wie in `PayInAsync`, mit
     `ManualAudit.Row` je Anteil, weil `ExecuteUpdate` den Interceptor umgeht. **`Ausgezahlt` heißt erledigt, nicht
     restlos geleert** — sonst zählt `GetCoverageAsync` einen abgeschlossenen Fall für immer als offene Verpflichtung.
+  - **Nicht verwechseln: `OeffentlicheFahndung.PublicPaidOut` ist keine Auszahlung.** Die Zahl, die ein Autor bei
+    der Ergreifung für die öffentliche Gesamtsumme angibt, ist RP-Kulisse ohne Buchung und ohne Beleg und darf
+    **keinen Geldpfad erreichen** (eigener Wächter) — Details in
+    [oeffentlich-redaktion.md](oeffentlich-redaktion.md), Phase 15b.
+  - **Der ausgezahlte Betrag ist der des Bearbeiters, nicht der der Ausschreibung.** Was die beworbenen Anteile nicht
+    decken, entsteht in derselben Transaktion als **behördlicher Anteil** (`NooseKasse`, Konto aus
+    `RewardPayoutInput.TopUpAccount`) — und zwar direkt mit Status `Ausgezahlt`: so fällt er nie in
+    `BountyShares.Advertised`, öffentliche Summe und Deckungswarnung sehen ihn nicht, und es braucht **keine
+    Migration**. Der Anteil ist der einzige gangbare Weg, weil `HinweisBelohnung.AnteilId` eine Pflichtbeziehung ist
+    (Beleg und `RewardRow.Origin/Account` lesen `Share!`) — `AnteilId` nullable zu machen hieße Beleg, Deckung und
+    öffentliche Summe umzubauen. Er ist außerdem der **Idempotenz-Token einer Ausschreibung ohne Kopfgeld**:
+    `AlreadyPaidAsync` erkennt eine erledigte Ausschreibung ausschließlich *über* ihre Anteile, ohne ihn ließe sich
+    zweimal auszahlen. Gezogen wird er **zuletzt** (`RewardAllocation.ShareCapacity.IsTopUp`), hinter der
+    persönlichen Übergabe: erst das ausgeschriebene Geld, dann frisches. Ohne Konto wird eine Auszahlung über dem
+    Kopfgeld abgewiesen; die einzige Schranke davor ist `RequireRewardPayout` (Führung) — Absicht, denn Führung sagt
+    behördliches Geld ohnehin direkt zu. Der „Auszahlen"-Knopf im `BountyPanel` hängt deshalb **nicht** mehr an
+    `Advertised > 0`, sonst hätte eine Ausschreibung ohne Kopfgeld keinen Einstieg.
   - **`FuehrteZurErgreifung` schreibt ausschließlich die Auszahlung, und der Beleg — nicht der Status — sperrt die
     zweite.** Der Status stand früher im Handmenü von `/hinweise/{id}` (`TipRules.AllowedTargets`), während
     `RewardService.GetDraftAsync` ihn als „Bereits belohnt" las: wer ihn von Hand setzte, hat das komplette Kopfgeld

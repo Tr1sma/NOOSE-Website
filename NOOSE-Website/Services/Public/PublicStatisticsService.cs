@@ -18,7 +18,9 @@ public class PublicStatisticsService(
     // The agency's record from before this site went live. Roleplay backdrop, not counted rows: the site is the
     // agency's new file room, not the day it opened, and a start page reading "0 $ paid out" would date it. The
     // four figures move together — a payout total without the tips behind it reads as invented. Kept in the public
-    // service only: the internal reward views, the KPI panel and every cash booking stay on the real rows.
+    // service only: the internal reward views, the KPI panel and every cash booking stay on the real rows. The
+    // per-capture figure below (OeffentlicheFahndung.PublicPaidOut) is the same kind of backdrop and obeys the
+    // same rule — PublicSurfaceGuardTests holds it to this file.
     // public so the tests can name the offset instead of restating it, and tuning it stays a one-line edit
     public const int TipsReceivedBaseline = 21;
     public const int TipsConfirmedBaseline = 18;
@@ -57,7 +59,7 @@ public class PublicStatisticsService(
             tips?.TipsReceived, tips?.TipsConfirmed, tips?.TipsLedToCapture, rewards?.RewardsPaid);
     }
 
-    /// <summary>Counts the two tables this service owns figures for; null when they cannot be read.</summary>
+    /// <summary>Counts the tables this service owns figures for; null when they cannot be read.</summary>
     private async Task<Counts?> LoadAsync(CancellationToken cancellationToken)
     {
         if (cache.TryGetValue(CacheKey, out Counts? cached) && cached is not null)
@@ -78,11 +80,16 @@ public class PublicStatisticsService(
             var ledToCapture = await db.Hinweise.AsNoTracking().CountAsync(TipRules.CaptureRows, cancellationToken);
             // no soft-delete filter to weaken here: money history is append-only, so every row is a real payout
             var paid = await db.HinweisBelohnungen.AsNoTracking().SumAsync(r => r.Amount, cancellationToken);
+            // The figure an author showed at an arrest, on top of it. Every status counts, not only Gefasst: a
+            // retraction does not unpay a reward, exactly as the real payout rows outlive one. The soft-delete
+            // filter does apply though — a notice the agency removed makes no claim any more.
+            var shown = await db.OeffentlicheFahndungen.AsNoTracking()
+                .SumAsync(f => f.PublicPaidOut ?? 0m, cancellationToken);
 
             // folded in here, not at the call site, so the baseline inherits both rules the counts already answer to:
             // an unreadable database publishes nothing, and a switched-off module publishes nothing
             counts = new Counts(TipsReceivedBaseline + received, TipsConfirmedBaseline + confirmed,
-                TipsCaptureBaseline + ledToCapture, RewardsPaidBaseline + paid);
+                TipsCaptureBaseline + ledToCapture, RewardsPaidBaseline + paid + shown);
         }
         catch (Exception)
         {

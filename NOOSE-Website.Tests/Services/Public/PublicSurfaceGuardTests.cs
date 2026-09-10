@@ -181,6 +181,28 @@ public class PublicSurfaceGuardTests
     }
 
     [Fact]
+    public void ThePubliclyShownPayout_IsReadNowhereButTheStatisticsService()
+    {
+        // It is a roleplay display figure, not money: nothing was booked and no receipt exists for it. Every money
+        // path in the app lives under Services/ — the KPI panel divides real payouts by real arrests, the cash book
+        // balances real accounts, the reward service issues receipts — and letting the facade reach any of them
+        // would corrupt a figure the agency works with. So exactly two services may name it: the wanted service
+        // writes it, the statistics service reads it. Same discipline as RewardsPaidBaseline.
+        string[] allowed = ["PublicWantedService.cs", "IPublicWantedService.cs", "PublicStatisticsService.cs"];
+
+        var services = Path.Combine(ProjectRoot(), "Services");
+        var offenders = Directory.EnumerateFiles(services, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !allowed.Contains(Path.GetFileName(f), StringComparer.Ordinal))
+            .Where(f => WithoutComments(File.ReadAllText(f)).Contains("PublicPaidOut", StringComparison.Ordinal))
+            .Select(Path.GetFileName)
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Die Anzeigezahl darf keinen Geldpfad erreichen: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
     public void NoPublicPage_RendersAClickableStatTile()
     {
         // StatTile navigates from an @onclick handler. Public pages render statically, so the handler never runs and

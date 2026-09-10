@@ -29,7 +29,9 @@
                        Label="Obergrenze" Disabled="_busy" />
             <MudButton OnClick="AddAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                        Disabled="_busy" StartIcon="@Icons.Material.Filled.Paid">Setzen</MudButton>
-            @if (IsLeadership && _summary.Advertised > 0 && _rewards.Count == 0)
+            @* deliberately not gated on an advertised bounty: the paid figure is the operator's, and a notice
+               without a bounty is rewarded straight out of the till *@
+            @if (IsLeadership && _rewards.Count == 0)
             {
                 <MudButton OnClick="PayoutAsync" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
                            Disabled="_busy" StartIcon="@Icons.Material.Filled.Redeem">Auszahlen</MudButton>
@@ -307,12 +309,17 @@
             Snackbar.Add("Erst die Ausschreibung auf gefasst setzen, dann die Belohnung auszahlen.", Severity.Warning);
             return;
         }
-        var amounts = await RewardPayoutDialog.ShowAsync(DialogService, draft);
-        if (amounts is null || amounts.Count == 0)
+        var split = await RewardPayoutDialog.ShowAsync(DialogService, draft);
+        if (split is null || split.Tips.Count == 0)
         {
             return;
         }
-        var receipts = await Reward.PayoutAsync(new RewardPayoutInput { WantedId = WantedId, Tips = amounts }, User);
+        var receipts = await Reward.PayoutAsync(new RewardPayoutInput
+        {
+            WantedId = WantedId,
+            Tips = split.Tips,
+            TopUpAccount = split.TopUpAccount,
+        }, User);
         Snackbar.Add($"Belohnung ausgezahlt · {string.Join(", ", receipts)}", Severity.Success);
     });
 

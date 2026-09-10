@@ -15,8 +15,13 @@ public static class RewardAllocation
     public const int MaxTips = 10;
 
     /// <summary>One advertised share and what it can still cover.</summary>
+    /// <remarks>
+    /// <paramref name="IsTopUp"/> marks money the payout invents because the operator pays more than was advertised.
+    /// It is drawn on last, behind even the personal handover: the bounty that was promised publicly is spent first,
+    /// and only what is still missing is taken fresh out of the till.
+    /// </remarks>
     public sealed record ShareCapacity(string ShareId, decimal Amount, BountyOrigin Origin,
-        BountyShareStatus Status, KassenKonto? Account, DateTime Timestamp);
+        BountyShareStatus Status, KassenKonto? Account, DateTime Timestamp, bool IsTopUp = false);
 
     /// <summary>What one tip is to be paid.</summary>
     public sealed record TipDemand(string TipId, decimal Amount);
@@ -32,10 +37,10 @@ public static class RewardAllocation
     public static bool NeedsBooking(BountyOrigin origin, BountyShareStatus status)
         => origin == BountyOrigin.NooseKasse || status == BountyShareStatus.Gesichert;
 
-    /// <summary>The draw order: bookable money first, oldest first, id as the tie-breaker.</summary>
+    /// <summary>The draw order: bookable money first, fresh money last, oldest first, id as the tie-breaker.</summary>
     public static IReadOnlyList<ShareCapacity> Order(IEnumerable<ShareCapacity> shares)
         => shares
-            .OrderBy(s => NeedsBooking(s.Origin, s.Status) ? 0 : 1)
+            .OrderBy(s => s.IsTopUp ? 2 : NeedsBooking(s.Origin, s.Status) ? 0 : 1)
             .ThenBy(s => s.Timestamp)
             .ThenBy(s => s.ShareId, StringComparer.Ordinal)
             .ToList();

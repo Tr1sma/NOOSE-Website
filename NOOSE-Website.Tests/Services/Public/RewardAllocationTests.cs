@@ -23,6 +23,11 @@ public class RewardAllocationTests
         => new(id, amount, BountyOrigin.AgentPrivat, BountyShareStatus.Gesichert, KassenKonto.Schwarzgeld,
             Base.AddDays(dayOffset));
 
+    /// <summary>Money the payout invents on the spot because the advertised bounty does not reach.</summary>
+    private static RewardAllocation.ShareCapacity TopUp(string id, decimal amount, int dayOffset = 0)
+        => new(id, amount, BountyOrigin.NooseKasse, BountyShareStatus.Ausgezahlt, KassenKonto.Gruengeld,
+            Base.AddDays(dayOffset), IsTopUp: true);
+
     private static RewardAllocation.TipDemand Tip(string id, decimal amount) => new(id, amount);
 
     // ---- which shares move money ----
@@ -70,6 +75,16 @@ public class RewardAllocationTests
         var order = RewardAllocation.Order([Official("b", 100m), Official("a", 100m)]);
 
         Assert.Equal(["a", "b"], order.Select(s => s.ShareId));
+    }
+
+    [Fact]
+    public void A_top_up_is_drawn_on_after_even_the_personal_handover()
+    {
+        // oldest of the three and bookable, so only the flag can push it to the back
+        var order = RewardAllocation.Order(
+            [TopUp("extra", 100m, -20), Pledged("pledged", 100m, -10), Official("agency", 100m)]);
+
+        Assert.Equal(["agency", "pledged", "extra"], order.Select(s => s.ShareId));
     }
 
     // ---- the split ----
@@ -128,6 +143,17 @@ public class RewardAllocationTests
 
         var slice = Assert.Single(slices);
         Assert.Equal("secured", slice.ShareId);
+    }
+
+    [Fact]
+    public void The_advertised_bounty_is_spent_before_the_top_up()
+    {
+        var slices = RewardAllocation.Distribute(
+            [Official("agency", 40_000m), TopUp("extra", 20_000m)],
+            [Tip("t1", 50_000m)]);
+
+        Assert.Equal(40_000m, slices.Single(s => s.ShareId == "agency").Amount);
+        Assert.Equal(10_000m, slices.Single(s => s.ShareId == "extra").Amount);
     }
 
     // ---- what a payout may not be ----

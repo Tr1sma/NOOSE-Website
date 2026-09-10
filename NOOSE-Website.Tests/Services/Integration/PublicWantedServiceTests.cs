@@ -1255,6 +1255,117 @@ public sealed class PublicWantedServiceTests
     }
 
     [Fact]
+    public async Task Capturing_StoresThePubliclyShownPayout()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader(), 750_000m);
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(750_000m, (await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).PublicPaidOut);
+        // a display figure and nothing else: no cash left the till and no citizen was issued a receipt
+        Assert.Empty(await db.KassenBuchungen.ToListAsync());
+        Assert.Empty(await db.HinweisBelohnungen.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Capturing_WithoutAnAmount_LeavesThePubliclyShownPayoutUnset()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        await using var db = ctx.NewContext();
+        // null rather than 0: "not stated" is a different claim from "nothing was paid"
+        Assert.Null((await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).PublicPaidOut);
+    }
+
+    [Fact]
+    public async Task ANegativePubliclyShownPayout_IsRefusedAndLeavesTheNoticeLive()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.CapturedAsync(id, Leader(), -1m));
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(PublicWantedStatus.Veroeffentlicht,
+            (await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).Status);
+    }
+
+    [Fact]
+    public async Task AThirdDecimalInThePubliclyShownPayout_IsRefused()
+    {
+        // the column holds two decimals; MySQL would swallow the third without a word
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.CapturedAsync(id, Leader(), 1.005m));
+    }
+
+    [Fact]
+    public async Task ThePubliclyShownPayout_StaysCorrectableAfterTheCapture()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader(), 750_000m);
+
+        await host.Service.SetPublicPaidOutAsync(id, 500_000m, Leader());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(500_000m, (await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).PublicPaidOut);
+    }
+
+    [Fact]
+    public async Task ThePubliclyShownPayout_StaysCorrectableAfterARetraction()
+    {
+        // a retraction does not take the figure out of the public total, so it must not lock the correction either
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader(), 750_000m);
+        await host.Service.RetractAsync(id, "Zahlendreher", Leader());
+
+        await host.Service.SetPublicPaidOutAsync(id, null, Leader());
+
+        await using var db = ctx.NewContext();
+        Assert.Null((await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id)).PublicPaidOut);
+    }
+
+    [Fact]
+    public async Task ThePubliclyShownPayout_CannotBeSetOnANoticeNobodyWasCaughtOn()
+    {
+        // otherwise the start page reports money paid for an arrest that never happened
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetPublicPaidOutAsync(id, 500_000m, Leader()));
+    }
+
+    [Fact]
+    public async Task ThePubliclyShownPayout_IsRefusedForTheReadOnlySupervision()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader(), 750_000m);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SetPublicPaidOutAsync(id, 1m, OnlyReader()));
+    }
+
+    [Fact]
     public async Task Capturing_LeavesAPressDraftBehind()
     {
         using var ctx = await SeededAsync();

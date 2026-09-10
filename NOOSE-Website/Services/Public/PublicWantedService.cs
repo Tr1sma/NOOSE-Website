@@ -274,7 +274,7 @@ public class PublicWantedService(
             .Where(f => f.Id == id)
             .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Kind, f.Status,
                 f.DisplayName, f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml,
-                f.BountyIsCap, f.PublicHazardLevel) })
+                f.BountyIsCap, f.PublicHazardLevel, f.PublicPaidOut) })
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is not null && await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken)
@@ -742,9 +742,12 @@ public class PublicWantedService(
         await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
-    public async Task CapturedAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task CapturedAsync(string id, ClaimsPrincipal actor, decimal? publicPaidOut = null,
+        CancellationToken cancellationToken = default)
     {
         Permission.RequirePublicWantedWrite(actor);
+        // before the row is touched, so a rejected figure cannot leave a half-captured notice behind
+        RequireShowableAmount(publicPaidOut);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
@@ -756,6 +759,7 @@ public class PublicWantedService(
 
         row.Status = PublicWantedStatus.Gefasst;
         row.CapturedAt = DateTime.UtcNow;
+        row.PublicPaidOut = publicPaidOut;
         var card = new PublicWantedCard(row.CaseNumber!, row.Kind, row.DisplayName, row.AliasText,
             row.PhotoFileName != null, row.PublicHazardLevel, row.PublishedAt, NoHints);
         await SaveAndInvalidateAsync(db, cancellationToken);
@@ -763,6 +767,45 @@ public class PublicWantedService(
         // after the commit, and never fatal: a press draft is a convenience, and losing it must not undo the capture.
         // The card is all the draft may know — it cannot carry a PersonId, the internal case number or a score
         try { await press.CreateCaptureDraftAsync(card, actor, cancellationToken); } catch { /* best effort */ }
+    }
+
+    public async Task SetPublicPaidOutAsync(string id, decimal? publicPaidOut, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+        RequireShowableAmount(publicPaidOut);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        // Gefasst, or any notice that already carries a figure: a retraction leaves the figure in the public total
+        // (it does not unpay a reward), so locking the correction to Gefasst would freeze a wrong number for good
+        if (row.Status != PublicWantedStatus.Gefasst && row.PublicPaidOut is null)
+        {
+            throw new InvalidOperationException(
+                "Die angezeigte Belohnung gehört zu einer Ergreifung — erst auf gefasst setzen.");
+        }
+
+        row.PublicPaidOut = publicPaidOut;
+        await SaveAndInvalidateAsync(db, cancellationToken);
+    }
+
+    /// <summary>The two rules a shown figure has to obey; it is a display value, so nothing else applies.</summary>
+    private static void RequireShowableAmount(decimal? amount)
+    {
+        if (amount is not { } value)
+        {
+            return;
+        }
+        if (value < 0m)
+        {
+            throw new InvalidOperationException("Die angezeigte Belohnung darf nicht negativ sein.");
+        }
+        // the column holds two decimals; MySQL would swallow a third without a word
+        if (decimal.Round(value, 2) != value)
+        {
+            throw new InvalidOperationException("Die angezeigte Belohnung hat höchstens zwei Dezimalstellen.");
+        }
     }
 
     public async Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

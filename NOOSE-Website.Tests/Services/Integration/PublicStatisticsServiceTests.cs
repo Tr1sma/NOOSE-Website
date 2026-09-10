@@ -306,6 +306,52 @@ public sealed class PublicStatisticsServiceTests
     }
 
     [Fact]
+    public async Task TheRewardFigureCountsTheAmountShownAtACapture()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var tip = Tip(TipStatus.FuehrteZurErgreifung);
+        await AddAsync(ctx, tip, Notice("NOOSE-FA-2026-0002", PublicWantedStatus.Gefasst,
+            n => n.PublicPaidOut = 500_000m));
+        await AddAsync(ctx,
+            new HinweisBelohnung { ReceiptNumber = "BEL-1", TipId = tip.Id, ShareId = "s1", Amount = 4000m });
+
+        // the roleplay figure and the real payouts land in the same published number
+        Assert.Equal(Paid(504_000m), (await host.Service.GetPublishedAsync()).RewardsPaid);
+    }
+
+    [Fact]
+    public async Task TheAmountShownAtACapture_IsWithheldWithTheRewardModule()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await AddAsync(ctx, Notice("NOOSE-FA-2026-0002", PublicWantedStatus.Gefasst,
+            n => n.PublicPaidOut = 500_000m));
+        await ModuleAsync(ctx, host, PublicModules.Reward, false);
+
+        // it has to sit inside the gated figure, not be added on after the gate
+        Assert.Null((await host.Service.GetPublishedAsync()).RewardsPaid);
+    }
+
+    [Fact]
+    public async Task ADeletedNotice_TakesTheAmountItShowedWithIt()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = Notice("NOOSE-FA-2026-0002", PublicWantedStatus.Gefasst, n => n.PublicPaidOut = 500_000m);
+        await AddAsync(ctx, notice);
+        await using (var db = ctx.NewContext())
+        {
+            // set by hand: this host runs without the interceptors, so Remove would be a hard delete
+            (await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == notice.Id)).IsDeleted = true;
+            await db.SaveChangesAsync();
+        }
+        host.Cache.Remove("OeffentlicheZahlen");
+
+        Assert.Equal(Paid(0m), (await host.Service.GetPublishedAsync()).RewardsPaid);
+    }
+
+    [Fact]
     public async Task NoPayout_IsTheBaselineRatherThanSilence()
     {
         using var ctx = await SeededAsync();

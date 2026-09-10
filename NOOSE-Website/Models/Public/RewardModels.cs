@@ -52,6 +52,9 @@ public class RewardPayoutInput
 {
     public string WantedId { get; set; } = string.Empty;
     public List<RewardTipAmount> Tips { get; set; } = [];
+
+    /// <summary>Where money beyond the advertised bounty comes from; required only when the sum exceeds it.</summary>
+    public KassenKonto? TopUpAccount { get; set; }
 }
 
 /// <summary>One line of the split.</summary>

@@ -197,6 +197,16 @@ else
                 <MudButton OnClick="CapturedAsync" Variant="Variant.Outlined" Color="Color.Success" Disabled="_busy"
                            StartIcon="@Icons.Material.Filled.CheckCircle">Gefasst</MudButton>
             }
+            @* own button rather than a menu entry: the menu below is gone once a notice is Gefasst, and a wrong
+               figure would otherwise stand on the start page for ever — a retracted notice keeps its figure in the
+               public total, so it keeps the button too *@
+            @if (_draft.Status == PublicWantedStatus.Gefasst || _draft.PublicPaidOut is not null)
+            {
+                <MudButton OnClick="CorrectPublicPaidOutAsync" Variant="Variant.Outlined" Color="Color.Default"
+                           Disabled="_busy" StartIcon="@Icons.Material.Filled.Payments">
+                    Angezeigte Belohnung
+                </MudButton>
+            }
             <MudSpacer />
             @* secondary and destructive out of the primary row; the two entries are mutually exclusive by status,
                so the menu is gone entirely once a notice is Gefasst *@
@@ -393,14 +403,26 @@ else
 
     private async Task CapturedAsync() => await RunAsync(async () =>
     {
-        if (!await ConfirmDialog.ShowAsync(DialogService, "Als gefasst markieren?",
-                "Die Ausschreibung verschwindet damit vom öffentlichen Board.",
-                "Als gefasst markieren", Color.Success))
+        var result = await WantedCaptureDialog.ShowCaptureAsync(DialogService);
+        if (result is null)
         {
             return;
         }
-        await Wanted.CapturedAsync(Id, User);
+        await Wanted.CapturedAsync(Id, User, result.Amount);
         Snackbar.Add("Als gefasst markiert.", Severity.Success);
+    });
+
+    private async Task CorrectPublicPaidOutAsync() => await RunAsync(async () =>
+    {
+        var result = await WantedCaptureDialog.ShowCorrectionAsync(DialogService, _draft?.PublicPaidOut);
+        if (result is null)
+        {
+            return;
+        }
+        await Wanted.SetPublicPaidOutAsync(Id, result.Amount, User);
+        Snackbar.Add(result.Amount is null
+            ? "Angezeigte Belohnung entfernt."
+            : "Angezeigte Belohnung geändert.", Severity.Success);
     });
 
     private async Task RefreshHazardAsync() => await RunAsync(async () =>

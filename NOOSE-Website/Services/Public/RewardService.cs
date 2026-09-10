@@ -26,6 +26,8 @@ public class RewardService(
     private const string NotFound = "Ausschreibung nicht gefunden.";
     private const string NotCaptured = "Erst die Ausschreibung auf gefasst setzen, dann die Belohnung auszahlen.";
     private const string AlreadyPaidText = "Die Belohnung dieser Ausschreibung ist bereits ausgezahlt.";
+    private const string TopUpNeedsAccount = "Die Belohnung übersteigt das ausgesetzte Kopfgeld — dafür ein Konto "
+        + "wählen, aus dem die Aufstockung bezahlt wird.";
 
     // ---- reads ----
 
@@ -226,6 +228,7 @@ public class RewardService(
             throw new InvalidOperationException(AlreadyPaidText);
         }
 
+        var now = DateTime.UtcNow;
         var shares = await CapacitiesAsync(db, notice.Id, cancellationToken);
         // ordered at the boundary: RewardAllocation promises that the same payout always produces the same
         // bookings, and the order the operator happened to touch the amount fields in is not part of the payout
@@ -233,8 +236,33 @@ public class RewardService(
             .Select(t => new RewardAllocation.TipDemand(t.TipId, t.Amount))
             .OrderBy(t => t.TipId, StringComparer.Ordinal)
             .ToList();
+
+        // The paid figure is the operator's, not the bounty's. What the advertised shares do not cover becomes agency
+        // money on the spot, born Ausgezahlt: it never enters BountyShares.Advertised, so neither the public sum nor
+        // the coverage warning sees it, and it needs no migration. It also re-arms the idempotency token — without a
+        // share of its own, a notice that never carried a bounty would have nothing AlreadyPaidAsync could find.
+        var capacities = new List<RewardAllocation.ShareCapacity>(shares);
+        var missing = demands.Sum(t => t.Amount) - shares.Sum(s => s.Amount);
+        FahndungKopfgeldAnteil? topUp = null;
+        if (missing > 0m)
+        {
+            var account = input.TopUpAccount ?? throw new InvalidOperationException(TopUpNeedsAccount);
+            topUp = new FahndungKopfgeldAnteil
+            {
+                WantedId = notice.Id,
+                Origin = BountyOrigin.NooseKasse,
+                Amount = missing,
+                Account = account,
+                DonorAgentId = actor.GetAgentId(),
+                Status = BountyShareStatus.Ausgezahlt,
+                Timestamp = now,
+            };
+            capacities.Add(new RewardAllocation.ShareCapacity(topUp.Id, missing, topUp.Origin, topUp.Status,
+                account, now, IsTopUp: true));
+        }
+
         // the split rules, the sum invariant included, live in one place
-        var slices = RewardAllocation.Distribute(shares, demands);
+        var slices = RewardAllocation.Distribute(capacities, demands);
 
         var tipIds = demands.Select(t => t.TipId).ToList();
         var payees = await db.Hinweise.AsNoTracking()
@@ -264,8 +292,7 @@ public class RewardService(
             }
         }
 
-        var now = DateTime.UtcNow;
-        var byShare = shares.ToDictionary(s => s.ShareId, StringComparer.Ordinal);
+        var byShare = capacities.ToDictionary(s => s.ShareId, StringComparer.Ordinal);
         var caseNumberOf = payees.ToDictionary(p => p.Id, p => p.CaseNumber, StringComparer.Ordinal);
 
         // one transaction: the case-number counter demands one, and the money, the shares and the tips commit together
@@ -288,6 +315,11 @@ public class RewardService(
             db.AuditLogs.Add(ManualAudit.Row(nameof(FahndungKopfgeldAnteil), share.ShareId, AuditAction.Modified,
                 actor, ManualAudit.Change("Status", BountyShareStatusDisplay.Name(share.Status),
                     BountyShareStatusDisplay.Name(BountyShareStatus.Ausgezahlt))));
+        }
+        if (topUp is not null)
+        {
+            // tracked, so the audit interceptor stamps it; the CAS above deliberately ran before it existed
+            db.FahndungKopfgeldAnteile.Add(topUp);
         }
 
         var receipts = new List<string>(tipIds.Count);

@@ -1819,6 +1819,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.PersonId).HasMaxLength(64);
             b.Property(f => f.FactionId).HasMaxLength(64);
             b.Property(f => f.PublishedById).HasMaxLength(64);
+            b.Property(f => f.PublicPaidOut).HasPrecision(18, 2);
             // unique, unlike the page slug: a counter number is issued once and never reused, so a
             // soft-deleted row blocks no address anyone could want back
             b.HasIndex(f => f.CaseNumber).IsUnique();

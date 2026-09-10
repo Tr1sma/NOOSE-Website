@@ -398,6 +398,23 @@
     - **Nur diese eine Oberfläche.** `IPublicKpiService` (Admin-Panel), die Belohnungs-Ansichten und jede
       Kassenbuchung stehen weiter auf den echten Zeilen; NOOSEI liest über `IStatisticsService`. Nichts
       Internes darf gegen die Startseiten-Zahlen abgeglichen werden.
+  - **Die Belohnungssumme trägt einen zweiten, pflegbaren Anteil: `OeffentlicheFahndung.PublicPaidOut`.** Der Autor
+    gibt beim Setzen auf **gefasst** optional eine Zahl an (`CapturedAsync(id, actor, publicPaidOut)`,
+    Korrektur über `SetPublicPaidOutAsync`), und `LoadAsync` addiert sie neben `paid` in dieselbe Zahl. Sie ist
+    **RP-Kulisse wie der Sockel, kein Geld**: keine Kassenbuchung, kein Beleg, kein belohnter Hinweis, keine
+    aufgelöste Anonymität. Vier Punkte hängen daran:
+    - **Sie darf keinen Geldpfad erreichen.** Jeder Geldpfad liegt unter `Services/`, deshalb dürfen genau zwei
+      Dienste den Namen nennen — `PublicWantedService` schreibt, `PublicStatisticsService` liest;
+      `ThePubliclyShownPayout_IsReadNowhereButTheStatisticsService` scannt darauf. Das KPI-Panel teilt echte
+      Auszahlungen durch echte Ergreifungen, die Kasse bilanziert echte Konten — eine Fassade darin verdirbt
+      eine Zahl, mit der die Behörde arbeitet.
+    - **Aggregat, nie pro Akte.** `PublicStatistics` trägt strukturell kein Aktenzeichen; eine Zahl je
+      Ausschreibung wäre die Zuordnung, die der Typ verhindern soll.
+    - **`null` heißt „nicht angegeben", nicht „0 $ gezahlt"** — dieselbe Unterscheidung wie bei den Zahlen selbst.
+    - **Jeder Status zählt, nicht nur `Gefasst`, aber der Soft-Delete-Filter greift.** Eine Rücknahme macht eine
+      Belohnung nicht unbezahlt (die echten Zeilen überleben sie ebenso), eine gelöschte Ausschreibung behauptet
+      dagegen nichts mehr. Genau deshalb ist die Korrektur **nicht** auf `Gefasst` beschränkt: sonst friert eine
+      Rücknahme einen Zahlendreher dauerhaft auf der Startseite ein.
     Die Tests benennen den Sockel über `Received()`/`Confirmed()`/`Captures()`/`Paid()` statt ihn abzuschreiben
     — Nachjustieren bleibt eine Zeile. **`CapturedNotices` hat bewusst keinen Sockel** (beschreibt weiterhin
     das Board, siehe nächster Punkt), was den Zähler „… führten zu einer Festnahme" über der Kachel

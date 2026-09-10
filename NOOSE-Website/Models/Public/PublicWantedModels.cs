@@ -212,7 +212,9 @@ public sealed record PublicWantedDraft(
     string? ChargeHtml,
     bool BountyIsCap,
     /// <summary>What the editor shows in the level picker; derived from the score until an author overrules it.</summary>
-    HazardLevel HazardLevel);
+    HazardLevel HazardLevel,
+    /// <summary>Reward figure shown in the public total; roleplay backdrop, so no booking and no receipt back it.</summary>
+    decimal? PublicPaidOut);
 
 /// <summary>One selectable file photo, labelled by upload date rather than by file name.</summary>
 public sealed record PublicWantedPhotoOption(string Id, string Label);

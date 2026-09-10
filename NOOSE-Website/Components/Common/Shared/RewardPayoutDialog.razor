@@ -1,4 +1,5 @@
 @* Splits the bounty of one captured notice across the tips that earned it. *@
+@using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 
@@ -6,14 +7,31 @@
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:520px;max-width:640px;">
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                         Variant="@(Draft.Available > 0 ? Variant.Filled : Variant.Outlined)">
                     @Money.Format(Draft.Available) verfügbar
                 </MudChip>
-                <MudChip T="string" Size="Size.Small" Color="@(Rest < 0 ? Color.Error : Color.Default)"
+                <MudChip T="string" Size="Size.Small" Color="@(Rest < 0 ? Color.Info : Color.Default)"
                          Variant="Variant.Outlined">
-                    @Money.Format(Total) verteilt · @Money.Format(Rest) offen
+                    @Money.Format(Total) verteilt ·
+                    @(Rest < 0 ? $"{Money.Format(-Rest)} Aufstockung" : $"{Money.Format(Rest)} offen")
                 </MudChip>
             </MudStack>
+
+            @if (Rest < 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Das liegt @Money.Format(-Rest) über dem ausgesetzten Kopfgeld. Die Differenz wird als behördliche
+                    Aufstockung aus dem gewählten Konto gebucht — nach außen dringt davon nichts.
+                </MudAlert>
+                <MudSelect T="KassenKonto" @bind-Value="_topUpAccount" Label="Konto der Aufstockung"
+                           Variant="Variant.Outlined">
+                    @foreach (var account in KassenKontoDisplay.All)
+                    {
+                        <MudSelectItem T="KassenKonto" Value="@account">@KassenKontoDisplay.Name(account)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
 
             @if (Draft.Handover > 0)
             {
@@ -88,10 +106,12 @@
     [Parameter, EditorRequired] public RewardDraft Draft { get; set; } = default!;
 
     private readonly Dictionary<string, decimal> _amounts = new(StringComparer.Ordinal);
+    private KassenKonto _topUpAccount = KassenKonto.Gruengeld;
 
     private decimal Total => _amounts.Values.Sum();
     private decimal Rest => Draft.Available - Total;
-    private bool MayApply => Total > 0m && Rest >= 0m;
+    // paying above the advertised bounty is allowed; the account picker above covers where that money comes from
+    private bool MayApply => Total > 0m;
 
     protected override void OnInitialized()
     {
@@ -107,15 +127,20 @@
     private void Set(string tipId, decimal value) => _amounts[tipId] = value < 0m ? 0m : value;
 
     private void Apply()
-        => MudDialog.Close(DialogResult.Ok(_amounts
-            .Where(a => a.Value > 0m)
-            .Select(a => new RewardTipAmount { TipId = a.Key, Amount = a.Value })
-            .ToList()));
+        => MudDialog.Close(DialogResult.Ok(new RewardPayoutDialogResult(
+            _amounts
+                .Where(a => a.Value > 0m)
+                .Select(a => new RewardTipAmount { TipId = a.Key, Amount = a.Value })
+                .ToList(),
+            Rest < 0 ? _topUpAccount : null)));
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>What the dialog collected; the account is set only when the payout exceeds the bounty.</summary>
+    public record RewardPayoutDialogResult(List<RewardTipAmount> Tips, KassenKonto? TopUpAccount);
+
     /// <summary>Shows the split form; returns the amounts per tip or null on cancel.</summary>
-    public static async Task<List<RewardTipAmount>?> ShowAsync(IDialogService dialog, RewardDraft draft)
+    public static async Task<RewardPayoutDialogResult?> ShowAsync(IDialogService dialog, RewardDraft draft)
     {
         var parameters = new DialogParameters<RewardPayoutDialog> { { x => x.Draft, draft } };
         var title = draft.WantedCaseNumber is { Length: > 0 } number
@@ -123,6 +148,6 @@
             : $"Belohnung — {draft.DisplayName}";
         var reference = await dialog.ShowAsync<RewardPayoutDialog>(title, parameters);
         var result = await reference.Result;
-        return result is { Canceled: false, Data: List<RewardTipAmount> amounts } ? amounts : null;
+        return result is { Canceled: false, Data: RewardPayoutDialogResult data } ? data : null;
     }
 }

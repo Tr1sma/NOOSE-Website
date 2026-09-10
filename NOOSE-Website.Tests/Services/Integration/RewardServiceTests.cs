@@ -172,6 +172,15 @@ public sealed class RewardServiceTests
             Tips = tips.Select(t => new RewardTipAmount { TipId = t.TipId, Amount = t.Amount }).ToList(),
         };
 
+    /// <summary>The same split, but the operator names the account the missing money comes out of.</summary>
+    private static RewardPayoutInput ToppedUp(KassenKonto account, string wantedId,
+        params (string TipId, decimal Amount)[] tips)
+    {
+        var input = Split(wantedId, tips);
+        input.TopUpAccount = account;
+        return input;
+    }
+
     private static async Task<List<FahndungKopfgeldAnteil>> SharesAsync(SqliteTestContext ctx)
     {
         await using var db = ctx.NewContext();
@@ -309,6 +318,75 @@ public sealed class RewardServiceTests
         Assert.Equal(90_000m, await host.Kasse.GetBalanceAsync(KassenKonto.Gruengeld));
     }
 
+    // ---- the free amount ----
+
+    [Fact]
+    public async Task More_than_the_bounty_is_topped_up_from_the_chosen_account()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        await host.Bounty.AddOfficialAsync(id, 10_000m, KassenKonto.Gruengeld, null, Leader());
+        var tip = await WorkedTipAsync(host, caseNumber);
+        await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
+        await FundAsync(host, KassenKonto.Schwarzgeld, 100_000m);
+        await host.Wanted.CapturedAsync(id, Leader());
+
+        await host.Reward.PayoutAsync(ToppedUp(KassenKonto.Schwarzgeld, id, (tip, 25_000m)), Leader());
+
+        var shares = await SharesAsync(ctx);
+        Assert.Equal(2, shares.Count);
+        var topUp = shares.Single(s => s.Amount == 15_000m);
+        Assert.Equal(BountyOrigin.NooseKasse, topUp.Origin);
+        Assert.Equal(KassenKonto.Schwarzgeld, topUp.Account);
+        // born paid, so it never counts towards the advertised sum for a single moment
+        Assert.Equal(BountyShareStatus.Ausgezahlt, topUp.Status);
+
+        Assert.Equal(25_000m, (await RewardsAsync(ctx)).Sum(r => r.Amount));
+        Assert.Equal(90_000m, await host.Kasse.GetBalanceAsync(KassenKonto.Gruengeld));
+        Assert.Equal(85_000m, await host.Kasse.GetBalanceAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task A_notice_without_a_bounty_can_still_be_rewarded()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        var tip = await WorkedTipAsync(host, caseNumber);
+        await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
+        await host.Wanted.CapturedAsync(id, Leader());
+
+        await host.Reward.PayoutAsync(ToppedUp(KassenKonto.Gruengeld, id, (tip, 5_000m)), Leader());
+
+        var share = Assert.Single(await SharesAsync(ctx));
+        Assert.Equal(5_000m, share.Amount);
+        Assert.Equal(BountyShareStatus.Ausgezahlt, share.Status);
+        Assert.Equal(0m, (await host.Bounty.GetSummaryAsync(id, Leader())).Advertised);
+        Assert.Equal(5_000m, Assert.Single(await RewardsAsync(ctx)).Amount);
+        Assert.Equal(95_000m, await host.Kasse.GetBalanceAsync(KassenKonto.Gruengeld));
+    }
+
+    [Fact]
+    public async Task A_second_payout_after_a_free_one_is_refused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var (id, caseNumber) = await PublishedAsync(host);
+        var first = await WorkedTipAsync(host, caseNumber);
+        var second = await WorkedTipAsync(host, caseNumber, citizen: Citizen(OtherUserId));
+        await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
+        await host.Wanted.CapturedAsync(id, Leader());
+        await host.Reward.PayoutAsync(ToppedUp(KassenKonto.Gruengeld, id, (first, 5_000m)), Leader());
+
+        // without a bounty there is no advertised share to settle, so the top-up is the idempotency token
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Reward.PayoutAsync(ToppedUp(KassenKonto.Gruengeld, id, (second, 5_000m)), Leader()));
+
+        Assert.Contains("bereits ausgezahlt", error.Message, StringComparison.Ordinal);
+        Assert.Single(await RewardsAsync(ctx));
+    }
+
     // ---- preconditions ----
 
     [Fact]
@@ -432,7 +510,7 @@ public sealed class RewardServiceTests
     }
 
     [Fact]
-    public async Task More_than_the_bounty_is_refused_and_changes_nothing()
+    public async Task More_than_the_bounty_without_an_account_is_refused_and_changes_nothing()
     {
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
@@ -442,9 +520,10 @@ public sealed class RewardServiceTests
         await FundAsync(host, KassenKonto.Gruengeld, 100_000m);
         await host.Wanted.CapturedAsync(id, Leader());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => host.Reward.PayoutAsync(Split(id, (tip, 10_001m)), Leader()));
 
+        Assert.Contains("Konto", error.Message, StringComparison.Ordinal);
         Assert.Empty(await RewardsAsync(ctx));
         Assert.All(await SharesAsync(ctx), s => Assert.Equal(BountyShareStatus.Zugesagt, s.Status));
         Assert.Equal(TipStatus.InPruefung, await TipStatusAsync(ctx, tip));
