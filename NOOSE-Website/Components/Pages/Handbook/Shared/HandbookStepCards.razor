@@ -1,0 +1,38 @@
+@* Numbered walkthrough cards. Rows, not markup, so the shape survives every edit of the text above them. *@
+
+@if (Steps.Count > 0)
+{
+    <MudText Typo="Typo.subtitle2" Class="mt-6 mb-3">Schritt für Schritt</MudText>
+
+    <MudStack Spacing="2">
+        @foreach (var step in Steps)
+        {
+            <MudPaper Elevation="1" Class="pa-3">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                        @step.Number
+                    </MudAvatar>
+                    <div style="flex:1;">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                            @if (!string.IsNullOrWhiteSpace(step.IconName))
+                            {
+                                <MudIcon Icon="@Icon(step.IconName)" Size="Size.Small" Color="Color.Primary" />
+                            }
+                            <MudText Typo="Typo.body1">@step.Title</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@step.Text</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<HandbookStepView> Steps { get; set; } = [];
+
+    /// <summary>An icon name from the content, resolved against the Material set; unknown names fall back.</summary>
+    private static string Icon(string name)
+        => typeof(Icons.Material.Filled).GetField(name)?.GetValue(null) as string
+           ?? Icons.Material.Filled.ChevronRight;
+}

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.AspNetCore.Components.Routing;
 using MudBlazor;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Common;
@@ -71,6 +71,10 @@ public static class NavCatalog
             Description: "Zentrale Ablage aller behördlichen Dokumente"),
         new NavEntry("gesetze", "/gesetze", Icons.Material.Filled.Gavel, "Gesetzbuch", NavSection.Wissen, NavArea.Ermittlung,
             Description: "Paragrafen und Rechtsgrundlagen zum Nachschlagen"),
+        new NavEntry("handbuch", "/handbuch", Icons.Material.Filled.MenuBook, "Handbuch", NavSection.Wissen, NavArea.Ermittlung,
+            Description: "Anleitungen und Glossar: wie die Seite und die Abläufe funktionieren"),
+        new NavEntry("neuerungen", "/neuerungen", Icons.Material.Filled.NewReleases, "Neuerungen", NavSection.Wissen, NavArea.Ermittlung,
+            Description: "Was sich auf dieser Seite geändert hat, nach Fassungen"),
 
         new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Verknüpfungen zwischen Akten als Netzdiagramm"),

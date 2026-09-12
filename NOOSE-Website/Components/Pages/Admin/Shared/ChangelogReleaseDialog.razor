@@ -1,0 +1,79 @@
+@* Add or edit one release heading. The build number is not editable here: the server stamps it on deploy. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_version" Label="Fassung" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Die Fassung braucht eine Versionsnummer."
+                          MaxLength="32" Placeholder="z. B. 1.4"
+                          HelperText="Frei vergeben. Die Build-Nummer stempelt der Server beim nächsten Start selbst dazu." />
+
+            <MudDatePicker @bind-Date="_date" Label="Datum" Variant="Variant.Outlined"
+                           DateFormat="dd.MM.yyyy" Editable="true" />
+
+            <MudTextField @bind-Value="_title" Label="Überschrift (optional)" Variant="Variant.Outlined"
+                          MaxLength="200" Placeholder="z. B. Belohnungen und Einspruch"
+                          HelperText="Eine Zeile, die sagt, worum es in dieser Fassung ging." />
+
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudNumericField T="int" @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                 Style="max-width:160px;"
+                                 HelperText="Nur relevant bei zwei Fassungen am selben Tag." />
+                <MudSwitch T="bool" @bind-Value="_isVisible" Color="Color.Primary" Label="Sichtbar" />
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_version) || _date is null)">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public ChangelogReleaseInput? Preset { get; set; }
+
+    private string _version = string.Empty;
+    private DateTime? _date = DateTime.Today;
+    private string? _title;
+    private int _sortOrder;
+    private bool _isVisible = true;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is { } p)
+        {
+            _version = p.Version;
+            _date = p.Date;
+            _title = p.Title;
+            _sortOrder = p.SortOrder;
+            _isVisible = p.IsVisible;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(
+            new ChangelogReleaseInput(_version, _date ?? DateTime.Today, _title, _sortOrder, _isVisible)));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<ChangelogReleaseInput?> ShowAsync(
+        IDialogService dialog,
+        string title,
+        ChangelogReleaseInput? preset = null)
+    {
+        var parameters = new DialogParameters<ChangelogReleaseDialog>
+        {
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<ChangelogReleaseDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ChangelogReleaseInput e } ? e : null;
+    }
+}

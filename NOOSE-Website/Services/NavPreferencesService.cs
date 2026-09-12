@@ -122,6 +122,10 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
     public Task SetChronikLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.ChronikLastSeenUtc = seenUtc, cancellationToken, notify: false);
 
+    // same shape as the chronicle marker: the hint card reads it, the drawer shows nothing
+    public Task SetNeuerungenLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
+        => MutateAsync(agentId, p => p.NeuerungenLastSeenUtc = seenUtc, cancellationToken, notify: false);
+
     // read-modify-write of the JSON column; ExecuteUpdate bypasses the read-only barrier (pure UI prefs)
     private async Task MutateAsync(string agentId, Action<NavPreferences> mutate, CancellationToken cancellationToken, bool notify = true)
     {

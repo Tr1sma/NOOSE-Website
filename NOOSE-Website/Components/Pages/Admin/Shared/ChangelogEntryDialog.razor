@@ -1,0 +1,99 @@
+@* Add or edit one changelog line. The wording rule lives in the helper text, where an author reads it. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="string" @bind-Value="_releaseId" Label="Fassung" Variant="Variant.Outlined" Required="true">
+                @foreach (var r in Releases)
+                {
+                    <MudSelectItem T="string" Value="@r.Id">@($"{r.Version} · {r.Date:dd.MM.yyyy}")</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="ChangelogKind" @bind-Value="_kind" Label="Art" Variant="Variant.Outlined">
+                @foreach (var k in ChangelogKindDisplay.All)
+                {
+                    <MudSelectItem T="ChangelogKind" Value="@k">@ChangelogKindDisplay.Name(k)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_title" Label="Eintrag" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Der Eintrag braucht einen Text."
+                          MaxLength="300" Counter="300"
+                          Placeholder="z. B. Bürger können Hinweise einreichen."
+                          HelperText="Ein kurzer Satz in Alltagssprache. Keine Fachbegriffe — der Leser will wissen, was sich für ihn ändert." />
+
+            <MudTextField @bind-Value="_area" Label="Bereich (optional)" Variant="Variant.Outlined"
+                          MaxLength="64" Placeholder="z. B. Fahndung"
+                          HelperText="Dient als Filter auf der Seite." />
+
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudNumericField T="int" @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                 Style="max-width:160px;" />
+                <MudSwitch T="bool" @bind-Value="_isVisible" Color="Color.Primary" Label="Sichtbar" />
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_releaseId))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<ChangelogRelease> Releases { get; set; } = [];
+    [Parameter] public ChangelogEntryInput? Preset { get; set; }
+
+    private string _releaseId = string.Empty;
+    private ChangelogKind _kind = ChangelogKind.Neu;
+    private string _title = string.Empty;
+    private string? _area;
+    private int _sortOrder;
+    private bool _isVisible = true;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is { } p)
+        {
+            _releaseId = p.ReleaseId;
+            _kind = p.Kind;
+            _title = p.Title;
+            _area = p.Area;
+            _sortOrder = p.SortOrder;
+            _isVisible = p.IsVisible;
+        }
+        else if (string.IsNullOrEmpty(_releaseId) && Releases.Count > 0)
+        {
+            _releaseId = Releases[0].Id;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(
+            new ChangelogEntryInput(_releaseId, _kind, _title, _area, _sortOrder, _isVisible)));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<ChangelogEntryInput?> ShowAsync(
+        IDialogService dialog,
+        string title,
+        IReadOnlyList<ChangelogRelease> releases,
+        ChangelogEntryInput? preset = null)
+    {
+        var parameters = new DialogParameters<ChangelogEntryDialog>
+        {
+            { x => x.Releases, releases },
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<ChangelogEntryDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ChangelogEntryInput e } ? e : null;
+    }
+}

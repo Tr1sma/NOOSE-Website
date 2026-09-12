@@ -1,0 +1,74 @@
+@* Add or edit one chapter heading. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Das Kapitel braucht einen Titel." MaxLength="160" />
+            <MudTextField @bind-Value="_slug" Label="Adresse (Slug)" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Das Kapitel braucht eine Adresse." MaxLength="80"
+                          HelperText="Steht als ?tab=… in der Adresse. Wird beim Speichern bereinigt." />
+            <MudTextField @bind-Value="_description" Label="Beschreibung" Variant="Variant.Outlined"
+                          MaxLength="400" Lines="2"
+                          HelperText="Eine Zeile: worum es in diesem Kapitel geht." />
+            <MudTextField @bind-Value="_iconName" Label="Symbol (optional)" Variant="Variant.Outlined"
+                          MaxLength="64" Placeholder="z. B. Start, Radar, Groups"
+                          HelperText="Name eines Material-Symbols. Unbekannte Namen fallen auf ein Standard-Symbol zurück." />
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudNumericField T="int" @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                 Style="max-width:160px;" />
+                <MudSwitch T="bool" @bind-Value="_isVisible" Color="Color.Primary" Label="Sichtbar" />
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_slug))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public HandbookChapterInput? Preset { get; set; }
+
+    private string _slug = string.Empty;
+    private string _title = string.Empty;
+    private string? _description;
+    private string? _iconName;
+    private int _sortOrder;
+    private bool _isVisible = true;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is { } p)
+        {
+            _slug = p.Slug;
+            _title = p.Title;
+            _description = p.Description;
+            _iconName = p.IconName;
+            _sortOrder = p.SortOrder;
+            _isVisible = p.IsVisible;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(
+            new HandbookChapterInput(_slug, _title, _description, _iconName, _sortOrder, _isVisible)));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<HandbookChapterInput?> ShowAsync(
+        IDialogService dialog, string title, HandbookChapterInput? preset = null)
+    {
+        var parameters = new DialogParameters<HandbookChapterDialog> { { x => x.Preset, preset } };
+        var reference = await dialog.ShowAsync<HandbookChapterDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: HandbookChapterInput e } ? e : null;
+    }
+}

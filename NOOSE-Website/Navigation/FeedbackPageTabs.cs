@@ -11,6 +11,7 @@ public static class FeedbackPageTabs
         new("system", "System & Erscheinungsbild"),
         new("discord", "Discord-Benachrichtigungen"),
         new("bester-agent", "Bester Agent"),
+        new("neuerungen", "Neuerungen"),
         new("status", "System-Status"),
         new("custom-felder", "Custom-Felder"),
         new("tags", "Tags"),

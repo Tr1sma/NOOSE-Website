@@ -38,6 +38,9 @@ public interface INavPreferencesService
     /// <summary>Stamp the chronicle as seen up to this instant.</summary>
     Task SetChronikLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default);
 
+    /// <summary>Stamp the changelog as seen up to this instant; the hint card appears only for what came after.</summary>
+    Task SetNeuerungenLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default);
+
     /// <summary>Stable id for a favorite (used for reordering).</summary>
     static string FavoriteId(NavFavorite f)
         => f.Kind == "page" ? $"page:{f.Key}" : $"record:{f.EntityType}:{f.EntityId}";

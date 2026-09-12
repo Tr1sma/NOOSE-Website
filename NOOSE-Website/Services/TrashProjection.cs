@@ -3,6 +3,8 @@ using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Changelog;
+using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Financing;
@@ -144,6 +146,18 @@ public static class TrashProjection
     public static TrashItem Objection(FahndungEinspruch x)
         => new("fahndungs-einsprueche", x.Id, x.CaseNumber, $"Einspruch {x.CaseNumber}",
             ObjectionStatusDisplay.Name(x.Status), x.DeletedAt);
+
+    // the version is not repeated here: the trash page is a flat list, and the line itself is the identity
+    public static TrashItem ChangelogLine(ChangelogEntry x)
+        => new("neuerungen", x.Id, null, x.Title,
+            Join(ChangelogKindDisplay.Name(x.Kind), x.Area), x.DeletedAt);
+
+    public static TrashItem HandbookChapter(HandbookChapter x)
+        => new("handbuch-kapitel", x.Id, null, x.Title, x.Description, x.DeletedAt);
+
+    // never the body: the trash page is a list, and an article may carry images
+    public static TrashItem HandbookArticle(HandbookArticle x)
+        => new("handbuch-artikel", x.Id, null, x.Title, x.Summary, x.DeletedAt);
 
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");

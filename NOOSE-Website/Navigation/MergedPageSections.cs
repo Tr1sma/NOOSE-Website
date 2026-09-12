@@ -5,7 +5,7 @@ public static class MergedPageSections
 {
     public static readonly string[] Settings =
     [
-        "system", "discord", "status",
+        "system", "discord", "status", "neuerungen",
         "custom-felder", "tags", "aktualitaet", "bedrohungs-score",
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
@@ -36,6 +36,7 @@ public static class MergedPageSections
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
         "feedback", "oeffentliche-seiten", "oeffentliche-fahndungen", "oeffentliche-fraktionsprofile",
         "hinweise", "tickets", "fahndungs-einsprueche", "pressemitteilungen", "oeffentliche-warnungen", "oeffentliche-lageberichte",
+        "neuerungen", "handbuch-kapitel", "handbuch-artikel",
     ];
 
     public static readonly string[] Wanted =

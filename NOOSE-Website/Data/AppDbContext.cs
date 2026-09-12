@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Data.Entities.Announcements;
+using NOOSE_Website.Data.Entities.Changelog;
+using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Data.Entities.Factions;
@@ -264,6 +266,12 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Pressemitteilung> Pressemitteilungen => Set<Pressemitteilung>();
     public DbSet<OeffentlicheWarnung> OeffentlicheWarnungen => Set<OeffentlicheWarnung>();
     public DbSet<OeffentlicherLagebericht> OeffentlicheLageberichte => Set<OeffentlicherLagebericht>();
+    public DbSet<ChangelogRelease> Aenderungsfassungen => Set<ChangelogRelease>();
+    public DbSet<ChangelogEntry> Aenderungseintraege => Set<ChangelogEntry>();
+    public DbSet<HandbookChapter> HandbuchKapitel => Set<HandbookChapter>();
+    public DbSet<HandbookArticle> HandbuchArtikel => Set<HandbookArticle>();
+    public DbSet<HandbookStep> HandbuchSchritte => Set<HandbookStep>();
+    public DbSet<GlossaryTerm> HandbuchBegriffe => Set<GlossaryTerm>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1802,6 +1810,97 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(r => r.SituationReportId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(r => r.PublishedBy).WithMany()
                 .HasForeignKey(r => r.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<HandbookChapter>(b =>
+        {
+            b.Property(c => c.Slug).HasMaxLength(80).IsRequired();
+            b.Property(c => c.Title).HasMaxLength(160).IsRequired();
+            b.Property(c => c.Description).HasMaxLength(400);
+            b.Property(c => c.IconName).HasMaxLength(64);
+            b.Property(c => c.SeedKey).HasMaxLength(128);
+            b.HasIndex(c => c.Slug).IsUnique();
+            b.HasIndex(c => c.SeedKey).IsUnique();
+            // the only shape the rail reads: visible chapters, in order
+            b.HasIndex(c => new { c.IsVisible, c.SortOrder });
+        });
+
+        modelBuilder.Entity<HandbookArticle>(b =>
+        {
+            b.Property(a => a.ChapterId).HasMaxLength(64).IsRequired();
+            b.Property(a => a.Slug).HasMaxLength(120).IsRequired();
+            b.Property(a => a.Title).HasMaxLength(200).IsRequired();
+            b.Property(a => a.Summary).HasMaxLength(400);
+            b.Property(a => a.ContentHtml).HasColumnType("longtext");
+            b.Property(a => a.RoleplayHtml).HasColumnType("longtext");
+            b.Property(a => a.DiagramKey).HasMaxLength(64);
+            b.Property(a => a.NavKey).HasMaxLength(64);
+            b.Property(a => a.SeedKey).HasMaxLength(128);
+            b.HasIndex(a => a.Slug).IsUnique();
+            b.HasIndex(a => a.SeedKey).IsUnique();
+            b.HasIndex(a => new { a.ChapterId, a.IsVisible, a.SortOrder });
+            // the help button resolves a route to a menu key, then a key to one article
+            b.HasIndex(a => a.NavKey);
+            // Restrict, not Cascade: a chapter is soft-deleted, and a cascade into an audited table would
+            // remove its articles without a single audit row
+            b.HasOne(a => a.Chapter).WithMany(c => c.Articles)
+                .HasForeignKey(a => a.ChapterId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<HandbookStep>(b =>
+        {
+            b.Property(s => s.ArticleId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.Title).HasMaxLength(200).IsRequired();
+            b.Property(s => s.Text).HasMaxLength(600).IsRequired();
+            b.Property(s => s.IconName).HasMaxLength(64);
+            b.HasIndex(s => new { s.ArticleId, s.Number });
+            // owned rows: a step has no life without its article, and the seeder replaces them wholesale
+            b.HasOne(s => s.Article).WithMany(a => a.Steps)
+                .HasForeignKey(s => s.ArticleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GlossaryTerm>(b =>
+        {
+            b.Property(t => t.Term).HasMaxLength(120).IsRequired();
+            b.Property(t => t.Synonyms).HasMaxLength(400);
+            b.Property(t => t.ShortDefinition).HasMaxLength(400).IsRequired();
+            b.Property(t => t.ExplanationHtml).HasColumnType("longtext");
+            b.Property(t => t.ArticleId).HasMaxLength(64);
+            b.Property(t => t.SeedKey).HasMaxLength(128);
+            b.HasIndex(t => t.Term).IsUnique();
+            b.HasIndex(t => t.SeedKey).IsUnique();
+            b.HasIndex(t => t.IsVisible);
+            // optional on purpose: a required navigation is INNER joined, so a term whose article was deleted
+            // would silently drop out of the glossary
+            b.HasOne(t => t.Article).WithMany()
+                .HasForeignKey(t => t.ArticleId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ChangelogRelease>(b =>
+        {
+            b.Property(r => r.Version).HasMaxLength(32).IsRequired();
+            b.Property(r => r.Title).HasMaxLength(200);
+            b.Property(r => r.BuildNumber).HasMaxLength(32);
+            // authored, so a unique index is safe: the release has no soft delete that could hold a version hostage
+            b.HasIndex(r => r.Version).IsUnique();
+            // the only shape the page reads: visible releases, newest first
+            b.HasIndex(r => new { r.IsVisible, r.Date, r.SortOrder });
+        });
+
+        modelBuilder.Entity<ChangelogEntry>(b =>
+        {
+            b.Property(e => e.ReleaseId).HasMaxLength(64).IsRequired();
+            b.Property(e => e.Title).HasMaxLength(300).IsRequired();
+            b.Property(e => e.Area).HasMaxLength(64);
+            b.Property(e => e.SeedKey).HasMaxLength(128);
+            // unique so a shipped line cannot be seeded twice; filtered rows keep theirs, which is what stops the
+            // seeder from re-creating an entry somebody deleted on purpose
+            b.HasIndex(e => e.SeedKey).IsUnique();
+            b.HasIndex(e => new { e.ReleaseId, e.IsVisible, e.SortOrder });
+            // Restrict, not Cascade: a release is never deleted, and a cascade path into an audited table would
+            // remove lines without a single audit row
+            b.HasOne(e => e.Release).WithMany(r => r.Entries)
+                .HasForeignKey(e => e.ReleaseId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OeffentlicheFahndung>(b =>

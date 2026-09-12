@@ -30,6 +30,9 @@ public sealed class NavPreferences
     /// <summary>Last time the chronicle was opened; drives its "new since your last visit" divider.</summary>
     public DateTime? ChronikLastSeenUtc { get; set; }
 
+    /// <summary>Last time /neuerungen was seen; drives the one-off hint after a new release.</summary>
+    public DateTime? NeuerungenLastSeenUtc { get; set; }
+
     /// <summary>Schema version for future migrations.</summary>
     public int Version { get; set; } = 2;
 }

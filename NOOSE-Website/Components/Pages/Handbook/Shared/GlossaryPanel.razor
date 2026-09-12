@@ -1,0 +1,61 @@
+@* The glossary tab: every term with its one sentence, grouped by first letter. *@
+
+@if (Terms.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Abc"
+                Title="Noch keine Begriffe"
+                Text="Sobald Begriffe erfasst sind, stehen sie hier alphabetisch." />
+}
+else
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        @Terms.Count @(Terms.Count == 1 ? "Begriff" : "Begriffe") aus der Sprache der Behörde und dieser Seite.
+    </MudText>
+
+    @foreach (var group in Grouped)
+    {
+        <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-5 mb-2">@group.Key</MudText>
+        <MudStack Spacing="2">
+            @foreach (var term in group)
+            {
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-1">
+                        <MudText Typo="Typo.subtitle2">@term.Term</MudText>
+                        <MudSpacer />
+                        @if (term.ArticleSlug is { } slug)
+                        {
+                            <MudLink Href="@($"/handbuch/{slug}")" Typo="Typo.caption">
+                                mehr dazu: @term.ArticleTitle
+                            </MudLink>
+                        }
+                        @if (OnEdit.HasDelegate)
+                        {
+                            <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="begriffAktion">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               aria-label="Begriff bearbeiten"
+                                               OnClick="@(() => OnEdit.InvokeAsync(term))" />
+                            </AuthorizeView>
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@term.ShortDefinition</MudText>
+                    @if (!string.IsNullOrWhiteSpace(term.ExplanationHtml))
+                    {
+                        <div class="mt-2"><RichHtml Html="@term.ExplanationHtml" /></div>
+                    }
+                </MudPaper>
+            }
+        </MudStack>
+    }
+}
+
+@code {
+    [Parameter] public IReadOnlyList<GlossaryTermView> Terms { get; set; } = [];
+
+    /// <summary>Set to offer an edit button per term; the button still checks the policy itself.</summary>
+    [Parameter] public EventCallback<GlossaryTermView> OnEdit { get; set; }
+
+    private IEnumerable<IGrouping<string, GlossaryTermView>> Grouped
+        => Terms
+            .OrderBy(t => t.Term, StringComparer.CurrentCulture)
+            .GroupBy(t => t.Term[..1].ToUpperInvariant());
+}

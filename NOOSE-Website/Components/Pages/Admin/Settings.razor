@@ -28,6 +28,11 @@
         <BestAgentPanel />
     </RecordSection>
 
+    <RecordSection Group="Betrieb" Slug="neuerungen" Label="Neuerungen"
+                   Icon="@Icons.Material.Filled.NewReleases">
+        <ChangelogPanel />
+    </RecordSection>
+
     <AuthorizeView Policy="@Policies.AdminPage" Context="statusSection">
         <RecordSection Group="Betrieb" Slug="status" Label="System-Status"
                        Icon="@Icons.Material.Filled.MonitorHeart">

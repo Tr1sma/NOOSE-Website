@@ -1,0 +1,56 @@
+@* One article on its own page - the address the help button and the search link to. *@
+@page "/handbuch/{Slug}"
+@inject IHandbookService HandbookService
+@inject NavigationManager Nav
+
+<PageTitle>@(_article?.Title ?? "Handbuch") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_article is null)
+{
+    <PageHeader Icon="@Icons.Material.Filled.MenuBook" Title="Artikel nicht gefunden"
+                BackHref="/handbuch" BackText="Zum Handbuch" />
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                Title="Diesen Artikel gibt es nicht"
+                Text="Vielleicht wurde er umbenannt oder ausgeblendet. Im Handbuch findest du das Verzeichnis." />
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.Article"
+                Title="@_article.Title"
+                BackHref="@($"/handbuch?tab={_article.ChapterSlug}")"
+                BackText="@($"Zurück zu {_article.ChapterTitle}")">
+        <SubtitleContent>
+            <MudLink Href="@($"/handbuch?tab={_article.ChapterSlug}")" Typo="Typo.body2">
+                @_article.ChapterTitle
+            </MudLink>
+        </SubtitleContent>
+    </PageHeader>
+
+    <HandbookArticleReader Article="_article" />
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private bool _load = true;
+    private HandbookArticleView? _article;
+    private string? _loadedSlug;
+
+    // OnParametersSetAsync, not OnInitializedAsync: two article addresses bind the same component type, so
+    // Blazor recycles the instance and the initialiser would not run again on a link from one article to another
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedSlug == Slug)
+        {
+            return;
+        }
+        _loadedSlug = Slug;
+        _load = true;
+        _article = await HandbookService.GetArticleAsync(Slug);
+        _load = false;
+    }
+}

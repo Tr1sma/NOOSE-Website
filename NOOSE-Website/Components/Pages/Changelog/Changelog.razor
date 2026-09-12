@@ -1,0 +1,220 @@
+@* What changed on this site, in the reader's language, grouped by release. *@
+@page "/neuerungen"
+@using System.Reflection
+@inject IChangelogService ChangelogService
+@inject INavPreferencesService NavPreferences
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Neuerungen · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.NewReleases"
+            Title="Neuerungen"
+            Subtitle="@_subtitle" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_releases.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.NewReleases"
+                Title="Noch keine Einträge"
+                Text="Sobald sich etwas an der Seite ändert, steht es hier." />
+}
+else
+{
+    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mb-6">
+        <MudChipSet T="string" SelectedValue="@_kindFilter" SelectedValueChanged="SetKindAsync"
+                    SelectionMode="SelectionMode.SingleSelection" CheckMark="true">
+            <MudChip T="string" Value="@AllKinds" Variant="Variant.Outlined">Alle</MudChip>
+            @foreach (var k in ChangelogKindDisplay.All)
+            {
+                <MudChip T="string" Value="@k.ToString()" Variant="Variant.Outlined"
+                         Color="@ChangelogKindDisplay.Colour(k)"
+                         Icon="@ChangelogKindDisplay.Icon(k)">@ChangelogKindDisplay.Name(k)</MudChip>
+            }
+        </MudChipSet>
+
+        <MudSpacer />
+
+        @if (_areas.Count > 0)
+        {
+            <MudSelect T="string" Value="@_areaFilter" ValueChanged="SetAreaAsync" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:260px;"
+                       Label="Bereich" Clearable="true">
+                <MudSelectItem T="string" Value="@AllAreas">Alle Bereiche</MudSelectItem>
+                @foreach (var a in _areas)
+                {
+                    <MudSelectItem T="string" Value="@a">@a</MudSelectItem>
+                }
+            </MudSelect>
+        }
+    </MudStack>
+
+    @if (_visible.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                    Title="Nichts gefunden"
+                    Text="Zu dieser Auswahl gibt es keine Einträge. Wähle einen anderen Filter." />
+    }
+    else
+    {
+        foreach (var release in _visible)
+        {
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
+                        Fassung @release.Version
+                    </MudChip>
+                    <MudText Typo="Typo.subtitle1">@release.Title</MudText>
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @release.Date.ToString("dd.MM.yyyy")@(release.BuildNumber is null ? "" : $" · Build {release.BuildNumber}")
+                    </MudText>
+                </MudStack>
+
+                <MudDivider Class="mb-3" />
+
+                @foreach (var entry in release.Entries)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start" Class="mb-2">
+                        <MudIcon Icon="@ChangelogKindDisplay.Icon(entry.Kind)"
+                                 Color="@ChangelogKindDisplay.Colour(entry.Kind)" Size="Size.Small" Class="mt-1" />
+                        <div>
+                            <MudText Typo="Typo.body2">@entry.Title</MudText>
+                            @if (!string.IsNullOrWhiteSpace(entry.Area))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@entry.Area</MudText>
+                            }
+                        </div>
+                    </MudStack>
+                }
+            </MudPaper>
+        }
+    }
+}
+
+@code {
+    private const string AllKinds = "alle";
+    private const string AllAreas = "alle";
+
+    private bool _load = true;
+    private List<ChangelogReleaseView> _releases = [];
+    private List<ChangelogReleaseView> _visible = [];
+    private List<string> _areas = [];
+
+    private string _kindFilter = AllKinds;
+    private string _areaFilter = AllAreas;
+    private string _subtitle = "Was sich auf dieser Seite geändert hat.";
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _kindFilter = QueryState.Read(Nav, "art") ?? AllKinds;
+        _areaFilter = QueryState.Read(Nav, "bereich") ?? AllAreas;
+
+        _releases = await ChangelogService.GetTimelineAsync();
+        _areas = _releases
+            .SelectMany(r => r.Entries)
+            .Select(e => e.Area)
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(a => a!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(a => a, StringComparer.CurrentCulture)
+            .ToList();
+
+        _subtitle = Subtitle(_releases.FirstOrDefault());
+        Apply();
+        _load = false;
+
+        // opening the page is the acknowledgement; the hint card must not greet the same release twice
+        await StampSeenAsync();
+    }
+
+    private static string Subtitle(ChangelogReleaseView? newest)
+    {
+        var build = RunningBuild();
+        if (newest is null)
+        {
+            return build is null
+                ? "Was sich auf dieser Seite geändert hat."
+                : $"Was sich auf dieser Seite geändert hat. Du arbeitest mit Build {build}.";
+        }
+        var version = $"Du arbeitest mit Fassung {newest.Version}";
+        return build is null
+            ? $"Was sich auf dieser Seite geändert hat. {version}."
+            : $"Was sich auf dieser Seite geändert hat. {version} (Build {build}).";
+    }
+
+    /// <summary>The running build, as the status page shows it, without the metadata suffix.</summary>
+    private static string? RunningBuild()
+    {
+        var raw = Assembly.GetEntryAssembly()
+            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+        var plus = raw.IndexOf('+');
+        return plus >= 0 ? raw[..plus] : raw;
+    }
+
+    private void Apply()
+    {
+        var kind = Enum.TryParse<ChangelogKind>(_kindFilter, out var k) ? k : (ChangelogKind?)null;
+
+        _visible = _releases
+            .Select(r => r with
+            {
+                Entries = r.Entries
+                    .Where(e => kind is null || e.Kind == kind)
+                    .Where(e => _areaFilter == AllAreas
+                        || string.Equals(e.Area, _areaFilter, StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+            })
+            // a release whose every line was filtered away is an empty heading, not a result
+            .Where(r => r.Entries.Count > 0)
+            .ToList();
+    }
+
+    private async Task SetKindAsync(string? value)
+    {
+        _kindFilter = string.IsNullOrWhiteSpace(value) ? AllKinds : value;
+        Apply();
+        await WriteQueryAsync();
+    }
+
+    private async Task SetAreaAsync(string? value)
+    {
+        _areaFilter = string.IsNullOrWhiteSpace(value) ? AllAreas : value;
+        Apply();
+        await WriteQueryAsync();
+    }
+
+    private async Task WriteQueryAsync()
+        => await QueryState.WriteAsync(JS, Nav,
+            ("art", _kindFilter == AllKinds ? null : _kindFilter),
+            ("bereich", _areaFilter == AllAreas ? null : _areaFilter));
+
+    private async Task StampSeenAsync()
+    {
+        if (AuthState is null)
+        {
+            return;
+        }
+        var user = (await AuthState).User;
+        var id = user.GetAgentId();
+        if (string.IsNullOrEmpty(id))
+        {
+            return;
+        }
+        try
+        {
+            await NavPreferences.SetNeuerungenLastSeenAsync(id, DateTime.UtcNow);
+        }
+        catch { /* best effort */ }
+    }
+}

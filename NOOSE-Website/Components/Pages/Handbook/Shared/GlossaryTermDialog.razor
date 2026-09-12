@@ -1,0 +1,92 @@
+@* Add or edit one glossary term. The short definition is the text the explain-bubbles will show. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_term" Label="Begriff" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Der Begriff braucht einen Namen." MaxLength="120" />
+
+            <MudTextField @bind-Value="_synonyms" Label="Andere Schreibweisen (optional)" Variant="Variant.Outlined"
+                          MaxLength="400" Placeholder="Deckname, Alias"
+                          HelperText="Kommagetrennt. Wird mitgesucht — und später auch bei den Erklär-Blasen erkannt." />
+
+            <MudTextField @bind-Value="_shortDefinition" Label="Kurzerklärung" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Der Begriff braucht eine kurze Erklärung."
+                          MaxLength="400" Counter="400" Lines="2"
+                          HelperText="Ein Satz, ohne Formatierung. Genau dieser Text steht später in der Erklär-Blase." />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Ausführlich (optional)</MudText>
+            <RichTextEditor @bind-Value="_explanationHtml" MinHeight="140px" />
+
+            <MudSelect T="string" @bind-Value="_articleId" Label="Vertiefender Artikel (optional)"
+                       Variant="Variant.Outlined" Clearable="true"
+                       HelperText="Erscheint als „mehr dazu“-Link am Begriff.">
+                <MudSelectItem T="string" Value="@(null as string)">— keiner —</MudSelectItem>
+                @foreach (var a in Articles)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Title</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSwitch T="bool" @bind-Value="_isVisible" Color="Color.Primary" Label="Sichtbar" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_term) || string.IsNullOrWhiteSpace(_shortDefinition))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<HandbookArticle> Articles { get; set; } = [];
+    [Parameter] public GlossaryTermInput? Preset { get; set; }
+
+    private string _term = string.Empty;
+    private string? _synonyms;
+    private string _shortDefinition = string.Empty;
+    private string? _explanationHtml;
+    private string? _articleId;
+    private bool _isVisible = true;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is { } p)
+        {
+            _term = p.Term;
+            _synonyms = p.Synonyms;
+            _shortDefinition = p.ShortDefinition;
+            _explanationHtml = p.ExplanationHtml;
+            _articleId = p.ArticleId;
+            _isVisible = p.IsVisible;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(new GlossaryTermInput(
+            _term, _synonyms, _shortDefinition, _explanationHtml, _articleId, _isVisible)));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<GlossaryTermInput?> ShowAsync(
+        IDialogService dialog,
+        string title,
+        IReadOnlyList<HandbookArticle> articles,
+        GlossaryTermInput? preset = null)
+    {
+        var parameters = new DialogParameters<GlossaryTermDialog>
+        {
+            { x => x.Articles, articles },
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<GlossaryTermDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: GlossaryTermInput e } ? e : null;
+    }
+}

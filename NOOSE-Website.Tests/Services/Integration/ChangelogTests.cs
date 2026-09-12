@@ -1,0 +1,371 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Changelog;
+using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Changelog;
+using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Models.Changelog;
+using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Changelog;
+using NOOSE_Website.Tests.Infrastructure;
+
+namespace NOOSE_Website.Tests.Services.Integration;
+
+/// <summary>The changelog: the seeder's promise never to overwrite an edit, and what the page shows.</summary>
+public sealed class ChangelogTests
+{
+    private static ClaimsPrincipal Leader()
+        => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).WithCodename("Falcon").Build();
+
+    private static ClaimsPrincipal Agent()
+        => ClaimsPrincipalBuilder.Agent("agent").WithRank(Rank.SpecialAgent).WithCodename("Wren").Build();
+
+    private static ClaimsPrincipal OnlyReader()
+        => ClaimsPrincipalBuilder.Agent("aufsicht").WithRank(Rank.Director).AsTeamLead().Build();
+
+    private sealed class FixedUser : ICurrentUserService
+    {
+        public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
+
+        public CurrentUserInfo Get() => new("lead", "Falcon", true, false, false);
+    }
+
+    /// <summary>The service with the audit interceptor attached, as in production.</summary>
+    /// <remarks>
+    /// The interceptor is what rewrites a <c>Remove</c> into a soft delete, so the recycle-bin test would
+    /// exercise a hard delete without it — and the seeder's "do not revive" rule would silently pass.
+    /// </remarks>
+    private static (ChangelogService Service, TestDbContextFactory Factory) NewHost(SqliteTestContext ctx)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(new FixedUser()))
+            .Options;
+        var factory = new TestDbContextFactory(options);
+        return (new ChangelogService(factory), factory);
+    }
+
+    /// <summary>Seeds through an intercepted context, as production does.</summary>
+    /// <remarks>
+    /// Not a detail: the release CreatedAt the hint card compares against is written by the audit interceptor.
+    /// Seeding through a bare context leaves it at default and the "new since your last visit" count reads zero.
+    /// </remarks>
+    private static async Task SeedAsync(
+        SqliteTestContext ctx,
+        IReadOnlyList<ChangelogContent.SeededRelease> releases,
+        int revision,
+        string build)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(new FixedUser()))
+            .Options;
+        await using var db = new AppDbContext(options);
+        await ChangelogSeeder.SeedAsync(db, releases, revision, build);
+    }
+
+    private static ChangelogContent.SeededRelease[] OneRelease(string title = "Erste Zeile.")
+        =>
+        [
+            new("1.0", new DateTime(2026, 8, 25), "Der Anfang",
+            [
+                new("1.0-a", ChangelogKind.Neu, title, "Fahndung"),
+                new("1.0-b", ChangelogKind.Behoben, "Zweite Zeile.", null),
+            ]),
+        ];
+
+    // --- the seeder -------------------------------------------------------
+
+    [Fact]
+    public async Task Seeding_twice_creates_each_line_once()
+    {
+        using var ctx = new SqliteTestContext();
+
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(1, await check.Aenderungsfassungen.CountAsync());
+        Assert.Equal(2, await check.Aenderungseintraege.CountAsync());
+    }
+
+    [Fact]
+    public async Task An_untouched_line_follows_a_new_revision()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease("Alter Text."), 1, "1.0.100");
+
+        await SeedAsync(ctx, OneRelease("Neuer Text."), 2, "1.0.100");
+
+        await using var check = ctx.NewContext();
+        var row = await check.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.0-a");
+        Assert.Equal("Neuer Text.", row.Title);
+        Assert.Equal(2, row.SeedRevision);
+    }
+
+    [Fact]
+    public async Task An_edited_line_is_never_overwritten()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease("Alter Text."), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        string id;
+        await using (var db = ctx.NewContext())
+        {
+            id = (await db.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.0-a")).Id;
+        }
+        var release = (await service.GetReleasesAsync()).Single();
+        await service.RefreshEntryAsync(id,
+            new ChangelogEntryInput(release.Id, ChangelogKind.Neu, "Von Hand umformuliert.", "Fahndung", 0, true),
+            Leader());
+
+        // a later deploy ships a newer revision of the very same line
+        await SeedAsync(ctx, OneRelease("Neuer Text."), 2, "1.0.100");
+
+        await using var check = ctx.NewContext();
+        var row = await check.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.0-a");
+        Assert.Equal("Von Hand umformuliert.", row.Title);
+        Assert.True(row.IsCustomised);
+    }
+
+    [Fact]
+    public async Task A_deleted_line_is_not_revived()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        string id;
+        await using (var db = ctx.NewContext())
+        {
+            id = (await db.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.0-a")).Id;
+        }
+        await service.DeleteEntryAsync(id, Leader());
+
+        await SeedAsync(ctx, OneRelease(), 2, "1.0.100");
+
+        await using var check = ctx.NewContext();
+        var row = await check.Aenderungseintraege.IgnoreQueryFilters()
+            .SingleAsync(e => e.SeedKey == "1.0-a");
+        Assert.True(row.IsDeleted);
+        Assert.Single(await check.Aenderungseintraege.IgnoreQueryFilters()
+            .Where(e => e.SeedKey == "1.0-a").ToListAsync());
+    }
+
+    [Fact]
+    public async Task The_build_stamp_lands_on_the_newest_release_and_stays_put()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        ChangelogContent.SeededRelease[] two =
+        [
+            .. OneRelease(),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+                [new("1.1-a", ChangelogKind.Verbessert, "Etwas wurde besser.", null)]),
+        ];
+        await SeedAsync(ctx, two, 1, "1.0.200");
+
+        await using var check = ctx.NewContext();
+        // the older release keeps the build it shipped with; only the new one is stamped
+        Assert.Equal("1.0.100", (await check.Aenderungsfassungen.SingleAsync(r => r.Version == "1.0")).BuildNumber);
+        Assert.Equal("1.0.200", (await check.Aenderungsfassungen.SingleAsync(r => r.Version == "1.1")).BuildNumber);
+    }
+
+    // --- the service ------------------------------------------------------
+
+    [Fact]
+    public async Task A_release_without_visible_lines_does_not_appear()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        Assert.Single(await service.GetTimelineAsync());
+
+        await using (var db = ctx.NewContext())
+        {
+            foreach (var e in await db.Aenderungseintraege.ToListAsync())
+            {
+                e.IsVisible = false;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Empty(await service.GetTimelineAsync());
+    }
+
+    [Fact]
+    public async Task A_first_visit_is_told_about_nothing()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var flash = await service.GetNewsSinceAsync(null);
+
+        Assert.Equal(0, flash.Count);
+    }
+
+    [Fact]
+    public async Task Only_releases_that_arrived_after_the_last_visit_are_counted()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        Assert.Equal(0, (await service.GetNewsSinceAsync(afterFirstSeeding)).Count);
+
+        await Task.Delay(20);
+        ChangelogContent.SeededRelease[] two =
+        [
+            .. OneRelease(),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+                [new("1.1-a", ChangelogKind.Verbessert, "Etwas wurde besser.", null)]),
+        ];
+        await SeedAsync(ctx, two, 1, "1.0.200");
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+        Assert.Equal(1, flash.Count);
+        Assert.Equal("1.1", flash.NewestVersion);
+    }
+
+    // --- permissions ------------------------------------------------------
+
+    [Fact]
+    public async Task An_agent_may_read_but_not_write()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        Assert.Single(await service.GetTimelineAsync());
+
+        var release = (await service.GetReleasesAsync()).Single();
+        var input = new ChangelogEntryInput(release.Id, ChangelogKind.Neu, "Darf nicht.", null, 0, true);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.CreateEntryAsync(input, Agent()));
+    }
+
+    [Fact]
+    public async Task The_read_only_supervision_is_refused_before_anything_is_written()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var release = (await service.GetReleasesAsync()).Single();
+        var input = new ChangelogEntryInput(release.Id, ChangelogKind.Neu, "Darf nicht.", null, 0, true);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.CreateEntryAsync(input, OnlyReader()));
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(2, await check.Aenderungseintraege.CountAsync());
+    }
+
+    [Fact]
+    public async Task Saving_a_shipped_line_marks_it_as_the_author_s()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var release = (await service.GetReleasesAsync()).Single();
+        string id;
+        await using (var db = ctx.NewContext())
+        {
+            id = (await db.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.0-a")).Id;
+        }
+
+        await service.RefreshEntryAsync(id,
+            new ChangelogEntryInput(release.Id, ChangelogKind.Neu, "Umformuliert.", null, 0, true), Leader());
+
+        await using var check = ctx.NewContext();
+        Assert.True((await check.Aenderungseintraege.SingleAsync(e => e.Id == id)).IsCustomised);
+    }
+
+    [Fact]
+    public async Task A_hand_written_line_carries_no_seed_key()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var release = (await service.GetReleasesAsync()).Single();
+        var created = await service.CreateEntryAsync(
+            new ChangelogEntryInput(release.Id, ChangelogKind.Neu, "Von Hand.", null, 99, true), Leader());
+
+        await using var check = ctx.NewContext();
+        var row = await check.Aenderungseintraege.SingleAsync(e => e.Id == created.Id);
+        Assert.Null(row.SeedKey);
+        Assert.True(row.IsCustomised);
+    }
+
+    // --- the shipped content ---------------------------------------------
+
+    [Fact]
+    public void Every_shipped_line_has_a_unique_key()
+    {
+        var keys = ChangelogContent.Releases.SelectMany(r => r.Entries).Select(e => e.Key).ToList();
+
+        Assert.Equal(keys.Count, keys.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Every_shipped_release_has_a_unique_version_and_at_least_one_line()
+    {
+        var versions = ChangelogContent.Releases.Select(r => r.Version).ToList();
+
+        Assert.Equal(versions.Count, versions.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(ChangelogContent.Releases, r => Assert.NotEmpty(r.Entries));
+    }
+
+    /// <summary>The real shipped list against the real schema — the closest a test gets to a first start.</summary>
+    /// <remarks>
+    /// The static checks above cannot catch a unique index rejecting a key or a release the seeder cannot resolve;
+    /// only writing the whole thing does.
+    /// </remarks>
+    [Fact]
+    public async Task The_shipped_changelog_seeds_and_renders()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, ChangelogContent.Releases, ChangelogContent.Revision, "1.0.999");
+
+        var (service, _) = NewHost(ctx);
+        var timeline = await service.GetTimelineAsync();
+
+        Assert.Equal(ChangelogContent.Releases.Count, timeline.Count);
+        Assert.Equal(
+            ChangelogContent.Releases.Sum(r => r.Entries.Length),
+            timeline.Sum(r => r.Entries.Count));
+
+        // newest first, and only the newest release carries the build of the deploy that brought it
+        Assert.True(timeline[0].Date >= timeline[^1].Date);
+        Assert.Equal("1.0.999", timeline[0].BuildNumber);
+        Assert.All(timeline.Skip(1), r => Assert.Null(r.BuildNumber));
+    }
+
+    /// <summary>The wording rule, as far as a test can hold it: no jargon that only the author would use.</summary>
+    [Fact]
+    public void No_shipped_line_talks_about_the_technology()
+    {
+        string[] forbidden =
+        [
+            "Migration", "Refactor", "Interceptor", "Service", "Endpoint", "Repository",
+            "Commit", "Branch", "Datenbank", "Tabelle", "Query", "Cache", "API",
+        ];
+
+        var offenders = ChangelogContent.Releases
+            .SelectMany(r => r.Entries)
+            .Where(e => forbidden.Any(f => e.Title.Contains(f, StringComparison.OrdinalIgnoreCase)))
+            .Select(e => e.Key)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+}

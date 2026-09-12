@@ -1,0 +1,139 @@
+@* Add or edit one article. The wording rules live in the helper texts, where an author reads them. *@
+@using NOOSE_Website.Navigation
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" @bind-Value="_chapterId" Label="Kapitel" Variant="Variant.Outlined" Required="true">
+                    @foreach (var c in Chapters)
+                    {
+                        <MudSelectItem T="string" Value="@c.Id">@c.Title</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudNumericField T="int" @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                 Style="max-width:150px;" />
+            </MudStack>
+
+            <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Der Artikel braucht einen Titel." MaxLength="200" />
+
+            <MudTextField @bind-Value="_slug" Label="Adresse (Slug)" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Der Artikel braucht eine Adresse." MaxLength="120"
+                          HelperText="Teil der Adresse: /handbuch/…. Kleinbuchstaben und Bindestriche; wird beim Speichern bereinigt." />
+
+            <MudTextField @bind-Value="_summary" Label="Kurzbeschreibung" Variant="Variant.Outlined"
+                          MaxLength="400" Lines="2"
+                          HelperText="Eine Zeile für die Kapitelübersicht — was der Artikel beantwortet." />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Anleitung</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Direkte Anrede, kurze Sätze. Ein Fachwort beim ersten Auftreten erklären.
+            </MudText>
+            <RichTextEditor @bind-Value="_contentHtml" MinHeight="260px" />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Im Rollenspiel bedeutet das … (optional)</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Was dieselbe Sache im Spiel bedeutet. Steht später in einem abgesetzten Kasten, damit man
+                Anleitung und Spielregel auseinanderhalten kann.
+            </MudText>
+            <RichTextEditor @bind-Value="_roleplayHtml" MinHeight="140px" />
+
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" @bind-Value="_diagramKey" Label="Diagramm (optional)"
+                           Variant="Variant.Outlined" Clearable="true"
+                           HelperText="Gezeichnete Schaubilder liegen im Code und veralten nicht.">
+                    <MudSelectItem T="string" Value="@(null as string)">— keines —</MudSelectItem>
+                    @foreach (var (key, label) in HandbookDiagram.Known)
+                    {
+                        <MudSelectItem T="string" Value="@key">@label</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect T="string" @bind-Value="_navKey" Label="Erklärt welche Seite? (optional)"
+                           Variant="Variant.Outlined" Clearable="true"
+                           HelperText="Setzt den „?“-Knopf in der Kopfzeile dieser Seite auf diesen Artikel.">
+                    <MudSelectItem T="string" Value="@(null as string)">— keine —</MudSelectItem>
+                    @foreach (var entry in NavCatalog.Internal.OrderBy(e => e.Label))
+                    {
+                        <MudSelectItem T="string" Value="@entry.Key">@entry.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+
+            <MudSwitch T="bool" @bind-Value="_isVisible" Color="Color.Primary" Label="Sichtbar" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_slug)
+                               || string.IsNullOrWhiteSpace(_chapterId))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<HandbookChapter> Chapters { get; set; } = [];
+    [Parameter] public HandbookArticleInput? Preset { get; set; }
+
+    private string _chapterId = string.Empty;
+    private string _slug = string.Empty;
+    private string _title = string.Empty;
+    private string? _summary;
+    private string? _contentHtml;
+    private string? _roleplayHtml;
+    private string? _diagramKey;
+    private string? _navKey;
+    private int _sortOrder;
+    private bool _isVisible = true;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is { } p)
+        {
+            _chapterId = p.ChapterId;
+            _slug = p.Slug;
+            _title = p.Title;
+            _summary = p.Summary;
+            _contentHtml = p.ContentHtml;
+            _roleplayHtml = p.RoleplayHtml;
+            _diagramKey = p.DiagramKey;
+            _navKey = p.NavKey;
+            _sortOrder = p.SortOrder;
+            _isVisible = p.IsVisible;
+        }
+        else if (string.IsNullOrEmpty(_chapterId) && Chapters.Count > 0)
+        {
+            _chapterId = Chapters[0].Id;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(new HandbookArticleInput(
+            _chapterId, _slug, _title, _summary, _contentHtml, _roleplayHtml,
+            _diagramKey, _navKey, _sortOrder, _isVisible)));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<HandbookArticleInput?> ShowAsync(
+        IDialogService dialog,
+        string title,
+        IReadOnlyList<HandbookChapter> chapters,
+        HandbookArticleInput? preset = null)
+    {
+        var parameters = new DialogParameters<HandbookArticleDialog>
+        {
+            { x => x.Chapters, chapters },
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<HandbookArticleDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: HandbookArticleInput e } ? e : null;
+    }
+}

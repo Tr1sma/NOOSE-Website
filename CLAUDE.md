@@ -346,6 +346,54 @@ Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führu
 → Einstieg immer über **[`claude-memory/oeffentlich-grundlagen.md`](claude-memory/oeffentlich-grundlagen.md)**,
 dann die Themendatei aus der Tabelle oben.
 
+## Handbuch pflegen (`/handbuch`)
+
+Der Erstbestand liegt in `NOOSE-Website/Infrastructure/Handbook/HandbookContent.cs`; der Seeder
+schreibt ihn beim Start ein und fasst **nie** an, was jemand redaktionell bearbeitet hat
+(`IstAngepasst`). Dieselbe Konfliktregel wie beim Changelog.
+
+- **Ton:** direkte Anrede, kurze Sätze, Klicknamen kursiv. Ein Fachwort beim ersten Auftreten erklären —
+  genau dort greift später auch die Erklär-Blase aus dem Glossar.
+- **Zwei Sorten Inhalt, bewusst getrennt:** `ContentHtml` ist die Anleitung, `RollenspielHtml` der
+  abgesetzte Kasten „Im Rollenspiel bedeutet das …". So lassen sich RP-Regeln ändern, ohne die
+  Anleitung anzufassen.
+- **Diagramme gehören nicht in den Text.** `HtmlCleanup` erlaubt kein `<svg>` und würde ein
+  eingebettetes beim ersten Speichern strippen. Ein Artikel nennt nur einen `DiagrammSchluessel`;
+  die Zeichnung ist eine Razor-Komponente unter `Components/Pages/Handbook/Diagrams/` und wird in
+  `HandbookDiagram.Known` registriert. `HandbookTests.Every_shipped_diagram_key_names_a_drawing` hält das.
+- **Schritt-Karten sind Zeilen, kein Markup.** Sie werden mit ihrem Artikel **komplett ersetzt**, nicht
+  einzeln geschlüsselt.
+- **`NavSchluessel` verbindet einen Artikel mit einem Menü-Eintrag** (`NavEntry.Key`) — daraus speist sich
+  der „?"-Knopf. Ein Tippfehler dort lässt den Knopf still verschwinden;
+  `Every_shipped_nav_key_names_a_menu_entry` fängt ihn ab.
+- **Bestehenden Artikel umformulieren ⇒ `HandbookContent.Revision` hochzählen.** Ein neuer Artikel
+  braucht das nicht; er wird an seinem fehlenden Key erkannt.
+- **Slugs im Erstbestand schon sauber schreiben** (Kleinbuchstaben, Bindestriche, keine Umlaute). Der
+  Seeder schreibt sie roh, der Editor bereinigt — `Every_shipped_slug_is_already_url_clean` hält beide zusammen.
+- **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante
+  des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
+
+## Changelog pflegen (`/neuerungen`)
+
+**Jedes Feature, das ein Agent bemerkt, bekommt eine Zeile** in
+`NOOSE-Website/Infrastructure/Changelog/ChangelogContent.cs` — das ist Teil des Features, nicht Nacharbeit.
+
+- **Ton:** ein kurzer Satz in Alltagssprache, aus Sicht des Lesers. Keine Technik: kein Dienst, keine Tabelle,
+  kein Interceptor, kein Commit. `ChangelogTests.No_shipped_line_talks_about_the_technology` hält eine
+  Sperrliste dagegen. Aus *„Partition the rate limiters"* wird **„Anmeldeseite lässt sich nicht mehr von außen
+  blockieren"**.
+- **Nichts eintragen** für Umbenennungen, Tests, Doku, Refactorings — alles, was von außen unsichtbar ist.
+- **Neue Zeile:** an die passende `SeededRelease` anhängen, `Key` stabil und einmalig (`<fassung>-<kurz>`).
+  Eine neue Zeile braucht **keine** Revisions-Erhöhung; sie wird an ihrem fehlenden Key erkannt.
+- **Bestehende Zeile umformulieren:** `ChangelogContent.Revision` **hochzählen**. Der Seeder schreibt dann
+  unberührte Zeilen neu — und lässt redaktionell bearbeitete (`IstAngepasst`) für immer in Ruhe. Ohne Bump
+  passiert nichts.
+- **Neue Fassung:** `SeededRelease` mit selbst vergebener Version anlegen. **Die Build-Nummer nicht eintragen** —
+  `BuildNumber.txt` ist gitignored und beim Schreiben unbekannt; `ChangelogSeeder` stempelt sie beim ersten
+  Start nach dem Deploy auf die neueste Fassung ohne Stempel.
+- **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` der Fassung ist
+  das, womit die Login-Hinweiskarte vergleicht; ohne Interceptor meldet sie still und dauerhaft nichts.
+
 ## Domänen-Glossar
 
 | Begriff | Bedeutung |
@@ -375,4 +423,7 @@ dann die Themendatei aus der Tabelle oben.
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings
+- `IdeenBacklog.md` — Feature-Roadmap: 66 bewertete Vorschläge, einzeln entschieden (28 angenommen,
+  31 vorgemerkt, 3 abgelehnt). Je Vorschlag **die Dateien, an denen er ansetzt**. Vor einem neuen
+  Feature dort nachsehen — die Analyse ist gemacht, und ein abgelehnter Punkt trägt seinen Grund.
 - `claude-memory/` — Detailwissen je Bereich (Tabelle oben). **Warum** eine Regel existiert, nicht nur dass sie gilt.

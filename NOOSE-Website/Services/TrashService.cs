@@ -1,6 +1,8 @@
 ﻿using System.Security.Claims;
 using MudBlazor;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Services.Changelog;
+using NOOSE_Website.Services.Handbook;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
@@ -34,7 +36,9 @@ public sealed class TrashService(
     IObjectionService objections,
     IPressReleaseService press,
     IPublicWarningService warnings,
-    IPublicReportService publicReports) : ITrashService
+    IPublicReportService publicReports,
+    IChangelogService changelog,
+    IHandbookService handbook) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -116,6 +120,15 @@ public sealed class TrashService(
         Source(new TrashKind("oeffentliche-lageberichte", "Öffentliche Lageberichte",
                 Icons.Material.Filled.Assessment, "/einstellungen?tab=berichte"),
             publicReports.GetTrashAsync, TrashProjection.PublicReport, publicReports.RestoreAsync),
+        Source(new TrashKind("neuerungen", "Neuerungen", Icons.Material.Filled.NewReleases,
+                "/einstellungen?tab=neuerungen"),
+            changelog.GetTrashAsync, TrashProjection.ChangelogLine, changelog.RestoreAsync),
+        Source(new TrashKind("handbuch-kapitel", "Handbuch-Kapitel", Icons.Material.Filled.MenuBook,
+                "/handbuch"),
+            handbook.GetChapterTrashAsync, TrashProjection.HandbookChapter, handbook.RestoreChapterAsync),
+        Source(new TrashKind("handbuch-artikel", "Handbuch-Artikel", Icons.Material.Filled.Article,
+                "/handbuch"),
+            handbook.GetArticleTrashAsync, TrashProjection.HandbookArticle, handbook.RestoreArticleAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

@@ -1146,6 +1146,150 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("VorgangAgenten");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Changelog.ChangelogEntry", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Area")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("Bereich");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<bool>("IsCustomised")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAngepasst");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Sichtbar");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int")
+                        .HasColumnName("Art");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("ReleaseId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("FassungId");
+
+                    b.Property<string>("SeedKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("SeedSchluessel");
+
+                    b.Property<int>("SeedRevision")
+                        .HasColumnType("int")
+                        .HasColumnName("SeedRevision");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeedKey")
+                        .IsUnique();
+
+                    b.HasIndex("ReleaseId", "IsVisible", "SortOrder");
+
+                    b.ToTable("Aenderungseintraege");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Changelog.ChangelogRelease", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("BuildNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("BuildNummer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Datum");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Sichtbar");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("Version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Version")
+                        .IsUnique();
+
+                    b.HasIndex("IsVisible", "Date", "SortOrder");
+
+                    b.ToTable("Aenderungsfassungen");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.ActivityTemplate", b =>
                 {
                     b.Property<string>("Id")
@@ -4133,6 +4277,339 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("PersonGroupId");
 
                     b.ToTable("PersonengruppeFotos");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.GlossaryTerm", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ArticleId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("ArtikelId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("ExplanationHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErklaerungHtml");
+
+                    b.Property<bool>("IsCustomised")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAngepasst");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Sichtbar");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("SeedKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("SeedSchluessel");
+
+                    b.Property<int>("SeedRevision")
+                        .HasColumnType("int")
+                        .HasColumnName("SeedRevision");
+
+                    b.Property<string>("ShortDefinition")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("Kurzdefinition");
+
+                    b.Property<string>("Synonyms")
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("Synonyme");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("Begriff");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("IsVisible");
+
+                    b.HasIndex("SeedKey")
+                        .IsUnique();
+
+                    b.HasIndex("Term")
+                        .IsUnique();
+
+                    b.ToTable("HandbuchBegriffe");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookArticle", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ChapterId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("KapitelId");
+
+                    b.Property<string>("ContentHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("InhaltHtml");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("DiagramKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("DiagrammSchluessel");
+
+                    b.Property<bool>("IsCustomised")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAngepasst");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Sichtbar");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("NavKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("NavSchluessel");
+
+                    b.Property<string>("RoleplayHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("RollenspielHtml");
+
+                    b.Property<string>("SeedKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("SeedSchluessel");
+
+                    b.Property<int>("SeedRevision")
+                        .HasColumnType("int")
+                        .HasColumnName("SeedRevision");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("Slug");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("Kurzbeschreibung");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NavKey");
+
+                    b.HasIndex("SeedKey")
+                        .IsUnique();
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("ChapterId", "IsVisible", "SortOrder");
+
+                    b.ToTable("HandbuchArtikel");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookChapter", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("Beschreibung");
+
+                    b.Property<string>("IconName")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("IconName");
+
+                    b.Property<bool>("IsCustomised")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAngepasst");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Sichtbar");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("SeedKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("SeedSchluessel");
+
+                    b.Property<int>("SeedRevision")
+                        .HasColumnType("int")
+                        .HasColumnName("SeedRevision");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)")
+                        .HasColumnName("Slug");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeedKey")
+                        .IsUnique();
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("IsVisible", "SortOrder");
+
+                    b.ToTable("HandbuchKapitel");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookStep", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ArticleId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("ArtikelId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("IconName")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("IconName");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("int")
+                        .HasColumnName("Nummer");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("varchar(600)")
+                        .HasColumnName("Text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId", "Number");
+
+                    b.ToTable("HandbuchSchritte");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.Informant", b =>
@@ -10094,6 +10571,17 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Case");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Changelog.ChangelogEntry", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Changelog.ChangelogRelease", "Release")
+                        .WithMany("Entries")
+                        .HasForeignKey("ReleaseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Release");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.DocumentAccessExclusion", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
@@ -10364,6 +10852,38 @@ namespace NOOSE_Website.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("PersonGroup");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.GlossaryTerm", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Handbook.HandbookArticle", "Article")
+                        .WithMany()
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Article");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookArticle", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Handbook.HandbookChapter", "Chapter")
+                        .WithMany("Articles")
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookStep", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Handbook.HandbookArticle", "Article")
+                        .WithMany("Steps")
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.Informant", b =>
@@ -11265,6 +11785,11 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Agents");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Changelog.ChangelogRelease", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Evidence.EvidenceEntry", b =>
                 {
                     b.Navigation("Lines");
@@ -11299,6 +11824,16 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Members");
 
                     b.Navigation("Photos");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookArticle", b =>
+                {
+                    b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Handbook.HandbookChapter", b =>
+                {
+                    b.Navigation("Articles");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.Informant", b =>

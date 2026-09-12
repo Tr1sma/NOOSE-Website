@@ -322,6 +322,40 @@ public static class Permission
         }
     }
 
+    /// <summary>Require HRB or leadership AND the right to write: the handbook, and ticking off a module.</summary>
+    /// <remarks>
+    /// The write variant of <see cref="RequireHrbOrLeadership"/>, which gates access to the recruiting desk and
+    /// deliberately says nothing about writing. Here the write check stands first: the flag alone lets the read-only
+    /// supervision and the demo principal through — the demo principal carries HRB and Director — and they would then
+    /// get as far as validating a slug before the ReadOnlyBarrierInterceptor refuses the save.
+    /// <para>
+    /// One predicate for the handbook and for ticking off a training module, because it is one question: who looks
+    /// after new agents. HRB is rank-independent, so this admits a Junior Agent carrying the flag, on purpose.
+    /// </para>
+    /// </remarks>
+    public static void RequireHrbOrLeadershipWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || !actor.IsHrbOrLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist dem HRB und der Führung vorbehalten.");
+        }
+    }
+
+    /// <summary>Require the right to write the changelog every agent reads on /neuerungen.</summary>
+    /// <remarks>
+    /// The write check stands before the rank one: RequireLeadership alone admits the read-only supervision and the
+    /// demo principal, which would let them mint a release row before the ReadOnlyBarrierInterceptor refuses the save.
+    /// </remarks>
+    public static void RequireChangelogWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Die Neuerungen pflegt die Führung.");
+        }
+    }
+
     /// <summary>Require the right to author a public wanted notice.</summary>
     /// <remarks>
     /// Not <see cref="RequireWriteAccess"/>: that one only blocks the read-only supervision and partners, so a

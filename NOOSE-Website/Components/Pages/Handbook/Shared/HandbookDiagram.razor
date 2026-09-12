@@ -1,0 +1,22 @@
+@* Picks a drawing by its key. An unknown key renders nothing rather than throwing - the key is data. *@
+
+@switch (DiagramKey)
+{
+    case "oberflaeche":
+        <LayoutDiagram />
+        break;
+    case "rechte-matrix":
+        <RightsMatrixDiagram />
+        break;
+}
+
+@code {
+    [Parameter] public string? DiagramKey { get; set; }
+
+    /// <summary>Keys that resolve to a drawing; the editor offers exactly these.</summary>
+    public static readonly IReadOnlyList<(string Key, string Label)> Known =
+    [
+        ("oberflaeche", "Aufbau der Oberfläche"),
+        ("rechte-matrix", "Dienstgrad und Kennzeichen"),
+    ];
+}

@@ -99,6 +99,9 @@
                 </MudAlert>
             }
 
+            @* One-off note that a new release landed; silent unless there is something to say. *@
+            <ChangelogHintCard />
+
             @* Announcement banner, maintained by leadership/admins under /einstellungen?tab=system. *@
             @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {

@@ -494,6 +494,17 @@ public static class SearchCatalog
                 + "über die öffentliche Suche gefunden, nicht über den Aktenbestand.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
+            ["HandbookChapter"] = "Überschrift eines Handbuch-Kapitels ohne eigenen Text; die Artikel tragen ihn.",
+            ["HandbookArticle"] = "Noch nicht in der Aktensuche: das Handbuch hat ein eigenes Suchfeld, "
+                + "das den ganzen Bestand im Speicher filtert. Die Aufnahme als Suchkategorie samt "
+                + "Anbieter und Assistant-Trait ist der nächste Schritt.",
+            ["GlossaryTerm"] = "Noch nicht in der Aktensuche; gefunden wird der Begriff über das Suchfeld "
+                + "im Handbuch. Kommt zusammen mit dem Artikel als eigene Kategorie dazu.",
+            ["HandbookStep"] = "Einzelner Schritt einer Anleitung; gefunden wird der Artikel, der ihn trägt.",
+            ["ChangelogRelease"] = "Überschrift einer Fassung ohne eigenen Text; die Einträge tragen ihn.",
+            ["ChangelogEntry"] = "Zeile über die Anwendung selbst, kein Aktenbestand. Sie steht vollständig "
+                + "auf /neuerungen und wird dort gefiltert; in der Aktensuche wäre sie ein Treffer, der auf "
+                + "keine Akte zeigt.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

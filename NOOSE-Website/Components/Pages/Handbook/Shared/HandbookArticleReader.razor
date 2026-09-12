@@ -1,0 +1,36 @@
+@* One article as the reader sees it: drawing, prose, walkthrough, and the set-apart roleplay box. *@
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@Article.Summary</MudText>
+
+@if (!string.IsNullOrWhiteSpace(Article.DiagramKey))
+{
+    <MudPaper Elevation="0" Class="pa-3 mb-5"
+              Style="background:var(--mud-palette-background); border:1px solid var(--mud-palette-lines-default);">
+        <HandbookDiagram DiagramKey="@Article.DiagramKey" />
+    </MudPaper>
+}
+
+@if (!string.IsNullOrWhiteSpace(Article.ContentHtml))
+{
+    @* RichHtml, not a raw MarkupString: it is the internal renderer, and the glossary bubbles hook in there *@
+    <RichHtml Html="@Article.ContentHtml" />
+}
+
+<HandbookStepCards Steps="Article.Steps" />
+
+@if (!string.IsNullOrWhiteSpace(Article.RoleplayHtml))
+{
+    @* set apart on purpose: the reader must be able to tell an instruction from a rule of the game *@
+    <MudPaper Elevation="0" Class="pa-4 mt-6"
+              Style="border-left:4px solid var(--mud-palette-secondary); background:var(--mud-palette-background);">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.TheaterComedy" Size="Size.Small" Color="Color.Secondary" />
+            <MudText Typo="Typo.subtitle2">Im Rollenspiel bedeutet das …</MudText>
+        </MudStack>
+        <RichHtml Html="@Article.RoleplayHtml" />
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired] public HandbookArticleView Article { get; set; } = default!;
+}

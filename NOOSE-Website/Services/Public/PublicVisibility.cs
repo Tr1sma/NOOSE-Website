@@ -265,6 +265,24 @@ public static class PublicVisibility
             ["OeffentlicheVorlage"] = "Rohtext einer Bürger-Nachricht, mit unaufgelösten Tokens und dem "
                 + "Arbeitstitel der Redaktion. Nach draußen geht die gerenderte Nachrichtenzeile, nie die "
                 + "Vorlage selbst.",
+
+            // --- handbook ---
+            ["HandbookChapter"] = "Kapitelüberschrift des internen Handbuchs; es erklärt die Bedienung der "
+                + "Dienststelle und richtet sich an Agenten, nicht an Bürger.",
+            ["HandbookArticle"] = "Anleitung zur internen Arbeit — welche Schaltfläche was tut, welche Einstufung "
+                + "wann gilt, wie eine Maßnahme abläuft. Nach außen wäre das eine Gebrauchsanweisung für die "
+                + "eigenen Verfahren.",
+            ["HandbookStep"] = "Einzelner Schritt einer internen Anleitung; teilt das Schicksal seines Artikels.",
+            ["GlossaryTerm"] = "Begriffserklärung der internen Fachsprache. Was nach draußen erklärt werden "
+                + "soll, steht im FAQ und wird dort redaktionell freigegeben.",
+
+            // --- changelog ---
+            ["ChangelogRelease"] = "Fassung der Anwendung samt Datum und Build-Nummer. Die Neuerungen richten "
+                + "sich an die Agenten, die mit der Seite arbeiten; nach außen wäre es eine Inventarliste der "
+                + "eingesetzten Software und ihres Alters.",
+            ["ChangelogEntry"] = "Eine Zeile der Neuerungen. Sie benennt interne Abläufe und Bereiche, die es "
+                + "nach außen gar nicht gibt — und welche Funktion wann dazukam oder repariert wurde, ist nach "
+                + "draußen keine Information, sondern eine Zeitleiste der eigenen Lücken.",
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

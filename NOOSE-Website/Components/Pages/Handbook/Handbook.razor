@@ -1,0 +1,366 @@
+@* The handbook: chapters on a rail, a glossary tab, and a search that stays inside the book. *@
+@page "/handbuch"
+@inject IHandbookService HandbookService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Handbuch · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.MenuBook"
+            Title="Handbuch"
+            Subtitle="Wie diese Seite und die Abläufe dahinter funktionieren — vom ersten Anmelden bis zu den Werkzeugen.">
+    <Actions>
+        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="redaktion">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.CreateNewFolder"
+                           OnClick="NewChapterAsync">Kapitel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PostAdd"
+                           OnClick="@(() => NewArticleAsync(null))"
+                           Disabled="@(_allChapters.Count == 0)">Artikel</MudButton>
+            </MudStack>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @* in-memory, not a second search provider: the whole book is small enough to load once per visit *@
+    <MudTextField @bind-Value="_search" @bind-Value:after="OnSearchAsync"
+                  Placeholder="Im Handbuch suchen (Artikel und Begriffe)…" Immediate="true" DebounceInterval="150"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Clearable="true" Class="mb-5" />
+
+    @if (!string.IsNullOrWhiteSpace(_search))
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-3">
+            @(_hitArticles.Count + _hitTerms.Count) Treffer für „@_search"
+        </MudText>
+
+        @if (_hitArticles.Count == 0 && _hitTerms.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                        Title="Nichts gefunden"
+                        Text="Kein Artikel und kein Begriff passt dazu. Versuch ein anderes Wort." />
+        }
+
+        @if (_hitArticles.Count > 0)
+        {
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Artikel</MudText>
+            <MudStack Spacing="2" Class="mb-5 mt-1">
+                @foreach (var a in _hitArticles)
+                {
+                    <MudPaper Elevation="1" Class="pa-3 cursor-pointer" @onclick="@(() => Open(a.Slug))">
+                        <MudText Typo="Typo.subtitle2">@a.Title</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.ChapterTitle</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@a.Summary</MudText>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+
+        @if (_hitTerms.Count > 0)
+        {
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Begriffe</MudText>
+            <MudStack Spacing="2" Class="mt-1">
+                @foreach (var t in _hitTerms)
+                {
+                    <MudPaper Elevation="1" Class="pa-3">
+                        <MudText Typo="Typo.subtitle2">@t.Term</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@t.ShortDefinition</MudText>
+                        @if (t.ArticleSlug is { } slug)
+                        {
+                            <MudLink Href="@($"/handbuch/{slug}")" Typo="Typo.caption">mehr dazu: @t.ArticleTitle</MudLink>
+                        }
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+    }
+    else
+    {
+        <RecordSectionRail>
+            @foreach (var chapter in _chapters)
+            {
+                <RecordSection Slug="@chapter.Slug" Label="@chapter.Title" Icon="@Icon(chapter.IconName)">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="mb-4">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="flex:1;">
+                            @chapter.Description
+                        </MudText>
+                        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="kapitelAktion">
+                            <MudStack Row="true" Spacing="0">
+                                <MudIconButton Icon="@Icons.Material.Filled.PostAdd" Size="Size.Small"
+                                               aria-label="Artikel in diesem Kapitel anlegen"
+                                               OnClick="@(() => NewArticleAsync(chapter.Id))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               aria-label="Kapitel bearbeiten"
+                                               OnClick="@(() => EditChapterAsync(chapter.Id))" />
+                            </MudStack>
+                        </AuthorizeView>
+                    </MudStack>
+
+                    @if (chapter.Articles.Count == 0)
+                    {
+                        <EmptyState Icon="@Icons.Material.Filled.EditNote"
+                                    Title="Dieses Kapitel wird noch geschrieben"
+                                    Text="Die Artikel dazu kommen als Nächstes. Bis dahin hilft die Suche über den ganzen Bestand." />
+                    }
+                    else
+                    {
+                        <MudStack Spacing="2">
+                            @foreach (var article in chapter.Articles)
+                            {
+                                <MudPaper Elevation="1" Class="pa-3">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                        <div style="flex:1;cursor:pointer;" @onclick="@(() => Open(article.Slug))">
+                                            <MudText Typo="Typo.subtitle2">@article.Title</MudText>
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@article.Summary</MudText>
+                                        </div>
+                                        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="artikelAktion">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                           aria-label="Artikel bearbeiten"
+                                                           OnClick="@(() => EditArticleAsync(article.Id))" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                           Color="Color.Error" aria-label="Artikel löschen"
+                                                           OnClick="@(() => DeleteArticleAsync(article))" />
+                                        </AuthorizeView>
+                                        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" />
+                                    </MudStack>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    }
+                </RecordSection>
+            }
+
+            <RecordSection Slug="glossar" Label="Glossar" Icon="@Icons.Material.Filled.Abc">
+                <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="glossarAktion">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mb-4"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="NewTermAsync">Neuer Begriff</MudButton>
+                </AuthorizeView>
+                <GlossaryPanel Terms="_terms" OnEdit="EditTermAsync" />
+            </RecordSection>
+        </RecordSectionRail>
+    }
+}
+
+@code {
+    private bool _load = true;
+    private string? _search;
+    private ClaimsPrincipal _user = new();
+
+    private List<HandbookChapterView> _chapters = [];
+    private List<GlossaryTermView> _terms = [];
+    private List<HandbookChapter> _allChapters = [];
+    private List<HandbookArticle> _allArticles = [];
+    private List<HandbookArticleCard> _hitArticles = [];
+    private List<GlossaryTermView> _hitTerms = [];
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            _user = (await AuthState).User;
+        }
+        _search = QueryState.Read(Nav, "suche");
+        await LoadAsync();
+        _load = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _chapters = await HandbookService.GetChaptersAsync();
+        _terms = await HandbookService.GetGlossaryAsync();
+        _allChapters = await HandbookService.GetAllChaptersAsync();
+
+        _allArticles = [];
+        foreach (var c in _allChapters)
+        {
+            _allArticles.AddRange(await HandbookService.GetAllArticlesAsync(c.Id));
+        }
+        Filter();
+    }
+
+    private void Open(string slug) => Nav.NavigateTo($"/handbuch/{slug}");
+
+    private async Task OnSearchAsync()
+    {
+        Filter();
+        await QueryState.WriteAsync(JS, Nav, ("suche", _search));
+    }
+
+    private void Filter()
+    {
+        var needle = _search?.Trim();
+        if (string.IsNullOrWhiteSpace(needle))
+        {
+            _hitArticles = [];
+            _hitTerms = [];
+            return;
+        }
+
+        _hitArticles = _chapters
+            .SelectMany(c => c.Articles)
+            .Where(a => Contains(a.Title, needle) || Contains(a.Summary, needle) || Contains(a.ChapterTitle, needle))
+            .ToList();
+
+        // synonyms count: somebody looking for "Deckname" means "Codename"
+        _hitTerms = _terms
+            .Where(t => Contains(t.Term, needle) || Contains(t.Synonyms, needle)
+                || Contains(t.ShortDefinition, needle))
+            .ToList();
+    }
+
+    private static bool Contains(string? haystack, string needle)
+        => haystack is not null && haystack.Contains(needle, StringComparison.CurrentCultureIgnoreCase);
+
+    /// <summary>An icon name from the content, resolved against the Material set; unknown names fall back.</summary>
+    private static string Icon(string? name)
+        => (name is null ? null : typeof(Icons.Material.Filled).GetField(name)?.GetValue(null) as string)
+           ?? Icons.Material.Filled.Article;
+
+    // --- editing ----------------------------------------------------------
+
+    private async Task NewChapterAsync()
+    {
+        var input = await HandbookChapterDialog.ShowAsync(DialogService, "Neues Kapitel");
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.CreateChapterAsync(input, _user);
+            Snackbar.Add("Kapitel angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditChapterAsync(string id)
+    {
+        if (_allChapters.FirstOrDefault(c => c.Id == id) is not { } chapter)
+        {
+            return;
+        }
+        var preset = new HandbookChapterInput(chapter.Slug, chapter.Title, chapter.Description,
+            chapter.IconName, chapter.SortOrder, chapter.IsVisible);
+        var input = await HandbookChapterDialog.ShowAsync(DialogService, "Kapitel bearbeiten", preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.RefreshChapterAsync(id, input, _user);
+            Snackbar.Add("Kapitel gespeichert.", Severity.Success);
+        });
+    }
+
+    private async Task NewArticleAsync(string? chapterId)
+    {
+        var preset = chapterId is null
+            ? null
+            : new HandbookArticleInput(chapterId, string.Empty, string.Empty, null, null, null, null, null, 0, true);
+        var input = await HandbookArticleDialog.ShowAsync(DialogService, "Neuer Artikel", _allChapters, preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.CreateArticleAsync(input, _user);
+            Snackbar.Add("Artikel angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditArticleAsync(string id)
+    {
+        if (_allArticles.FirstOrDefault(a => a.Id == id) is not { } article)
+        {
+            return;
+        }
+        var preset = new HandbookArticleInput(article.ChapterId, article.Slug, article.Title, article.Summary,
+            article.ContentHtml, article.RoleplayHtml, article.DiagramKey, article.NavKey,
+            article.SortOrder, article.IsVisible);
+        var input = await HandbookArticleDialog.ShowAsync(DialogService, "Artikel bearbeiten", _allChapters, preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.RefreshArticleAsync(id, input, _user);
+            Snackbar.Add("Artikel gespeichert.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteArticleAsync(HandbookArticleCard article)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Artikel löschen",
+            $"„{article.Title}\" in den Papierkorb legen?", "Löschen", Color.Error);
+        if (!ok)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.DeleteArticleAsync(article.Id, _user);
+            Snackbar.Add("Artikel in den Papierkorb gelegt.", Severity.Success);
+        });
+    }
+
+    private async Task NewTermAsync()
+    {
+        var input = await GlossaryTermDialog.ShowAsync(DialogService, "Neuer Begriff", _allArticles);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.CreateTermAsync(input, _user);
+            Snackbar.Add("Begriff angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditTermAsync(GlossaryTermView term)
+    {
+        var preset = new GlossaryTermInput(term.Term, term.Synonyms, term.ShortDefinition,
+            term.ExplanationHtml, ArticleIdOf(term.ArticleSlug), true);
+        var input = await GlossaryTermDialog.ShowAsync(DialogService, "Begriff bearbeiten", _allArticles, preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await HandbookService.RefreshTermAsync(term.Id, input, _user);
+            Snackbar.Add("Begriff gespeichert.", Severity.Success);
+        });
+    }
+
+    private string? ArticleIdOf(string? slug)
+        => slug is null ? null : _allArticles.FirstOrDefault(a => a.Slug == slug)?.Id;
+
+    private async Task GuardAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

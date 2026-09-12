@@ -339,6 +339,10 @@ builder.Services.AddScoped<INavPreferencesService, NavPreferencesService>();
 builder.Services.AddScoped<INavLabelService, NavLabelService>();
 builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
 builder.Services.AddScoped<ILawService, LawService>();
+builder.Services.AddScoped<NOOSE_Website.Services.Changelog.IChangelogService,
+    NOOSE_Website.Services.Changelog.ChangelogService>();
+builder.Services.AddScoped<NOOSE_Website.Services.Handbook.IHandbookService,
+    NOOSE_Website.Services.Handbook.HandbookService>();
 builder.Services.AddScoped<ILibraryStorageService, LibraryStorageService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
@@ -540,6 +544,12 @@ using (var scope = app.Services.CreateScope())
 
     // seed the four editorial starter pages as drafts (idempotent; never overwrites an edited page)
     await NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db);
+
+    // seed the shipped changelog; keeps untouched lines current, never rewrites an edited one, revives nothing
+    await NOOSE_Website.Infrastructure.Changelog.ChangelogSeeder.SeedAsync(db);
+
+    // seed the shipped handbook; same promise as the changelog - an edited article is never rewritten
+    await NOOSE_Website.Infrastructure.Handbook.HandbookSeeder.SeedAsync(db);
 
     // seed the four starting warning chips (only while the table is empty; a deleted one stays deleted)
     await NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db);

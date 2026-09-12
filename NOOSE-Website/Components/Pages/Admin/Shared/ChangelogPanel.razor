@@ -1,0 +1,247 @@
+@* Editorial view of /neuerungen: releases with their lines, editable by leadership. *@
+@inject IChangelogService ChangelogService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Was auf <MudLink Href="/neuerungen">/neuerungen</MudLink> steht. Ein Teil davon wird mit der Anwendung
+    ausgeliefert; sobald du eine solche Zeile bearbeitest, gehört sie dir und wird bei keinem Deploy mehr
+    überschrieben. Neue Fassungen bekommen ihre Build-Nummer beim nächsten Start automatisch.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="NewReleaseAsync">Neue Fassung</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
+                   OnClick="NewEntryAsync" Disabled="@(_releases.Count == 0)">Neuer Eintrag</MudButton>
+    </MudStack>
+
+    @if (_releases.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.NewReleases"
+                    Title="Noch keine Fassung"
+                    Text="Lege eine Fassung an, dann kannst du ihr Einträge zuordnen." />
+    }
+    else
+    {
+        foreach (var release in _releases)
+        {
+            var lines = _entries.TryGetValue(release.Id, out var l) ? l : [];
+            <MudPaper Elevation="1" Class="pa-3 mb-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary"
+                             Variant="@(release.IsVisible ? Variant.Filled : Variant.Outlined)">
+                        @release.Version
+                    </MudChip>
+                    <MudText Typo="Typo.subtitle2">@release.Title</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @release.Date.ToString("dd.MM.yyyy")
+                        @if (release.BuildNumber is not null)
+                        {
+                            <text> · Build @release.BuildNumber</text>
+                        }
+                        <text> · @lines.Count @(lines.Count == 1 ? "Eintrag" : "Einträge")</text>
+                    </MudText>
+                    @if (!release.IsVisible)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text">ausgeblendet</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   aria-label="Fassung bearbeiten"
+                                   OnClick="@(() => EditReleaseAsync(release))" />
+                </MudStack>
+
+                @if (lines.Count > 0)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudTable Items="lines" Dense="true" Hover="true" Elevation="0" T="ChangelogEntry"
+                              Breakpoint="Breakpoint.Sm">
+                        <HeaderContent>
+                            <MudTh Style="width:130px;">Art</MudTh>
+                            <MudTh>Eintrag</MudTh>
+                            <MudTh Style="width:140px;">Bereich</MudTh>
+                            <MudTh Style="width:120px;">Herkunft</MudTh>
+                            <MudTh Style="text-align:right;width:110px;">Aktion</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Art">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Color="@ChangelogKindDisplay.Colour(context.Kind)"
+                                         Icon="@ChangelogKindDisplay.Icon(context.Kind)">
+                                    @ChangelogKindDisplay.Name(context.Kind)
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Eintrag">
+                                <MudText Typo="Typo.body2"
+                                         Class="@(context.IsVisible ? "" : "mud-text-secondary")">@context.Title</MudText>
+                                @if (!context.IsVisible)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">ausgeblendet</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Bereich">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Area</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Herkunft">
+                                <MudTooltip Text="@OriginHint(context)">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@OriginText(context)</MudText>
+                                </MudTooltip>
+                            </MudTd>
+                            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               aria-label="Eintrag bearbeiten"
+                                               OnClick="@(() => EditEntryAsync(context))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               aria-label="Eintrag löschen"
+                                               OnClick="@(() => DeleteEntryAsync(context))" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool _load = true;
+    private ClaimsPrincipal _user = new();
+    private List<ChangelogRelease> _releases = [];
+    private Dictionary<string, List<ChangelogEntry>> _entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            _user = (await AuthState).User;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _releases = await ChangelogService.GetReleasesAsync();
+            _entries = [];
+            foreach (var r in _releases)
+            {
+                _entries[r.Id] = await ChangelogService.GetEntriesAsync(r.Id);
+            }
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private static string OriginText(ChangelogEntry entry)
+        => entry.SeedKey is null ? "selbst angelegt"
+            : entry.IsCustomised ? "bearbeitet"
+            : "ausgeliefert";
+
+    private static string OriginHint(ChangelogEntry entry)
+        => entry.SeedKey is null
+            ? "Von Hand eingetragen; die ausgelieferte Liste fasst diese Zeile nie an."
+            : entry.IsCustomised
+                ? "Ausgeliefert, danach bearbeitet — wird bei keinem Deploy mehr überschrieben."
+                : "Kommt mit der Anwendung und bleibt aktuell, solange du sie nicht bearbeitest.";
+
+    private async Task NewReleaseAsync()
+    {
+        var input = await ChangelogReleaseDialog.ShowAsync(DialogService, "Neue Fassung");
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await ChangelogService.CreateReleaseAsync(input, _user);
+            Snackbar.Add("Fassung angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditReleaseAsync(ChangelogRelease release)
+    {
+        var preset = new ChangelogReleaseInput(release.Version, release.Date, release.Title,
+            release.SortOrder, release.IsVisible);
+        var input = await ChangelogReleaseDialog.ShowAsync(DialogService, "Fassung bearbeiten", preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await ChangelogService.RefreshReleaseAsync(release.Id, input, _user);
+            Snackbar.Add("Fassung gespeichert.", Severity.Success);
+        });
+    }
+
+    private async Task NewEntryAsync()
+    {
+        var input = await ChangelogEntryDialog.ShowAsync(DialogService, "Neuer Eintrag", _releases);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await ChangelogService.CreateEntryAsync(input, _user);
+            Snackbar.Add("Eintrag angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditEntryAsync(ChangelogEntry entry)
+    {
+        var preset = new ChangelogEntryInput(entry.ReleaseId, entry.Kind, entry.Title, entry.Area,
+            entry.SortOrder, entry.IsVisible);
+        var input = await ChangelogEntryDialog.ShowAsync(DialogService, "Eintrag bearbeiten", _releases, preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await ChangelogService.RefreshEntryAsync(entry.Id, input, _user);
+            Snackbar.Add("Eintrag gespeichert.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteEntryAsync(ChangelogEntry entry)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag löschen",
+            $"„{entry.Title}\" in den Papierkorb legen?", "Löschen", Color.Error);
+        if (!ok)
+        {
+            return;
+        }
+        await GuardAsync(async () =>
+        {
+            await ChangelogService.DeleteEntryAsync(entry.Id, _user);
+            Snackbar.Add("Eintrag in den Papierkorb gelegt.", Severity.Success);
+        });
+    }
+
+    private async Task GuardAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
