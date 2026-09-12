@@ -1,0 +1,70 @@
+@* Shared shape for every "one stage after another" drawing. Six diagrams differ only in their labels. *@
+
+<svg viewBox="@($"0 0 640 {Height}")" role="img" aria-label="@Caption"
+     style="width:100%;height:auto;max-width:640px;">
+    <title>@Caption</title>
+    <desc>@Description</desc>
+
+    @for (var i = 0; i < Steps.Count; i++)
+    {
+        var step = Steps[i];
+        var y = Top + (i * (BoxHeight + Gap));
+        @* wrapped in a group: Razor claims a bare <text> inside a code block for its own use *@
+        <g>
+            <rect x="16" y="@y" width="@Width" height="@BoxHeight" rx="6"
+                  fill="@(step.Accent ? "var(--mud-palette-primary)" : "var(--mud-palette-surface)")"
+                  opacity="@(step.Accent ? "0.22" : "1")"
+                  stroke="@(step.Accent ? "var(--mud-palette-primary)" : "var(--mud-palette-lines-default)")"
+                  stroke-width="1.5" />
+            <circle cx="44" cy="@(y + (BoxHeight / 2))" r="13"
+                    fill="none" stroke="var(--mud-palette-primary)" stroke-width="1.5" />
+            <text x="44" y="@(y + (BoxHeight / 2) + 4)" font-size="12" text-anchor="middle"
+                  fill="var(--mud-palette-primary)">@(i + 1)</text>
+            <text x="70" y="@(y + 22)" font-size="13" fill="var(--mud-palette-text-primary)">@step.Title</text>
+            <text x="70" y="@(y + 40)" font-size="11" fill="var(--mud-palette-text-secondary)">@step.Text</text>
+
+            @if (step.Note is { Length: > 0 } note)
+            {
+                @* another group: a bare <text> opening a code block is Razor's own tag, not SVG's *@
+                <g>
+                    <text x="@(Width + 8)" y="@(y + 30)" font-size="10" text-anchor="end"
+                          fill="var(--mud-palette-warning)">@note</text>
+                </g>
+            }
+
+            @if (i < Steps.Count - 1)
+            {
+                <line x1="44" y1="@(y + BoxHeight)" x2="44" y2="@(y + BoxHeight + Gap)"
+                      stroke="var(--mud-palette-lines-default)" stroke-width="1.5" />
+                <path d="@($"M 40 {y + BoxHeight + Gap - 6} L 44 {y + BoxHeight + Gap} L 48 {y + BoxHeight + Gap - 6}")"
+                      fill="none" stroke="var(--mud-palette-lines-default)" stroke-width="1.5" />
+            }
+        </g>
+    }
+
+    @if (Footnote is { Length: > 0 })
+    {
+        <g>
+            <text x="16" y="@(Height - 8)" font-size="10"
+                  fill="var(--mud-palette-text-secondary)">@Footnote</text>
+        </g>
+    }
+</svg>
+
+@code {
+    /// <summary>One stage of the flow; <c>Note</c> is the aside that hangs off to the right.</summary>
+    public sealed record FlowStep(string Title, string Text, string? Note = null, bool Accent = false);
+
+    [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IReadOnlyList<FlowStep> Steps { get; set; } = [];
+    [Parameter] public string? Footnote { get; set; }
+
+    private const int Top = 16;
+    private const int Width = 608;
+    private const int BoxHeight = 54;
+    private const int Gap = 26;
+
+    private int Height => Top + (Steps.Count * BoxHeight) + ((Steps.Count - 1) * Gap)
+                          + (Footnote is { Length: > 0 } ? 32 : 16);
+}

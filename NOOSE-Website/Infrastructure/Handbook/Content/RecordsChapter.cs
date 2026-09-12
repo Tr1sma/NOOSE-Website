@@ -1,0 +1,273 @@
+using Article = NOOSE_Website.Infrastructure.Handbook.HandbookContent.SeededArticle;
+using Chapter = NOOSE_Website.Infrastructure.Handbook.HandbookContent.SeededChapter;
+using Step = NOOSE_Website.Infrastructure.Handbook.HandbookContent.SeededStep;
+
+namespace NOOSE_Website.Infrastructure.Handbook.Content;
+
+/// <summary>Chapter two: the records themselves and everything that hangs off them.</summary>
+internal static class RecordsChapter
+{
+    internal static readonly Chapter Chapter = new(
+        "kap-akten", "akten-fuehren", "Akten führen",
+        "Personen, Fraktionen, Einstufungen, Verknüpfungen und der Papierkorb.", "FolderShared",
+        [
+            new Article("art-personenakte", "personenakte", "Die Personenakte",
+                "Die wichtigste Akte der Behörde - und wie sie aufgebaut ist.",
+                """
+                <p>Zu jeder Person, mit der die NOOSE zu tun hat, gibt es <strong>genau eine Akte</strong>.
+                Alles, was über sie bekannt ist, läuft dort zusammen: Vernehmungen, Observationen, Fotos,
+                Fraktionszugehörigkeit, Fahndung, Kommentare.</p>
+                <p>Eine neue Akte legst du über <em>Personen → Neu</em> an. Pflicht ist nur der Name; das
+                <strong>Aktenzeichen</strong> - die feste Nummer der Akte - vergibt das System selbst.</p>
+                <p>Die Akte ist in <strong>Abschnitte</strong> unterteilt, die links in einer Leiste stehen:
+                <em>Akte</em> (Steckbrief, Einstufung, Gefährdung, Fotos), <em>Ermittlung</em> (Doks,
+                Überwachung, Verknüpfungen, Zugehörigkeit), <em>Anhänge</em> (Quellen, Fotos) und
+                <em>Verlauf</em> (Kommentare, Wiedervorlagen, Zeitstrahl). Du siehst nur die Abschnitte, für
+                die deine Rechte reichen.</p>
+                <p>Lege lieber <strong>eine</strong> Akte gut an als drei halbe. Wenn du unsicher bist, ob es
+                die Person schon gibt, such zuerst - die Suche findet auch ähnlich klingende Schreibweisen.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>Der <strong>Lebensstatus</strong> kennt drei Werte: lebend, tot und flüchtig. „Tot“ ist im
+                Spiel kein Endzustand - nach etwa 20 Minuten steht die Person wieder auf, und die Akte bleibt
+                bestehen. Trag den Tod trotzdem ein: für die Zeit dazwischen ist er die Wahrheit, und der
+                Verlauf der Akte soll ihn kennen.</p>
+                """,
+                DiagramKey: "personenakte",
+                NavKey: "personen",
+                Steps:
+                [
+                    new Step("Search", "Zuerst suchen",
+                        "Tippe den Namen in die Suche. Vielleicht gibt es die Akte längst - eine zweite Akte zur selben Person ist der häufigste Fehler."),
+                    new Step("PersonAdd", "Akte anlegen",
+                        "Personen → Neu. Name reicht; alles andere kannst du später ergänzen."),
+                    new Step("ContactPage", "Steckbrief füllen",
+                        "Aliase, Telefonnummer, Fahrzeuge, Waffen - das ist der Teil, den andere am häufigsten brauchen."),
+                    new Step("Shield", "Einstufung setzen",
+                        "Erst wenn es einen Anlass gibt. Eine Einstufung ohne Grund verzerrt später jede Auswertung."),
+                    new Step("Link", "Verknüpfen",
+                        "Fraktion, Vorgang, andere Personen. Eine Akte ohne Verbindungen ist eine Sackgasse."),
+                ]),
+
+            new Article("art-steckbrief", "steckbrief", "Der Steckbrief",
+                "Aliase, Telefon, Fahrzeuge, Waffen - die Merkmale, nach denen gesucht wird.",
+                """
+                <p>Der <strong>Steckbrief</strong> ist der Abschnitt der Personenakte, in dem die harten
+                Merkmale stehen: Aliase und Spitznamen, Telefonnummer, Fahrzeuge mit Kennzeichen, bekannte
+                Waffen, Wohnsitz.</p>
+                <p>Diese Felder sind kein Beiwerk. Nach genau diesen Angaben wird gesucht, wenn jemand nur ein
+                Kennzeichen oder einen Spitznamen hat. Ein eingetragenes Alias findet die Akte auch dann, wenn
+                niemand den echten Namen kennt.</p>
+                <p>Trag ein, was du <strong>belegen</strong> kannst, und hänge den Beleg als Quelle an. Eine
+                Vermutung gehört in einen Kommentar, nicht in den Steckbrief.</p>
+                """),
+
+            new Article("art-aktenzeichen", "aktenzeichen", "Aktenzeichen",
+                "Woher die Nummer kommt und wozu sie gut ist.",
+                """
+                <p>Jede Akte bekommt beim Anlegen ein <strong>Aktenzeichen</strong> - eine feste,
+                menschenlesbare Nummer wie <em>NOOSE-P-2026-0001</em>. Sie besteht aus der Behörde, einem
+                Buchstaben für die Aktenart, dem Jahr und einer laufenden Nummer.</p>
+                <p>Das Aktenzeichen vergibt das System selbst und es ändert sich nie. Genau deshalb ist es das
+                Richtige, wenn du im Funk, in einem Bericht oder gegenüber einer Partnerbehörde eine bestimmte
+                Akte benennen willst: Namen sind mehrdeutig, Aktenzeichen nicht.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>Im Schriftverkehr mit Gericht, LSPD oder Bürgern nennst du immer das Aktenzeichen. Es ist
+                die einzige Angabe, die du ohne Bedenken herausgeben kannst - sie verrät für sich genommen
+                nichts über den Inhalt.</p>
+                """),
+
+            new Article("art-einstufung", "einstufung", "Einstufungen",
+                "Prüffall, Verdachtsfall, gesichert staatsgefährdend - und was daran hängt.",
+                """
+                <p>Die <strong>Einstufung</strong> sagt, wie ernst die Behörde eine Person oder Fraktion nimmt.
+                Es gibt drei Stufen, und sie bauen aufeinander auf:</p>
+                <ul>
+                <li><strong>Prüffall</strong> - es gibt Anhaltspunkte, mehr nicht. Wir schauen hin.</li>
+                <li><strong>Verdachtsfall</strong> - der Verdacht ist belegt genug, um aktiv zu ermitteln.</li>
+                <li><strong>Gesichert staatsgefährdend</strong> - die höchste Stufe. Die Bewertung ist
+                abgeschlossen.</li>
+                </ul>
+                <p>Eine Einstufung zu setzen ist eine <strong>Entscheidung</strong>, keine Notiz. Jede Änderung
+                wird mit Begründung und Datum festgehalten und ist im Abschnitt <em>Einstufung</em> als
+                Verlauf nachlesbar. Die höchste Stufe darf erst ab Senior Special Agent vergeben werden.</p>
+                <p>Die Einstufung hebt außerdem den <strong>Bedrohungs-Score</strong> auf einen festen Sockel.
+                Eine leichtfertige Einstufung färbt also die ganze Lageübersicht ein.</p>
+                """,
+                DiagramKey: "einstufung"),
+
+            new Article("art-verschlusssachen", "verschlusssachen", "Verschlusssachen",
+                "Was „VS“ bedeutet und wer damit was sieht.",
+                """
+                <p>Eine <strong>Verschlusssache</strong> - kurz VS - ist ein Inhalt, den nicht jeder sehen
+                darf. Es gibt vier Stufen:</p>
+                <ul>
+                <li><strong>Offen</strong> - alle internen Agenten.</li>
+                <li><strong>Führung</strong> - erst ab Supervisory Special Agent.</li>
+                <li><strong>TRU</strong> - nur Konten mit dem Kennzeichen TRU.</li>
+                <li><strong>HRB</strong> - nur Konten mit dem Kennzeichen HRB.</li>
+                </ul>
+                <p>Die Stufe wirkt <strong>überall</strong>, nicht nur auf der Akte selbst: ein VS-Dokument
+                erscheint auch in der Suche nicht, taucht in keiner Liste auf und wird von NOOSEI nicht
+                erwähnt. Für dich sieht es so aus, als gäbe es das Dokument nicht - und das ist Absicht.</p>
+                <p>Stufe hoch heißt nicht „sicherer“. Was niemand findet, hilft auch niemandem. Stufe eine
+                Sache nur ein, wenn es einen Grund gibt, den du benennen kannst.</p>
+                """,
+                DiagramKey: "vs-stufen"),
+
+            new Article("art-fraktionen", "fraktionen", "Fraktionen",
+                "Die Akte einer organisierten Gruppe: Mitglieder, Ränge, Bestände, Beziehungen.",
+                """
+                <p>Eine <strong>Fraktion</strong> ist eine organisierte Gruppe mit eigener Struktur - Ränge,
+                Führung, oft ein Anwesen. Ihre Akte funktioniert wie eine Personenakte, hat aber vier eigene
+                Abschnitte: <em>Mitglieder</em>, <em>Bestände</em>, <em>Aktivitäten</em> und
+                <em>Beziehungen</em> zu anderen Fraktionen.</p>
+                <p>Mitglieder werden mit ihrer Personenakte verknüpft, nicht als Namen eingetippt. Dadurch
+                sieht man von beiden Seiten dasselbe: die Person zeigt ihre Fraktion, die Fraktion ihre
+                Mitglieder.</p>
+                <p>Vier dieser Bereiche haben eine <strong>eigene Aktualitäts-Ampel</strong>. Wer die
+                Mitgliederliste pflegt, setzt nur die Mitglieder-Ampel zurück - Stammdaten anzufassen zählt
+                nicht als „gepflegt“.</p>
+                """,
+                NavKey: "fraktionen"),
+
+            new Article("art-personengruppen", "personengruppen", "Personengruppen",
+                "Der lose Zusammenschluss - und warum er im Zweifel die richtige Wahl ist.",
+                """
+                <p>Eine <strong>Personengruppe</strong> ist ein loser Zusammenschluss ohne feste Struktur -
+                eine Clique, eine Zelle, eine Gruppe, die zusammen auftritt, aber keine Ränge kennt. Nimm sie,
+                wenn du Leute zusammenfassen willst, ohne eine Organisation zu behaupten, die es nicht gibt.</p>
+                <p>Sie hat Mitglieder wie eine Fraktion, aber keine Ränge, keine Bestände und keine
+                Beziehungen zu anderen Gruppen. Genau das ist ihr Zweck: weniger Behauptung.</p>
+                <p>Im Zweifel: Personengruppe. Sie lässt sich später immer noch zur Fraktion ausbauen, während
+                eine vorschnelle Fraktionsakte eine Struktur suggeriert, die niemand belegt hat.</p>
+                """,
+                NavKey: "personengruppen"),
+
+            new Article("art-parteien", "parteien", "Parteien",
+                "Die politische Organisation - getrennt von den Fraktionen geführt.",
+                """
+                <p>Eine <strong>Partei</strong> ist eine politische Organisation mit Mitgliedern und
+                Ausrichtung. Sie wird getrennt von den Fraktionen geführt, weil politische Arbeit anders
+                bewertet wird als organisierte Kriminalität.</p>
+                <p>Die Akte funktioniert wie die einer Personengruppe: Mitglieder werden mit ihrer
+                Personenakte verknüpft, alles andere - Einstufung, Verknüpfungen, Kommentare - ist dasselbe
+                wie überall.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>Eine Partei ist nicht schon deshalb ein Fall, weil sie eine Partei ist. Eine Einstufung
+                braucht denselben Anlass wie überall sonst - und wird hier besonders genau hingesehen.</p>
+                """,
+                NavKey: "parteien"),
+
+            new Article("art-verknuepfungen", "verknuepfungen", "Akten verknüpfen",
+                "Warum eine Verknüpfung immer in beide Richtungen sichtbar ist.",
+                """
+                <p>Fast jede Akte hat einen Abschnitt <em>Verknüpfungen</em>. Dort stellst du eine Verbindung
+                zu einer anderen Akte her - egal welcher Art: Person zu Fraktion, Vorgang zu Dokument,
+                Operation zu Person.</p>
+                <p>Eine Verknüpfung ist <strong>immer beidseitig</strong>. Du legst sie einmal an, und sie
+                erscheint auf beiden Akten. Du musst sie also nie doppelt pflegen - und du kannst dich darauf
+                verlassen, dass auf der Gegenseite dasselbe steht.</p>
+                <p>Zu jeder Verknüpfung gehört eine <strong>Art</strong> (etwa „gehört zu“, „steht in
+                Verbindung mit“) und möglichst eine kurze Notiz, warum. Eine Verknüpfung ohne Begründung ist
+                in drei Wochen nicht mehr nachvollziehbar.</p>
+                """,
+                DiagramKey: "verknuepfung"),
+
+            new Article("art-quellen", "quellen", "Quellen anhängen",
+                "Der Beleg zur Behauptung - Bild, Datei, Link oder Zitat.",
+                """
+                <p>Der Abschnitt <em>Quellen</em> nimmt Belege auf: einen Screenshot, ein Dokument, einen Link
+                oder ein wörtliches Zitat. Jede Quelle bekommt eine Art und eine kurze Beschreibung.</p>
+                <p>Die Faustregel dieser Behörde: <strong>was in der Akte steht, soll belegbar sein</strong>.
+                Eine Beobachtung ohne Quelle ist ein Gerücht - und im Zweifelsfall genau das, was vor Gericht
+                zusammenbricht.</p>
+                <p>Quellen hängen an der Akte, nicht an dir. Wer die Akte sehen darf, sieht auch die Quellen.
+                Umgekehrt gilt: eine Quelle an einer Verschlusssache ist selbst eine.</p>
+                """),
+
+            new Article("art-kommentare", "kommentare", "Kommentare und Erwähnungen",
+                "Die laufende Unterhaltung an einer Akte - und wie du jemanden hinzuziehst.",
+                """
+                <p>Jede Akte hat einen Abschnitt <em>Kommentare</em>. Er ist der richtige Ort für alles, was
+                Einschätzung ist und nicht Tatsache: Vermutungen, offene Fragen, Absprachen.</p>
+                <p>Mit einem <strong>@</strong> ziehst du jemanden dazu. Du bekommst eine Auswahlliste, wählst
+                den Agenten - und er bekommt eine Benachrichtigung mit Link auf genau diese Akte. Genauso lässt
+                sich eine <strong>andere Akte</strong> erwähnen; sie erscheint dann als anklickbarer Verweis
+                mitten im Text.</p>
+                <p>Ein Bild kannst du direkt mit <strong>Strg+V</strong> einfügen. Es wird an der Trägerakte
+                abgelegt, nicht bei dir - wer die Akte nicht sehen darf, sieht auch das Bild nicht.</p>
+                """),
+
+            new Article("art-stichworte", "stichworte-und-zusatzfelder", "Stichworte und Zusatzfelder",
+                "Zwei Wege, eine Akte über die vorgesehenen Felder hinaus zu beschreiben.",
+                """
+                <p><strong>Stichworte</strong> (Tags) sind freie Schlagworte, die du an jede Akte hängen
+                kannst. Sie sind dafür da, quer durch den Bestand zu filtern: alle Akten zu einem Einsatz, zu
+                einem Stadtteil, zu einem Thema.</p>
+                <p>Damit daraus kein Wildwuchs wird, pflegt die Führung die Liste der Stichworte unter
+                <em>Einstellungen</em>. Nimm ein vorhandenes, bevor du ein neues erfindest - zwei Stichworte
+                für dieselbe Sache trennen genau die Akten, die zusammengehören.</p>
+                <p><strong>Zusatzfelder</strong> sind etwas anderes: eigene, von der Führung definierte Felder,
+                die an jeder Akte einer Art erscheinen. Sie sind die Antwort auf „wir bräuchten hier noch ein
+                Feld für …“, ohne dass die Seite umgebaut werden muss.</p>
+                """),
+
+            new Article("art-wiedervorlagen", "wiedervorlagen", "Wiedervorlagen",
+                "Die Erinnerung an einer Akte - damit nichts liegen bleibt.",
+                """
+                <p>Eine <strong>Wiedervorlage</strong> ist eine Erinnerung, die an einer Akte hängt: „am 14.
+                nochmal prüfen, ob sich die Fraktionslage geändert hat“. Du setzt Datum, Text und wer
+                zuständig ist.</p>
+                <p>Wird sie fällig, bekommt der Zuständige eine Benachrichtigung - und die Wiedervorlage steht
+                auf seinem Lagezentrum, bis sie erledigt ist. Sie verschwindet nicht von selbst.</p>
+                <p>Nutze sie großzügig. Eine Akte, die auf etwas wartet, ohne dass jemand daran erinnert wird,
+                wartet für immer.</p>
+                """),
+
+            new Article("art-watchlist", "beobachtete-akten", "Beobachtete Akten",
+                "Einer Akte folgen und gesagt bekommen, wenn sich etwas ändert.",
+                """
+                <p>Über das Stern-Symbol setzt du eine Akte auf deine <strong>Beobachtungsliste</strong>. Ab
+                dann wirst du benachrichtigt, wenn sich an ihr etwas ändert - ein neuer Kommentar, eine neue
+                Einstufung, ein neues Dok.</p>
+                <p>Unter <em>Beobachtete Akten</em> stehen alle, denen du folgst, mit dem Datum der letzten
+                Änderung. Das ist der schnellste Weg zu „was ist bei meinen Sachen passiert, während ich weg
+                war“.</p>
+                <p>Die Liste ist deine allein. Niemand sieht, welchen Akten du folgst.</p>
+                """,
+                NavKey: "watchlist"),
+
+            new Article("art-aktualitaet", "aktualitaet", "Die Aktualitäts-Ampel",
+                "Grün, gelb, rot - wie alt die Angaben einer Akte sind.",
+                """
+                <p>An Fraktionsakten steht eine <strong>Ampel</strong>: grün heißt aktuell, gelb heißt „wird
+                langsam alt“, rot heißt veraltet. Sie misst nicht, wie gut die Akte ist, sondern nur, wann
+                zuletzt jemand nachgesehen hat.</p>
+                <p>Wichtig: Die Ampel hängt an <strong>vier getrennten Stempeln</strong> - Mitglieder,
+                Bestände, Aktivitäten und Doks. Der älteste davon bestimmt die Farbe. Am Namen der Fraktion zu
+                schrauben setzt die Ampel <em>nicht</em> zurück, und das ist Absicht: sonst würde eine
+                Rechtschreibkorrektur eine drei Monate alte Mitgliederliste als frisch ausweisen.</p>
+                <p>Eine rote Ampel ist kein Vorwurf, sondern eine Arbeitsanweisung.</p>
+                """),
+
+            new Article("art-papierkorb", "papierkorb", "Der Papierkorb",
+                "Gelöschtes ist nicht weg - und wie du es zurückholst.",
+                """
+                <p>Wenn du eine Akte löschst, wird sie nicht vernichtet. Sie wandert in den
+                <strong>Papierkorb</strong> und verschwindet nur aus Listen, Suche und Verknüpfungen. Der
+                Inhalt bleibt erhalten.</p>
+                <p>Unter <em>Papierkorb</em> liegen die gelöschten Einträge <strong>aller</strong> Aktenarten
+                an einer Stelle, nach Art gruppiert. Ein Klick auf <em>Wiederherstellen</em> holt eine Akte
+                zurück, als wäre nichts gewesen.</p>
+                <p>Deshalb ist Löschen kein Drama - aber auch keine Lösung für „ich will das nicht mehr
+                sehen“. Dafür gibt es Status und Filter.</p>
+                """,
+                NavKey: "papierkorb"),
+        ]);
+}

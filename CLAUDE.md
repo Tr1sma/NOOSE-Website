@@ -348,9 +348,12 @@ dann die Themendatei aus der Tabelle oben.
 
 ## Handbuch pflegen (`/handbuch`)
 
-Der Erstbestand liegt in `NOOSE-Website/Infrastructure/Handbook/HandbookContent.cs`; der Seeder
-schreibt ihn beim Start ein und fasst **nie** an, was jemand redaktionell bearbeitet hat
-(`IstAngepasst`). Dieselbe Konfliktregel wie beim Changelog.
+Der Erstbestand liegt unter `NOOSE-Website/Infrastructure/Handbook/` — `HandbookContent.cs` hält nur
+die Formen und setzt das Buch zusammen, der Text steht **eine Datei je Kapitel** in `Content/`
+(plus `GlossaryContent.cs`). Der Seeder schreibt ihn beim Start ein und fasst **nie** an, was jemand
+redaktionell bearbeitet hat (`IstAngepasst`). Dieselbe Konfliktregel wie beim Changelog.
+
+Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-Karten.
 
 - **Ton:** direkte Anrede, kurze Sätze, Klicknamen kursiv. Ein Fachwort beim ersten Auftreten erklären —
   genau dort greift später auch die Erklär-Blase aus dem Glossar.
@@ -370,6 +373,11 @@ schreibt ihn beim Start ein und fasst **nie** an, was jemand redaktionell bearbe
   braucht das nicht; er wird an seinem fehlenden Key erkannt.
 - **Slugs im Erstbestand schon sauber schreiben** (Kleinbuchstaben, Bindestriche, keine Umlaute). Der
   Seeder schreibt sie roh, der Editor bereinigt — `Every_shipped_slug_is_already_url_clean` hält beide zusammen.
+- **Eine neue Seite braucht einen Artikel.** `Every_menu_entry_has_an_article` fordert je `NavEntry` einen
+  Artikel mit passendem `NavSchluessel`; die einzige Ausnahmeliste im Test sind Zweit-Einträge auf eine
+  Seite, die schon einen Artikel hat (ein Artikel trägt genau einen Schlüssel).
+- **Ein Begriff ist unique indexiert**, nicht nur sein Seed-Key — `Every_shipped_term_is_written_only_once`
+  fängt die Dublette ab, die sonst erst den ersten Start sprengt.
 - **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante
   des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
 

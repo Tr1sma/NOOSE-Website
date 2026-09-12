@@ -8,6 +8,42 @@
     case "rechte-matrix":
         <RightsMatrixDiagram />
         break;
+    case "personenakte":
+        <PersonRecordDiagram />
+        break;
+    case "einstufung":
+        <ClassificationDiagram />
+        break;
+    case "vs-stufen":
+        <ClassifiedLevelsDiagram />
+        break;
+    case "verknuepfung":
+        <LinkDiagram />
+        break;
+    case "akten-ebenen":
+        <RecordLevelsDiagram />
+        break;
+    case "ehk-score":
+        <ThreatScoreDiagram />
+        break;
+    case "fahndung-lebenszyklus":
+        <WantedLifecycleDiagram />
+        break;
+    case "hinweis-weg":
+        <TipFlowDiagram />
+        break;
+    case "bewerbung-ablauf":
+        <ApplicationFlowDiagram />
+        break;
+    case "befoerderung":
+        <PromotionDiagram />
+        break;
+    case "partner-freigabe":
+        <PartnerAccessDiagram />
+        break;
+    case "noosei-grenzen":
+        <NooseiScopeDiagram />
+        break;
 }
 
 @code {
@@ -18,5 +54,17 @@
     [
         ("oberflaeche", "Aufbau der Oberfläche"),
         ("rechte-matrix", "Dienstgrad und Kennzeichen"),
+        ("personenakte", "Aufbau einer Personenakte"),
+        ("akten-ebenen", "Vorgang, Operation, Taskforce"),
+        ("einstufung", "Die drei Einstufungen"),
+        ("vs-stufen", "Stufen einer Verschlusssache"),
+        ("verknuepfung", "Eine Verknüpfung, zwei Seiten"),
+        ("ehk-score", "Der Bedrohungs-Score"),
+        ("fahndung-lebenszyklus", "Lebenszyklus einer Fahndung"),
+        ("hinweis-weg", "Der Weg eines Bürgerhinweises"),
+        ("bewerbung-ablauf", "Ablauf einer Bewerbung"),
+        ("befoerderung", "Ablauf einer Beförderung"),
+        ("partner-freigabe", "Was eine Partnerbehörde sieht"),
+        ("noosei-grenzen", "Was NOOSEI sieht"),
     ];
 }

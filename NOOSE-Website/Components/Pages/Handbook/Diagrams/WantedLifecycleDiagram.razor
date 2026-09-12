@@ -1,0 +1,18 @@
+@* The life of a public wanted notice, including the two ways it ends. *@
+
+<FlowDiagram Caption="Lebenszyklus einer Fahndung"
+             Description="Vom Entwurf über die Veröffentlichung bis zu gefasst oder zurückgezogen."
+             Steps="_steps"
+             Footnote="Zurückgezogen behält Aktenzeichen und Inhalt - erneut veröffentlichen ist ein Klick." />
+
+@code {
+    private static readonly IReadOnlyList<FlowDiagram.FlowStep> _steps =
+    [
+        new("Entwurf", "An der Personenakte angelegt. Nach außen noch nichts sichtbar."),
+        new("Veröffentlichen oder beantragen", "Ab Senior Special Agent direkt, darunter über die Freigaben.",
+            "Rang ≥ 3"),
+        new("Veröffentlicht", "Steht unter einem eigenen FA-Aktenzeichen öffentlich.", null, Accent: true),
+        new("Hinweise laufen ein", "Bürger melden sich über das Aktenzeichen, nicht über die Akte."),
+        new("Gefasst oder zurückgezogen", "Beides nimmt die Ausschreibung sofort von der öffentlichen Seite."),
+    ];
+}

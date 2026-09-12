@@ -1,0 +1,63 @@
+@* How a person record is laid out: one spine, four groups of sections hanging off it. *@
+
+<svg viewBox="0 0 640 400" role="img" aria-labelledby="personRecordTitle personRecordDesc"
+     style="width:100%;height:auto;max-width:640px;">
+    <title id="personRecordTitle">Aufbau einer Personenakte</title>
+    <desc id="personRecordDesc">
+        In der Mitte die Akte mit Name und Aktenzeichen. Darum vier Gruppen von Abschnitten: Akte,
+        Ermittlung, Anhänge und Verlauf, jede mit ihren Abschnitten.
+    </desc>
+
+    @{
+        var groups = new[]
+        {
+            ("Akte", new[] { "Steckbrief", "Einstufung", "Gefährdung", "Öffentliche Fahndung", "Zusatzfelder" }),
+            ("Ermittlung", new[] { "Doks", "Überwachung", "Verknüpfungen", "Zugehörigkeit", "Hinweisgeber" }),
+            ("Anhänge", new[] { "Fotos", "Quellen" }),
+            ("Verlauf", new[] { "Kommentare", "Wiedervorlagen", "Zeitstrahl" }),
+        };
+    }
+
+    <!-- the record itself -->
+    <rect x="16" y="16" width="608" height="60" rx="8"
+          fill="var(--mud-palette-primary)" opacity="0.18"
+          stroke="var(--mud-palette-primary)" stroke-width="1.5" />
+    <rect x="16" y="16" width="608" height="60" rx="8" fill="none"
+          stroke="var(--mud-palette-primary)" stroke-width="1.5" />
+    <text x="36" y="42" font-size="14" fill="var(--mud-palette-text-primary)">Personenakte</text>
+    <text x="36" y="62" font-size="11" fill="var(--mud-palette-text-secondary)">
+        Name · Lebensstatus · NOOSE-P-2026-0001
+    </text>
+    <text x="604" y="52" font-size="11" text-anchor="end" fill="var(--mud-palette-primary)">
+        Aktenzeichen vergibt das System
+    </text>
+
+    @for (var g = 0; g < groups.Length; g++)
+    {
+        var (name, sections) = groups[g];
+        var x = 16 + (g * 154);
+        @* wrapped in a group: Razor claims a bare <text> inside a code block for its own use *@
+        <g>
+            <line x1="@(x + 66)" y1="76" x2="@(x + 66)" y2="104"
+                  stroke="var(--mud-palette-lines-default)" stroke-width="1.5" />
+            <rect x="@x" y="104" width="144" height="28" rx="5"
+                  fill="var(--mud-palette-surface)" stroke="var(--mud-palette-lines-default)" stroke-width="1.5" />
+            <text x="@(x + 12)" y="123" font-size="12" fill="var(--mud-palette-text-primary)">@name</text>
+
+            @for (var s = 0; s < sections.Length; s++)
+            {
+                var y = 142 + (s * 32);
+                <g>
+                    <rect x="@(x + 10)" y="@y" width="134" height="24" rx="4"
+                          fill="var(--mud-palette-background)" stroke="var(--mud-palette-lines-default)" />
+                    <text x="@(x + 20)" y="@(y + 16)" font-size="10"
+                          fill="var(--mud-palette-text-secondary)">@sections[s]</text>
+                </g>
+            }
+        </g>
+    }
+
+    <text x="16" y="390" font-size="10" fill="var(--mud-palette-text-secondary)">
+        Du siehst nur die Abschnitte, für die deine Rechte reichen - fehlende bleiben ohne Hinweis leer.
+    </text>
+</svg>

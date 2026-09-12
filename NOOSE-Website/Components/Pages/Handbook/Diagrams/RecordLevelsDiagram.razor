@@ -1,0 +1,16 @@
+@* Which record holds what: the four levels people mix up most often. *@
+
+<FlowDiagram Caption="Vier Ebenen der Aktenführung"
+             Description="Von der dauerhaften Subjektakte über den Vorgang und die einzelne Operation bis zur Taskforce als Mannschaft."
+             Steps="_steps"
+             Footnote="Faustregel: Sachverhalt = Vorgang · Termin = Operation · Gruppe Menschen = Taskforce" />
+
+@code {
+    private static readonly IReadOnlyList<FlowDiagram.FlowStep> _steps =
+    [
+        new("Personen- und Fraktionsakte", "Was über ein Subjekt bekannt ist. Lebt dauerhaft.", "ein Subjekt"),
+        new("Vorgang", "Eine Ermittlung, die mehrere Akten bündelt. Hat Anfang und Ende.", "ein Sachverhalt"),
+        new("Operation", "Ein konkreter Einsatz mit Ort, Zeit und Ergebnis.", "ein Termin"),
+        new("Taskforce", "Eine Mannschaft mit Auftrag und Genehmigung.", "eine Gruppe"),
+    ];
+}

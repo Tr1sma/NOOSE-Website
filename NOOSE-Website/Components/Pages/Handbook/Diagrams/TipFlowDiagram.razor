@@ -1,0 +1,18 @@
+@* What happens to a citizen tip after it arrives. *@
+
+<FlowDiagram Caption="Der Weg eines Bürgerhinweises"
+             Description="Vom öffentlichen Formular über Übernahme und Rückfrage bis zum Abschluss."
+             Steps="_steps"
+             Footnote="Die Anonymitätszusage gilt über den gesamten Weg - auch auf Zeitstrahl und in der Chronik." />
+
+@code {
+    private static readonly IReadOnlyList<FlowDiagram.FlowStep> _steps =
+    [
+        new("Eingegangen", "Ein Bürger füllt das öffentliche Formular aus.", "Status: Neu"),
+        new("Übernommen", "Ein Agent macht sich zuständig, damit niemand doppelt schreibt.", "In Prüfung"),
+        new("Rückfrage", "Optional: Nachfrage an den Hinweisgeber über sein Bürgerkonto.", "Rückfrage"),
+        new("Mit der Akte verknüpft", "Ohne Verknüpfung ist der Hinweis in zwei Wochen nicht mehr auffindbar."),
+        new("Abgeschlossen", "Bestätigt, verworfen - oder führte zur Ergreifung.",
+            "Grundlage der Belohnung", Accent: true),
+    ];
+}

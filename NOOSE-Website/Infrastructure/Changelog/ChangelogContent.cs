@@ -180,5 +180,16 @@ public static class ChangelogContent
             Fix("1.3-belohnung-gebucht", "Eine Belohnung gilt erst als ausgezahlt, wenn sie gebucht ist.", "Hinweise"),
             Fix("1.3-test-antworten", "Antworten auf einen Test werden nicht mehr mit veralteten Angaben gespeichert.", "Bewerbungen"),
         ]),
+
+        new("1.4", new DateTime(2026, 9, 12), "Handbuch, Glossar und diese Seite hier",
+        [
+            Neu("1.4-neuerungen", "Diese Seite: hier steht ab jetzt, was sich geändert hat.", "Bedienung"),
+            Neu("1.4-neuerungen-hinweis", "Nach dem Anmelden weist eine Karte auf Neuerungen hin.", "Bedienung"),
+            Neu("1.4-handbuch", "Handbuch mit Anleitungen zu jeder Seite und jedem Ablauf.", "Handbuch"),
+            Neu("1.4-glossar", "Glossar: über 140 Fachwörter in je einem Satz erklärt.", "Handbuch"),
+            Neu("1.4-schaubilder", "Schaubilder zu Fahndung, Bewerbung, Bürgerhinweis und Rechten.", "Handbuch"),
+            Neu("1.4-handbuch-suche", "Eigenes Suchfeld im Handbuch, das Artikel und Begriffe zugleich findet.", "Handbuch"),
+            Neu("1.4-handbuch-pflege", "Führung und HRB können Handbuch und Glossar selbst bearbeiten.", "Handbuch"),
+        ]),
     ];
 }

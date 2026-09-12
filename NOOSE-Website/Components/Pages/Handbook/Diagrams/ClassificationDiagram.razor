@@ -1,0 +1,16 @@
+@* The three classification steps and the score floor each one sets. *@
+
+<FlowDiagram Caption="Die drei Einstufungen"
+             Description="Prüffall, Verdachtsfall und gesichert staatsgefährdend, mit dem Sockel, den jede Stufe im Bedrohungs-Score setzt."
+             Steps="_steps"
+             Footnote="Jede Änderung wird mit Begründung und Datum festgehalten." />
+
+@code {
+    private static readonly IReadOnlyList<FlowDiagram.FlowStep> _steps =
+    [
+        new("Prüffall", "Es gibt Anhaltspunkte, mehr nicht. Wir schauen hin.", "Score ab 12"),
+        new("Verdachtsfall", "Der Verdacht ist belegt genug, um aktiv zu ermitteln.", "Score ab 50"),
+        new("Gesichert staatsgefährdend", "Die Bewertung ist abgeschlossen. Erst ab Senior Special Agent.",
+            "Score ab 75", Accent: true),
+    ];
+}

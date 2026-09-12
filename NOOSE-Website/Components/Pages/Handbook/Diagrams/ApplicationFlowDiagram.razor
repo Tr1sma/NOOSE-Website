@@ -1,0 +1,19 @@
+@* The recruiting pipeline, plus the ban that two of its endings trigger. *@
+
+<FlowDiagram Caption="Ablauf einer Bewerbung"
+             Description="Von der Einreichung über Sicherheitsüberprüfung, Test und Gespräch bis zur Entscheidung."
+             Steps="_steps"
+             Footnote="Ablehnen, Schließen und eine nicht bestandene Überprüfung sperren das Discord-Konto 14 Tage." />
+
+@code {
+    private static readonly IReadOnlyList<FlowDiagram.FlowStep> _steps =
+    [
+        new("Eingereicht", "Über den öffentlichen Bereich. Das Konto sieht nur die eigene Bewerbung."),
+        new("Sicherheitsüberprüfung", "Gibt es eine Personenakte? Spricht etwas gegen eine Einstellung?",
+            "nicht bestanden = 14 Tage"),
+        new("Test", "Eignungstest mit Zeitlimit. Die Uhr startet beim ersten Abruf der Fragen."),
+        new("Vorstellungsgespräch", "Der Bewerber sieht weiterhin nur die Stufe „Test“.", "bewusst vergröbert"),
+        new("Entscheidung", "Angenommen legt das Konto an. Abgelehnt oder geschlossen sperrt 14 Tage.",
+            null, Accent: true),
+    ];
+}

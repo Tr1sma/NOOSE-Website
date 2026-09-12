@@ -422,8 +422,8 @@ public sealed class HandbookTests
             chapters.Sum(c => c.Articles.Count));
         Assert.Equal(HandbookContent.Terms.Count, terms.Count);
 
-        // the sample chapter is written out; the rest is the shape of the book and fills up later
-        Assert.NotEmpty(chapters[0].Articles);
+        // every chapter carries text: an empty one renders as a heading with nothing under it
+        Assert.All(chapters, c => Assert.NotEmpty(c.Articles));
         var first = await service.GetArticleAsync(chapters[0].Articles[0].Slug);
         Assert.NotNull(first);
         Assert.False(string.IsNullOrWhiteSpace(first!.ContentHtml));
@@ -444,5 +444,46 @@ public sealed class HandbookTests
 
         Assert.NotEmpty(written);
         Assert.All(written, w => Assert.Contains("<p>", w.ContentHtml!, StringComparison.Ordinal));
+    }
+
+    /// <summary>The term itself is uniquely indexed, so a duplicate would break the very first start.</summary>
+    [Fact]
+    public void Every_shipped_term_is_written_only_once()
+    {
+        var duplicates = HandbookContent.Terms
+            .GroupBy(t => t.Term, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        Assert.Empty(duplicates);
+    }
+
+    /// <summary>A menu entry without an article is a page whose help button stays dark. New page, new article.</summary>
+    /// <remarks>
+    /// The exceptions are entries that are a second door onto a page that already has one - an article carries a
+    /// single menu key, so the two cannot both claim it.
+    /// </remarks>
+    [Fact]
+    public void Every_menu_entry_has_an_article()
+    {
+        string[] secondDoors =
+        [
+            // the same page as "tickets", filtered to the tickets you are attached to
+            "tickets.beteiligt",
+        ];
+
+        var covered = HandbookContent.Chapters
+            .SelectMany(c => c.Articles)
+            .Where(a => a.NavKey is not null)
+            .Select(a => a.NavKey!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var missing = NavCatalog.Internal
+            .Select(e => e.Key)
+            .Where(k => !covered.Contains(k) && !secondDoors.Contains(k, StringComparer.Ordinal))
+            .ToList();
+
+        Assert.Empty(missing);
     }
 }

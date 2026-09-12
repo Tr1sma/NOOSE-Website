@@ -1,0 +1,48 @@
+@* The four confidentiality levels side by side: who sees each one, and who sees nothing at all. *@
+
+<svg viewBox="0 0 640 300" role="img" aria-labelledby="vsLevelsTitle vsLevelsDesc"
+     style="width:100%;height:auto;max-width:640px;">
+    <title id="vsLevelsTitle">Die vier Stufen einer Verschlusssache</title>
+    <desc id="vsLevelsDesc">
+        Offen für alle internen Agenten, Führung ab Supervisory Special Agent, TRU nur mit dem Kennzeichen TRU,
+        HRB nur mit dem Kennzeichen HRB. Partnerkonten sehen keine Stufe.
+    </desc>
+
+    @{
+        var levels = new[]
+        {
+            ("Offen", "Jeder interne Agent", "100 %"),
+            ("Führung", "Ab Supervisory Special Agent, dazu Admins", "ab Rang 4"),
+            ("TRU", "Nur Konten mit dem Kennzeichen TRU", "Kennzeichen"),
+            ("HRB", "Nur Konten mit dem Kennzeichen HRB", "Kennzeichen"),
+        };
+    }
+
+    @for (var i = 0; i < levels.Length; i++)
+    {
+        var (name, who, hint) = levels[i];
+        var y = 20 + (i * 58);
+        var width = 596 - (i * 96);
+        @* wrapped in a group: Razor claims a bare <text> inside a code block for its own use *@
+        <g>
+            <rect x="16" y="@y" width="@width" height="44" rx="6"
+                  fill="@(i == 0 ? "var(--mud-palette-surface)" : "var(--mud-palette-primary)")"
+                  opacity="@(i == 0 ? "1" : "0.22")"
+                  stroke="@(i == 0 ? "var(--mud-palette-lines-default)" : "var(--mud-palette-primary)")"
+                  stroke-width="1.5" />
+            <text x="32" y="@(y + 20)" font-size="13" fill="var(--mud-palette-text-primary)">@name</text>
+            <text x="32" y="@(y + 36)" font-size="11" fill="var(--mud-palette-text-secondary)">@who</text>
+            <text x="@(width + 8)" y="@(y + 28)" font-size="10" text-anchor="end"
+                  fill="var(--mud-palette-text-secondary)">@hint</text>
+        </g>
+    }
+
+    <line x1="16" y1="262" x2="624" y2="262"
+          stroke="var(--mud-palette-lines-default)" stroke-width="1" stroke-dasharray="4 4" />
+    <text x="16" y="280" font-size="11" fill="var(--mud-palette-warning)">
+        Was du nicht sehen darfst, existiert für dich nicht: keine Lücke, kein Hinweis, kein Suchtreffer.
+    </text>
+    <text x="16" y="296" font-size="10" fill="var(--mud-palette-text-secondary)">
+        Partnerkonten von LSPD, DoJ und LSMD sehen keine dieser Stufen.
+    </text>
+</svg>
