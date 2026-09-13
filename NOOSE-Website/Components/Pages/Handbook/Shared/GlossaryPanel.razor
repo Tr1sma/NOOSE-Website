@@ -40,7 +40,8 @@ else
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@term.ShortDefinition</MudText>
                     @if (!string.IsNullOrWhiteSpace(term.ExplanationHtml))
                     {
-                        <div class="mt-2"><RichHtml Html="@term.ExplanationHtml" /></div>
+                        @* no bubbles here: this IS the glossary, and a term explaining itself is a loop *@
+                        <div class="mt-2"><RichHtml Html="@term.ExplanationHtml" Glossary="false" /></div>
                     }
                 </MudPaper>
             }

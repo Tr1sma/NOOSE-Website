@@ -33,6 +33,13 @@ public sealed class NavPreferences
     /// <summary>Last time /neuerungen was seen; drives the one-off hint after a new release.</summary>
     public DateTime? NeuerungenLastSeenUtc { get; set; }
 
+    /// <summary>Explain-on-hover bubbles for glossary terms in rich text. On unless the agent turns them off.</summary>
+    /// <remarks>
+    /// Default-on means an agent whose blob predates this property also gets them - there is deliberately no way
+    /// to tell "never decided" from "deliberately on", because nothing here needs one.
+    /// </remarks>
+    public bool GlossarBlasen { get; set; } = true;
+
     /// <summary>Schema version for future migrations.</summary>
     public int Version { get; set; } = 2;
 }

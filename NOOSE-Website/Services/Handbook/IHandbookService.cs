@@ -23,6 +23,9 @@ public interface IHandbookService
     /// <summary>Visible glossary terms, alphabetical.</summary>
     Task<List<GlossaryTermView>> GetGlossaryAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>The glossary prepared for matching, cached: every rich-text block on a page asks for it.</summary>
+    Task<GlossaryMatcher> GetGlossaryMatcherAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Every chapter including hidden ones, in order; for the editor.</summary>
     Task<List<HandbookChapter>> GetAllChaptersAsync(CancellationToken cancellationToken = default);
 

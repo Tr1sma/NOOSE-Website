@@ -350,6 +350,61 @@ html, body {
     cursor: default;
 }
 
+/* ---- Glossar-Erklärblasen im gerenderten Dokument-HTML ----
+   CSS rather than a component: the body is one MarkupString, and a MarkupString cannot host a MudTooltip.
+   The definition rides in data-glossar, which only ever exists on the render path - the sanitizer allows no
+   such attribute, so this markup must never be written back to the database. */
+.dokument-html .glossar {
+    border-bottom: 1px dotted var(--mud-palette-primary);
+    cursor: help;
+    position: relative;
+}
+
+    .dokument-html .glossar::after {
+        content: attr(data-glossar);
+        position: absolute;
+        left: 0;
+        bottom: 100%;
+        z-index: 1400;
+        min-width: 14rem;
+        max-width: 22rem;
+        margin-bottom: .35rem;
+        padding: .5rem .625rem;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 6px;
+        background-color: var(--mud-palette-surface);
+        color: var(--mud-palette-text-primary);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+        font-size: .78rem;
+        font-weight: 400;
+        line-height: 1.35;
+        white-space: normal;
+        text-align: left;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .12s ease-in-out;
+        pointer-events: none;
+    }
+
+    .dokument-html .glossar:hover::after,
+    .dokument-html .glossar:focus::after,
+    .dokument-html .glossar:focus-visible::after {
+        opacity: 1;
+        visibility: visible;
+    }
+
+/* on paper a bubble helps nobody, and the dotted rule reads as a mistake */
+@media print {
+    .dokument-html .glossar {
+        border-bottom: none;
+        cursor: auto;
+    }
+
+        .dokument-html .glossar::after {
+            display: none;
+        }
+}
+
     .dokument-html blockquote {
         border-left: 3px solid var(--mud-palette-lines-default);
         margin-left: 0;

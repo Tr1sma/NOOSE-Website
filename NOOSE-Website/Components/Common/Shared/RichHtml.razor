@@ -1,5 +1,7 @@
-@* Renders stored WYSIWYG HTML and resolves its @-mention tokens for the viewer. *@
+@* Renders stored WYSIWYG HTML, resolves its @-mention tokens and marks glossary terms for the viewer. *@
 @inject IMentionService MentionService
+@inject IHandbookService HandbookService
+@inject INavPreferencesService NavPrefs
 
 <div class="@($"dokument-html {Class}")">@((MarkupString)(_rendered ?? Html ?? string.Empty))</div>
 
@@ -10,8 +12,11 @@
     /// <summary>Viewer; falls back to the cascading authentication state.</summary>
     [Parameter] public ClaimsPrincipal? User { get; set; }
 
-    /// <summary>Renders mentions as bare text instead of links; for print views.</summary>
+    /// <summary>Renders mentions as bare text instead of links, and drops the bubbles; for print views.</summary>
     [Parameter] public bool Plain { get; set; }
+
+    /// <summary>Set false where a glossary bubble would explain the very text it sits in.</summary>
+    [Parameter] public bool Glossary { get; set; } = true;
 
     [Parameter] public string? Class { get; set; }
 
@@ -19,34 +24,75 @@
 
     private string? _rendered;
     private string? _source;
+    private bool _plain;
+    private bool _glossary = true;
     private bool _touched;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_touched && _source == Html)
+        // the memo has to key on every input, not just the html: toggling Plain alone changes the output
+        if (_touched && _source == Html && _plain == Plain && _glossary == Glossary)
         {
             return;
         }
         _touched = true;
         _source = Html;
+        _plain = Plain;
+        _glossary = Glossary;
         _rendered = null;
-
-        // no token -> render raw, no service call
-        if (MentionHtml.Refs(Html).Count == 0)
-        {
-            return;
-        }
 
         var user = User;
         if (user is null && AuthStateTask is not null)
         {
             user = (await AuthStateTask).User;
         }
-        if (user is null)
+
+        var html = Html;
+
+        // mentions first. The other way round, the glossary would split a text node while the token
+        // @{Typ:GUID} is still raw text, and the mention parser reads one node's data with absolute offsets.
+        if (user is not null && MentionHtml.Refs(html).Count > 0)
         {
-            return;
+            html = await MentionService.ResolveHtmlAsync(html, user.MayClassifiedRead(), user.GetAgentId(),
+                partnerAgency: user.GetPartnerAgency(), plain: Plain);
         }
-        _rendered = await MentionService.ResolveHtmlAsync(Html, user.MayClassifiedRead(), user.GetAgentId(),
-            partnerAgency: user.GetPartnerAgency(), plain: Plain);
+
+        if (await BubblesOnAsync(user))
+        {
+            try
+            {
+                html = GlossaryHtml.Annotate(html, await HandbookService.GetGlossaryMatcherAsync());
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+
+        _rendered = html;
+    }
+
+    /// <summary>Internal agents only, never in print, and only while the agent leaves them switched on.</summary>
+    private async Task<bool> BubblesOnAsync(ClaimsPrincipal? user)
+    {
+        // an applicant chat and a partner view are rendered through this component too; neither should
+        // pick up in-house vocabulary
+        if (Plain || !Glossary || user is null || !user.IsInternalAgent())
+        {
+            return false;
+        }
+        if (user.GetAgentId() is not { Length: > 0 } agentId)
+        {
+            return false;
+        }
+        try
+        {
+            return (await NavPrefs.GetAsync(agentId)).GlossarBlasen;
+        }
+        catch
+        {
+            /* best effort */
+            return false;
+        }
     }
 }

@@ -391,6 +391,19 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
 - **Eine neue Seite braucht einen Artikel.** `Every_menu_entry_has_an_article` fordert je `NavEntry` einen
   Artikel mit passendem `NavSchluessel`; die einzige Ausnahmeliste im Test sind Zweit-Einträge auf eine
   Seite, die schon einen Artikel hat (ein Artikel trägt genau einen Schlüssel).
+- **Erklär-Blasen laufen auf dem Renderpfad, nie beim Speichern.** `GlossaryHtml.Annotate` (aufgerufen von
+  `RichHtml`, **nach** dem Erwähnungs-Durchlauf) schreibt `<span class="glossar" data-glossar="…">` — ein
+  Attribut, das `HtmlCleanup` gar nicht kennt. Käme diese Ausgabe je in einen Speicherpfad, bliebe ein toter
+  dekorierter Span in der Akte zurück. Reihenfolge zählt: umgekehrt zerschnitte der Glossar-Durchlauf den
+  Textknoten, den `MentionParser` mit absoluten Offsets liest.
+- **Der Glossar-Durchlauf fasst nur Textknoten an** und überspringt `a`, `code`, `pre` sowie alles unter
+  `.erwaehnung`/`.glossar` — die Erwähnungs-Ausgabe ist ein **Span**, kein Link, und „Verschlusssache" ist
+  selbst ein Begriff. Längster Treffer zuerst (sonst „Senior Special ⟨Agent⟩"), Wortgrenzen über
+  `char.IsLetterOrDigit` (sonst leuchtet „Fahndung" in „Fahndungsliste"), jeder Begriff **einmal je Block**.
+  Alles davon hängt an `GlossaryHtmlTests` — 24 Fälle, weil jeder Fehler dort stumm ist.
+- **Auf Papier nie.** Die Blasen hängen an `RichHtml.Plain`, und `PrintRichHtmlScanTests` fordert für jede
+  `RichHtml`-Stelle in einer `@layout PrintLayout`-Seite ein `Plain="true"`. Routen-Schnüffeln wäre falsch:
+  `/lageberichte/{Id}` nutzt das Drucklayout ohne `/druck`-Adresse.
 - **Ein Begriff ist unique indexiert**, nicht nur sein Seed-Key — `Every_shipped_term_is_written_only_once`
   fängt die Dublette ab, die sonst erst den ersten Start sprengt.
 - **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante

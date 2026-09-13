@@ -192,6 +192,8 @@ public static class ChangelogContent
             Neu("1.4-handbuch-pflege", "Führung und HRB können Handbuch und Glossar selbst bearbeiten.", "Handbuch"),
             Neu("1.4-module-hrb", "Das HRB kann Ausbildungsmodule jetzt selbst abhaken.", "Personal"),
             Neu("1.4-hilfe-knopf", "Ein Fragezeichen in der Kopfzeile führt zur Anleitung für diese Seite.", "Handbuch"),
+            Neu("1.4-erklaerblasen", "Fachwörter in Texten erklären sich selbst, wenn du mit der Maus darüberfährst.", "Handbuch"),
+            Neu("1.4-erklaerblasen-aus", "Die Worterklärungen lassen sich unter „Menü anpassen“ abschalten.", "Bedienung"),
         ]),
     ];
 }

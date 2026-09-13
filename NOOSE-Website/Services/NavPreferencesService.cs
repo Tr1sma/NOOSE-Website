@@ -126,6 +126,9 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
     public Task SetNeuerungenLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.NeuerungenLastSeenUtc = seenUtc, cancellationToken, notify: false);
 
+    public Task SetGlossarBlasenAsync(string agentId, bool enabled, CancellationToken cancellationToken = default)
+        => MutateAsync(agentId, p => p.GlossarBlasen = enabled, cancellationToken);
+
     // read-modify-write of the JSON column; ExecuteUpdate bypasses the read-only barrier (pure UI prefs)
     private async Task MutateAsync(string agentId, Action<NavPreferences> mutate, CancellationToken cancellationToken, bool notify = true)
     {

@@ -155,6 +155,19 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         }).ToList();
     }
 
+    public async Task<GlossaryMatcher> GetGlossaryMatcherAsync(CancellationToken cancellationToken = default)
+    {
+        var key = $"handbuch:glossar:{Generation}";
+        if (cache.TryGetValue(key, out GlossaryMatcher? hit) && hit is not null)
+        {
+            return hit;
+        }
+
+        var matcher = GlossaryMatcher.Build(await GetGlossaryAsync(cancellationToken));
+        cache.Set(key, matcher, CacheDuration);
+        return matcher;
+    }
+
     public async Task<List<HandbookChapter>> GetAllChaptersAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

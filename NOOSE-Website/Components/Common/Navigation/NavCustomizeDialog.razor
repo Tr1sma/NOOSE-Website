@@ -93,6 +93,18 @@
                         }
                     </MudSelect>
                 </MudTabPanel>
+
+                <MudTabPanel Text="Lesen" Icon="@Icons.Material.Filled.MenuBook">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                        Fachwörter aus dem Glossar bekommen in Texten eine gepunktete Linie. Fährst du mit der Maus
+                        darüber, erscheint die Erklärung in einem Satz. Jeder Begriff nur beim ersten Vorkommen.
+                    </MudText>
+                    <MudSwitch T="bool" Value="_prefs.GlossarBlasen" ValueChanged="OnGlossarBlasenChangedAsync"
+                               Color="Color.Primary" Label="Fachwörter erklären" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+                        Wirkt auf Seiten, die du danach öffnest.
+                    </MudText>
+                </MudTabPanel>
             </MudTabs>
         }
     </DialogContent>
@@ -193,6 +205,9 @@
 
     private Task RemoveFavoriteAsync(NavFavorite f)
         => RunAsync(() => NavPrefs.ToggleFavoriteAsync(_agentId, f));
+
+    private Task OnGlossarBlasenChangedAsync(bool enabled)
+        => RunAsync(() => NavPrefs.SetGlossarBlasenAsync(_agentId, enabled));
 
     private Task OnStartRouteChangedAsync(string route)
         => RunAsync(() => NavPrefs.SetStartRouteAsync(_agentId, route == "/dashboard" ? null : route));
