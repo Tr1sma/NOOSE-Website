@@ -409,6 +409,24 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
 - **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante
   des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
 
+## Einarbeitungs-Checkliste
+
+Sechs Schritte, die sich selbst abhaken. Die Regeln stehen **einmal** in `Services/Onboarding.cs` (statischer
+Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferences.OnboardingDone`.
+
+- **Fünf Schritte werden gestempelt, wo sie passieren** (`INavPreferencesService.MarkOnboardingStepAsync`):
+  `/profil`, `/handbuch` und `/handbuch/{slug}` (dort zusätzlich `kapitel:<slug>` — es ist die einzige Stelle,
+  die das Kapitel eines Artikels kennt), die Suchseite (es gibt kein Suchprotokoll) und `RecentsTracker`
+  für „erste Akte". **Der sechste ist abgeleitet** (Menü angepasst): die Präferenzen sind schon die Antwort.
+- **`Recents` taugt nicht als Nachweis** — die Liste ist auf 15 gedeckelt, ein daraus gelesener Schritt würde
+  sich nach fünfzehn weiteren Besuchen selbst zurücknehmen. Deshalb wird beim Ereignis gestempelt.
+- **Ein Schritt darf keine Abfrage kosten.** Alles kommt aus dem Präferenzen-Blob, den der Drawer ohnehin
+  geladen und 30 s gecacht hat. Ein Schritt, dessen „erledigt" Zeilen zählen müsste, gehört nicht auf die Liste.
+- **Schreiben läuft über `ExecuteUpdateAsync`** und umgeht damit den `ReadOnlyBarrierInterceptor` bewusst
+  (reine UI-Präferenz, kein Audit-Eintrag). Jeder Stempel steht in `try/catch` — er darf nie die Seite kosten.
+- **Je Stempel ein winziger, idempotenter Schreibvorgang.** `MutateAsync` ist ein ungesichertes
+  Read-Modify-Write über den **ganzen** Blob, und jede Navigation schreibt parallel `PushRecentAsync`.
+
 ## Changelog pflegen (`/neuerungen`)
 
 **Jedes Feature, das ein Agent bemerkt, bekommt eine Zeile** in

@@ -395,4 +395,67 @@ public sealed class NavPreferencesServiceTests : IDisposable
 
         Assert.False(fired);
     }
+    // ---- the two fields the handbook added ----
+
+    /// <summary>A property addition rides in the existing JSON column; this proves it actually round-trips.</summary>
+    [Fact]
+    public async Task SetGlossarBlasenAsync_persists_the_switch()
+    {
+        SeedAgent("a1");
+
+        await NewService().SetGlossarBlasenAsync("a1", false);
+
+        Assert.False(Stored("a1").GlossarBlasen);
+    }
+
+    [Fact]
+    public void GlossarBlasen_defaults_to_on_for_a_blob_written_before_it_existed()
+    {
+        // no marker in the stored JSON at all: System.Text.Json leaves the C# initializer standing
+        SeedAgent("a1", new NavPreferences { StartRoute = "/personen" });
+
+        Assert.True(Stored("a1").GlossarBlasen);
+    }
+
+    [Fact]
+    public async Task MarkOnboardingStepAsync_persists_and_is_idempotent()
+    {
+        SeedAgent("a1");
+        var service = NewService();
+
+        await service.MarkOnboardingStepAsync("a1", Onboarding.StepSearch);
+        await service.MarkOnboardingStepAsync("a1", Onboarding.StepSearch);
+        await service.MarkOnboardingStepAsync("a1", Onboarding.ChapterStep("erste-schritte"));
+
+        var stored = Stored("a1");
+        Assert.Equal(2, stored.OnboardingDone.Count);
+        Assert.Contains(Onboarding.StepSearch, stored.OnboardingDone);
+    }
+
+    /// <summary>Markers land while the agent navigates, and every navigation writes the same blob.</summary>
+    [Fact]
+    public async Task A_marker_survives_a_recents_push_that_follows_it()
+    {
+        SeedAgent("a1");
+        var service = NewService();
+
+        await service.MarkOnboardingStepAsync("a1", Onboarding.StepRecord);
+        await service.PushRecentAsync("a1",
+            new RecentItem("/personen/1", "Jemand", "x", "Person", "1", new DateTime(2026, 9, 13, 0, 0, 0, DateTimeKind.Utc)));
+
+        Assert.Contains(Onboarding.StepRecord, Stored("a1").OnboardingDone);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task An_empty_marker_writes_nothing(string marker)
+    {
+        SeedAgent("a1");
+
+        await NewService().MarkOnboardingStepAsync("a1", marker);
+
+        Assert.Empty(Stored("a1").OnboardingDone);
+    }
+
 }

@@ -1,0 +1,78 @@
+@* The first steps for a new agent. Disappears for good once every one of them is done. *@
+@inject INavPreferencesService NavPrefs
+
+@if (_steps.Count > 0 && _open)
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.Flag" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle1">Erste Schritte</MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_done von @_steps.Count</MudText>
+        </MudStack>
+
+        <MudProgressLinear Value="@(_steps.Count == 0 ? 0 : _done * 100.0 / _steps.Count)"
+                           Color="@(_done == _steps.Count ? Color.Success : Color.Primary)"
+                           Size="Size.Small" Class="mb-3" />
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Niemand hakt das für dich ab — die Punkte erledigen sich, sobald du die Sache einmal gemacht hast.
+        </MudText>
+
+        <MudStack Spacing="1">
+            @foreach (var step in _steps)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                    <MudIcon Icon="@(step.Done ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.RadioButtonUnchecked)"
+                             Color="@(step.Done ? Color.Success : Color.Default)"
+                             Size="Size.Small" Class="mt-1" />
+                    <div style="flex:1;">
+                        @if (step.Done)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@step.Title</MudText>
+                        }
+                        else
+                        {
+                            <MudLink Href="@step.Href" Typo="Typo.body2">@step.Title</MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@step.Text</MudText>
+                        }
+                    </div>
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private IReadOnlyList<Onboarding.Step> _steps = [];
+    private int _done;
+    private bool _open;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // read on load, never write: a transient empty read must not be saved back as the real state
+        try
+        {
+            var user = AuthStateTask is null ? null : (await AuthStateTask).User;
+            if (user is null || !user.IsInternalAgent() || user.GetAgentId() is not { Length: > 0 } id)
+            {
+                return;
+            }
+            var prefs = await NavPrefs.GetAsync(id);
+            // the whole card goes once everything is done; there is nothing to congratulate about
+            if (Onboarding.IsComplete(prefs))
+            {
+                return;
+            }
+            _steps = Onboarding.Steps(prefs);
+            _done = _steps.Count(s => s.Done);
+            _open = true;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

@@ -1,6 +1,7 @@
 @* One article on its own page - the address the help button and the search link to. *@
 @page "/handbuch/{Slug}"
 @inject IHandbookService HandbookService
+@inject INavPreferencesService NavPrefs
 @inject NavigationManager Nav
 
 <PageTitle>@(_article?.Title ?? "Handbuch") · NOOSE</PageTitle>
@@ -37,6 +38,8 @@ else
 @code {
     [Parameter] public string Slug { get; set; } = string.Empty;
 
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
     private bool _load = true;
     private HandbookArticleView? _article;
     private string? _loadedSlug;
@@ -53,5 +56,29 @@ else
         _load = true;
         _article = await HandbookService.GetArticleAsync(Slug);
         _load = false;
+        await StampAsync();
+    }
+
+    /// <summary>Marks the handbook as visited and the article's chapter as read.</summary>
+    /// <remarks>This is the only place that knows which chapter an article belongs to; the index is not a read.</remarks>
+    private async Task StampAsync()
+    {
+        try
+        {
+            var user = AuthStateTask is null ? null : (await AuthStateTask).User;
+            if (user is null || !user.IsInternalAgent() || user.GetAgentId() is not { Length: > 0 } id)
+            {
+                return;
+            }
+            await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepHandbook);
+            if (_article is not null)
+            {
+                await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.ChapterStep(_article.ChapterSlug));
+            }
+        }
+        catch
+        {
+            /* best effort */
+        }
     }
 }

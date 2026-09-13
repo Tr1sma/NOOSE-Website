@@ -58,6 +58,12 @@
         try
         {
             await NavPrefs.PushRecentAsync(_agentId, item);
+            // latched here rather than read out of Recents later: that list is capped at 15 and would
+            // un-complete the step after fifteen other visits
+            if (loc.IsRecord)
+            {
+                await NavPrefs.MarkOnboardingStepAsync(_agentId, Onboarding.StepRecord);
+            }
         }
         catch
         {

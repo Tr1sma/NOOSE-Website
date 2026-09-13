@@ -7,6 +7,7 @@
 @inject ITagService TagService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject INavPreferencesService NavPrefs
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -288,6 +289,7 @@ else
                 _againSearch = false;
                 _results = await SearchService.SearchAsync(BuildCriteria(), _user);
                 _searched = true;
+                await StampSearchAsync();
             }
             while (_againSearch);
             await UrlAsync();
@@ -309,6 +311,16 @@ else
     /// <summary>Re-runs only the categories the budget cut off and merges them in.</summary>
     /// <remarks>The one place the page restricts categories server-side — and it says so on a button rather than
     /// doing it silently.</remarks>
+    /// <summary>The onboarding marker for "searched once"; there is no search log to mine it from later.</summary>
+    private async Task StampSearchAsync()
+    {
+        if (_agentId is not { Length: > 0 } id || !_user.IsInternalAgent())
+        {
+            return;
+        }
+        try { await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepSearch); } catch { /* best effort */ }
+    }
+
     private async Task SearchRestAsync()
     {
         if (_results.Incomplete.Count == 0)

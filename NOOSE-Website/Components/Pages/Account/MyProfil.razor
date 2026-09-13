@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject IGamificationService Gamification
 @inject IDialogService DialogService
+@inject INavPreferencesService NavPrefs
 @using NOOSE_Website.Models.Gamification
 
 <PageTitle>Mein Profil · NOOSE</PageTitle>
@@ -241,6 +242,10 @@
         _mayWrite = _user.MayWrite();
 
         var id = _user.GetAgentId();
+        if (id is { Length: > 0 })
+        {
+            try { await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepProfile); } catch { /* best effort */ }
+        }
         _agent = string.IsNullOrWhiteSpace(id) ? null : await AgentService.FindAsync(id);
         if (_agent is not null)
         {

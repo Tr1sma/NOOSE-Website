@@ -194,6 +194,8 @@ public static class ChangelogContent
             Neu("1.4-hilfe-knopf", "Ein Fragezeichen in der Kopfzeile führt zur Anleitung für diese Seite.", "Handbuch"),
             Neu("1.4-erklaerblasen", "Fachwörter in Texten erklären sich selbst, wenn du mit der Maus darüberfährst.", "Handbuch"),
             Neu("1.4-erklaerblasen-aus", "Die Worterklärungen lassen sich unter „Menü anpassen“ abschalten.", "Bedienung"),
+            Neu("1.4-einarbeitung", "Eine Karte im Lagezentrum zeigt neuen Agenten die ersten sechs Schritte.", "Bedienung"),
+            Neu("1.4-einarbeitung-stand", "Führung und HRB sehen in der Personalakte, wie weit die Einarbeitung ist.", "Personal"),
         ]),
     ];
 }

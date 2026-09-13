@@ -136,6 +136,9 @@ internal static class GettingStartedChapter
                 <p>Das <strong>Glossar</strong> am Ende des Handbuchs erklärt jedes Fachwort in einem Satz.
                 Wenn dir irgendwo ein Begriff begegnet, den du nicht kennst, schlag ihn dort nach, bevor du
                 rätst.</p>
+                <p>Im Lagezentrum steht für den Anfang eine Karte <strong>Erste Schritte</strong> mit sechs
+                Punkten. Die haken sich von selbst ab, sobald du die jeweilige Sache einmal gemacht hast -
+                niemand muss dich freigeben, und wenn alle sechs erledigt sind, verschwindet die Karte.</p>
                 <p>Unter <em>Neuerungen</em> steht in Alltagssprache, was sich zuletzt geändert hat. Und wenn
                 etwas nicht funktioniert oder dir fehlt: <em>Feedback</em> im Bereich <em>Mein Dienst</em>.
                 Das landet direkt bei denen, die die Seite pflegen.</p>

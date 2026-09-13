@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject NavigationManager Nav
+@inject INavPreferencesService NavPrefs
 
 <PageTitle>Handbuch · NOOSE</PageTitle>
 
@@ -176,6 +177,11 @@ else
         _search = QueryState.Read(Nav, "suche");
         await LoadAsync();
         _load = false;
+
+        if (_user is not null && _user.IsInternalAgent() && _user.GetAgentId() is { Length: > 0 } id)
+        {
+            try { await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepHandbook); } catch { /* best effort */ }
+        }
     }
 
     private async Task LoadAsync()

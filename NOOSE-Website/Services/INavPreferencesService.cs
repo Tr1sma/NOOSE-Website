@@ -44,6 +44,9 @@ public interface INavPreferencesService
     /// <summary>Turns the glossary explain-bubbles on or off for this agent.</summary>
     Task SetGlossarBlasenAsync(string agentId, bool enabled, CancellationToken cancellationToken = default);
 
+    /// <summary>Records that an agent reached one onboarding step. Idempotent, and cheap enough to call blind.</summary>
+    Task MarkOnboardingStepAsync(string agentId, string stepKey, CancellationToken cancellationToken = default);
+
     /// <summary>Stable id for a favorite (used for reordering).</summary>
     static string FavoriteId(NavFavorite f)
         => f.Kind == "page" ? $"page:{f.Key}" : $"record:{f.EntityType}:{f.EntityId}";

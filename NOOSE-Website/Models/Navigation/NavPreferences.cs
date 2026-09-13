@@ -33,6 +33,13 @@ public sealed class NavPreferences
     /// <summary>Last time /neuerungen was seen; drives the one-off hint after a new release.</summary>
     public DateTime? NeuerungenLastSeenUtc { get; set; }
 
+    /// <summary>Onboarding steps this agent has reached, by key. A set, so a step can be reached twice.</summary>
+    /// <remarks>
+    /// Keys rather than a counter or a list of booleans: the step list will grow and shrink over time, and a
+    /// positional shape would silently re-interpret everybody's stored progress the first time it did.
+    /// </remarks>
+    public HashSet<string> OnboardingDone { get; set; } = [];
+
     /// <summary>Explain-on-hover bubbles for glossary terms in rich text. On unless the agent turns them off.</summary>
     /// <remarks>
     /// Default-on means an agent whose blob predates this property also gets them - there is deliberately no way

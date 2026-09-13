@@ -129,6 +129,13 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
     public Task SetGlossarBlasenAsync(string agentId, bool enabled, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.GlossarBlasen = enabled, cancellationToken);
 
+    // one tiny idempotent step per call, not a save-all: the agent is navigating while these land, and the
+    // whole blob is last-writer-wins against the recents push that every navigation fires
+    public Task MarkOnboardingStepAsync(string agentId, string stepKey, CancellationToken cancellationToken = default)
+        => string.IsNullOrWhiteSpace(stepKey)
+            ? Task.CompletedTask
+            : MutateAsync(agentId, p => p.OnboardingDone.Add(stepKey), cancellationToken, notify: false);
+
     // read-modify-write of the JSON column; ExecuteUpdate bypasses the read-only barrier (pure UI prefs)
     private async Task MutateAsync(string agentId, Action<NavPreferences> mutate, CancellationToken cancellationToken, bool notify = true)
     {
