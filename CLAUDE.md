@@ -178,6 +178,13 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 - **Neue Policy anlegen:** Konstante in `Policies.cs` → registrieren in `AuthorizationRegistration.AddNooseAuthorization` (`RankRequirement` für Rang-Gate **oder** `RequireAssertion(ctx => ctx.User.SomeExtension())`) → ggf. Extension in `AgentPrincipalExtensions.cs`. **Policy-Strings nie hardcoden** — immer `Policies.*`.
 - **Account-Flow:** Discord-Login → `Agent` mit `Status=Pending` → Freigabe durch Führung/Admin (`AgentManagementService.ReleaseAsync`) setzt `Active` + Rang + Flags. Bootstrap-Admins via `Bootstrap:AdminDiscordId(s)`.
 - **Zwei VS-Achsen:** `Classification` (Einstufung Person/Fraktion: `ReviewCase`/Prüffall → `SuspicionCase`/Verdachtsfall → `SecuredStateThreatening`/Gesichert staatsgefährdend) **und** `DocumentClassification` (Bibliotheks-VS-Stufe: `None`/`Leadership`/`Tru`/`Hrb`). VS-Sichtbarkeit wird **server-seitig** über `DocumentViewerScope.CanSee` durchgesetzt, nicht über die `Classified`-Policy (reserviert/ungenutzt).
+- **Ausbildungsmodule: Abhaken ist nicht Verwalten.** `TrainingModuleService.MarkCompletedAsync`/`UnmarkCompletedAsync`
+  tragen `Permission.RequireHrbOrLeadershipWrite` (HRB darf, rangunabhängig); `CreateAsync`/`UpdateAsync`/`DeleteAsync`
+  bleiben auf `RequireLeadership` — `DeleteAsync` nimmt die Haken **aller** Agenten mit. Das UI-Gate ist **kein**
+  `AuthorizeView`, sondern das private `ModulesPanel._mayTick`, gelesen an **zwei** Stellen (Checkbox-`ReadOnly` und
+  `ToggleAsync`); nur die Checkbox zu sperren lässt den SignalR-Pfad offen. Das Prädikat muss den Guard spiegeln
+  (`MayWrite() && IsHrbOrLeadership()`) — `Policies.HrbOrLeadership` allein hat keine Schreibprüfung und ließe
+  Nur-Lese-Aufsicht und Demo-Principal eine aktive Checkbox sehen.
 - **Keine DoJ/LSPD/LSMD-Accounts/-Ränge** — jeder User ist ein NOOSE-`Agent`. Partner-Lesezugriff (Phase 9) ist noch nicht gebaut.
 
 ## UI / Blazor-Komponenten

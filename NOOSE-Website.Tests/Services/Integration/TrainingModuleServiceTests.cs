@@ -17,6 +17,14 @@ public sealed class TrainingModuleServiceTests
     private static ClaimsPrincipal NonLeader(string id = "plain")
         => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.JuniorAgent).Build();
 
+    // HRB is rank-independent: this account may tick a module off but may not administer the catalogue.
+    private static ClaimsPrincipal JuniorHrb(string id = "hrb")
+        => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.JuniorAgent).WithCodename("Sparrow").AsHrb().Build();
+
+    // Read-only supervision: reads everything, writes nothing. Leadership by rank, refused by the write check.
+    private static ClaimsPrincipal OnlyReader(string id = "aufsicht")
+        => ClaimsPrincipalBuilder.Agent(id).WithRank(Rank.Director).WithCodename("Heron").AsTeamLead().Build();
+
     private static TrainingModuleService NewService(SqliteTestContext ctx) => new(ctx.Factory);
 
     private static TrainingModule Mod(string id, string name, int sorting = 0, bool active = true)
@@ -438,5 +446,100 @@ public sealed class TrainingModuleServiceTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             NewService(ctx).UnmarkCompletedAsync("c1", NonLeader()));
+    }
+
+    // ---- who may tick: HRB or leadership, and nobody else ----
+
+    /// <summary>The point of the change: the HRB flag carries no rank, and it does not need one here.</summary>
+    [Fact]
+    public async Task MarkCompletedAsync_AsHrbWithoutRank_Succeeds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1"));
+            db.TrainingModules.Add(Mod("m1", "Alpha"));
+            db.SaveChanges();
+        }
+
+        var completion = await NewService(ctx).MarkCompletedAsync("a1", "m1", null, JuniorHrb());
+
+        Assert.Equal("Sparrow", completion.CompleterName);
+        using var check = ctx.NewContext();
+        Assert.Single(check.AgentModuleCompletions.ToList());
+    }
+
+    [Fact]
+    public async Task UnmarkCompletedAsync_AsHrbWithoutRank_Succeeds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.AgentModuleCompletions.Add(Comp("c1", "a1", "m1"));
+            db.SaveChanges();
+        }
+
+        await NewService(ctx).UnmarkCompletedAsync("c1", JuniorHrb());
+
+        using var check = ctx.NewContext();
+        Assert.Empty(check.AgentModuleCompletions.ToList());
+    }
+
+    /// <summary>A plain agent without the flag still cannot tick - widening HRB must not widen everyone.</summary>
+    [Fact]
+    public async Task MarkCompletedAsync_AsPlainAgent_StillThrowsUnauthorized()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1"));
+            db.TrainingModules.Add(Mod("m1", "Alpha"));
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            NewService(ctx).MarkCompletedAsync("a1", "m1", null,
+                ClaimsPrincipalBuilder.Agent("plain").WithRank(Rank.SeniorSpecialAgent).Build()));
+    }
+
+    /// <summary>Write check before rank check: the supervision is leadership by rank and still refused.</summary>
+    [Fact]
+    public async Task MarkCompletedAsync_AsReadOnlySupervision_IsRefusedBeforeAnythingIsWritten()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1"));
+            db.TrainingModules.Add(Mod("m1", "Alpha"));
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            NewService(ctx).MarkCompletedAsync("a1", "m1", null, OnlyReader()));
+
+        using var check = ctx.NewContext();
+        Assert.Empty(check.AgentModuleCompletions.ToList());
+    }
+
+    /// <summary>The split that is the whole point: ticking widened, administering the catalogue did not.</summary>
+    [Fact]
+    public async Task Administering_the_catalogue_stays_with_leadership()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.TrainingModules.Add(Mod("m1", "Alpha"));
+            db.SaveChanges();
+        }
+
+        var service = NewService(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.CreateAsync(new ModuleInput { Name = "Neu" }, JuniorHrb()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.UpdateAsync("m1", new ModuleInput { Name = "Beta" }, JuniorHrb()));
+        // DeleteAsync also wipes every agent's tick history for that module
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.DeleteAsync("m1", JuniorHrb()));
     }
 }

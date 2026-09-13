@@ -612,6 +612,57 @@ public sealed class PermissionTests
         AssertDenied(() => Permission.RequireHrbOrLeadership(actor));
     }
 
+    // ------------------------------------------------------- RequireHrbOrLeadershipWrite
+
+    // The write variant behind the handbook and behind ticking off a training module. It differs from
+    // RequireHrbOrLeadership in one load-bearing way: the write check stands first, so the read-only
+    // supervision and the demo principal are refused despite carrying the rank and the flag.
+
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_hrbWithoutRank_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent).AsHrb();
+        AssertAllowed(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_leadershipRank_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent);
+        AssertAllowed(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SeniorSpecialAgent);
+        AssertDenied(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
+    // director by rank, so RequireHrbOrLeadership would let this one through
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_readOnlySupervision_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsTeamLead();
+        AssertDenied(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
+    // the demo principal carries HRB and Director together, which is exactly why the write check is first
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_demo_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsHrb().AsDemo();
+        AssertDenied(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadershipWrite_partnerWithHrbFlag_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent()
+            .AsPartner(PartnerAgency.LSPD, PartnerRank.Member).AsHrb();
+        AssertDenied(() => Permission.RequireHrbOrLeadershipWrite(actor));
+    }
+
     // ---------------------------------------------------------------- RequireApplicant
 
     [Fact]

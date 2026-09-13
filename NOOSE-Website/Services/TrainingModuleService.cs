@@ -133,7 +133,8 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task<AgentModuleCompletion> MarkCompletedAsync(string agentId, string moduleId, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        // ticking off is HRB work, unlike creating or deleting a module, which stays with leadership
+        Permission.RequireHrbOrLeadershipWrite(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // the training catalogue is NOOSE-internal; partners carry a PartnerRank, not a NOOSE Rank
@@ -165,7 +166,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task UnmarkCompletedAsync(string completionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireHrbOrLeadershipWrite(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var completion = await db.AgentModuleCompletions.FirstOrDefaultAsync(c => c.Id == completionId, cancellationToken);

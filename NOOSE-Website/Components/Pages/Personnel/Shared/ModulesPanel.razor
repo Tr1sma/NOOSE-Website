@@ -1,4 +1,4 @@
-﻿@* Training modules with completion status; toggling is leadership-only. *@
+﻿@* Training modules with completion status; ticking off is HRB or leadership. *@
 @inject ITrainingModuleService ModuleService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -31,7 +31,7 @@
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="flex-grow-1">
                         @* MayMark blocks new completions only; an existing one stays correctable *@
-                        <MudCheckBox T="bool" Value="m.IsCompleted" ReadOnly="@(!_isLeadership || _busy || (!MayMark && !m.IsCompleted))"
+                        <MudCheckBox T="bool" Value="m.IsCompleted" ReadOnly="@(!_mayTick || _busy || (!MayMark && !m.IsCompleted))"
                                      Color="Color.Success" Dense="true"
                                      ValueChanged="@(v => ToggleAsync(m, v))" />
                         <div>
@@ -81,7 +81,7 @@
 
     private bool _load = true;
     private bool _busy;
-    private bool _isLeadership;
+    private bool _mayTick;
     private ClaimsPrincipal _user = default!;
     private List<AgentModuleStatus> _modules = new();
 
@@ -90,7 +90,9 @@
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _isLeadership = _user.IsLeadership();
+        // mirrors Permission.RequireHrbOrLeadershipWrite exactly: the flag alone would hand the read-only
+        // supervision and the demo principal an enabled box that the service then refuses
+        _mayTick = _user.MayWrite() && _user.IsHrbOrLeadership();
         await LoadAsync();
     }
 
@@ -103,7 +105,7 @@
 
     private async Task ToggleAsync(AgentModuleStatus status, bool completed)
     {
-        if (!_isLeadership || _busy || completed == status.IsCompleted || (completed && !MayMark))
+        if (!_mayTick || _busy || completed == status.IsCompleted || (completed && !MayMark))
         {
             return;
         }

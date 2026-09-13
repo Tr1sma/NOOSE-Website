@@ -17,8 +17,8 @@ public interface ITrainingModuleService
 
     /// <summary>Modules relevant to a personnel file with the agent's completion status (active plus already completed).</summary>
     Task<List<AgentModuleStatus>> GetStatusForAgentAsync(string agentId, CancellationToken cancellationToken = default);
-    /// <summary>Marks a module completed for an agent; leadership only, once per agent/module.</summary>
+    /// <summary>Marks a module completed for an agent; HRB or leadership, once per agent/module.</summary>
     Task<AgentModuleCompletion> MarkCompletedAsync(string agentId, string moduleId, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    /// <summary>Removes a module completion for an agent; leadership only.</summary>
+    /// <summary>Removes a module completion for an agent; HRB or leadership.</summary>
     Task UnmarkCompletedAsync(string completionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

@@ -42,8 +42,11 @@ internal static class PersonnelChapter
                 <p>In der Personalakte steht eine Liste von <strong>Ausbildungsmodulen</strong> - Schulungen,
                 Unterweisungen, Nachweise, die jeder Agent durchlaufen soll. Jedes Modul wird einzeln
                 abgehakt, mit Datum und dem Namen dessen, der es abgenommen hat.</p>
-                <p>Abhaken darf die <strong>Führung</strong>. Wer ein Modul irrtümlich abgehakt hat, kann den
-                Haken auch wieder entfernen - der Vorgang steht im Protokoll.</p>
+                <p>Abhaken dürfen die <strong>Führung</strong> und das <strong>HRB</strong>. Das HRB-Kennzeichen
+                hängt nicht am Dienstgrad - ein Junior Agent mit diesem Kennzeichen darf es also auch. Wer ein
+                Modul irrtümlich abgehakt hat, kann den Haken wieder entfernen; der Vorgang steht im Protokoll.</p>
+                <p>Die <strong>Liste der Module</strong> selbst ist etwas anderes: sie anzulegen, zu ändern oder
+                zu löschen bleibt der Führung vorbehalten. Ein gelöschtes Modul nimmt die Haken aller Agenten mit.</p>
                 <p>Für den Agenten selbst ist die Liste vor allem eine Orientierung: sie sagt, was von ihm
                 erwartet wird, bevor ihn jemand danach fragt.</p>
                 """),
