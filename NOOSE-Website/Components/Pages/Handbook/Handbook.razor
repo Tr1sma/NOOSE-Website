@@ -176,6 +176,7 @@ else
         }
         _search = QueryState.Read(Nav, "suche");
         await LoadAsync();
+        OpenTermFromQuery();
         _load = false;
 
         if (_user is not null && _user.IsInternalAgent() && _user.GetAgentId() is { Length: > 0 } id)
@@ -199,6 +200,29 @@ else
     }
 
     private void Open(string slug) => Nav.NavigateTo($"/handbuch/{slug}");
+
+    /// <summary>Lands a glossary hit from the global search on its term.</summary>
+    /// <remarks>
+    /// By id, not by name: the search catalog formats its route template without URL-encoding, and a term carries
+    /// spaces and umlauts. The id is resolved to the term here and fed into the page's own filter, so the landing
+    /// reuses the search rendering rather than a second way of showing one term. An unknown id simply does nothing.
+    /// </remarks>
+    private void OpenTermFromQuery()
+    {
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            return;
+        }
+        if (QueryState.Read(Nav, "begriff") is not { Length: > 0 } id)
+        {
+            return;
+        }
+        if (_terms.FirstOrDefault(t => t.Id == id) is { } term)
+        {
+            _search = term.Term;
+            Filter();
+        }
+    }
 
     private async Task OnSearchAsync()
     {

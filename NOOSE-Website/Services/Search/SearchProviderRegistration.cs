@@ -42,6 +42,8 @@ public static class SearchProviderRegistration
         services.AddScoped<ISearchProvider, MeetingSearchProvider>();
         services.AddScoped<ISearchProvider, MeetingAgendaItemSearchProvider>();
         services.AddScoped<ISearchProvider, LibraryFileSearchProvider>();
+        services.AddScoped<ISearchProvider, HandbookArticleSearchProvider>();
+        services.AddScoped<ISearchProvider, GlossaryTermSearchProvider>();
 
         // Personal und Dienst
         services.AddScoped<ISearchProvider, AgentSearchProvider>();

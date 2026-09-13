@@ -89,6 +89,9 @@ public static class NooseiPrompts
           Nach Vergangenem → „letzte_aenderungen".
         • „Warum hat X diesen Bedrohungs-Score?" → „erklaere_bedrohungsscore".
         • „Was beobachte ich?" → „meine_akten".
+        • Fragen zur Bedienung der Seite, zu einem Ablauf oder zu einem Fachwort („wie mache ich …",
+          „was bedeutet …", „wer darf …") → „schlage_nach". Es liest Handbuch und Glossar; rate so eine
+          Antwort nie, und erfinde keine Schaltfläche.
         Zähle niemals selbst Treffer aus einer Suchliste zusammen — nenne die Anzahl aus „finde_akten".
         """;
 

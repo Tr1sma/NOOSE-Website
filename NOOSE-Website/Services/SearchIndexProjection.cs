@@ -4,6 +4,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
@@ -60,6 +61,13 @@ public static class SearchIndexProjection
             new[] { g.Title }, new[] { g.Paragraph, g.Title, g.LawBook }),
         EvidenceItem i => Build(nameof(EvidenceItem), i.Id, i.Id,
             new[] { i.Name }, new[] { i.Name, i.Category }),
+        // keyed on the row id, which is what the provider resolves against; the hit then carries the slug,
+        // because that is the address. Title and summary only - the body is longtext and stays out.
+        HandbookArticle a2 => Build(nameof(HandbookArticle), a2.Id, a2.Id,
+            new[] { a2.Title }, new[] { a2.Title, a2.Summary, a2.Slug }),
+        // the synonyms are the point of the phonetic pass here: somebody misremembers the spelling of a term
+        GlossaryTerm t2 => Build(nameof(GlossaryTerm), t2.Id, t2.Id,
+            new[] { t2.Term }, new[] { t2.Term, t2.Synonyms, t2.ShortDefinition }),
         // Informant is deliberately absent: the only field worth a phonetic pass is the V-person's real name, and
         // this table has no gate — partners search against it too. Indexing the case number instead buys nothing:
         // an exact case number is already found by the LIKE recall.

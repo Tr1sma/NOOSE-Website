@@ -18,6 +18,7 @@ using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Llm;
@@ -379,6 +380,17 @@ public static class SearchCatalog
         new(nameof(OeffentlicherLagebericht), "Öffentlicher Lagebericht", "Öffentliche Lageberichte",
             SearchGroup.Administration, Icons.Material.Filled.Assessment, SearchHitShape.Record,
             SearchTraits.Heavy | SearchTraits.Assistant, null),
+        // the route carries the SLUG, not the id: /handbuch/{Slug} is the article address, and an id there 404s
+        new(nameof(HandbookArticle), "Handbuch-Artikel", "Handbuch-Artikel", SearchGroup.Content,
+            Icons.Material.Filled.MenuBook, SearchHitShape.Record,
+            SearchTraits.Quick | SearchTraits.SideIndexed | SearchTraits.Assistant,
+            "/handbuch/{0}"),
+        // the glossary is a section of /handbuch, not a page: the term is opened by id through a query parameter,
+        // because the route template is formatted, never URL-encoded, and a term carries spaces and umlauts
+        new(nameof(GlossaryTerm), "Glossar-Begriff", "Glossar-Begriffe", SearchGroup.Content,
+            Icons.Material.Filled.Abc, SearchHitShape.Record,
+            SearchTraits.Quick | SearchTraits.SideIndexed | SearchTraits.Assistant,
+            "/handbuch?begriff={0}"),
     ];
 
     /// <summary>Entities deliberately left out of the search, each with the reason.</summary>
@@ -495,11 +507,6 @@ public static class SearchCatalog
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
             ["HandbookChapter"] = "Überschrift eines Handbuch-Kapitels ohne eigenen Text; die Artikel tragen ihn.",
-            ["HandbookArticle"] = "Noch nicht in der Aktensuche: das Handbuch hat ein eigenes Suchfeld, "
-                + "das den ganzen Bestand im Speicher filtert. Die Aufnahme als Suchkategorie samt "
-                + "Anbieter und Assistant-Trait ist der nächste Schritt.",
-            ["GlossaryTerm"] = "Noch nicht in der Aktensuche; gefunden wird der Begriff über das Suchfeld "
-                + "im Handbuch. Kommt zusammen mit dem Artikel als eigene Kategorie dazu.",
             ["HandbookStep"] = "Einzelner Schritt einer Anleitung; gefunden wird der Artikel, der ihn trägt.",
             ["ChangelogRelease"] = "Überschrift einer Fassung ohne eigenen Text; die Einträge tragen ihn.",
             ["ChangelogEntry"] = "Zeile über die Anwendung selbst, kein Aktenbestand. Sie steht vollständig "

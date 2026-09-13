@@ -196,6 +196,8 @@ public static class ChangelogContent
             Neu("1.4-erklaerblasen-aus", "Die Worterklärungen lassen sich unter „Menü anpassen“ abschalten.", "Bedienung"),
             Neu("1.4-einarbeitung", "Eine Karte im Lagezentrum zeigt neuen Agenten die ersten sechs Schritte.", "Bedienung"),
             Neu("1.4-einarbeitung-stand", "Führung und HRB sehen in der Personalakte, wie weit die Einarbeitung ist.", "Personal"),
+            Neu("1.4-noosei-handbuch", "NOOSEI beantwortet Fragen zur Bedienung aus dem Handbuch, mit Quellenangabe.", "Handbuch"),
+            Neu("1.4-suche-handbuch", "Die Suche findet jetzt auch Handbuch-Artikel und Glossarbegriffe.", "Suche"),
         ]),
     ];
 }

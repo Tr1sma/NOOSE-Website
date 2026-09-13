@@ -24,6 +24,7 @@ public static class NooseiToolLabels
         "lies_kalender" => "NOOSEI sieht den Kalender durch …",
         "erklaere_bedrohungsscore" => "NOOSEI schlüsselt einen Bedrohungs-Score auf …",
         "meine_akten" => "NOOSEI holt die Beobachtungsliste …",
+        "schlage_nach" => "NOOSEI schlägt im Handbuch nach …",
         _ => "NOOSEI arbeitet …",
     };
 
@@ -45,6 +46,7 @@ public static class NooseiToolLabels
         "lies_kalender" => "Kalender",
         "erklaere_bedrohungsscore" => "Bedrohungs-Score",
         "meine_akten" => "Beobachtungsliste",
+        "schlage_nach" => "Handbuch",
         _ => toolName,
     };
 }

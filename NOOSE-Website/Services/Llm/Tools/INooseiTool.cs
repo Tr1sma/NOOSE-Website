@@ -286,6 +286,11 @@ public static class NooseiRecordTypes
             ["OeffentlicheSeite"] = "oeffentlichkeit (lies_bereich)",
             ["OeffentlicheWarnung"] = "oeffentlichkeit (lies_bereich)",
             ["OeffentlicherLagebericht"] = "oeffentlichkeit (lies_bereich)",
+
+            // the handbook is not a record and is not opened as one: an article is an answer to a question, and
+            // the tool that answers questions reads the body, the walkthrough and the glossary in one pass
+            ["HandbookArticle"] = "handbuch (schlage_nach)",
+            ["GlossaryTerm"] = "glossar (schlage_nach)",
         };
 
     /// <summary>Search categories NOOSEI deliberately does not read as a record, each with the reason.</summary>

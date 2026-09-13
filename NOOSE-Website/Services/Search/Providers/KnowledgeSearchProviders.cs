@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Common;
 
@@ -221,4 +222,121 @@ public sealed class LibraryFileSearchProvider(IDbContextFactory<AppDbContext> db
             })
             .ToList();
     }
+}
+
+/// <summary>Handbook articles: what a page does and how a procedure runs.</summary>
+/// <remarks>
+/// Titles, summaries and slugs only, never the body. The category is <c>Quick</c>, and <c>Quick</c> excludes
+/// <c>Heavy</c> — a longtext scan would push it into the second budget wave. The body is not lost: the assistant
+/// reads it through <c>schlage_nach</c>, which is the tool for a question rather than a lookup.
+/// <para>
+/// The hit carries the SLUG as its target, because <c>/handbuch/{Slug}</c> is the article address. Recall and
+/// side-index resolution still match on the row id, which is what the index stores.
+/// </para>
+/// </remarks>
+public sealed class HandbookArticleSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
+{
+    public string Category => nameof(HandbookArticle);
+
+    public PartnerAccess Partner => PartnerAccess.Never;
+
+    public bool AppliesTo(SearchViewer viewer) => !viewer.IsPartner;
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var q = Visible(db);
+        if (query.HasText)
+        {
+            var s = query.Text;
+            q = q.Where(a => a.Title.Contains(s) || a.Slug.Contains(s)
+                || (a.Summary != null && a.Summary.Contains(s)));
+        }
+        return await q.OrderBy(a => a.SortOrder).ThenBy(a => a.Title).Take(query.PerCategory)
+            .Select(a => new SearchHit(nameof(HandbookArticle), a.Slug, a.Title, a.Summary ?? string.Empty, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await Visible(db).Where(a => ids.Contains(a.Id)).Take(take)
+            .Select(a => new SearchHit(nameof(HandbookArticle), a.Slug, a.Title, a.Summary ?? string.Empty, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<QuickHit>> QuickAsync(
+        SearchQuery query, int max, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var s = query.Text;
+        return await Visible(db).Where(a => a.Title.Contains(s))
+            .OrderBy(a => a.SortOrder).ThenBy(a => a.Title).Take(max)
+            .Select(a => new QuickHit(nameof(HandbookArticle), a.Slug, a.Title, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>The one gate, shared by recall, palette and side-index resolution.</summary>
+    /// <remarks>Mirrors <c>HandbookService</c>: an article in a hidden chapter is hidden with it. Soft delete is
+    /// the global filter and needs no clause here.</remarks>
+    private static IQueryable<HandbookArticle> Visible(AppDbContext db)
+        => db.HandbuchArtikel
+            .Where(a => a.IsVisible
+                && db.HandbuchKapitel.Any(c => c.Id == a.ChapterId && c.IsVisible));
+}
+
+/// <summary>Glossary terms: the in-house vocabulary, one sentence each.</summary>
+/// <remarks>
+/// The glossary has no page of its own - it is a section of <c>/handbuch</c> - so the hit opens the handbook with
+/// the term named in a query parameter. By id, not by name: the route template is formatted and never URL-encoded,
+/// and a term carries spaces and umlauts.
+/// <para>No soft delete on this table; a term is withdrawn with <c>IsVisible</c>.</para>
+/// </remarks>
+public sealed class GlossaryTermSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
+{
+    public string Category => nameof(GlossaryTerm);
+
+    public PartnerAccess Partner => PartnerAccess.Never;
+
+    public bool AppliesTo(SearchViewer viewer) => !viewer.IsPartner;
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var q = Visible(db);
+        if (query.HasText)
+        {
+            var s = query.Text;
+            // synonyms are searched too: somebody looking for "Deckname" means "Codename"
+            q = q.Where(t => t.Term.Contains(s) || t.ShortDefinition.Contains(s)
+                || (t.Synonyms != null && t.Synonyms.Contains(s)));
+        }
+        return await q.OrderBy(t => t.Term).Take(query.PerCategory)
+            .Select(t => new SearchHit(nameof(GlossaryTerm), t.Id, t.Term, t.ShortDefinition, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await Visible(db).Where(t => ids.Contains(t.Id)).Take(take)
+            .Select(t => new SearchHit(nameof(GlossaryTerm), t.Id, t.Term, t.ShortDefinition, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<QuickHit>> QuickAsync(
+        SearchQuery query, int max, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var s = query.Text;
+        return await Visible(db).Where(t => t.Term.Contains(s) || (t.Synonyms != null && t.Synonyms.Contains(s)))
+            .OrderBy(t => t.Term).Take(max)
+            .Select(t => new QuickHit(nameof(GlossaryTerm), t.Id, t.Term, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static IQueryable<GlossaryTerm> Visible(AppDbContext db)
+        => db.HandbuchBegriffe.Where(t => t.IsVisible);
 }

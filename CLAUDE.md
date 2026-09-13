@@ -420,6 +420,20 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   fängt die Dublette ab, die sonst erst den ersten Start sprengt.
 - **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante
   des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
+- **Handbuch und Glossar sind zwei Suchkategorien** (`Quick | SideIndexed | Assistant`, also **kein** `Heavy`:
+  der Artikeltext ist longtext und bleibt draußen — gefunden wird über Titel, Kurzbeschreibung und Kapitel,
+  so wie es auch das Suchfeld im Handbuch tut). **Der Artikel-Treffer trägt den Slug**, nicht die Id:
+  `/handbuch/{Slug}` ist die Adresse, eine Id dort ergibt 404. Der Index und `ResolveIdsAsync` laufen weiter
+  über die **Zeilen-Id** — das sind zwei verschiedene Schlüssel in einem Anbieter.
+- **Der Glossarbegriff hat keine eigene Seite** und wird über `/handbuch?begriff={Id}` geöffnet, aufgelöst in
+  `Handbook.OpenTermFromQuery()`. **Über die Id, nicht den Namen:** `SearchCatalog.Route` füllt die Vorlage mit
+  `string.Format` und kodiert **nicht** — ein Begriff trägt Leerzeichen und Umlaute.
+- **NOOSEI liest das Handbuch über `schlage_nach`**, nicht über `lies_akte`: beide Typen stehen in
+  `NooseiRecordTypes.ReachableWithoutRead`, nicht in `Uses`. Ein Artikel ist eine Antwort auf eine Frage, keine
+  Akte. Das Werkzeug bewertet erst Titel/Kurzbeschreibung/Kapitel und lädt **nur für die Besten** den Text —
+  gegen jeden Rumpf zu scoren hieße achtzig longtext-Spalten für eine Frage zu lesen.
+- **`SearchIndexBackfillWorker.Version` steht auf 3.** Wer die Projektion um einen Typ erweitert, zählt hoch
+  **und** ergänzt die `IndexAllAsync`-Zeile — sonst bekommt eine Bestandsinstallation null Index-Zeilen.
 
 ## Einarbeitungs-Checkliste
 
