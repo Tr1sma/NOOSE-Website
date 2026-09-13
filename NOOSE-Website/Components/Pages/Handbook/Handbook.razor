@@ -41,7 +41,7 @@ else
     @if (!string.IsNullOrWhiteSpace(_search))
     {
         <MudText Typo="Typo.subtitle2" Class="mb-3">
-            @(_hitArticles.Count + _hitTerms.Count) Treffer für „@_search"
+            @(_hitArticles.Count + _hitTerms.Count) Treffer für „@_search“
         </MudText>
 
         @if (_hitArticles.Count == 0 && _hitTerms.Count == 0)
@@ -306,7 +306,7 @@ else
     private async Task DeleteArticleAsync(HandbookArticleCard article)
     {
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Artikel löschen",
-            $"„{article.Title}\" in den Papierkorb legen?", "Löschen", Color.Error);
+            $"„{article.Title}“ in den Papierkorb legen?", "Löschen", Color.Error);
         if (!ok)
         {
             return;
