@@ -30,7 +30,7 @@ else
                         }
                         @if (OnEdit.HasDelegate)
                         {
-                            <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="begriffAktion">
+                            <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="begriffAktion">
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                aria-label="Begriff bearbeiten"
                                                OnClick="@(() => OnEdit.InvokeAsync(term))" />

@@ -57,6 +57,14 @@ public static class Policies
     /// <summary>Recruiting management access: HRB member or leadership.</summary>
     public const string HrbOrLeadership = "HrbOderFuehrung";
 
+    /// <summary>The write half of <see cref="HrbOrLeadership"/>: the handbook, and ticking off a module.</summary>
+    /// <remarks>
+    /// Mirrors <c>Permission.RequireHrbOrLeadershipWrite</c>. The plain policy has no write check, so it opens
+    /// the editorial controls for the read-only supervision and for the demo principal - which carries HRB and
+    /// Director together - and both then get a refusal from the service after filling in a dialog.
+    /// </remarks>
+    public const string HrbOrLeadershipWrite = "HrbOderFuehrungSchreiben";
+
     /// <summary>Citizen portal access: signed in with status Civilian.</summary>
     public const string CitizenPortal = "BuergerPortal";
 }

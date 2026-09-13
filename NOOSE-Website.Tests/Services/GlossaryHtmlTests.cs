@@ -208,8 +208,69 @@ public sealed class GlossaryHtmlTests
         var hit = matcher.LongestAt("Die Nur-Lese-Aufsicht liest mit.", 4);
 
         Assert.NotNull(hit);
-        Assert.Equal("Nur-Lese-Aufsicht", hit!.Phrase);
+        Assert.Equal("Nur-Lese-Aufsicht", hit!.Entry.Phrase);
     }
+
+    // --- whitespace between the words of a term ---------------------------
+
+    /// <summary>
+    /// The editor writes a non-breaking space for a repeated or trailing space, and pasted content carries
+    /// them. A strict comparison misses the long term and bubbles the word inside it instead - a wrong
+    /// definition, not a missing one.
+    /// </summary>
+    [Theory]
+    [InlineData("<p>Ein Senior\u00a0Special\u00a0Agent entscheidet.</p>")]
+    [InlineData("<p>Ein Senior  Special  Agent entscheidet.</p>")]
+    [InlineData("<p>Ein Senior\nSpecial\nAgent entscheidet.</p>")]
+    public void Any_whitespace_between_the_words_of_a_term_still_matches_the_whole_term(string html)
+    {
+        var result = GlossaryHtml.Annotate(html, Standard);
+
+        Assert.Equal(1, Occurrences(result, "class=\"glossar\""));
+        Assert.Contains("Der dritte Dienstgrad.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ein Mitglied der NOOSE.", result, StringComparison.Ordinal);
+    }
+
+    /// <summary>The wrapped run is what was matched, so the odd separator stays inside the bubble.</summary>
+    [Fact]
+    public void The_wrapped_run_covers_the_separator_that_was_actually_there()
+    {
+        var result = GlossaryHtml.Annotate("<p>Ein Senior\u00a0Special Agent.</p>", Standard);
+
+        // the non-breaking space comes back out encoded, so assert on the ends of the run
+        Assert.Contains("Special Agent</span>", result, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"glossar\" tabindex=\"0\" data-glossar=\"Der dritte Dienstgrad.\">Senior",
+            result, StringComparison.Ordinal);
+    }
+
+    /// <summary>Whitespace is not optional: two terms running together are still two words, not one term.</summary>
+    [Fact]
+    public void A_missing_separator_does_not_match()
+    {
+        var matcher = Matcher(Term("t", "Senior Agent", "Ein Dienstgrad."));
+
+        Assert.Null(matcher.LongestAt("SeniorAgent", 0));
+    }
+
+    // --- boundaries -------------------------------------------------------
+
+    /// <summary>A decomposed accent is part of its word; wrapping without it tears the mark off its letter.</summary>
+    [Fact]
+    public void A_combining_mark_after_a_term_is_a_word_character()
+    {
+        var matcher = Matcher(Term("t", "Akte", "Die Akte."));
+
+        // "Akte" followed by U+0300 is a different word, so nothing may match
+        Assert.Null(matcher.LongestAt("Eine Akte\u0300 hier.", 5));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(11)]
+    [InlineData(99)]
+    public void An_index_outside_the_text_answers_null(int index)
+        => Assert.Null(Standard.LongestAt("kein Wort", index));
 
     private static int Occurrences(string haystack, string needle)
     {

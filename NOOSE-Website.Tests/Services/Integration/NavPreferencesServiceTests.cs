@@ -432,6 +432,42 @@ public sealed class NavPreferencesServiceTests : IDisposable
         Assert.Contains(Onboarding.StepSearch, stored.OnboardingDone);
     }
 
+    /// <summary>
+    /// Concurrent mutations all land and nothing deadlocks. Note what this does NOT prove: the write is a
+    /// read-modify-write over the whole blob, and the lost update it can suffer in production is invisible
+    /// here, because SqliteTestContext hands every context the same open connection and therefore serialises
+    /// the commands by itself. The guard against that is the per-agent lock in MutateAsync; these two tests
+    /// only catch a deadlock introduced by it.
+    /// </summary>
+    [Fact]
+    public async Task Two_mutations_in_flight_at_once_do_not_lose_each_other()
+    {
+        SeedAgent("a1");
+        var service = NewService();
+
+        await Task.WhenAll(
+            service.MarkOnboardingStepAsync("a1", Onboarding.StepProfile),
+            service.PushRecentAsync("a1",
+                new RecentItem("/profil", "Mein Profil", "x", null, null,
+                    new DateTime(2026, 9, 13, 0, 0, 0, DateTimeKind.Utc))));
+
+        var stored = Stored("a1");
+        Assert.Contains(Onboarding.StepProfile, stored.OnboardingDone);
+        Assert.Single(stored.Recents);
+    }
+
+    [Fact]
+    public async Task Many_mutations_in_flight_at_once_all_land()
+    {
+        SeedAgent("a1");
+        var service = NewService();
+
+        await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(i => service.MarkOnboardingStepAsync("a1", $"schritt-{i}")));
+
+        Assert.Equal(12, Stored("a1").OnboardingDone.Count);
+    }
+
     /// <summary>Markers land while the agent navigates, and every navigation writes the same blob.</summary>
     [Fact]
     public async Task A_marker_survives_a_recents_push_that_follows_it()

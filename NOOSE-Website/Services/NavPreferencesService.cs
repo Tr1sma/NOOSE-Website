@@ -136,6 +136,20 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
             ? Task.CompletedTask
             : MutateAsync(agentId, p => p.OnboardingDone.Add(stepKey), cancellationToken, notify: false);
 
+    /// <summary>One writer at a time per agent, because the read-modify-write below is not atomic.</summary>
+    /// <remarks>
+    /// The whole blob is rewritten on every call, so two overlapping mutations lose one of the two changes -
+    /// silently, and not at random. Every navigation fires <see cref="PushRecentAsync"/>, and a page that
+    /// stamps something on the same navigation is racing it: the onboarding marker for "profil" was written
+    /// and overwritten on every single visit, so the step could never tick. Striped rather than one lock per
+    /// agent so the table is bounded; collisions between two agents only cost each other a turn.
+    /// </remarks>
+    private static readonly SemaphoreSlim[] Writers =
+        [.. Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1))];
+
+    private static SemaphoreSlim WriterFor(string agentId)
+        => Writers[(int)((uint)StringComparer.Ordinal.GetHashCode(agentId) % Writers.Length)];
+
     // read-modify-write of the JSON column; ExecuteUpdate bypasses the read-only barrier (pure UI prefs)
     private async Task MutateAsync(string agentId, Action<NavPreferences> mutate, CancellationToken cancellationToken, bool notify = true)
     {
@@ -143,17 +157,29 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
         {
             return;
         }
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var json = await db.Users.AsNoTracking()
-            .Where(a => a.Id == agentId)
-            .Select(a => a.NavPreferencesJson)
-            .FirstOrDefaultAsync(cancellationToken);
-        var prefs = Deserialize(json);
-        mutate(prefs);
-        var updated = JsonSerializer.Serialize(prefs);
-        await db.Users.Where(a => a.Id == agentId)
-            .ExecuteUpdateAsync(s => s.SetProperty(a => a.NavPreferencesJson, updated), cancellationToken);
-        cache.Set(CacheKey(agentId), prefs, CacheDuration);
+
+        var writer = WriterFor(agentId);
+        await writer.WaitAsync(cancellationToken);
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+            var json = await db.Users.AsNoTracking()
+                .Where(a => a.Id == agentId)
+                .Select(a => a.NavPreferencesJson)
+                .FirstOrDefaultAsync(cancellationToken);
+            var prefs = Deserialize(json);
+            mutate(prefs);
+            var updated = JsonSerializer.Serialize(prefs);
+            await db.Users.Where(a => a.Id == agentId)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.NavPreferencesJson, updated), cancellationToken);
+            // inside the lock: a cache write from a mutation that lost the race would resurrect its stale blob
+            cache.Set(CacheKey(agentId), prefs, CacheDuration);
+        }
+        finally
+        {
+            writer.Release();
+        }
+
         if (notify)
         {
             Changed?.Invoke();

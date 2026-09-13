@@ -1,3 +1,4 @@
+using System.Globalization;
 using NOOSE_Website.Models.Handbook;
 
 namespace NOOSE_Website.Services.Handbook;
@@ -17,6 +18,9 @@ public sealed class GlossaryMatcher
     /// <param name="Phrase">The term or one of its synonyms.</param>
     /// <param name="TermId">Identity of the term, so the same term is not bubbled twice under two spellings.</param>
     public sealed record Entry(string Phrase, string TermId, string Term, string Definition);
+
+    /// <param name="Length">Characters consumed in the text, which is not the phrase length once whitespace differs.</param>
+    public sealed record Match(Entry Entry, int Length);
 
     public static readonly GlossaryMatcher Empty = new(new Dictionary<char, List<Entry>>());
 
@@ -74,9 +78,17 @@ public sealed class GlossaryMatcher
     /// inside "Fahndungsliste" and "Agent" inside "Agententätigkeit". A term split across inline tags
     /// (<c>Ver&lt;b&gt;schluss&lt;/b&gt;sache</c>) is missed on purpose - matching across nodes would mean
     /// re-cutting the markup.
+    /// <para>
+    /// Every candidate is measured rather than the first hit taken, because with flexible whitespace a longer
+    /// phrase does not necessarily consume more characters.
+    /// </para>
     /// </remarks>
-    public Entry? LongestAt(string text, int index)
+    public Match? LongestAt(string text, int index)
     {
+        if (string.IsNullOrEmpty(text) || index < 0 || index >= text.Length)
+        {
+            return null;
+        }
         if (index > 0 && IsWordCharacter(text[index - 1]))
         {
             return null;
@@ -86,28 +98,77 @@ public sealed class GlossaryMatcher
             return null;
         }
 
+        Match? best = null;
         foreach (var entry in candidates)
         {
-            var end = index + entry.Phrase.Length;
-            if (end > text.Length)
+            var length = MatchLength(text, index, entry.Phrase);
+            if (length < 0)
             {
                 continue;
             }
-            if (string.Compare(text, index, entry.Phrase, 0, entry.Phrase.Length,
-                    StringComparison.OrdinalIgnoreCase) != 0)
-            {
-                continue;
-            }
+            var end = index + length;
             if (end < text.Length && IsWordCharacter(text[end]))
             {
                 continue;
             }
-            // the bucket is sorted longest first, so the first hit is the longest
-            return entry;
+            if (best is null || length > best.Length)
+            {
+                best = new Match(entry, length);
+            }
         }
-        return null;
+        return best;
     }
 
-    // letters and digits only: a hyphen has to count as a boundary, or "Nur-Lese-Aufsicht" could never match
-    private static bool IsWordCharacter(char c) => char.IsLetterOrDigit(c);
+    /// <summary>Characters consumed if the phrase matches at the index, or -1.</summary>
+    /// <remarks>
+    /// A run of whitespace in the phrase matches any run of whitespace in the text. Without that, a stored
+    /// "Senior&amp;nbsp;Special&amp;nbsp;Agent" - which is what the editor writes for repeated or trailing
+    /// spaces, and what pasted content carries - fails to match the three-word term, and the bubble lands on
+    /// the contained word "Agent" instead. A wrong definition, not a missing one.
+    /// </remarks>
+    private static int MatchLength(string text, int index, string phrase)
+    {
+        var t = index;
+        var p = 0;
+
+        while (p < phrase.Length)
+        {
+            if (char.IsWhiteSpace(phrase[p]))
+            {
+                while (p < phrase.Length && char.IsWhiteSpace(phrase[p]))
+                {
+                    p++;
+                }
+                if (t >= text.Length || !char.IsWhiteSpace(text[t]))
+                {
+                    return -1;
+                }
+                while (t < text.Length && char.IsWhiteSpace(text[t]))
+                {
+                    t++;
+                }
+                continue;
+            }
+
+            if (t >= text.Length || char.ToLowerInvariant(text[t]) != char.ToLowerInvariant(phrase[p]))
+            {
+                return -1;
+            }
+            t++;
+            p++;
+        }
+        return t - index;
+    }
+
+    /// <summary>What counts as part of a word for the boundary test.</summary>
+    /// <remarks>
+    /// Letters and digits, plus combining marks: a hyphen has to count as a boundary or "Nur-Lese-Aufsicht"
+    /// could never match, but a decomposed "Akte&#x0300;" must not look like a finished word, or the accent
+    /// ends up orphaned outside the bubble.
+    /// </remarks>
+    private static bool IsWordCharacter(char c)
+        => char.IsLetterOrDigit(c)
+           || CharUnicodeInfo.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark
+               or UnicodeCategory.SpacingCombiningMark
+               or UnicodeCategory.EnclosingMark;
 }

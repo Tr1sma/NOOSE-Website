@@ -175,6 +175,11 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 - **Nur-Lese-Aufsicht (`OnlyReader`)** = `IsTeamLead && !IsAdmin` (abgeleitet, kein Flag): liest alles (inkl. VS), schreibt **nichts** (vom `ReadOnlyBarrierInterceptor` hart vetoed), sieht **nie** Klarnamen. `IsTeamLead` allein gewährt sonst keine Rechte; TeamLeads sind RP-weit unsichtbar.
   - **`IsTeamLead` entfernt den Account aus jeder Auswahlliste** (`AgentSelection`), auch mit `IsAdmin` obendrauf. Deshalb zeigt die **Einsichtsliste eines VS-Dokuments die Aufsicht nicht**, obwohl `DocumentViewerScope.CanSee` ihr den Lesezugriff weiterhin gewährt — die Liste ist absichtlich unvollständig, sonst würde sie die Existenz der Aufsicht verraten. Nicht „reparieren".
 - **Claims werden beim Login** in den Cookie geschrieben (`AgentClaimsPrincipalFactory`) → keine DB-Hits pro Request. Rang-/Rollen-/Status-Änderung rotiert den `SecurityStamp` (`Save(agent, newStamp: true)`) → erzwingt Re-Login (`SecurityStampValidator` revalidiert alle 30s).
+- **Zwei Policies für HRB+Führung, und die Wahl ist load-bearing.** `Policies.HrbOrLeadership` ist das
+  **Zugangs**-Gate (Bewerbungswesen) und prüft **nicht** aufs Schreiben; `Policies.HrbOrLeadershipWrite`
+  spiegelt `Permission.RequireHrbOrLeadershipWrite` (`MayWrite() && IsHrbOrLeadership()`) und gehört an jedes
+  Redaktions-`AuthorizeView`. Mit der falschen sieht der Demo-Besucher (trägt HRB **und** Director) die
+  Bearbeiten-Knöpfe des Handbuchs und bekommt nach dem Ausfüllen eines Dialogs eine Absage.
 - **Neue Policy anlegen:** Konstante in `Policies.cs` → registrieren in `AuthorizationRegistration.AddNooseAuthorization` (`RankRequirement` für Rang-Gate **oder** `RequireAssertion(ctx => ctx.User.SomeExtension())`) → ggf. Extension in `AgentPrincipalExtensions.cs`. **Policy-Strings nie hardcoden** — immer `Policies.*`.
 - **Account-Flow:** Discord-Login → `Agent` mit `Status=Pending` → Freigabe durch Führung/Admin (`AgentManagementService.ReleaseAsync`) setzt `Active` + Rang + Flags. Bootstrap-Admins via `Bootstrap:AdminDiscordId(s)`.
 - **Zwei VS-Achsen:** `Classification` (Einstufung Person/Fraktion: `ReviewCase`/Prüffall → `SuspicionCase`/Verdachtsfall → `SecuredStateThreatening`/Gesichert staatsgefährdend) **und** `DocumentClassification` (Bibliotheks-VS-Stufe: `None`/`Leadership`/`Tru`/`Hrb`). VS-Sichtbarkeit wird **server-seitig** über `DocumentViewerScope.CanSee` durchgesetzt, nicht über die `Classified`-Policy (reserviert/ungenutzt).
@@ -398,9 +403,16 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   Textknoten, den `MentionParser` mit absoluten Offsets liest.
 - **Der Glossar-Durchlauf fasst nur Textknoten an** und überspringt `a`, `code`, `pre` sowie alles unter
   `.erwaehnung`/`.glossar` — die Erwähnungs-Ausgabe ist ein **Span**, kein Link, und „Verschlusssache" ist
-  selbst ein Begriff. Längster Treffer zuerst (sonst „Senior Special ⟨Agent⟩"), Wortgrenzen über
-  `char.IsLetterOrDigit` (sonst leuchtet „Fahndung" in „Fahndungsliste"), jeder Begriff **einmal je Block**.
-  Alles davon hängt an `GlossaryHtmlTests` — 24 Fälle, weil jeder Fehler dort stumm ist.
+  selbst ein Begriff. Längster Treffer zuerst (sonst „Senior Special ⟨Agent⟩"), Wortgrenzen (sonst leuchtet
+  „Fahndung" in „Fahndungsliste"), jeder Begriff **einmal je Block**.
+  Wortgrenzen zählen **Buchstaben, Ziffern und kombinierende Zeichen** — ohne Letztere reißt ein zerlegtes
+  „Akte&#x0300;" seinen Akzent aus der Blase heraus.
+  **Whitespace im Begriff ist tolerant** (`GlossaryMatcher.MatchLength`): der Editor schreibt für einen
+  doppelten oder abschließenden Leerschritt ein `&nbsp;`, und ein strenger Vergleich verfehlte dann den
+  langen Begriff und setzte die Blase auf das Wort *darin* — „Senior&nbsp;Special&nbsp;⟨Agent⟩", also eine
+  **falsche** Erklärung, keine fehlende. Deshalb misst `LongestAt` jeden Kandidaten, statt den ersten Treffer
+  zu nehmen: mit flexiblem Whitespace verbraucht der längere Begriff nicht zwangsläufig mehr Zeichen.
+  Alles davon hängt an `GlossaryHtmlTests` — 34 Fälle, weil jeder Fehler dort stumm ist.
 - **Auf Papier nie.** Die Blasen hängen an `RichHtml.Plain`, und `PrintRichHtmlScanTests` fordert für jede
   `RichHtml`-Stelle in einer `@layout PrintLayout`-Seite ein `Plain="true"`. Routen-Schnüffeln wäre falsch:
   `/lageberichte/{Id}` nutzt das Drucklayout ohne `/druck`-Adresse.
@@ -424,8 +436,12 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
   geladen und 30 s gecacht hat. Ein Schritt, dessen „erledigt" Zeilen zählen müsste, gehört nicht auf die Liste.
 - **Schreiben läuft über `ExecuteUpdateAsync`** und umgeht damit den `ReadOnlyBarrierInterceptor` bewusst
   (reine UI-Präferenz, kein Audit-Eintrag). Jeder Stempel steht in `try/catch` — er darf nie die Seite kosten.
-- **Je Stempel ein winziger, idempotenter Schreibvorgang.** `MutateAsync` ist ein ungesichertes
-  Read-Modify-Write über den **ganzen** Blob, und jede Navigation schreibt parallel `PushRecentAsync`.
+- **Je Stempel ein winziger, idempotenter Schreibvorgang.** `MutateAsync` ist ein Read-Modify-Write über den
+  **ganzen** Blob, und jede Navigation schreibt parallel `PushRecentAsync`. Zwei überlappende Mutationen
+  verlieren deshalb eine der beiden Änderungen — der „profil"-Stempel wurde bei **jedem** Besuch geschrieben
+  und sofort wieder überschrieben, der Schritt konnte nie abhaken. Dagegen steht jetzt ein **Schloss je Agent**
+  (gestreift, statisch) um Lesen-Ändern-Schreiben **und** den Cache-Write. Im Testharnisch ist das unsichtbar:
+  `SqliteTestContext` gibt jedem Context dieselbe offene Verbindung und serialisiert von selbst.
 
 ## Changelog pflegen (`/neuerungen`)
 

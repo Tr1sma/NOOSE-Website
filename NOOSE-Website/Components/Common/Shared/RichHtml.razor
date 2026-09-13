@@ -57,7 +57,8 @@
                 partnerAgency: user.GetPartnerAgency(), plain: Plain);
         }
 
-        if (await BubblesOnAsync(user))
+        // an empty block asks nothing of the glossary, and a page can hold twenty of them
+        if (!string.IsNullOrWhiteSpace(html) && await BubblesOnAsync(user))
         {
             try
             {

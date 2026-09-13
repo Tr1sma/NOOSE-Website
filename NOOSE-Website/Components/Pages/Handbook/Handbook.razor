@@ -14,7 +14,7 @@
             Subtitle="Wie diese Seite und die Abläufe dahinter funktionieren — vom ersten Anmelden bis zu den Werkzeugen."
             ShowHelp="false">
     <Actions>
-        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="redaktion">
+        <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="redaktion">
             <MudStack Row="true" Spacing="2">
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.CreateNewFolder"
@@ -96,7 +96,7 @@ else
                         <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="flex:1;">
                             @chapter.Description
                         </MudText>
-                        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="kapitelAktion">
+                        <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="kapitelAktion">
                             <MudStack Row="true" Spacing="0">
                                 <MudIconButton Icon="@Icons.Material.Filled.PostAdd" Size="Size.Small"
                                                aria-label="Artikel in diesem Kapitel anlegen"
@@ -125,7 +125,7 @@ else
                                             <MudText Typo="Typo.subtitle2">@article.Title</MudText>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@article.Summary</MudText>
                                         </div>
-                                        <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="artikelAktion">
+                                        <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="artikelAktion">
                                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                            aria-label="Artikel bearbeiten"
                                                            OnClick="@(() => EditArticleAsync(article.Id))" />
@@ -143,7 +143,7 @@ else
             }
 
             <RecordSection Slug="glossar" Label="Glossar" Icon="@Icons.Material.Filled.Abc">
-                <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="glossarAktion">
+                <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="glossarAktion">
                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mb-4"
                                StartIcon="@Icons.Material.Filled.Add"
                                OnClick="NewTermAsync">Neuer Begriff</MudButton>

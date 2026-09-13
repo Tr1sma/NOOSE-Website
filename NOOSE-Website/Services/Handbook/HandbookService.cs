@@ -19,7 +19,10 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
     // error-prone than tracking a key per nav entry, and an editor sees their change immediately.
     private long Generation => cache.TryGetValue(GenerationKey, out long g) ? g : 0;
 
-    private void Evict() => cache.Set(GenerationKey, Generation + 1);
+    // NeverRemove: were the counter dropped while entries keyed on an older generation survived, the key
+    // would roll back to 0 and serve them again - a stale article with no way to notice
+    private void Evict() => cache.Set(GenerationKey, Generation + 1,
+        new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
 
     /// <summary>Boxed so a "there is no article" answer is cacheable too; null alone is indistinguishable from a miss.</summary>
     private sealed record CachedCard(HandbookArticleCard? Card);
@@ -155,17 +158,33 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         }).ToList();
     }
 
-    public async Task<GlossaryMatcher> GetGlossaryMatcherAsync(CancellationToken cancellationToken = default)
+    // The TASK is cached, not the result: every rich-text block on a page asks at the same moment, and
+    // caching only the finished matcher lets all of them miss and run the query. A failed load is dropped
+    // again so one hiccup does not switch the bubbles off for the whole cache lifetime.
+    public Task<GlossaryMatcher> GetGlossaryMatcherAsync(CancellationToken cancellationToken = default)
     {
         var key = $"handbuch:glossar:{Generation}";
-        if (cache.TryGetValue(key, out GlossaryMatcher? hit) && hit is not null)
+        if (cache.TryGetValue(key, out Task<GlossaryMatcher>? hit) && hit is not null)
         {
             return hit;
         }
 
-        var matcher = GlossaryMatcher.Build(await GetGlossaryAsync(cancellationToken));
-        cache.Set(key, matcher, CacheDuration);
-        return matcher;
+        var load = LoadMatcherAsync(key, cancellationToken);
+        cache.Set(key, load, CacheDuration);
+        return load;
+    }
+
+    private async Task<GlossaryMatcher> LoadMatcherAsync(string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return GlossaryMatcher.Build(await GetGlossaryAsync(cancellationToken));
+        }
+        catch
+        {
+            cache.Remove(key);
+            throw;
+        }
     }
 
     public async Task<List<HandbookChapter>> GetAllChaptersAsync(CancellationToken cancellationToken = default)

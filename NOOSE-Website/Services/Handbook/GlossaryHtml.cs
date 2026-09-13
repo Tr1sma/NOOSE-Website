@@ -91,22 +91,22 @@ public static class GlossaryHtml
 
             // a term already bubbled stays plain, but the whole phrase is still consumed: stepping into it
             // would let a shorter term match inside a longer one it is part of
-            if (!used.Add(match.TermId))
+            if (!used.Add(match.Entry.TermId))
             {
-                i += match.Phrase.Length;
+                i += match.Length;
                 continue;
             }
 
             sb ??= new StringBuilder();
             sb.Append(WebUtility.HtmlEncode(text[copied..i]));
             sb.Append("<span class=\"glossar\" tabindex=\"0\" data-glossar=\"")
-              .Append(WebUtility.HtmlEncode(match.Definition))
+              .Append(WebUtility.HtmlEncode(match.Entry.Definition))
               .Append("\">")
               // the text as written, not the term as catalogued: the reader's own wording has to survive
-              .Append(WebUtility.HtmlEncode(text.Substring(i, match.Phrase.Length)))
+              .Append(WebUtility.HtmlEncode(text.Substring(i, match.Length)))
               .Append("</span>");
 
-            i += match.Phrase.Length;
+            i += match.Length;
             copied = i;
         }
 
