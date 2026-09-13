@@ -12,6 +12,11 @@
         <MudIcon Icon="@Icon" Color="@IconColour" Size="Size.Large" />
     }
     <MudText Typo="Typo.h4">@Title</MudText>
+    @if (ShowHelp)
+    {
+        @* next to the title, not at the right edge: the right edge belongs to the page's own actions *@
+        <HandbookHelpButton NavKey="@HelpNavKey" />
+    }
     <MudSpacer />
     @Actions
 </MudStack>
@@ -43,4 +48,15 @@ else
     [Parameter] public string? BackHref { get; set; }
     [Parameter] public string BackText { get; set; } = "Zurück";
     [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>Set false where the handbook link would point at the page the reader is already on.</summary>
+    [Parameter] public bool ShowHelp { get; set; } = true;
+
+    /// <summary>Overrides the menu key the help button resolves from the route.</summary>
+    /// <remarks>
+    /// Route resolution takes the longest matching prefix, so every sub-route collapses onto its list entry -
+    /// /personen/{id} and /personen/{id}/bearbeiten both answer "personen". That is usually the right article;
+    /// name a key here where it is not.
+    /// </remarks>
+    [Parameter] public string? HelpNavKey { get; set; }
 }

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
@@ -46,8 +47,9 @@ public sealed class HandbookTests
     /// The interceptor is what rewrites a <c>Remove</c> into a soft delete; without it the recycle-bin tests would
     /// exercise a hard delete and the seeder's "do not revive" rule would pass without being tested at all.
     /// </remarks>
-    private static HandbookService NewService(SqliteTestContext ctx)
-        => new(new TestDbContextFactory(Intercepted(ctx)));
+    // a fresh cache per service: a shared one would carry one test's book into the next
+    private static HandbookService NewService(SqliteTestContext ctx, IMemoryCache? cache = null)
+        => new(new TestDbContextFactory(Intercepted(ctx)), cache ?? new MemoryCache(new MemoryCacheOptions()));
 
     private static async Task SeedAsync(
         SqliteTestContext ctx,
@@ -457,6 +459,54 @@ public sealed class HandbookTests
             .ToList();
 
         Assert.Empty(duplicates);
+    }
+
+    // --- the help button's read path -------------------------------------
+
+    /// <summary>
+    /// The nav-key lookup is cached because it runs on every page header. In production the cache is a
+    /// singleton and the service is scoped, so an edit made through one instance has to be visible through
+    /// the next - otherwise an author saves a title and keeps seeing the old one for the cache lifetime.
+    /// </summary>
+    [Fact]
+    public async Task An_edited_article_is_visible_to_the_help_button_at_once()
+    {
+        using var ctx = new SqliteTestContext();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+
+        var reader = NewService(ctx, cache);
+        Assert.Equal("Anmelden", (await reader.GetArticleForNavKeyAsync("dashboard"))!.Title);
+
+        var editor = NewService(ctx, cache);
+        var chapter = (await editor.GetAllChaptersAsync()).Single();
+        var article = (await editor.GetAllArticlesAsync(chapter.Id)).Single();
+        await editor.RefreshArticleAsync(article.Id,
+            new HandbookArticleInput(chapter.Id, article.Slug, "Neu benannt", article.Summary,
+                article.ContentHtml, null, null, "dashboard", 0, true), Leader());
+
+        Assert.Equal("Neu benannt", (await reader.GetArticleForNavKeyAsync("dashboard"))!.Title);
+    }
+
+    /// <summary>Hiding the article is how a help button is switched off; the cache must not keep it alive.</summary>
+    [Fact]
+    public async Task Hiding_an_article_takes_the_help_button_with_it()
+    {
+        using var ctx = new SqliteTestContext();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+
+        var reader = NewService(ctx, cache);
+        Assert.NotNull(await reader.GetArticleForNavKeyAsync("dashboard"));
+
+        var editor = NewService(ctx, cache);
+        var chapter = (await editor.GetAllChaptersAsync()).Single();
+        var article = (await editor.GetAllArticlesAsync(chapter.Id)).Single();
+        await editor.RefreshArticleAsync(article.Id,
+            new HandbookArticleInput(chapter.Id, article.Slug, article.Title, article.Summary,
+                article.ContentHtml, null, null, "dashboard", 0, IsVisible: false), Leader());
+
+        Assert.Null(await reader.GetArticleForNavKeyAsync("dashboard"));
     }
 
     /// <summary>A menu entry without an article is a page whose help button stays dark. New page, new article.</summary>

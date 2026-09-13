@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Models.Handbook;
@@ -7,8 +8,22 @@ using NOOSE_Website.Models.Handbook;
 namespace NOOSE_Website.Services.Handbook;
 
 /// <inheritdoc cref="IHandbookService" />
-public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) : IHandbookService
+public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache cache) : IHandbookService
 {
+    // The help button asks for an article on every page header, and the header sits on 36 pages - with
+    // prerendering that is four round trips per view. The book changes a few times a month, so it is cached.
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(10);
+    private const string GenerationKey = "handbuch:gen";
+
+    // Keys carry the generation, so one increment retires every cached entry at once. Cheaper and less
+    // error-prone than tracking a key per nav entry, and an editor sees their change immediately.
+    private long Generation => cache.TryGetValue(GenerationKey, out long g) ? g : 0;
+
+    private void Evict() => cache.Set(GenerationKey, Generation + 1);
+
+    /// <summary>Boxed so a "there is no article" answer is cacheable too; null alone is indistinguishable from a miss.</summary>
+    private sealed record CachedCard(HandbookArticleCard? Card);
+
     public async Task<List<HandbookChapterView>> GetChaptersAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -76,6 +91,19 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
             return null;
         }
 
+        var key = $"handbuch:nav:{Generation}:{navKey}";
+        if (cache.TryGetValue(key, out CachedCard? hit) && hit is not null)
+        {
+            return hit.Card;
+        }
+
+        var card = await LoadArticleForNavKeyAsync(navKey, cancellationToken);
+        cache.Set(key, new CachedCard(card), CacheDuration);
+        return card;
+    }
+
+    private async Task<HandbookArticleCard?> LoadArticleForNavKeyAsync(string navKey, CancellationToken cancellationToken)
+    {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var article = await db.HandbuchArtikel.AsNoTracking()
             .Where(a => a.NavKey == navKey && a.IsVisible)
@@ -167,6 +195,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         };
         db.HandbuchKapitel.Add(chapter);
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
         return chapter;
     }
 
@@ -190,6 +219,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         // the promise of the seeder: once edited here, the shipped content leaves this row alone for good
         chapter.IsCustomised = true;
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     public async Task DeleteChapterAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -209,6 +239,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         }
         db.HandbuchKapitel.Remove(chapter); // soft delete via interceptor
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     // --- articles ---------------------------------------------------------
@@ -242,6 +273,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         };
         db.HandbuchArtikel.Add(article);
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
         return article;
     }
 
@@ -272,6 +304,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         article.IsVisible = input.IsVisible;
         article.IsCustomised = true;
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     public async Task DeleteArticleAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -286,6 +319,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         }
         db.HandbuchArtikel.Remove(article); // soft delete via interceptor
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     // --- glossary ---------------------------------------------------------
@@ -315,6 +349,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         };
         db.HandbuchBegriffe.Add(row);
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
         return row;
     }
 
@@ -341,6 +376,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         row.IsVisible = input.IsVisible;
         row.IsCustomised = true;
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     // --- trash ------------------------------------------------------------
@@ -379,6 +415,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         chapter.DeletedAt = null;
         chapter.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     public async Task RestoreArticleAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -403,6 +440,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory) :
         article.DeletedAt = null;
         article.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
+        Evict();
     }
 
     // --- helpers ----------------------------------------------------------

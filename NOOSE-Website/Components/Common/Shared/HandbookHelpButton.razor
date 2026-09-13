@@ -1,0 +1,79 @@
+@* The "?" in a page header: resolves the current route to a menu key and links to the article for it. *@
+@using Microsoft.AspNetCore.Components.Routing
+@using NOOSE_Website.Navigation
+@implements IDisposable
+@inject IHandbookService HandbookService
+@inject NavigationManager Nav
+
+@if (_article is not null)
+{
+    @* internal only: /handbuch carries no Authorize of its own, so a partner would follow a working link *@
+    <AuthorizeView Policy="@Policies.InternalAgent" Context="hilfe">
+        <MudTooltip Text="@($"Handbuch: {_article.Title}")">
+            <MudIconButton Icon="@Icons.Material.Filled.HelpOutline"
+                           Size="Size.Small"
+                           Color="Color.Default"
+                           Href="@($"/handbuch/{_article.Slug}")"
+                           aria-label="@($"Hilfe zu dieser Seite: {_article.Title}")" />
+        </MudTooltip>
+    </AuthorizeView>
+}
+
+@code {
+    /// <summary>Overrides the route lookup; set it where the resolved menu entry is the wrong answer.</summary>
+    [Parameter] public string? NavKey { get; set; }
+
+    private HandbookArticleCard? _article;
+    private string? _loadedKey;
+    private bool _subscribed;
+
+    protected override async Task OnParametersSetAsync() => await ResolveAsync();
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // prerender is a static snapshot: subscribing there leaks a handler onto a circuit that never lives
+        if (firstRender && RendererInfo.IsInteractive && !_subscribed)
+        {
+            Nav.LocationChanged += OnLocationChanged;
+            _subscribed = true;
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+        => _ = InvokeAsync(async () => { await ResolveAsync(); StateHasChanged(); });
+
+    private async Task ResolveAsync()
+    {
+        // a page header sits on 36 pages; a database hiccup here must cost the button, not the page
+        try
+        {
+            var key = NavKey ?? NavCatalog.ByRoute(Nav.ToBaseRelativePath(Nav.Uri))?.Key;
+            if (key is null)
+            {
+                _article = null;
+                _loadedKey = null;
+                return;
+            }
+            if (key == _loadedKey)
+            {
+                return;
+            }
+            _article = await HandbookService.GetArticleForNavKeyAsync(key);
+            _loadedKey = key;
+        }
+        catch
+        {
+            /* best effort */
+            _article = null;
+            _loadedKey = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_subscribed)
+        {
+            Nav.LocationChanged -= OnLocationChanged;
+        }
+    }
+}

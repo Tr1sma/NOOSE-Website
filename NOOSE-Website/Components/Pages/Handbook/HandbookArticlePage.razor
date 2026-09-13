@@ -12,7 +12,7 @@
 else if (_article is null)
 {
     <PageHeader Icon="@Icons.Material.Filled.MenuBook" Title="Artikel nicht gefunden"
-                BackHref="/handbuch" BackText="Zum Handbuch" />
+                BackHref="/handbuch" BackText="Zum Handbuch" ShowHelp="false" />
     <EmptyState Icon="@Icons.Material.Filled.SearchOff"
                 Title="Diesen Artikel gibt es nicht"
                 Text="Vielleicht wurde er umbenannt oder ausgeblendet. Im Handbuch findest du das Verzeichnis." />
@@ -22,7 +22,8 @@ else
     <PageHeader Icon="@Icons.Material.Filled.Article"
                 Title="@_article.Title"
                 BackHref="@($"/handbuch?tab={_article.ChapterSlug}")"
-                BackText="@($"Zurück zu {_article.ChapterTitle}")">
+                BackText="@($"Zurück zu {_article.ChapterTitle}")"
+                ShowHelp="false">
         <SubtitleContent>
             <MudLink Href="@($"/handbuch?tab={_article.ChapterSlug}")" Typo="Typo.body2">
                 @_article.ChapterTitle

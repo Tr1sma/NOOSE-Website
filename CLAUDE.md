@@ -374,8 +374,16 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
 - **Schritt-Karten sind Zeilen, kein Markup.** Sie werden mit ihrem Artikel **komplett ersetzt**, nicht
   einzeln geschlüsselt.
 - **`NavSchluessel` verbindet einen Artikel mit einem Menü-Eintrag** (`NavEntry.Key`) — daraus speist sich
-  der „?"-Knopf. Ein Tippfehler dort lässt den Knopf still verschwinden;
-  `Every_shipped_nav_key_names_a_menu_entry` fängt ihn ab.
+  der „?"-Knopf (`Components/Common/Shared/HandbookHelpButton.razor`, gerendert von `PageHeader`). Ein
+  Tippfehler dort lässt den Knopf still verschwinden; `Every_shipped_nav_key_names_a_menu_entry` fängt ihn ab.
+  **`NavCatalog.ByRoute` nimmt das längste Präfix**, also fallen alle Unterrouten auf ihren Listen-Eintrag
+  (`/personen/{id}/bearbeiten` ⇒ `personen`) und `?tab=` wird verworfen — die sieben Sammelseiten haben je
+  **einen** Artikel. Wo das falsch ist: `HelpNavKey` setzen. Wo der Knopf auf die Seite zeigen würde, auf
+  der man steht: `ShowHelp="false"` (so machen es `/handbuch` und `/handbuch/{slug}`).
+- **Der Nav-Key-Lesepfad ist gecacht** (`HandbookService`, Generationszähler im `IMemoryCache`), weil er auf
+  36 Seiten je Aufruf läuft und Prerendering ihn verdoppelt. **Jeder Schreibpfad ruft `Evict()`** — sonst
+  sieht ein Redakteur seine eigene Änderung zehn Minuten lang nicht;
+  `An_edited_article_is_visible_to_the_help_button_at_once` hält das.
 - **Bestehenden Artikel umformulieren ⇒ `HandbookContent.Revision` hochzählen.** Ein neuer Artikel
   braucht das nicht; er wird an seinem fehlenden Key erkannt.
 - **Slugs im Erstbestand schon sauber schreiben** (Kleinbuchstaben, Bindestriche, keine Umlaute). Der
