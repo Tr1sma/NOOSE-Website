@@ -31,6 +31,48 @@ public sealed class MentionServiceTests
             ? ClaimsPrincipalBuilder.Agent("viewer").WithRank(Rank.Director).Build()
             : ClaimsPrincipalBuilder.Agent("viewer").WithRank(Rank.JuniorAgent).Build();
 
+    // ---- CandidatesAsync: what may become a token ---------------------------
+
+    /// <summary>
+    /// The picker takes its record candidates from the quick search, but not every palette category can carry a
+    /// mention. The token is @{Typ:GUID}; a category whose hit id is not a row id - the handbook article is
+    /// addressed by its slug - would write one the parser can never match, and it would be stored raw and
+    /// rendered literally in somebody's comment. A category with no arm in RecordsReference resolves to
+    /// "(nicht verfügbar)" instead of a name.
+    /// </summary>
+    [Fact]
+    public async Task CandidatesAsync_DropsCategoriesThatCannotCarryAMention()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = NewService(ctx,
+        [
+            new QuickHit("Person", PersonId, "Otto Offen", "NOOSE-P-2026-0001"),
+            new QuickHit("HandbookArticle", "fahndung-ausschreiben", "Eine Fahndung ausschreiben", string.Empty),
+            new QuickHit("GlossaryTerm", "22222222-2222-2222-2222-222222222222", "Prüffall", string.Empty),
+        ]);
+
+        var candidates = await svc.CandidatesAsync("Fahndung", Viewer(mayRealName: false));
+
+        Assert.Contains(candidates, c => c.Type == "Person");
+        Assert.DoesNotContain(candidates, c => c.Type == "HandbookArticle");
+        Assert.DoesNotContain(candidates, c => c.Type == "GlossaryTerm");
+    }
+
+    /// <summary>Every category the palette offers today is mentionable; the filter must not remove any of them.</summary>
+    [Fact]
+    public void EveryQuickCategoryExceptTheHandbookIsMentionable()
+    {
+        var notMentionable = NOOSE_Website.Services.Search.SearchCatalog.Categories
+            .Where(c => c.Has(NOOSE_Website.Services.Search.SearchTraits.Quick))
+            .Select(c => c.Clr)
+            .Where(clr => !LinkService.KnownTypes.Contains(clr, StringComparer.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        // exactly the two the handbook added, and the filter in CandidatesAsync is what keeps them out
+        Assert.Equal(["GlossaryTerm", "HandbookArticle"], notMentionable);
+    }
+
     // ---- ResolveAsync ------------------------------------------------------
 
     [Fact]

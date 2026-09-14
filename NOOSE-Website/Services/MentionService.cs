@@ -219,7 +219,12 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         // records via quick search, classification- and taskforce-membership-filtered
         var records = await search.QuickSearchAsync(s, actor, 8, cancellationToken);
-        hit.AddRange(records.Select(a => new MentionHit(a.Category, a.TargetId, a.Name, a.CaseNumber)));
+        hit.AddRange(records
+            // not everything the palette offers can carry a mention: the token is @{Typ:GUID}, and a category
+            // whose hit id is not a row id writes one the parser can never match - it would be stored raw and
+            // rendered literally. KnownTypes is the set that resolves to a reference at all.
+            .Where(a => LinkService.KnownTypes.Contains(a.Category, StringComparer.Ordinal))
+            .Select(a => new MentionHit(a.Category, a.TargetId, a.Name, a.CaseNumber)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 

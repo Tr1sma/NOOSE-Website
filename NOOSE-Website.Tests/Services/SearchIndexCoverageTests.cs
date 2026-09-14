@@ -88,13 +88,26 @@ public class SearchIndexCoverageTests
         Assert.Empty(missing);
     }
 
+    /// <summary>
+    /// A tripwire, not a computation: there is no way to assert "someone remembered". The count below is the
+    /// number of side-indexed categories at the last bump, so adding one makes this fail and the next reader
+    /// has to come here - and the message tells them what to do. The old form compared the version against a
+    /// hardcoded 2 and could therefore never fail again.
+    /// </summary>
     [Fact]
     public void The_backfill_version_is_bumped_whenever_the_projection_changes()
     {
-        // no way to assert "someone remembered" — but the version must at least keep pace with the type count,
-        // which turns the forgotten bump into a failure the next time a type is added
-        Assert.True(SearchIndexBackfillWorker.Version >= 2,
-            "Version muss hochgezählt werden, sonst indiziert eine Bestandsinstallation die neuen Typen nie nach.");
+        const int sideIndexedAtLastBump = 13;
+        const int versionAtLastBump = 4;
+
+        var sideIndexed = SearchCatalog.Categories.Count(c => c.Has(SearchTraits.SideIndexed));
+
+        Assert.True(
+            sideIndexed == sideIndexedAtLastBump && SearchIndexBackfillWorker.Version >= versionAtLastBump,
+            $"{sideIndexed} seitenindizierte Kategorien, zuletzt waren es {sideIndexedAtLastBump}. "
+            + "Eine neue braucht eine Zeile in SearchIndexProjection, eine IndexAllAsync-Zeile im Backfill, "
+            + "ein hochgezähltes SearchIndexBackfillWorker.Version und die beiden Zahlen hier - sonst "
+            + "indiziert eine Bestandsinstallation den neuen Typ nie nach.");
     }
 
     // ---- palette and side-index provider overrides ----

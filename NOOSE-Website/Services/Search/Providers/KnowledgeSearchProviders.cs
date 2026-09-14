@@ -230,8 +230,8 @@ public sealed class LibraryFileSearchProvider(IDbContextFactory<AppDbContext> db
 /// <c>Heavy</c> — a longtext scan would push it into the second budget wave. The body is not lost: the assistant
 /// reads it through <c>schlage_nach</c>, which is the tool for a question rather than a lookup.
 /// <para>
-/// The hit carries the SLUG as its target, because <c>/handbuch/{Slug}</c> is the article address. Recall and
-/// side-index resolution still match on the row id, which is what the index stores.
+/// The slug is the key everywhere in the search path - hit target, index entry and id resolution - because
+/// <c>/handbuch/{Slug}</c> is the article address and the side-index pass dedupes on the target id.
 /// </para>
 /// </remarks>
 public sealed class HandbookArticleSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
@@ -261,7 +261,8 @@ public sealed class HandbookArticleSearchProvider(IDbContextFactory<AppDbContext
         SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await Visible(db).Where(a => ids.Contains(a.Id)).Take(take)
+        // by slug, the same key the index and the hit carry - see SearchIndexProjection
+        return await Visible(db).Where(a => ids.Contains(a.Slug)).Take(take)
             .Select(a => new SearchHit(nameof(HandbookArticle), a.Slug, a.Title, a.Summary ?? string.Empty, string.Empty))
             .ToListAsync(cancellationToken);
     }

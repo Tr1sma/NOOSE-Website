@@ -40,11 +40,14 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             return [];
         }
 
-        // flat WHERE IN, not a collection projection: Pomelo translates no lateral join on MySQL
+        // flat WHERE IN, not a collection projection: Pomelo translates no lateral join on MySQL.
+        // Projected, not materialised: the card has no body, and reading eighty longtext columns to render
+        // a list of titles is what the index page and the assistant's scoring pass were both paying for.
         var ids = chapters.Select(c => c.Id).ToList();
         var articles = await db.HandbuchArtikel.AsNoTracking()
             .Where(a => ids.Contains(a.ChapterId) && a.IsVisible)
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
+            .Select(a => new { a.Id, a.Slug, a.Title, a.Summary, a.ChapterId })
             .ToListAsync(cancellationToken);
         var byChapter = articles.GroupBy(a => a.ChapterId).ToDictionary(g => g.Key, g => g.ToList());
 

@@ -21,6 +21,12 @@ namespace NOOSE_Website.Services.Llm.Tools;
 /// </remarks>
 public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
 {
+    /// <summary>Articles whose body is loaded, however many the caller asks for.</summary>
+    private const int MaxArticleBodies = 5;
+
+    /// <summary>Source chips under one answer.</summary>
+    private const int MaxRefs = 8;
+
     public string Name => "schlage_nach";
 
     public string Description =>
@@ -48,6 +54,9 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
             return new NooseiToolResult("Bitte eine Frage angeben.", null, true);
         }
         var max = NooseiLimits.Count(arguments, "max", 3);
+        // the body load is the expensive half - three queries per article - so it is bounded on its own.
+        // A model asking for forty would otherwise cost more than a hundred sequential round trips.
+        var bodies = Math.Min(max, MaxArticleBodies);
 
         var tokens = Tokens(question);
         if (tokens.Count == 0)
@@ -63,7 +72,7 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
                 + Score(tokens, x.Chapter, 1)))
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score).ThenBy(x => x.Card.Title, StringComparer.CurrentCulture)
-            .Take(max)
+            .Take(bodies)
             .ToList();
 
         var terms = (await handbook.GetGlossaryAsync(cancellationToken))
@@ -84,9 +93,22 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
         var sb = new StringBuilder();
         var refs = new List<LlmContextRef>(cards.Count + terms.Count);
 
+        // the glossary first: it is a line per term, while an article body can fill the whole budget, and
+        // the clip cuts the tail. Last, a definition could be trimmed away while its source chip survived.
+        if (terms.Count > 0)
+        {
+            sb.AppendLine("Glossar:");
+            foreach (var (term, _) in terms)
+            {
+                sb.Append("• ").Append(term.Term).Append(" — ").AppendLine(term.ShortDefinition);
+                refs.Add(new LlmContextRef(nameof(GlossaryTerm), term.Id, term.Term));
+            }
+            sb.AppendLine();
+        }
+
         foreach (var (card, chapter, _) in cards)
         {
-            // only now the body: the scoring pass deliberately never touched it
+            // only now the body: the scoring pass reads cards, which carry no longtext
             var article = await handbook.GetArticleAsync(card.Slug, cancellationToken);
             if (article is null)
             {
@@ -96,19 +118,10 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
             refs.Add(new LlmContextRef(nameof(HandbookArticle), article.Slug, article.Title));
         }
 
-        if (terms.Count > 0)
-        {
-            sb.AppendLine("Glossar:");
-            foreach (var (term, _) in terms)
-            {
-                sb.Append("• ").Append(term.Term).Append(" — ").AppendLine(term.ShortDefinition);
-                refs.Add(new LlmContextRef(nameof(GlossaryTerm), term.Id, term.Term));
-            }
-        }
-
         return new NooseiToolResult(
             NooseiLimits.Clip(sb.ToString(), NooseiLimits.MaxContentResultChars),
-            refs.Count == 0 ? null : refs);
+            // capped: the chips under an answer are a handful of places to look, not a bibliography
+            refs.Count == 0 ? null : refs.Take(MaxRefs).ToList());
     }
 
     private static void Append(StringBuilder sb, HandbookArticleView article, string chapter)
@@ -141,26 +154,42 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
 
     /// <summary>Words worth searching for, from a question asked in whole sentences.</summary>
     /// <remarks>
-    /// Four letters and up, minus the German filler a question is made of. Without it "Wie lege ich eine Akte an?"
-    /// scores every article that contains "eine".
+    /// Three letters and up, minus the German filler a question is made of. Without the filler list
+    /// "Wie lege ich eine Akte an?" scores every article that contains "eine"; without the low floor the
+    /// glossary's own abbreviations - TRU, HRB, VS, Dok - could never be asked about at all. A two-letter
+    /// word survives only when it was written in capitals, which is what an abbreviation looks like.
     /// </remarks>
     private static List<string> Tokens(string question)
         => question
-            .Split([' ', '\t', '\n', '\r', ',', '.', ';', ':', '?', '!', '"', '„', '“', '(', ')', '/'],
+            .Split([' ', '\t', '\n', '\r', ',', '.', ';', ':', '?', '!', '"', '\u201e', '\u201c', '(', ')', '/'],
                 StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => w.Trim().ToLowerInvariant())
-            .Where(w => w.Length >= 4 && !Filler.Contains(w))
+            .Select(w => w.Trim())
+            .Where(Worthwhile)
+            .Select(w => w.ToLowerInvariant())
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+    private static bool Worthwhile(string word)
+    {
+        if (word.Length == 2)
+        {
+            return !word.Any(char.IsLower);
+        }
+        return word.Length >= 3 && !Filler.Contains(word.ToLowerInvariant());
+    }
+
+    /// <summary>German function words a question is built from. Never a glossary term - "Dok" stays.</summary>
     private static readonly HashSet<string> Filler = new(StringComparer.Ordinal)
     {
+        "der", "die", "das", "dem", "den", "des", "ein", "uns", "ich", "mir", "man", "wie", "was", "wer",
+        "wem", "wen", "und", "ist", "war", "bin", "hat", "hab", "mit", "von", "vom", "für", "auf", "aus",
+        "bei", "bis", "nun", "nur", "als", "zum", "zur", "mal", "ihr", "ihm", "ihn", "sie", "wir", "ihre",
         "eine", "einen", "einem", "einer", "eines", "dies", "diese", "diesem", "diesen", "dieser",
         "welche", "welcher", "welches", "wieso", "warum", "wann", "wohin", "woher", "kann", "kannst",
         "muss", "musst", "darf", "darfst", "soll", "sollte", "will", "wird", "werden", "wurde",
-        "nicht", "noch", "auch", "aber", "oder", "denn", "dann", "beim", "beim", "damit", "dafür",
-        "mich", "mir", "sich", "sind", "sein", "seine", "ihre", "ihrer", "über", "unter", "nach",
-        "vor", "beim", "durch", "gegen", "ohne", "immer", "schon", "etwas", "alles", "man", "wenn",
+        "nicht", "noch", "auch", "aber", "oder", "denn", "dann", "beim", "damit", "dafür",
+        "mich", "sich", "sind", "sein", "seine", "ihrer", "über", "unter", "nach",
+        "vor", "durch", "gegen", "ohne", "immer", "schon", "etwas", "alles", "wenn",
         "dass", "hier", "dort", "wieder", "genau", "eigentlich", "bitte", "geht", "macht", "mache",
     };
 

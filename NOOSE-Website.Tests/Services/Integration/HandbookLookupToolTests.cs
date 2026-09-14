@@ -216,6 +216,69 @@ public sealed class HandbookLookupToolTests
 
     // --- the contract -----------------------------------------------------
 
+    /// <summary>The glossary's own abbreviations are shorter than a word: TRU, HRB, VS, Dok.</summary>
+    [Theory]
+    [InlineData("Was ist die TRU?")]
+    [InlineData("Was bedeutet VS?")]
+    public async Task A_short_abbreviation_is_still_searchable(string frage)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.HandbuchBegriffe.Add(new GlossaryTerm
+            {
+                Id = "t9", Term = "TRU", ShortDefinition = "Tactical Response Unit.",
+                Synonyms = "VS", IsVisible = true,
+            });
+            db.SaveChanges();
+        }
+
+        var result = await NewTool(ctx).InvokeAsync(
+            Args($$"""{ "frage": "{{frage}}" }"""), Context());
+
+        Assert.Contains("Tactical Response Unit.", result.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A body can fill the whole budget; a definition trimmed away with its chip left behind is worse.</summary>
+    [Fact]
+    public async Task The_glossary_is_written_before_the_articles()
+    {
+        using var ctx = new SqliteTestContext();
+        Seed(ctx);
+
+        var result = await NewTool(ctx).InvokeAsync(
+            Args("""{ "frage": "Fahndung und Prüffall" }"""), Context());
+
+        var glossary = result.Text.IndexOf("Glossar:", StringComparison.Ordinal);
+        var article = result.Text.IndexOf("Artikel:", StringComparison.Ordinal);
+        Assert.True(glossary >= 0 && article > glossary, result.Text);
+    }
+
+    /// <summary>The chips are a handful of places to look, not a bibliography.</summary>
+    [Fact]
+    public async Task The_sources_are_capped()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                db.HandbuchBegriffe.Add(new GlossaryTerm
+                {
+                    Id = $"t{i}", Term = $"Fahndung{i}", ShortDefinition = "Eine Ausschreibung.",
+                    IsVisible = true,
+                });
+            }
+            db.SaveChanges();
+        }
+
+        var result = await NewTool(ctx).InvokeAsync(
+            Args("""{ "frage": "Fahndung", "max": 40 }"""), Context());
+
+        Assert.NotNull(result.Refs);
+        Assert.True(result.Refs!.Count <= 8, $"{result.Refs.Count} Quellen");
+    }
+
     [Fact]
     public void The_tool_declares_its_name_and_requires_a_question()
     {

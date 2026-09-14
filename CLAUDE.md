@@ -422,17 +422,31 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
 - **Handbuch und Glossar sind zwei Suchkategorien** (`Quick | SideIndexed | Assistant`, also **kein** `Heavy`:
   der Artikeltext ist longtext und bleibt draußen — gefunden wird über Titel, Kurzbeschreibung und Kapitel,
-  so wie es auch das Suchfeld im Handbuch tut). **Der Artikel-Treffer trägt den Slug**, nicht die Id:
-  `/handbuch/{Slug}` ist die Adresse, eine Id dort ergibt 404. Der Index und `ResolveIdsAsync` laufen weiter
-  über die **Zeilen-Id** — das sind zwei verschiedene Schlüssel in einem Anbieter.
+  so wie es auch das Suchfeld im Handbuch tut).
+- **Der Slug ist der Schlüssel des Artikels im ganzen Suchpfad** — Treffer, Index-Eintrag und `ResolveIdsAsync`.
+  `/handbuch/{Slug}` ist die Adresse, eine Id dort ergibt 404. Und die Zweitwelle entdoppelt ihre Kandidaten
+  gegen die schon gefundenen `TargetId`s: mit zwei verschiedenen Schlüsseln kam **jeder** Artikel, den die
+  erste Welle gefunden hatte, ein zweites Mal zurück. `SourceId` bleibt die Zeilen-Id, damit ein Umbenennen
+  den Eintrag umschreibt statt den alten Slug liegen zu lassen (so macht es auch der `PersonAlias`-Zweig).
+  `HandbookSideIndexTests` hält das.
+- **Nicht jede `Quick`-Kategorie kann eine Erwähnung tragen.** Der @-Picker speist sich aus
+  `ISearchService.QuickSearchAsync`, und der Token ist `@{Typ:GUID}` — ein Slug passt nicht auf die Regex,
+  der Token käme **roh in den Kommentar** und würde wörtlich angezeigt. `MentionService.CandidatesAsync`
+  filtert deshalb auf `LinkService.KnownTypes` (die Typen, die überhaupt als Referenz auflösen); für alle
+  Kategorien, die es vor dem Handbuch gab, ist der Filter ein No-Op.
 - **Der Glossarbegriff hat keine eigene Seite** und wird über `/handbuch?begriff={Id}` geöffnet, aufgelöst in
   `Handbook.OpenTermFromQuery()`. **Über die Id, nicht den Namen:** `SearchCatalog.Route` füllt die Vorlage mit
   `string.Format` und kodiert **nicht** — ein Begriff trägt Leerzeichen und Umlaute.
 - **NOOSEI liest das Handbuch über `schlage_nach`**, nicht über `lies_akte`: beide Typen stehen in
   `NooseiRecordTypes.ReachableWithoutRead`, nicht in `Uses`. Ein Artikel ist eine Antwort auf eine Frage, keine
   Akte. Das Werkzeug bewertet erst Titel/Kurzbeschreibung/Kapitel und lädt **nur für die Besten** den Text —
-  gegen jeden Rumpf zu scoren hieße achtzig longtext-Spalten für eine Frage zu lesen.
-- **`SearchIndexBackfillWorker.Version` steht auf 3.** Wer die Projektion um einen Typ erweitert, zählt hoch
+  gegen jeden Rumpf zu scoren hieße achtzig longtext-Spalten für eine Frage zu lesen. Damit das stimmt,
+  **projiziert `GetChaptersAsync`** auf die Kartenfelder statt Entitäten zu laden; vorher zog schon die
+  Indexseite jeden Artikeltext mit. Der Textabruf ist zusätzlich **eigenständig gedeckelt**
+  (`MaxArticleBodies`), sonst kostete ein `max: 40` über hundert Rundreisen; die Quellen-Chips ebenso
+  (`MaxRefs`). Das **Glossar steht vor den Artikeln**, weil der Clip das Ende abschneidet — sonst fiele eine
+  Definition weg, während ihr Chip stehen bliebe.
+- **`SearchIndexBackfillWorker.Version` steht auf 4.** Wer die Projektion um einen Typ erweitert, zählt hoch
   **und** ergänzt die `IndexAllAsync`-Zeile — sonst bekommt eine Bestandsinstallation null Index-Zeilen.
 
 ## Einarbeitungs-Checkliste

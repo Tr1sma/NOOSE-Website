@@ -61,9 +61,11 @@ public static class SearchIndexProjection
             new[] { g.Title }, new[] { g.Paragraph, g.Title, g.LawBook }),
         EvidenceItem i => Build(nameof(EvidenceItem), i.Id, i.Id,
             new[] { i.Name }, new[] { i.Name, i.Category }),
-        // keyed on the row id, which is what the provider resolves against; the hit then carries the slug,
-        // because that is the address. Title and summary only - the body is longtext and stays out.
-        HandbookArticle a2 => Build(nameof(HandbookArticle), a2.Id, a2.Id,
+        // keyed on the SLUG, not the row id: the hit carries the slug too, and the side-index pass dedupes
+        // its candidates against the target ids already found. Two different keys there meant every article
+        // the plain recall had found came back a second time. SourceId stays the row id, so a rename
+        // rewrites the entry instead of leaving the old slug behind (the PersonAlias arm does the same).
+        HandbookArticle a2 => Build(nameof(HandbookArticle), a2.Slug, a2.Id,
             new[] { a2.Title }, new[] { a2.Title, a2.Summary, a2.Slug }),
         // the synonyms are the point of the phonetic pass here: somebody misremembers the spelling of a term
         GlossaryTerm t2 => Build(nameof(GlossaryTerm), t2.Id, t2.Id,
