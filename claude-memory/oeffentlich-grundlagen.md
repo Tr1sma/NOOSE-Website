@@ -115,9 +115,9 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
     Identity-User zu laden: dessen `RealName` hat in einem Panel nichts zu suchen, das die Aufsicht rendert.
   - **„Leer" heißt: weder Text noch Bild.** Eine Seite, die nur aus einem Organigramm besteht, ist Inhalt;
     `HtmlCleanup.PlainText` allein hätte sie als leeren Entwurf abgelehnt.
-  - **Eine fehlende Seite trägt `noindex`** (per `<HeadContent>`): `/info` ist indexierbar, und die Route
-    antwortet für jeden erfundenen Slug mit 200 — ohne das Meta-Tag indexiert ein Crawler beliebig viele
-    Soft-404s.
+  - **Eine fehlende Seite trägt `noindex`** (heute über `<LinkPreview NoIndex="…">`, siehe unten): `/info`
+    ist indexierbar, und die Route antwortet für jeden erfundenen Slug mit 200 — ohne das Meta-Tag indexiert
+    ein Crawler beliebig viele Soft-404s.
   - **Öffentlicher Inhalt wird als rohes `MarkupString` gerendert, nie über `RichHtml`** (das löst
     `@{Typ:GUID}` auf und würde interne Aktennamen ausliefern), und der `RichTextEditor` läuft dort **ohne
     `Ai` und ohne `Mentions`**.
@@ -132,6 +132,44 @@ Suchanbindung nach innen und außen mit den internen Kennzahlen.
     jetzt ausdrücklich ab statt sie zu überspringen.
   - Ein Tab je Seite gibt es nicht: `Infoseiten` hat **einen** Tab auf den Hub `/info`, damit die Nav weiter
     allein aus `PublicModules` kommt.
+
+## Link-Vorschau
+
+Jede öffentliche Seite sagt selbst, wie ihr Link **außerhalb** aussieht — vor allem im Discord, wo die Seite
+ihre eigenen Links postet. Eine Zeile je Seite, direkt unter dem `<PageTitle>`:
+`<LinkPreview Title="…" Description="…" Image="…" />`
+(`Components/Common/Shared/LinkPreview.razor`); `PublicPageScanTests.EveryPublicPageDeclaresItsLinkPreview`
+fordert sie ein, zwei Ausnahmen tragen dort ihren Grund.
+
+- **Der Kopf einer Seite wird an genau einer Stelle geschrieben.** Zwei `<HeadContent>`-Blöcke auf einer Seite
+  addieren sich **nicht**: die Ausgabestelle behält den zuletzt registrierten und verwirft den anderen. Ein
+  eigener `<meta robots>` neben einer `LinkPreview` veröffentlichte deshalb, was zufällig später rendert —
+  und fehlt dabei das `noindex`, steht ein Soft-404 im Suchindex. Darum ist `NoIndex` ein **Parameter** der
+  Vorschau und kein eigener Block; `TheHeadOfAPublicPageIsWrittenInOnePlace` hält das.
+  Zwei Dateien dürfen weiter selbst in den Kopf schreiben: `PublicModuleGate` (antwortet für ein
+  abgeschaltetes Modul mit 404 und setzt sein `noindex` selbst — es rendert als Letztes und gewinnt damit
+  richtigerweise) und `WantedPoster` (trägt immer `noindex` und deshalb nie eine Karte).
+- **`NoIndex` ist der Miss-Zweig, kein zweiter Schalter.** `/gesucht/{az}`, `/presse/{az}`,
+  `/berichte/{zeitraum}` und `/info/{slug}` antworten für jede erfundene Adresse mit 200. Die Karte einer
+  Seite, die „nicht gefunden" sagt, wäre die zweite Hälfte desselben Fehlers. `/suche-oeffentlich` setzt es,
+  sobald eine Suchanfrage in der Adresse steht.
+- **Das Bild muss ohne Anmeldung erreichbar sein.** Ein Unfurler ist ein anonymer Fremder; kann er das Bild
+  nicht laden, verwirft er die ganze Karte. Es gibt deshalb genau zwei Quellen: das veröffentlichte
+  Fahndungsfoto unter `/gesucht/{Aktenzeichen}/foto` — der eine anonyme Datei-Endpunkt der Anwendung — und
+  als Rückfall die Behördenmarke `NooseIcon.png`. Eine Ausschreibung **ohne** Foto fällt bewusst auf die
+  Marke zurück, statt eine Adresse zu senden, die 404 antwortet.
+- **Der Text kommt aus dem, was die Seite ohnehin sagt** (Vorwurf, Teaser, erster Absatz), nicht aus einer
+  zweiten Fassung, die auseinanderläuft. `LinkPreviewText.Summary` liest dafür nur die **ersten 4000 Zeichen**
+  des Markups und schneidet **nie innerhalb eines Tags**: eine Pressemitteilung trägt ihre Bilder als base64
+  im Body, und ein abgeschnittenes `<img src="data:…` verlöre seine schließende Klammer — der Tag-Entferner
+  reichte die base64-Daten dann in die Karte durch. Fängt ein Text mit einem Bild an, bleibt die Karte
+  bewusst ohne Untertitel.
+- **Kein Standard im Kopf von `App.razor`.** Ein dort fest verdrahtetes `og:title` stünde **vor** dem
+  `HeadOutlet`, und ein Unfurler nimmt das erste Vorkommen — die allgemeine Fassung gewänne gegen die der
+  Seite. Interne Seiten bekommen deshalb gar keine Vorschau; ein geteilter interner Link landet ohnehin auf
+  der Anmeldung.
+- **Der Titel trägt kein „· NOOSE".** Das steht schon in `og:site_name`, und ein Unfurler zeigt beides
+  untereinander.
 
 ## Migrationen
 

@@ -8,14 +8,12 @@
 
 <PageTitle>@(_page?.Title ?? "Information") · NOOSE</PageTitle>
 
-@* hoisted out of the module gate: with the module off (the shipped default) the gate renders instead of the
-   miss branch, and every invented slug would answer 200 without this tag *@
-@if (_page is null)
-{
-    <HeadContent>
-        <meta name="robots" content="noindex, nofollow" />
-    </HeadContent>
-}
+@* One head block, and it carries both facts: noindex on the miss branch - the route answers 200 for
+   every slug someone invents - and otherwise the card a shared link shows in a Discord
+   channel. Hoisted out of the gate, which renders instead of the miss branch while the module is off. *@
+<LinkPreview NoIndex="@(_page is null)" Article="true"
+             Title="@(_page?.Title ?? "Information")"
+             Description="@_page?.Html" />
 
 @* The draft preview sits OUTSIDE the gate: PublicPageService.GetPreviewAsync is deliberately not module-gated,
    because preparing content while the module is still off is the point of a draft. Keyed on IsDraft rather than on

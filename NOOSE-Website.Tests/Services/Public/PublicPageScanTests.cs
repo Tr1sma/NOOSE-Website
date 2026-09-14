@@ -55,6 +55,24 @@ public partial class PublicPageScanTests
         ["TipForm.razor"] = "tip form: input, image upload and validation feedback need a circuit",
     };
 
+    /// <summary>Pages that deliberately send no preview card.</summary>
+    /// <remarks>
+    /// The default is the other way round: a public page is meant to be shared, and a link without a card reads as
+    /// spam in a Discord channel - which is the whole point of the wanted notices.
+    /// </remarks>
+    private static readonly Dictionary<string, string> PreviewExempt = new(StringComparer.Ordinal)
+    {
+        ["Invite.razor"] = "one-time invite: a card in a channel is the opposite of what the link is for",
+        ["WantedPoster.razor"] = "print sheet: always noindex, so a preview would never be delivered anyway",
+    };
+
+    /// <summary>The two files that may write into the head without going through LinkPreview.</summary>
+    private static readonly Dictionary<string, string> HeadExempt = new(StringComparer.Ordinal)
+    {
+        ["PublicModuleGate.razor"] = "the gate answers 404 for a switched-off module and says noindex itself",
+        ["WantedPoster.razor"] = "print sheet: noindex unconditionally, and it carries no preview to merge it with",
+    };
+
     private static string Root([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website", "Components"));
 
@@ -181,6 +199,39 @@ public partial class PublicPageScanTests
     [GeneratedRegex(@"\[SupplyParameterFromQuery[^\]]*\]\s*(?<decl>(?:public|private|internal|protected)?\s*)"
         + @"(?<type>\S+)\s", RegexOptions.Singleline)]
     private static partial Regex QueryParameter();
+
+    [Fact]
+    public void EveryPublicPageDeclaresItsLinkPreview()
+    {
+        var offenders = Files()
+            .Where(f => Code(f).Contains("@page", StringComparison.Ordinal))
+            .Where(f => !PreviewExempt.ContainsKey(Path.GetFileName(f)))
+            .Where(f => !Code(f).Contains("<LinkPreview", StringComparison.Ordinal))
+            .Select(Path.GetFileName)
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Jede öffentliche Seite sagt, wie ihr Link außerhalb aussieht: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void TheHeadOfAPublicPageIsWrittenInOnePlace()
+    {
+        // Two HeadContent blocks on one page are not added together: the outlet keeps the last one registered and
+        // drops the other. A page that put its own <meta robots> next to a LinkPreview would therefore publish
+        // whichever of the two happened to render later - and losing that one is a soft-404 in a search index.
+        var offenders = Files()
+            .Where(f => Code(f).Contains("<HeadContent", StringComparison.Ordinal))
+            .Select(Path.GetFileName)
+            .Where(name => !HeadExempt.ContainsKey(name!))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Kopf einer öffentlichen Seite wird über LinkPreview geschrieben, nicht von Hand: "
+            + string.Join(", ", offenders));
+    }
 
     [Fact]
     public void TheTwoWantedBoardsDoNotShareARoute()

@@ -11,14 +11,11 @@
 
 <PageTitle>Suche · NOOSE</PageTitle>
 
-@if (!string.IsNullOrWhiteSpace(QueryText))
-{
-    @* a result page for a query the agency did not write is not content to index, and the route answers 200 for
-       every one of them — the same soft-404 trap the missing info page guards against *@
-    <HeadContent>
-        <meta name="robots" content="noindex, nofollow" />
-    </HeadContent>
-}
+@* One head block, and it carries both facts: noindex once a query is in the address - a result page for words
+   the agency did not write is not content to index, and the route answers 200 for every one of them - and
+   otherwise the card a shared link shows in a Discord channel. *@
+<LinkPreview NoIndex="@(!string.IsNullOrWhiteSpace(QueryText))" Title="Suche"
+             Description="Durchsucht ausschließlich Veröffentlichtes: Fahndungen, Organisationen, Presse, Warnungen und Lageberichte." />
 
 <PublicModuleGate Module="@PublicModules.PublicSearch" Title="Suche">
 <MudPaper Elevation="4" Class="pa-4 pa-sm-8">

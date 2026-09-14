@@ -40,6 +40,11 @@ zuletzt die Architektur-Grenze.
 
 **Aufwand:** klein | **Jury-Schnitt:** 8.7 | **Blickwinkel:** Reichweite und Aussenwelt
 
+> **Umgesetzt am 14.09.2026.** Eine `<LinkPreview>`-Zeile je Seite
+> (`Components/Common/Shared/LinkPreview.razor`), Text und Adresse aus `Services/Public/LinkPreviewText.cs`,
+> Bild ist das veroeffentlichte Fahndungsfoto oder die Behoerdenmarke. Die Regeln dahinter stehen in
+> [`claude-memory/oeffentlich-grundlagen.md`](claude-memory/oeffentlich-grundlagen.md) unter „Link-Vorschau".
+
 **Was es tut.** Oeffentliche Seiten bekommen Vorschau-Angaben (Titel, Kurztext, Bild), damit ein Link im Discord als Karte mit Foto erscheint statt als nackte Adresse.
 
 **Warum.** Die Seite postet ihre Links selbst ins Discord - und sie sehen dort aus wie Spam. Ein Fahndungslink ohne Bild und ohne Namen wird nicht angeklickt, obwohl genau das der Zweck der Ausschreibung ist.

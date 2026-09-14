@@ -1,0 +1,80 @@
+@* What an unfurler shows instead of a bare address: one title, one sentence, one picture. *@
+@inject NavigationManager Nav
+
+<HeadContent>
+    @if (NoIndex)
+    {
+        <meta name="robots" content="noindex, nofollow" />
+    }
+    else
+    {
+        <meta property="og:site_name" content="NOOSE" />
+        <meta property="og:locale" content="de_DE" />
+        <meta property="og:type" content="@_type" />
+        <meta property="og:title" content="@Title" />
+        <meta property="og:url" content="@_url" />
+        <meta property="og:image" content="@_image" />
+        @* the colour of the stripe down the left of a Discord card *@
+        <meta name="theme-color" content="@NooseTheme.DefaultPrimary" />
+        <meta name="twitter:card" content="@_card" />
+        @if (_text.Length > 0)
+        {
+            <meta name="description" content="@_text" />
+            <meta property="og:description" content="@_text" />
+        }
+    }
+</HeadContent>
+
+@code {
+    // The head of a page is written here and nowhere else. Two HeadContent blocks on one page are not added
+    // together - the outlet keeps the last one registered and drops the other - so a page that carried its own
+    // <meta robots> next to this component would silently publish whichever of the two rendered later. That is
+    // why noindex is a parameter of the preview rather than a block of its own, and why
+    // PublicPageScanTests.TheHeadOfAPublicPageIsWrittenInOnePlace holds it that way.
+
+    /// <summary>Headline of the card. Without the "· NOOSE" suffix — og:site_name already says that.</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The sentence under the headline. Plain text or a body; markup and length are handled here.</summary>
+    [Parameter]
+    public string? Description { get; set; }
+
+    /// <summary>Site-relative path of the picture. Unset falls back to the agency mark.</summary>
+    /// <remarks>
+    /// It has to be reachable without a login: the unfurler is an anonymous stranger. The published wanted photo
+    /// under <c>/gesucht/{Aktenzeichen}/foto</c> is the one file endpoint that qualifies.
+    /// </remarks>
+    [Parameter]
+    public string? Image { get; set; }
+
+    /// <summary>A written piece rather than a section of the site.</summary>
+    [Parameter]
+    public bool Article { get; set; }
+
+    /// <summary>Keep this address out of every index — and then send no preview either.</summary>
+    /// <remarks>
+    /// The public routes answer 200 for an invented case number, slug or period, so the miss branch of those pages
+    /// sets this. A card for a page that says "not found" would be the second half of the same mistake.
+    /// </remarks>
+    [Parameter]
+    public bool NoIndex { get; set; }
+
+    private const string Mark = "NooseIcon.png";
+
+    private string _text = string.Empty;
+    private string _url = string.Empty;
+    private string _image = string.Empty;
+    private string _type = "website";
+    private string _card = "summary";
+
+    protected override void OnParametersSet()
+    {
+        _text = LinkPreviewText.Summary(Description);
+        _url = LinkPreviewText.Canonical(Nav.Uri);
+        _image = Nav.ToAbsoluteUri(Image ?? Mark).ToString();
+        _type = Article ? "article" : "website";
+        // the mark is a logo and belongs in the small corner; a face or a scene earns the wide card
+        _card = Image is null ? "summary" : "summary_large_image";
+    }
+}

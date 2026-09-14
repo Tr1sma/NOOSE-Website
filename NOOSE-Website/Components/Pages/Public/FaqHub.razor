@@ -7,14 +7,12 @@
 
 <PageTitle>@(_faq.Page?.Title ?? "Häufige Fragen") · NOOSE</PageTitle>
 
-@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and the
-   route would answer without this tag *@
-@if (_faq.Page is null)
-{
-    <HeadContent>
-        <meta name="robots" content="noindex, nofollow" />
-    </HeadContent>
-}
+@* One head block, and it carries both facts: noindex while nothing is published here - the route answers
+   200 either way - and otherwise the card a shared link shows in a Discord channel. Hoisted out of the
+   gate, which renders instead of the miss branch while the module is off. *@
+<LinkPreview NoIndex="@(_faq.Page is null)"
+             Title="@(_faq.Page?.Title ?? "Häufige Fragen")"
+             Description="@_faq.Page?.Html" />
 
 @* The draft preview sits OUTSIDE the gate, like the editorial pages: IPublicFaqService.GetPreviewAsync is
    deliberately not gated, because preparing answers while the module is still off is the point of a draft.

@@ -17,6 +17,8 @@
 
 <PageTitle>@(_capture ? "Person gestellt melden" : "Hinweis geben") · NOOSE</PageTitle>
 
+<LinkPreview Title="@PreviewTitle" Description="@PreviewText" />
+
 @* keyed: both routes bind the same component type, so Blazor reuses the instance and the gate - which decides in
    OnInitializedAsync - would keep answering for the module of the route we came from *@
 <PublicModuleGate @key="_module" Module="@_module" Title="@(_capture ? "Person gestellt melden" : "Hinweis geben")">
@@ -268,6 +270,14 @@
     // reject and no 500 to trigger
     private bool _capture;
     private string _module = PublicModules.Tips;
+
+    /// <summary>Headline of the preview card; the two routes are two different errands.</summary>
+    private string PreviewTitle => _capture ? "Person gestellt melden" : "Beobachtung melden";
+
+    /// <summary>Sentence of the preview card, in the words the page itself opens with.</summary>
+    private string PreviewText => _capture
+        ? "Hier meldest du, dass du eine gesuchte Person gestellt hast. NOOSE übernimmt ab hier."
+        : "Jeder Hinweis wird von einem Agenten gelesen und bewertet.";
 
     protected override async Task OnParametersSetAsync()
     {

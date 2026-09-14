@@ -9,14 +9,13 @@
 
 <PageTitle>@(_entry?.DisplayName ?? "Gesucht") · NOOSE</PageTitle>
 
-@* hoisted out of the module gate: with the module off the gate renders instead of the miss branch, and
-   every invented address would answer 200 without this tag *@
-@if (_entry is null)
-{
-    <HeadContent>
-        <meta name="robots" content="noindex, nofollow" />
-    </HeadContent>
-}
+@* One head block, and it carries both facts: noindex on the miss branch - the route answers 200 for
+   every case number someone invents - and otherwise the card a shared link shows in a Discord
+   channel. Hoisted out of the gate, which renders instead of the miss branch while the module is off. *@
+<LinkPreview NoIndex="@(_entry is null)" Article="true"
+             Title="@(_entry?.DisplayName ?? "Gesucht")"
+             Description="@_entry?.ChargeHtml"
+             Image="@PreviewPhoto" />
 
 <PublicModuleGate Module="@PublicModules.Wanted" Title="Gesucht">
 <MudPaper Elevation="4" Class="pa-4 pa-sm-8">
@@ -206,6 +205,14 @@
     private bool _mayObject;
     private bool _objectionOffered;
     private string? _loadedKey;
+
+    /// <summary>Picture of the preview card, or null for the agency mark.</summary>
+    /// <remarks>
+    /// The same anonymous endpoint the page itself shows. A notice without a photo deliberately falls back rather
+    /// than sending an address that answers 404 - an unfurler that cannot fetch the picture drops the whole card.
+    /// </remarks>
+    private string? PreviewPhoto
+        => _entry is { HasPhoto: true } entry ? $"/gesucht/{entry.CaseNumber}/foto" : null;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }

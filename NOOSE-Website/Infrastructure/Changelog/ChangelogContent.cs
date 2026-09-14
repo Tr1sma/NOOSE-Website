@@ -1,4 +1,4 @@
-using NOOSE_Website.Models.Enums;
+﻿using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Infrastructure.Changelog;
 
@@ -198,6 +198,14 @@ public static class ChangelogContent
             Neu("1.4-einarbeitung-stand", "Führung und HRB sehen in der Personalakte, wie weit die Einarbeitung ist.", "Personal"),
             Neu("1.4-noosei-handbuch", "NOOSEI beantwortet Fragen zur Bedienung aus dem Handbuch, mit Quellenangabe.", "Handbuch"),
             Neu("1.4-suche-handbuch", "Die Suche findet jetzt auch Handbuch-Artikel und Glossarbegriffe.", "Suche"),
+        ]),
+
+        new("1.5", new DateTime(2026, 9, 14), "Geteilte Links sehen nach Behörde aus",
+        [
+            Neu("1.5-link-vorschau", "Ein Link auf eine öffentliche Seite erscheint im Discord als Karte mit "
+                + "Titel, Kurztext und Bild.", "Öffentlich"),
+            Neu("1.5-fahndung-vorschau", "Ein geteilter Fahndungslink zeigt Name, Vorwurf und das Fahndungsfoto.",
+                "Fahndung"),
         ]),
     ];
 }

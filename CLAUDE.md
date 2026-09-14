@@ -341,7 +341,7 @@ Ticket-Chat, Bürger-Vorlagen, Organisationsprofile, Einspruch, Presse, Warnunge
 Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führungsprofile und die
 **Ergreifungsmeldung** (ein Bürger meldet, dass er eine gesuchte Person selbst gestellt hat).
 
-**Vier Regeln gelten überall dort — der Rest steht in `claude-memory/oeffentlich-*.md`:**
+**Fünf Regeln gelten überall dort — der Rest steht in `claude-memory/oeffentlich-*.md`:**
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten. Zugang (`MayUseCitizenPortal()`),
   Status (`IsCitizen()`) und Einreichen (`MayCitizenSubmit()`) sind drei verschiedene Fragen — **Partner und
@@ -354,6 +354,10 @@ Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führu
   soft-gelöschte Akte anonym live (nachgemessen, nicht vermutet).
 - **Schreib-Guard vor Rang-Guard.** Sonst prägen Nur-Lese-Aufsicht und Demo-Principal Aktenzeichen und
   Foto-Kopien, bevor der `ReadOnlyBarrierInterceptor` das Speichern verweigert.
+- **Eine öffentliche Seite schreibt ihren Kopf über `<LinkPreview>`** (`Components/Common/Shared/`) und
+  nirgends sonst. Zwei `<HeadContent>`-Blöcke auf einer Seite addieren sich nicht — die Ausgabestelle behält
+  den zuletzt registrierten —, deshalb ist `noindex` ein **Parameter** der Vorschau. Ohne die Zeile wird der
+  geteilte Link zur nackten Adresse; `PublicPageScanTests` fordert beides ein.
 
 → Einstieg immer über **[`claude-memory/oeffentlich-grundlagen.md`](claude-memory/oeffentlich-grundlagen.md)**,
 dann die Themendatei aus der Tabelle oben.
