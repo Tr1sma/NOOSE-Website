@@ -480,7 +480,7 @@ Ziel: `root@195.20.225.12`, systemd-Service `noose`, App-Dir `/var/www/noose`. P
 - **`App_Data` beim Deploy nie löschen** - enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit aus.
 - **`TZ=Europe/Berlin`** in `/etc/noose/noose.env` nötig - sonst sind alle `ToLocalTime()`-Zeiten verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
 - **Discord-Redirect** `https://noose.info/signin-discord` muss im Developer-Portal registriert sein.
-- **Prod-Secrets** in `/etc/noose/noose.env` mit Doppel-Unterstrich: `ConnectionStrings__ProductionConnection`, `Authentication__Discord__ClientId`/`__ClientSecret`, `Bootstrap__AdminDiscordId`.
+- **Prod-Secrets** in `/etc/noose/noose.env` mit Doppel-Unterstrich: `ConnectionStrings__ProductionConnection`, `Authentication__Discord__ClientId`/`__ClientSecret`, `Bootstrap__AdminDiscordId`, `Llm__ApiKey` (OpenRouter) und `Llm__DeepSeek__ApiKey` (DeepSeek direkt).
 - **Health-Check:** `GET /health` (anonym, prüft DB-Konnektivität) → `200 Healthy`.
 
 ---

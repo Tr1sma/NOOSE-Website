@@ -191,6 +191,11 @@ ConnectionStrings__ProductionConnection=Server=127.0.0.1;Port=3306;Database=noos
 Authentication__Discord__ClientId=DEINE_DISCORD_CLIENT_ID
 Authentication__Discord__ClientSecret=DEIN_DISCORD_CLIENT_SECRET
 Bootstrap__AdminDiscordId=DEINE_DISCORD_ID
+# NOOSEI. Der Schlüssel je Anbieter; Adresse, Modell und Preis haben Vorgaben im Code.
+# Welcher Anbieter genutzt wird, schaltet der KI-Eigner unter /einstellungen?tab=ki-anbieter um.
+Llm__ApiKey=DEIN_OPENROUTER_SCHLUESSEL
+Llm__DeepSeek__ApiKey=DEIN_DEEPSEEK_SCHLUESSEL
+Ki__OwnerDiscordId=DEINE_DISCORD_ID
 ```
 
 ### 5.4 systemd-Dienst
