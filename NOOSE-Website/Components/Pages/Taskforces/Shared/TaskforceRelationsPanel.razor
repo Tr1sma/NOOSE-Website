@@ -79,21 +79,20 @@
 
     private async Task AddAsync()
     {
-        // Exclude already-linked targets per type
-        var factionFrom = _list.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
-        var groupsFrom = _list.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
-        var partyFrom = _list.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();
-        var personFrom = _list.Where(v => v.OtherType == nameof(Person)).Select(v => v.OtherId).ToList();
-
-        var choice = await OrgRelationDialog.ShowAsync(DialogService, "Verknüpfung", User.IsLeadership(),
-            factionFrom, groupsFrom, partyFrom, personFrom, peopleAllow: true);
+        // Exclude already-linked targets and self
+        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
+            allowedTypes: [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            excluded: LinkDialog.Exclusions(_list, nameof(Taskforce), TaskforceId),
+            designation: "Verknüpfung",
+            labelCaption: "Notiz (optional)",
+            labelPlaceholder: "z. B. Zielperson, Zeuge, beteiligte Bande");
         if (choice is null)
         {
             return;
         }
         try
         {
-            await LinkService.CreateAsync(nameof(Taskforce), TaskforceId, choice.TargetType, choice.TargetId, choice.Note, User, LinkKind.Default);
+            await LinkService.CreateAsync(nameof(Taskforce), TaskforceId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default);
             Snackbar.Add("Verknüpfung gespeichert.", Severity.Success);
             await LoadAsync();
         }

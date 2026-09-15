@@ -74,21 +74,20 @@
 
     private async Task AddAsync()
     {
-        // Exclude already-involved targets per type.
-        var factionFrom = _list.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
-        var groupsFrom = _list.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
-        var partyFrom = _list.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();
-        var personFrom = _list.Where(v => v.OtherType == nameof(Person)).Select(v => v.OtherId).ToList();
-
-        var choice = await OrgRelationDialog.ShowAsync(DialogService, "Beteiligten", User.IsLeadership(),
-            factionFrom, groupsFrom, partyFrom, personFrom, peopleAllow: true);
+        // Exclude already-involved targets and self.
+        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
+            allowedTypes: [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            excluded: LinkDialog.Exclusions(_list, nameof(Operation), OperationId),
+            designation: "Beteiligten",
+            labelCaption: "Notiz (optional)",
+            labelPlaceholder: "z. B. Zielperson, Zeuge, beteiligte Bande");
         if (choice is null)
         {
             return;
         }
         try
         {
-            await LinkService.CreateAsync(nameof(Operation), OperationId, choice.TargetType, choice.TargetId, choice.Note, User, LinkKind.Default);
+            await LinkService.CreateAsync(nameof(Operation), OperationId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default);
             Snackbar.Add("Beteiligter gespeichert.", Severity.Success);
             await LoadAsync();
         }

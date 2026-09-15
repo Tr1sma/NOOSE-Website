@@ -210,6 +210,8 @@ public static class ChangelogContent
             Besser("2.1.02-dienstnummer", "Die Dienstnummer wird aus den freien römischen Nummern gewählt.", "Personal"),
             Fix("2.1.03-bewerbung-terminauswahl", "Die Termin-Auswahl in Bewerbungsnachrichten wird nicht mehr abgeschnitten.",
                 "Bewerbungen"),
+            Besser("2.1.04-verknuepfen", "Beim Verknüpfen sieht das Fenster überall gleich aus und schlägt schon "
+                + "Verknüpftes nicht mehr vor.", "Bedienung"),
         ], "1.5"),
     ];
 }

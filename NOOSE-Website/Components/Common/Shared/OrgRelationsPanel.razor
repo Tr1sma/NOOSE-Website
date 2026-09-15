@@ -61,14 +61,15 @@
     private bool _mayWrite;
     private readonly Dictionary<LinkKind, List<LinkDisplay>> _lists = new();
 
-    private sealed record Section(LinkKind Kind, string Title, string Designation, string AddText, string EmptyText, Color Colour, string Icon);
+    private sealed record Section(LinkKind Kind, string Title, string Designation, string AddText, string EmptyText,
+        string NotePlaceholder, Color Colour, string Icon);
 
     private static readonly Section[] Sections =
     {
         new(LinkKind.Conflict, "Konflikte", "Konflikt", "Konflikt hinzufügen", "Keine Konflikte erfasst.",
-            Color.Error, Icons.Material.Filled.Bolt),
+            "z. B. Revierkonflikt, langjährige Feindschaft", Color.Error, Icons.Material.Filled.Bolt),
         new(LinkKind.Alliance, "Bündnisse", "Bündnis", "Bündnis hinzufügen", "Keine Bündnisse erfasst.",
-            Color.Success, Icons.Material.Filled.Handshake),
+            "z. B. Waffenbruderschaft, Nichtangriffspakt", Color.Success, Icons.Material.Filled.Handshake),
     };
 
     protected override async Task OnInitializedAsync()
@@ -92,24 +93,19 @@
     {
         // exclude already-linked targets and self
         var all = _lists.Values.SelectMany(l => l).ToList();
-        var factionFrom = all.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
-        var groupsFrom = all.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
-        var partyFrom = all.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();
-        switch (EntityType)
-        {
-            case nameof(Faction): factionFrom.Add(EntityId); break;
-            case nameof(PersonGroup): groupsFrom.Add(EntityId); break;
-            case nameof(Party): partyFrom.Add(EntityId); break;
-        }
-
-        var choice = await OrgRelationDialog.ShowAsync(DialogService, s.Designation, User.IsLeadership(), factionFrom, groupsFrom, partyFrom);
+        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
+            allowedTypes: [nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            excluded: LinkDialog.Exclusions(all, EntityType, EntityId),
+            designation: s.Designation,
+            labelCaption: "Notiz (optional)",
+            labelPlaceholder: s.NotePlaceholder);
         if (choice is null)
         {
             return;
         }
         try
         {
-            await LinkService.CreateAsync(EntityType, EntityId, choice.TargetType, choice.TargetId, choice.Note, User, s.Kind);
+            await LinkService.CreateAsync(EntityType, EntityId, choice.TargetType, choice.TargetId, choice.Label, User, s.Kind);
             Snackbar.Add($"{s.Designation} gespeichert.", Severity.Success);
             await LoadAsync();
         }

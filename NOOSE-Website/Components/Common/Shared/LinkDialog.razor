@@ -334,14 +334,14 @@
             }
             else
             {
-                <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
-                              Placeholder="z. B. siehe auch / Quelle für" />
+                <MudTextField @bind-Value="_label" Label="@LabelCaption" Variant="Variant.Outlined"
+                              Placeholder="@LabelPlaceholder" />
             }
         </MudStack>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(CurrentTargetId is null)">Verknüpfen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(CurrentTargetId is null)">Hinzufügen</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -350,10 +350,16 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     [Parameter] public bool IsLeadership { get; set; }
-    /// <summary>Person excluded from the person picker.</summary>
-    [Parameter] public string? ExclusionPersonId { get; set; }
     /// <summary>Calling record type; Case + target Person switches the label to role suggestions.</summary>
     [Parameter] public string? SourceType { get; set; }
+    /// <summary>Restricts the offered types; null offers every type the viewer may link.</summary>
+    [Parameter] public IReadOnlyList<string>? AllowedTypes { get; set; }
+    /// <summary>Already-linked or otherwise blocked ids per type.</summary>
+    [Parameter] public IReadOnlyDictionary<string, IReadOnlyList<string>>? Excluded { get; set; }
+    /// <summary>Drives the dialog title.</summary>
+    [Parameter] public string Designation { get; set; } = "Verknüpfung";
+    [Parameter] public string LabelCaption { get; set; } = "Bezeichnung (optional)";
+    [Parameter] public string LabelPlaceholder { get; set; } = "z. B. siehe auch / Quelle für";
 
     // viewer context for search visibility
     private ClaimsPrincipal? _user;
@@ -381,6 +387,8 @@
             _docScope = DocumentViewerScope.From(user);
             _scope = ViewerScope.From(user);
         }
+        _targetType = ShownTypes.Select(t => t.Value).FirstOrDefault() ?? nameof(Person);
+        await TypeSwitchedAsync();
     }
 
     private record TypeOption(string Value, string Display);
@@ -422,6 +430,10 @@
             if (_mayTicket)
             {
                 shown = shown.Append(new(nameof(Ticket), "Bürger-Ticket"));
+            }
+            if (AllowedTypes is not null)
+            {
+                shown = shown.Where(t => AllowedTypes.Contains(t.Value, StringComparer.Ordinal));
             }
             return shown;
         }
@@ -511,47 +523,57 @@
         }
     }
 
+    // callers hand in the already-linked ids, the picker must not offer them again
+    private IEnumerable<T> Allowed<T>(string type, IEnumerable<T> hits, Func<T, string> id)
+    {
+        if (Excluded is null || !Excluded.TryGetValue(type, out var blocked) || blocked.Count == 0)
+        {
+            return hits;
+        }
+        return hits.Where(x => !blocked.Contains(id(x)));
+    }
+
     private async Task<IEnumerable<Person>> SearchPeople(string value, CancellationToken token)
     {
         var hit = await PersonService.SearchAsync(value, IsLeadership, 20, token);
-        return ExclusionPersonId is null ? hit : hit.Where(p => p.Id != ExclusionPersonId);
+        return Allowed(nameof(Person), hit, p => p.Id);
     }
 
     private async Task<IEnumerable<Faction>> SearchFactions(string value, CancellationToken token)
-        => await FactionService.SearchAsync(value, IsLeadership, 20, token);
+        => Allowed(nameof(Faction), await FactionService.SearchAsync(value, IsLeadership, 20, token), f => f.Id);
 
     private async Task<IEnumerable<PersonGroup>> SearchGroups(string value, CancellationToken token)
-        => await GroupService.SearchAsync(value, IsLeadership, 20, token);
+        => Allowed(nameof(PersonGroup), await GroupService.SearchAsync(value, IsLeadership, 20, token), g => g.Id);
 
     private async Task<IEnumerable<Party>> SearchParties(string value, CancellationToken token)
-        => await PartyService.SearchAsync(value, IsLeadership, 20, token);
+        => Allowed(nameof(Party), await PartyService.SearchAsync(value, IsLeadership, 20, token), p => p.Id);
 
     private async Task<IEnumerable<Operation>> SearchOperations(string value, CancellationToken token)
-        => await OperationService.SearchAsync(value, IsLeadership, 20, token);
+        => Allowed(nameof(Operation), await OperationService.SearchAsync(value, IsLeadership, 20, token), o => o.Id);
 
     private async Task<IEnumerable<Taskforce>> SearchTaskforces(string value, CancellationToken token)
-        => await TaskforceService.SearchAsync(value, _mayAllTf, _meId, 20, token);
+        => Allowed(nameof(Taskforce), await TaskforceService.SearchAsync(value, _mayAllTf, _meId, 20, token), t => t.Id);
 
     private async Task<IEnumerable<Case>> SearchCases(string value, CancellationToken token)
-        => await CaseService.SearchAsync(value, _scope, 20, token);
+        => Allowed(nameof(Case), await CaseService.SearchAsync(value, _scope, 20, token), v => v.Id);
 
     private async Task<IEnumerable<Law>> SearchLaws(string value, CancellationToken token)
-        => await LawService.SearchAsync(value, 20, token);
+        => Allowed(nameof(Law), await LawService.SearchAsync(value, 20, token), g => g.Id);
 
     private async Task<IEnumerable<Job>> SearchJobs(string value, CancellationToken token)
-        => await JobService.SearchAsync(value, _mayClassified, _meId, 20, token);
+        => Allowed(nameof(Job), await JobService.SearchAsync(value, _mayClassified, _meId, 20, token), a => a.Id);
 
     private async Task<IEnumerable<DocumentListItem>> SearchDocuments(string value, CancellationToken token)
-        => await DocumentService.SearchAsync(value, _docScope, 20, token);
+        => Allowed(nameof(Document), await DocumentService.SearchAsync(value, _docScope, 20, token), d => d.Id);
 
     private async Task<IEnumerable<Meeting>> SearchMeetings(string value, CancellationToken token)
-        => await MeetingService.SearchAsync(value, 20, token);
+        => Allowed(nameof(Meeting), await MeetingService.SearchAsync(value, 20, token), m => m.Id);
 
     private async Task<IEnumerable<TipPickRow>> SearchTips(string value, CancellationToken token)
-        => _user is null ? Array.Empty<TipPickRow>() : await TipService.SearchForLinkAsync(value, _user, 20, token);
+        => Allowed(nameof(Hinweis), _user is null ? Array.Empty<TipPickRow>() : await TipService.SearchForLinkAsync(value, _user, 20, token), h => h.Id);
 
     private async Task<IEnumerable<TicketPickRow>> SearchTickets(string value, CancellationToken token)
-        => _user is null ? Array.Empty<TicketPickRow>() : await TicketService.SearchForLinkAsync(value, _user, 20, token);
+        => Allowed(nameof(Ticket), _user is null ? Array.Empty<TicketPickRow>() : await TicketService.SearchForLinkAsync(value, _user, 20, token), t => t.Id);
 
     // the picker shows the subject, the link never does: only the case number identifies a ticket outward
     private static string TipText(TipPickRow? h) => h is null ? string.Empty : $"Bürgerhinweis {h.CaseNumber}";
@@ -567,7 +589,7 @@
             all = all.Where(b => b.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
                                 || b.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase));
         }
-        return Task.FromResult(all);
+        return Task.FromResult(Allowed(nameof(Bewerbung), all, b => b.Id));
     }
 
     private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
@@ -579,7 +601,7 @@
             all = all.Where(a => a.Codename.Contains(s, StringComparison.OrdinalIgnoreCase)
                                 || (IsLeadership && (a.RealName ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)));
         }
-        return Task.FromResult(all);
+        return Task.FromResult(Allowed(nameof(Agent), all, a => a.Id));
     }
 
     private Task<IEnumerable<PersonDocDisplay>> SearchDocs(string value, CancellationToken token)
@@ -592,7 +614,7 @@
                                 || (d.Doc.Person?.CaseNumber ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
                                 || (d.Doc.Reason ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase));
         }
-        return Task.FromResult(all);
+        return Task.FromResult(Allowed(nameof(PersonDoc), all, d => d.Doc.Id));
     }
 
     private static string DocText(PersonDocDisplay? d)
@@ -608,7 +630,7 @@
                                 || (o.Obs.Person?.CaseNumber ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
                                 || (o.Obs.Location ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase));
         }
-        return Task.FromResult(all);
+        return Task.FromResult(Allowed(nameof(Observation), all, o => o.Obs.Id));
     }
 
     private static string ObsText(ObservationDisplay? o)
@@ -648,29 +670,38 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
-    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string exclusionPersonId, string? sourceType = null)
+    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? sourceType = null,
+        IReadOnlyList<string>? allowedTypes = null, IReadOnlyDictionary<string, IReadOnlyList<string>>? excluded = null,
+        string designation = "Verknüpfung", string labelCaption = "Bezeichnung (optional)",
+        string labelPlaceholder = "z. B. siehe auch / Quelle für")
     {
         var parameters = new DialogParameters<LinkDialog>
         {
             { x => x.IsLeadership, isLeadership },
-            { x => x.ExclusionPersonId, exclusionPersonId },
             { x => x.SourceType, sourceType },
+            { x => x.AllowedTypes, allowedTypes },
+            { x => x.Excluded, excluded },
+            { x => x.Designation, designation },
+            { x => x.LabelCaption, labelCaption },
+            { x => x.LabelPlaceholder, labelPlaceholder },
         };
-        var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
+        var reference = await dialog.ShowAsync<LinkDialog>($"{designation} hinzufügen", parameters);
         var result = await reference.Result;
         return result is { Canceled: false, Data: LinkInput e } ? e : null;
     }
 
-    /// <summary>Overload without person exclusion, for non-person records.</summary>
-    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? sourceType = null)
+    /// <summary>Builds the exclusion map from an existing link list; self is blocked as its own type.</summary>
+    public static Dictionary<string, IReadOnlyList<string>> Exclusions(IReadOnlyList<LinkDisplay>? links = null,
+        string? selfType = null, string? selfId = null)
     {
-        var parameters = new DialogParameters<LinkDialog>
+        var map = (links ?? Array.Empty<LinkDisplay>())
+            .GroupBy(v => v.OtherType, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(v => v.OtherId).Distinct().ToList(), StringComparer.Ordinal);
+        if (selfType is not null && selfId is not null)
         {
-            { x => x.IsLeadership, isLeadership },
-            { x => x.SourceType, sourceType },
-        };
-        var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
-        var result = await reference.Result;
-        return result is { Canceled: false, Data: LinkInput e } ? e : null;
+            var own = map.TryGetValue(selfType, out var existing) ? existing : Array.Empty<string>();
+            map[selfType] = own.Contains(selfId) ? own : [.. own, selfId];
+        }
+        return map;
     }
 }

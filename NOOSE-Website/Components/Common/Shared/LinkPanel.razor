@@ -229,7 +229,8 @@
 
     private async Task NewLinkAsync()
     {
-        var input = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(), PersonId);
+        var input = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
+            excluded: LinkDialog.Exclusions(selfType: nameof(Person), selfId: PersonId));
         if (input is null)
         {
             return;
