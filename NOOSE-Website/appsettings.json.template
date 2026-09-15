@@ -39,9 +39,18 @@
   },
   "Llm": {
     "Enabled": true,
+    "DefaultProvider": "OpenRouter",
     "BaseUrl": "https://openrouter.ai/api/v1",
     "Model": "deepseek/deepseek-v4.1-flash",
     "ApiKey": "",
+    "DeepSeek": {
+      "BaseUrl": "https://api.deepseek.com/v1",
+      "Model": "deepseek-flash",
+      "ApiKey": "",
+      "PriceByModel": {
+        "deepseek-flash": { "InputPerMillionUsd": 0.30, "OutputPerMillionUsd": 1.20 }
+      }
+    },
     "AllowClassifiedEgress": true
   },
   "Ki": {
