@@ -8,7 +8,7 @@ namespace NOOSE_Website.Tests.Services;
 public class LlmCostForecastTests
 {
     private static LlmQuotaStatus Status(long baseWeekly, long carryIn = 0, long consumed = 0)
-        => new("a", "Falke", Rank.SpecialAgent, 2026, 32, baseWeekly, carryIn, consumed, 50, false);
+        => new("a", "Falke", Rank.SpecialAgent, 2026, 32, baseWeekly, baseWeekly, 0, carryIn, consumed, 50, false);
 
     private static LlmWeekSpend Week(int week, long tokens, decimal cost, bool running = false)
         => new(2026, week, new DateTime(2026, 1, 1).AddDays(7 * week), tokens, cost, running);

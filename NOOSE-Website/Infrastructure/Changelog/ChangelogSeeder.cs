@@ -12,7 +12,7 @@ namespace NOOSE_Website.Infrastructure.Changelog;
 /// a line somebody deleted is not revived; and a line that was never shipped (no seed key) is invisible to this class.
 /// <para>
 /// The build number is stamped here rather than authored: it is unknown while the lines are written. The newest
-/// release without one gets the running build, which is exactly the deploy that carried it.
+/// release gets the running build on the first start after it shipped; an older one stays unnumbered for good.
 /// </para>
 /// <para>
 /// Seed through a context that carries the audit interceptor. The release CreatedAt it stamps is what the login hint
@@ -228,11 +228,12 @@ public static class ChangelogSeeder
             return;
         }
 
+        // only the newest release may be stamped: a first start would otherwise walk down the whole
+        // list and hand old releases the build number of a deploy that never carried them
         var newest = await db.Aenderungsfassungen
-            .Where(r => r.BuildNumber == null)
             .OrderByDescending(r => r.Date).ThenByDescending(r => r.SortOrder)
             .FirstOrDefaultAsync(cancellationToken);
-        if (newest is null)
+        if (newest is null || newest.BuildNumber is not null)
         {
             return;
         }

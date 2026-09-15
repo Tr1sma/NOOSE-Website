@@ -272,6 +272,8 @@ public class AgentManagementService(
 
     public async Task NameChangeApproveAsync(string agentId, ClaimsPrincipal actor)
     {
+        // write guard before the gate: a refused actor must not take the process-wide lock
+        Permission.RequireWriteAccess(actor);
         Agent agent;
         await BadgeNumberGate.WaitAsync();
         try
@@ -303,6 +305,8 @@ public class AgentManagementService(
 
     public async Task NameChangeRejectAsync(string agentId, string reason, ClaimsPrincipal actor)
     {
+        // write guard before the reads: the barrier would only refuse at the save
+        Permission.RequireWriteAccess(actor);
         var agent = await GetOrThrow(agentId);
         if (agent.NameChangeRequestedAt is null)
         {
@@ -1048,6 +1052,13 @@ public class AgentManagementService(
         if (!BadgeNumbers.IsAllowed(badgeNumber) && !(allowLegacyValue && isLegacyValue))
         {
             throw new InvalidOperationException("Die Dienstnummer muss eine römische Zahl zwischen I und XXV sein.");
+        }
+
+        // the agent's own value is no conflict with itself: without this, a legacy duplicate
+        // between two rows would make the row unsavable without renaming its badge number
+        if (isLegacyValue)
+        {
+            return;
         }
 
         var assigned = await db.Users.AsNoTracking()

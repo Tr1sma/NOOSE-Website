@@ -12,11 +12,18 @@
                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3"
                              Adornment="Adornment.End" AdornmentText="Token" />
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @if (Status.BoostPercent > 0)
+                {
+                    <text>
+                        Mit dem Aufschlag des aktiven Anbieters (+@Status.BoostPercent %) wirksam:
+                        @Effective.ToString("N0") Token.<br />
+                    </text>
+                }
                 Höchstbestand mit @Status.CarryPercent % Übertrag:
-                @LlmQuotaMath.Ceiling(_amount, Status.CarryPercent).ToString("N0") Token
+                @LlmQuotaMath.Ceiling(Effective, Status.CarryPercent).ToString("N0") Token
                 @if (MaySeeCost)
                 {
-                    <text>(≈ @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(_amount, Status.CarryPercent)).ToString("0.00") $ pro Woche)</text>
+                    <text>(≈ @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(Effective, Status.CarryPercent)).ToString("0.00") $ pro Woche)</text>
                 }
             </MudText>
         }
@@ -41,10 +48,15 @@
     private bool _custom;
     private long _amount;
 
+    /// <summary>What the typed base is worth once the active upstream's surcharge is on it.</summary>
+    private long Effective => LlmQuotaMath.Boosted(_amount, Status.BoostPercent);
+
     protected override void OnInitialized()
     {
         _custom = Status.IsOverride;
-        _amount = Status.BaseWeekly;
+        // the RAW figure, never Status.BaseWeekly: that one already carries the boost, and writing it back
+        // as an override would apply the surcharge a second time on every confirm
+        _amount = Status.RawBaseWeekly;
     }
 
     private void Confirm() => MudDialog.Close(DialogResult.Ok(new Choice(_custom ? _amount : null)));

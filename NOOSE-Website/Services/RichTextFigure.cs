@@ -62,7 +62,13 @@ public static class RichTextFigure
         var changed = false;
         foreach (var line in document.QuerySelectorAll("p").OfType<IElement>().ToList())
         {
-            if (line.QuerySelector("img") is not { } image || !string.IsNullOrWhiteSpace(line.TextContent))
+            // exactly one element and it is the image: folding a line that carries more would drop the rest with
+            // the paragraph it replaces. TextContent cannot catch that - an <img> contributes no text - so a
+            // second picture pasted into the same line used to vanish on save, before it was ever written to a file.
+            if (line.ChildElementCount != 1
+                || line.FirstElementChild is not { } image
+                || !image.NodeName.Equals("IMG", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(line.TextContent))
             {
                 continue;
             }

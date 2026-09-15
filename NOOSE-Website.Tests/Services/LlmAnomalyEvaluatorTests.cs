@@ -18,7 +18,7 @@ public class LlmAnomalyEvaluatorTests
 
     private static LlmQuotaStatus Status(string agentId = "a1", long available = 50_000, long consumed = 0,
         Rank rank = Rank.SpecialAgent)
-        => new(agentId, "Falke-" + agentId, rank, 2026, 32, available, 0, consumed, 0, false);
+        => new(agentId, "Falke-" + agentId, rank, 2026, 32, available, available, 0, 0, consumed, 0, false);
 
     private static LlmUsageRow Row(int minutesAgo, long tokens, string prompt = "Frage", string agentId = "a1")
         => new(agentId, "Falke-" + agentId, Now.AddMinutes(-minutesAgo), tokens, Fingerprint(prompt), prompt);

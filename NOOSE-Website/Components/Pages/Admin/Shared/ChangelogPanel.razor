@@ -15,12 +15,14 @@
 }
 else
 {
-    <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="NewReleaseAsync">Neue Fassung</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
-                   OnClick="NewEntryAsync" Disabled="@(_releases.Count == 0)">Neuer Eintrag</MudButton>
-    </MudStack>
+    <AuthorizeView Policy="@Policies.LeadershipWrite" Context="redaktionsAktionen">
+        <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="NewReleaseAsync">Neue Fassung</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
+                       OnClick="NewEntryAsync" Disabled="@(_releases.Count == 0)">Neuer Eintrag</MudButton>
+        </MudStack>
+    </AuthorizeView>
 
     @if (_releases.Count == 0)
     {
@@ -53,9 +55,11 @@ else
                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text">ausgeblendet</MudChip>
                     }
                     <MudSpacer />
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                   aria-label="Fassung bearbeiten"
-                                   OnClick="@(() => EditReleaseAsync(release))" />
+                    <AuthorizeView Policy="@Policies.LeadershipWrite" Context="fassungBearbeiten">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       aria-label="Fassung bearbeiten"
+                                       OnClick="@(() => EditReleaseAsync(release))" />
+                    </AuthorizeView>
                 </MudStack>
 
                 @if (lines.Count > 0)
@@ -95,12 +99,14 @@ else
                                 </MudTooltip>
                             </MudTd>
                             <MudTd DataLabel="Aktion" Style="text-align:right;">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                               aria-label="Eintrag bearbeiten"
-                                               OnClick="@(() => EditEntryAsync(context))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                               aria-label="Eintrag löschen"
-                                               OnClick="@(() => DeleteEntryAsync(context))" />
+                                <AuthorizeView Policy="@Policies.LeadershipWrite" Context="eintragAktionen">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   aria-label="Eintrag bearbeiten"
+                                                   OnClick="@(() => EditEntryAsync(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   aria-label="Eintrag löschen"
+                                                   OnClick="@(() => DeleteEntryAsync(context))" />
+                                </AuthorizeView>
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
@@ -114,6 +120,7 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool _load = true;
+    private bool _mayWrite;
     private ClaimsPrincipal _user = new();
     private List<ChangelogRelease> _releases = [];
     private Dictionary<string, List<ChangelogEntry>> _entries = [];
@@ -124,6 +131,9 @@ else
         {
             _user = (await AuthState).User;
         }
+        // mirrors Permission.RequireChangelogWrite exactly: the page policy also admits the read-only
+        // supervision and the demo principal, whom the service refuses after they filled in a dialog
+        _mayWrite = _user.MayWrite() && _user.IsLeadership();
         await LoadAsync();
     }
 
@@ -133,11 +143,8 @@ else
         try
         {
             _releases = await ChangelogService.GetReleasesAsync();
-            _entries = [];
-            foreach (var r in _releases)
-            {
-                _entries[r.Id] = await ChangelogService.GetEntriesAsync(r.Id);
-            }
+            var entries = await ChangelogService.GetEntriesAsync(_releases.Select(r => r.Id).ToList());
+            _entries = entries.ToDictionary(g => g.Key, g => g.Value.ToList());
         }
         finally
         {
@@ -159,6 +166,10 @@ else
 
     private async Task NewReleaseAsync()
     {
+        if (!_mayWrite)
+        {
+            return;
+        }
         var input = await ChangelogReleaseDialog.ShowAsync(DialogService, "Neue Fassung");
         if (input is null)
         {
@@ -173,6 +184,10 @@ else
 
     private async Task EditReleaseAsync(ChangelogRelease release)
     {
+        if (!_mayWrite)
+        {
+            return;
+        }
         var preset = new ChangelogReleaseInput(release.Version, release.Date, release.Title,
             release.SortOrder, release.IsVisible);
         var input = await ChangelogReleaseDialog.ShowAsync(DialogService, "Fassung bearbeiten", preset);
@@ -189,6 +204,10 @@ else
 
     private async Task NewEntryAsync()
     {
+        if (!_mayWrite)
+        {
+            return;
+        }
         var input = await ChangelogEntryDialog.ShowAsync(DialogService, "Neuer Eintrag", _releases);
         if (input is null)
         {
@@ -203,6 +222,10 @@ else
 
     private async Task EditEntryAsync(ChangelogEntry entry)
     {
+        if (!_mayWrite)
+        {
+            return;
+        }
         var preset = new ChangelogEntryInput(entry.ReleaseId, entry.Kind, entry.Title, entry.Area,
             entry.SortOrder, entry.IsVisible);
         var input = await ChangelogEntryDialog.ShowAsync(DialogService, "Eintrag bearbeiten", _releases, preset);
@@ -219,6 +242,10 @@ else
 
     private async Task DeleteEntryAsync(ChangelogEntry entry)
     {
+        if (!_mayWrite)
+        {
+            return;
+        }
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag löschen",
             $"„{entry.Title}\" in den Papierkorb legen?", "Löschen", Color.Error);
         if (!ok)

@@ -10,7 +10,7 @@ public static class MergedPageSections
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
         "finanzierung",
-        "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
+        "noosei", "ki-anbieter", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
         "oeffentliche-module", "oeffentliche-seiten", "oeffentliche-faq", "presse", "lage", "warnungen", "berichte", "recht",
         "oeffentliche-kennzahlen",

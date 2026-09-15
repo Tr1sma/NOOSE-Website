@@ -98,6 +98,30 @@ public sealed class RichTextHtmlInterceptorTests
         Assert.Equal("tester", bild.CreatedById);
     }
 
+    /// <summary>A text with headings and no picture is the ordinary case for a table of contents — and it used to
+    /// slip past the candidate filter, so every link of its own table of contents pointed at nothing.</summary>
+    [Fact]
+    public async Task Headings_get_their_anchors_without_a_picture_in_the_document()
+    {
+        using var ctx = new SqliteTestContext();
+        var (interceptor, _) = Aufbau();
+        await using (var db = MitKette(ctx, interceptor))
+        {
+            db.Documents.Add(new Document
+            {
+                Id = "d9",
+                Title = "Lagebild",
+                ContentHtml = "<h2>Lagebild</h2><p>Text ohne jedes Bild.</p><h2>Bewertung</h2>",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = ctx.NewContext();
+        var dokument = await check.Documents.SingleAsync();
+        Assert.Contains("id=\"lagebild\"", dokument.ContentHtml);
+        Assert.Contains("id=\"bewertung\"", dokument.ContentHtml);
+    }
+
     [Fact]
     public async Task An_image_the_storage_refuses_stays_inline()
     {
@@ -244,6 +268,36 @@ public sealed class RichTextImageFieldsTests
             {
                 Assert.NotNull(entity!.FindProperty(feld));
             }
+        }
+    }
+
+    /// <summary>Same tripwire for the anchor list: a column named there by a typo would simply never get ids,
+    /// and the only symptom is a table of contents whose links go nowhere.</summary>
+    [Fact]
+    public void Every_anchored_property_exists_in_the_model()
+    {
+        using var ctx = new SqliteTestContext();
+        using var db = ctx.NewContext();
+
+        foreach (var typ in RichTextAnchorFields.Types)
+        {
+            var entity = db.Model.FindEntityType(typ);
+            Assert.NotNull(entity);
+            foreach (var feld in RichTextAnchorFields.For(typ))
+            {
+                Assert.NotNull(entity!.FindProperty(feld));
+            }
+        }
+    }
+
+    /// <summary>The anchor list must cover the image list: an image carrier that lost its anchors would go
+    /// unnoticed, since both passes run from the same candidate loop.</summary>
+    [Fact]
+    public void Anchors_cover_every_image_carrier()
+    {
+        foreach (var typ in RichTextImageFields.Types)
+        {
+            Assert.All(RichTextImageFields.For(typ), feld => Assert.Contains(feld, RichTextAnchorFields.For(typ)));
         }
     }
 

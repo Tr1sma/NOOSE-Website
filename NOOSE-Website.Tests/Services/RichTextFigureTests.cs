@@ -20,6 +20,32 @@ public sealed class RichTextFigureTests
         Assert.True(stored.IndexOf("<img", StringComparison.Ordinal) < stored.IndexOf("</figure>", StringComparison.Ordinal));
     }
 
+    /// <summary>Two pictures pasted into one line without an Enter between them. Folding that line used to keep
+    /// the first and throw the rest away with the paragraph it replaced — before they were ever written to a file.</summary>
+    [Fact]
+    public void ToStored_LeavesALineCarryingMoreThanOneImageAlone()
+    {
+        var stored = RichTextFigure.ToStored(
+            "<p><img src=\"/dateien/textbilder/a\"><img src=\"/dateien/textbilder/b\"></p>"
+            + "<p class=\"noose-bildtext\">Vergleich</p>");
+
+        Assert.DoesNotContain("<figure", stored);
+        Assert.Contains("textbilder/a", stored);
+        Assert.Contains("textbilder/b", stored);
+    }
+
+    /// <summary>A linked picture: the anchor is part of the line and must not be dropped either.</summary>
+    [Fact]
+    public void ToStored_LeavesALinkedImageAlone()
+    {
+        var stored = RichTextFigure.ToStored(
+            "<p><a href=\"https://noose.info\"><img src=\"/dateien/textbilder/a\"></a></p>"
+            + "<p class=\"noose-bildtext\">Quelle</p>");
+
+        Assert.DoesNotContain("<figure", stored);
+        Assert.Contains("href=\"https://noose.info\"", stored);
+    }
+
     [Fact]
     public void ToStored_LeavesAnImageWithoutCaptionAlone()
     {

@@ -4,6 +4,11 @@ using NOOSE_Website.Services;
 namespace NOOSE_Website.Models.Llm;
 
 /// <summary>One agent's NOOSEI quota for the running ISO week.</summary>
+/// <param name="BaseWeekly">Effective base: the stored figure after the active upstream's boost. Everything
+/// derived — ceiling, carry cap, daily limit — is measured against this one.</param>
+/// <param name="RawBaseWeekly">The stored figure BEFORE the boost, i.e. the override or the rank rule. The only
+/// value an editor may write back: feeding the boosted one into an override applies the surcharge a second time.</param>
+/// <param name="BoostPercent">Surcharge of the active upstream, so a caller can show base and effect apart.</param>
 /// <param name="DailyLimit">Ceiling for the running local day; 0 means the rank has none.</param>
 /// <param name="ConsumedToday">Charged since local midnight. Counted apart from the week because the two ceilings
 /// answer different questions: one is a fair share, the other is a runaway brake.</param>
@@ -14,6 +19,8 @@ public record LlmQuotaStatus(
     int Year,
     int Week,
     long BaseWeekly,
+    long RawBaseWeekly,
+    int BoostPercent,
     long CarryIn,
     long Consumed,
     int CarryPercent,
@@ -49,7 +56,7 @@ public record LlmQuotaStatus(
 
     public string PeriodLabel => Year <= 0 ? string.Empty : IsoWeekPeriod.Label(Year, Week);
 
-    public static LlmQuotaStatus Empty { get; } = new(string.Empty, null, null, 0, 0, 0, 0, 0, 0, false);
+    public static LlmQuotaStatus Empty { get; } = new(string.Empty, null, null, 0, 0, 0, 0, 0, 0, 0, 0, false);
 }
 
 /// <summary>What one booked request cost and what is left afterwards.</summary>

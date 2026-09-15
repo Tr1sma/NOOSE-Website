@@ -45,7 +45,8 @@ public sealed class RichTextAnchorsTests
     [Fact]
     public void Slug_TransliteratesGermanAndDropsPunctuation()
     {
-        Assert.Equal("grosse-lage-uber-dem-hafen", RichTextAnchors.Slug("Große Lage über dem Hafen!"));
+        // same transliteration as HandbookService.Slug: ue/oe/ae/ss, never a bare vowel
+        Assert.Equal("grosse-lage-ueber-dem-hafen", RichTextAnchors.Slug("Große Lage über dem Hafen!"));
         Assert.Equal("abschnitt", RichTextAnchors.Slug(""));
     }
 
@@ -60,9 +61,9 @@ public sealed class RichTextAnchorsTests
 
         Assert.Contains("class=\"noose-inhaltsverzeichnis\"", toc);
         Assert.Contains("href=\"#lagebild\"", toc);
-        Assert.Contains("href=\"#grosse-lage-uber-dem-hafen\"", toc);
+        Assert.Contains("href=\"#grosse-lage-ueber-dem-hafen\"", toc);
         Assert.Contains("id=\"lagebild\"", stored);
-        Assert.Contains("id=\"grosse-lage-uber-dem-hafen\"", stored);
+        Assert.Contains("id=\"grosse-lage-ueber-dem-hafen\"", stored);
     }
 
     [Fact]

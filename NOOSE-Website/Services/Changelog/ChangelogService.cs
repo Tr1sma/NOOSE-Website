@@ -96,6 +96,20 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<ChangelogEntry>>> GetEntriesAsync(
+        IReadOnlyCollection<string> releaseIds, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // one flat WHERE IN for the whole editor, not a round trip per release
+        var ids = releaseIds.ToList();
+        var entries = await db.Aenderungseintraege.AsNoTracking()
+            .Where(e => ids.Contains(e.ReleaseId))
+            .OrderBy(e => e.SortOrder).ThenBy(e => e.Title)
+            .ToListAsync(cancellationToken);
+        return entries.GroupBy(e => e.ReleaseId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ChangelogEntry>)g.ToList());
+    }
+
     public async Task<ChangelogRelease> CreateReleaseAsync(ChangelogReleaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireChangelogWrite(actor);

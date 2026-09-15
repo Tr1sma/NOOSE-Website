@@ -132,7 +132,28 @@ public sealed class LlmQuotaServiceTests
         var status = await Build(ctx, boostPercent: 50).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(15_000L, status.BaseWeekly);
+        Assert.Equal(10_000L, status.RawBaseWeekly);
+        Assert.Equal(50, status.BoostPercent);
         Assert.True(status.IsOverride);
+    }
+
+    /// <summary>The editor writes back what it was shown. It is shown RawBaseWeekly, so a confirm that changes
+    /// nothing must change nothing — handing back the boosted figure would apply the surcharge a second time,
+    /// and again on every further confirm.</summary>
+    [Fact]
+    public async Task WritingBackTheShownBase_DoesNotApplyTheBoostTwice()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent, over: 10_000);
+
+        var before = await Build(ctx, boostPercent: 400).GetStatusAsync(AgentId, Leader());
+        // exactly what LlmQuotaOverrideDialog puts in its field and hands to SetOverrideAsync
+        await Build(ctx, boostPercent: 400).SetOverrideAsync(AgentId, before.RawBaseWeekly, Owner());
+        var after = await Build(ctx, boostPercent: 400).GetStatusAsync(AgentId, Leader());
+
+        Assert.Equal(before.RawBaseWeekly, after.RawBaseWeekly);
+        Assert.Equal(before.BaseWeekly, after.BaseWeekly);
+        Assert.Equal(50_000L, after.BaseWeekly);
     }
 
     [Fact]

@@ -132,12 +132,15 @@ else
             if (IsEdit)
             {
                 await BoardService.RefreshAsync(Id!, _input, _user);
+                // only after the row is stored: a failed save must keep the draft
+                await _contentForm.MarkSavedAsync();
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/brett/{Id}");
             }
             else
             {
                 var a = await BoardService.CreateAsync(_input, _user);
+                await _contentForm.MarkSavedAsync();
                 Snackbar.Add($"Ankündigung {a.CaseNumber} veröffentlicht.", Severity.Success);
                 Nav.NavigateTo($"/brett/{a.Id}");
             }

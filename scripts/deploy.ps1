@@ -73,12 +73,14 @@ function Resolve-Exe {
 }
 
 try {
-    $project = Join-Path $PSScriptRoot "NOOSE-Website\NOOSE-Website.csproj"
+    # das Skript liegt in scripts\, das Projekt eine Ebene darueber
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $project = Join-Path $repoRoot "NOOSE-Website\NOOSE-Website.csproj"
     $publish = Join-Path $PSScriptRoot "publish"
     $tarball = Join-Path $PSScriptRoot "noose-publish.tgz"
 
     if (-not (Test-Path $project)) {
-        throw "Projekt nicht gefunden: $project. Liegt deploy.ps1 wirklich im Repo-Root?"
+        throw "Projekt nicht gefunden: $project. Liegt deploy.ps1 wirklich in scripts\ innerhalb des Repos?"
     }
 
     # ssh/scp vorab auf vollen Pfad aufloesen (PATH-unabhaengig).

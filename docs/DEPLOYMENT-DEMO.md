@@ -1,7 +1,7 @@
 # Demo-Instanz aufsetzen — `demo.noose.info`
 
 Zweite, **read-only** NOOSE-Instanz auf **demselben Server**, eigene DB, eigener Port, eigene Domain.
-Produktiv (`noose.info`) bleibt komplett unberührt. Vom **Main-PC** abarbeiten — alle Befehle in **PowerShell**, aus dem **Repo-Ordner**.
+Produktiv (`noose.info`) bleibt komplett unberührt. Vom **Main-PC** abarbeiten — alle Befehle in **PowerShell**, aus dem **Repo-Root** (das Skript liegt in `scripts\`).
 
 | | Produktiv | Demo |
 |--|-----------|------|
@@ -76,11 +76,11 @@ Das Skript macht (idempotent, mehrfach ausführbar):
 ## Schritt 3 — Demo-Instanz deployen
 
 ```powershell
-.\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo
+.\scripts\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo
 ```
 
 Publisht das Binary, lädt es nach `/var/www/noose-demo`, startet `noose-demo`. Beim Start migriert die App
-die leere `noose_demo` automatisch. (Für künftige Updates der **Produktiv**-Seite weiter einfach `.\deploy.ps1`.)
+die leere `noose_demo` automatisch. (Für künftige Updates der **Produktiv**-Seite weiter einfach `.\scripts\deploy.ps1`.)
 
 ---
 
@@ -124,8 +124,8 @@ das ist eine kleine Code-Änderung + Deploy. Bei Bedarf sagen.)*
 
 ## Updates später
 
-- **Produktiv:** `.\deploy.ps1`
-- **Demo:** `.\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo`
+- **Produktiv:** `.\scripts\deploy.ps1`
+- **Demo:** `.\scripts\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo`
 
 ## Nützliche Befehle
 

@@ -344,10 +344,11 @@ public class LlmQuotaService(
         var rules = config.For(agent.Rank);
         // the boost sits on top of an individual override too: it says what the active upstream costs, not who
         // is allowed how much, and those are two different questions
-        var baseWeekly = LlmQuotaMath.Boosted(agent.LlmQuotaOverride ?? rules.BaseWeekly, boostPercent);
+        var rawBaseWeekly = agent.LlmQuotaOverride ?? rules.BaseWeekly;
+        var baseWeekly = LlmQuotaMath.Boosted(rawBaseWeekly, boostPercent);
         var carryIn = await CloseElapsedAsync(db, agent, snapshot, baseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
         return new LlmQuotaStatus(agent.Id, agent.Codename, agent.Rank, year, week,
-            baseWeekly, carryIn, snapshot.Consumed(agent.Id, year, week), rules.CarryOverPercent,
+            baseWeekly, rawBaseWeekly, boostPercent, carryIn, snapshot.Consumed(agent.Id, year, week), rules.CarryOverPercent,
             agent.LlmQuotaOverride is not null,
             // measured against the base, so an individual override moves the daily ceiling with it
             LlmQuotaMath.DailyLimit(baseWeekly, rules.DailyPercent), snapshot.ConsumedToday(agent.Id));

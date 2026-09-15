@@ -76,6 +76,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.HrbOrLeadershipWrite, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.MayWrite() && ctx.User.IsHrbOrLeadership()))
+            .AddPolicy(Policies.LeadershipWrite, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.MayWrite() && ctx.User.IsLeadership()))
             // public area
             .AddPolicy(Policies.CitizenPortal, p => p
                 .RequireAuthenticatedUser()

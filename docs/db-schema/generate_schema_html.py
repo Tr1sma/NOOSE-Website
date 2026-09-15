@@ -5,7 +5,7 @@ Parses NOOSE-Website/Data/Migrations/AppDbContextModelSnapshot.cs and emits a
 self-contained HTML file (vis-network from CDN) visualizing the DB schema.
 
 Usage:  python docs/db-schema/generate_schema_html.py
-Output: DatenbankStruktur.html in the repo root.
+Output: DatenbankStruktur.html in docs/.
 """
 
 import json
@@ -15,7 +15,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = REPO_ROOT / "NOOSE-Website" / "Data" / "Migrations" / "AppDbContextModelSnapshot.cs"
-OUTPUT = REPO_ROOT / "DatenbankStruktur.html"
+OUTPUT = REPO_ROOT / "docs" / "DatenbankStruktur.html"
 
 
 def extract_entity_blocks(text):

@@ -89,7 +89,8 @@ public static partial class HtmlCleanup
 
     private static readonly string[] AllowedAttributeNames =
     [
-        "href", "target", "rel", "class", "style", "src", "alt", "id",
+        // "id" is deliberately NOT here: it is allowed on headings only, see the RemovingAttribute hook below
+        "href", "target", "rel", "class", "style", "src", "alt",
         "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
         "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
         "data-row", "data-col", "data-w", "data-full", "data-checked",
@@ -109,8 +110,13 @@ public static partial class HtmlCleanup
     ];
 
     /// <summary>What the sanitizer keeps; the editor cleans a paste against the same lists.</summary>
+    /// <remarks>
+    /// Carries "id" although the global attribute list does not: the editor may keep a heading id while typing,
+    /// and the server decides on save (headings keep it, everything else loses it). Listing it here and nowhere
+    /// else is deliberate — the client cleaner is a convenience, the sanitizer is the rule.
+    /// </remarks>
     public static ContentProfile Profile { get; } = new(
-        AllowedTagNames, AllowedAttributeNames, AllowedCssPropertyNames, AllowedSchemeNames);
+        AllowedTagNames, [.. AllowedAttributeNames, "id"], AllowedCssPropertyNames, AllowedSchemeNames);
 
     private static HtmlSanitizer Generate(bool allowDiffMarks = false, bool allowImagePlaceholder = false)
     {
@@ -148,6 +154,20 @@ public static partial class HtmlCleanup
         {
             s.AllowedSchemes.Add(scheme);
         }
+
+        // id survives on headings and nowhere else: the table of contents links to them, and RichTextAnchors
+        // writes those ids on save. Kept out of the global allowlist because an id is a document-wide name -
+        // in a comment, a ticket or a public page an author could otherwise shadow an id the page itself uses,
+        // redirect an in-page link, or break a label/aria reference, from any field that accepts rich text.
+        s.RemovingAttribute += (_, e) =>
+        {
+            if (e.Reason == RemoveReason.NotAllowedAttribute
+                && string.Equals(e.Attribute.Name, "id", StringComparison.OrdinalIgnoreCase)
+                && e.Tag.NodeName is "H1" or "H2" or "H3" or "H4" or "H5" or "H6")
+            {
+                e.Cancel = true;
+            }
+        };
 
         // data: stays image-only; a data: href is a phishing vector
         s.PostProcessNode += (_, e) =>

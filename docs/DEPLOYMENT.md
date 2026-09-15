@@ -42,10 +42,10 @@ Wichtige App-Mechanik (siehe `Program.cs` / `Data/DatabaseConnectionResolver.cs`
 
 ## 2. Routine-Deploy (der einfache Weg)
 
-Nach Code-Änderungen einfach im Repo-Ordner ausführen:
+Nach Code-Änderungen einfach aus dem Repo-Root (das Skript liegt in `scripts\`) ausführen:
 
 ```powershell
-.\deploy.ps1
+.\scripts\deploy.ps1
 ```
 
 Das Skript macht alles: `dotnet publish` → mit **tar** packen → per `scp` hochladen → auf dem
@@ -59,8 +59,8 @@ starten, Health-Check. Am Ende im Browser **Strg+F5** (Asset-Cache leeren).
 
 Optionen:
 ```powershell
-.\deploy.ps1 -SkipPublish     # vorhandenen .\publish-Ordner nutzen
-.\deploy.ps1 -Server root@andere.ip -Service noose -AppDir /var/www/noose
+.\scripts\deploy.ps1 -SkipPublish     # vorhandenen .\scripts\publish-Ordner nutzen
+.\scripts\deploy.ps1 -Server root@andere.ip -Service noose -AppDir /var/www/noose
 ```
 
 > **Wichtig:** Immer `tar` verwenden (macht das Skript). **Nie** `Compress-Archive` — das hat
@@ -79,7 +79,7 @@ ssh-keygen -t ed25519
 type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@195.20.225.12 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 ```
 
-Danach läuft `.\deploy.ps1` komplett ohne Passwort-Eingabe.
+Danach läuft `.\scripts\deploy.ps1` komplett ohne Passwort-Eingabe.
 
 ---
 
@@ -87,8 +87,8 @@ Danach läuft `.\deploy.ps1` komplett ohne Passwort-Eingabe.
 
 **Auf dem PC** (Repo-Ordner):
 ```powershell
-dotnet publish .\NOOSE-Website\NOOSE-Website.csproj -c Release -o .\publish
-tar -czf noose-publish.tgz -C .\publish .
+dotnet publish .\NOOSE-Website\NOOSE-Website.csproj -c Release -o .\scripts\publish
+tar -czf noose-publish.tgz -C .\scripts\publish .
 scp .\noose-publish.tgz root@195.20.225.12:/tmp/
 ```
 
@@ -123,9 +123,9 @@ certbot renew --dry-run
 
 ### Backups der Datenbank
 
-**Ein-Befehl-Backup vom PC** (frischer Dump auf dem Server **+** Kopie auf den PC, aus dem Repo-Root):
+**Ein-Befehl-Backup vom PC** (frischer Dump auf dem Server **+** Kopie auf den PC, aus dem Repo-Root (das Skript liegt in `scripts\`)):
 ```powershell
-.\backup-db.ps1
+.\scripts\backup-db.ps1
 # Server-Kopie:  /root/backups/noose-<datum>_<zeit>.sql.gz
 # PC-Kopie:      %USERPROFILE%\NOOSE-Backups\noose-<datum>_<zeit>.sql.gz
 ```

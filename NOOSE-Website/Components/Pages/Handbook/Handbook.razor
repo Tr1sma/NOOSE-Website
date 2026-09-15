@@ -309,6 +309,7 @@ else
         await GuardAsync(async () =>
         {
             await HandbookService.CreateArticleAsync(input, _user);
+            await DropDraftsAsync("handbuch:neu:anleitung", "handbuch:neu:rollenspiel");
             Snackbar.Add("Artikel angelegt.", Severity.Success);
         });
     }
@@ -330,6 +331,7 @@ else
         await GuardAsync(async () =>
         {
             await HandbookService.RefreshArticleAsync(id, input, _user);
+            await DropDraftsAsync($"handbuch:{id}:anleitung", $"handbuch:{id}:rollenspiel");
             Snackbar.Add("Artikel gespeichert.", Severity.Success);
         });
     }
@@ -359,6 +361,7 @@ else
         await GuardAsync(async () =>
         {
             await HandbookService.CreateTermAsync(input, _user);
+            await DropDraftsAsync("glossar:neu");
             Snackbar.Add("Begriff angelegt.", Severity.Success);
         });
     }
@@ -375,6 +378,7 @@ else
         await GuardAsync(async () =>
         {
             await HandbookService.RefreshTermAsync(term.Id, input, _user);
+            await DropDraftsAsync($"glossar:{term.Id}");
             Snackbar.Add("Begriff gespeichert.", Severity.Success);
         });
     }
@@ -394,4 +398,14 @@ else
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
+
+    /// <summary>Drops the editor drafts of a dialog that has already closed.</summary>
+    /// <remarks>
+    /// The dialog hands back its input and disappears; the row is written here. So this is the first moment the
+    /// save is known to have worked, and the editor is gone by then — hence by key rather than through the
+    /// component. Dropping it inside the dialog instead would delete the draft on a failed write too, which is
+    /// the one case it exists for.
+    /// </remarks>
+    private Task DropDraftsAsync(params string[] keys)
+        => Task.WhenAll(keys.Select(k => RichTextEditor.DiscardDraftAsync(JS, _user.GetAgentId(), k)));
 }

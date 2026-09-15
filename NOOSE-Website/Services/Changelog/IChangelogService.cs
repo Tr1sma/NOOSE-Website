@@ -19,6 +19,10 @@ public interface IChangelogService
     /// <summary>Every line of one release including hidden ones, in order; for the editor.</summary>
     Task<List<ChangelogEntry>> GetEntriesAsync(string releaseId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every line of the given releases including hidden ones, grouped by release; for the editor.</summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<ChangelogEntry>>> GetEntriesAsync(
+        IReadOnlyCollection<string> releaseIds, CancellationToken cancellationToken = default);
+
     Task<ChangelogRelease> CreateReleaseAsync(ChangelogReleaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RefreshReleaseAsync(string id, ChangelogReleaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

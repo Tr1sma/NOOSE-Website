@@ -45,7 +45,21 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    /// <summary>Changed rich-text columns that may hold a picture or a caption; empty in the common case.</summary>
+    /// <summary>Whether a column is worth a pass: a picture to file away, a caption to fold, or a heading to anchor.</summary>
+    /// <remarks>
+    /// The heading arm is load-bearing. Without it the anchor pass only ever saw texts that happened to carry an
+    /// image, so a long document with a table of contents and no picture got no ids at all and every entry of its
+    /// own table of contents pointed nowhere — silently, and exactly in the case the feature exists for.
+    /// Each sub-pass returns its input unchanged when it finds nothing, so a false positive here costs one parse.
+    /// </remarks>
+    private static bool NeedsRewrite(string html)
+        => html.Contains("data:image", StringComparison.OrdinalIgnoreCase)
+        || html.Contains(RichTextFigure.CaptionClass, StringComparison.Ordinal)
+        || html.Contains("<h1", StringComparison.OrdinalIgnoreCase)
+        || html.Contains("<h2", StringComparison.OrdinalIgnoreCase)
+        || html.Contains("<h3", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Changed rich-text columns that may hold a picture, a caption or a heading; empty in the common case.</summary>
     private static List<(EntityEntry Entry, string Field)> Candidates(DbContextEventData eventData)
     {
         var candidates = new List<(EntityEntry, string)>();
@@ -60,16 +74,15 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
             {
                 continue;
             }
-            foreach (var field in RichTextImageFields.For(entry.Entity))
+            // the wider list: anchors reach carriers whose images stay inline
+            foreach (var field in RichTextAnchorFields.For(entry.Entity))
             {
                 var property = entry.Property(field);
                 if (entry.State is EntityState.Modified && !property.IsModified)
                 {
                     continue;
                 }
-                if (property.CurrentValue is not string html
-                    || (!html.Contains("data:image", StringComparison.OrdinalIgnoreCase)
-                        && !html.Contains(RichTextFigure.CaptionClass, StringComparison.Ordinal)))
+                if (property.CurrentValue is not string html || !NeedsRewrite(html))
                 {
                     continue;
                 }
@@ -91,9 +104,14 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
         {
             var html = (string)entry.Property(field).CurrentValue!;
             var entityId = (string)entry.Property("Id").CurrentValue!;
+            var type = entry.Metadata.ClrType;
             var stored = RichTextFigure.ToStored(html);
             stored = RichTextAnchors.ToStored(stored);
-            var replaced = await ReplaceImagesAsync(ctx, storage, entry.Metadata.ClrType.Name, entityId, stored, cancellationToken);
+            // images only for the carriers whose pictures the internal endpoint may serve; anchors reach further,
+            // so a handbook article gets its heading ids while its base64 deliberately stays inline
+            var replaced = RichTextImageFields.For(type).Contains(field)
+                ? await ReplaceImagesAsync(ctx, storage, type.Name, entityId, stored, cancellationToken)
+                : stored;
             if (ReferenceEquals(stored, html) && ReferenceEquals(replaced, stored))
             {
                 continue;

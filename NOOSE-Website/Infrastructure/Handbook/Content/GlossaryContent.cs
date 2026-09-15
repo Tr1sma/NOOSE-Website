@@ -163,7 +163,7 @@ internal static class GlossaryContent
             Synonyms: "Mention", ArticleKey: "art-kommentare"),
         new("beg-stichwort", "Stichwort",
             "Ein freies Schlagwort an einer Akte, um quer durch den Bestand zu filtern.",
-            Synonyms: "Tag", ArticleKey: "art-stichworte"),
+            ArticleKey: "art-stichworte"),
         new("beg-zusatzfeld", "Zusatzfeld",
             "Ein selbst definiertes Feld, das an jeder Akte einer Art erscheint.",
             Synonyms: "Custom-Feld", ArticleKey: "art-stichworte"),

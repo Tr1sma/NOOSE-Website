@@ -25,6 +25,7 @@ public static class FeedbackPageTabs
         new("einladungen", "Einladungen"),
         new("finanzierung", "Budget-Regeln"),
         new("noosei", "NOOSEI-Betrieb"),
+        new("ki-anbieter", "Anbieter"),
         new("ki-regeln", "Token-Regeln"),
         new("ki-betrieb", "Betriebszahlen"),
         new("ki-kontingente", "Kontingente"),

@@ -233,6 +233,16 @@ public static class ChangelogContent
             Neu("2.1.14-editor-auswahl", "Über markiertem Text schwebt jetzt eine kleine Leiste mit den "
                 + "wichtigsten Formaten, und eingefügte Bilder werden automatisch verkleinert, damit alles "
                 + "schnell bleibt.", "Bedienung"),
+            Fix("2.1.15-editor-ersetzen", "„Alle ersetzen\" trifft jetzt auch in Texten mit Bildern oder "
+                + "Erwähnungen die richtige Stelle und lässt Erwähnungen unangetastet.", "Bedienung"),
+            Fix("2.1.16-editor-inhaltsverzeichnis", "Die Einträge des Inhaltsverzeichnisses springen jetzt "
+                + "wirklich zur Überschrift – auch in Texten ohne Bild und in Handbuch-Artikeln.", "Bedienung"),
+            Fix("2.1.17-editor-entwurf", "Nach dem Speichern wird ein Entwurf nicht mehr beim nächsten Öffnen "
+                + "erneut angeboten – betraf Ankündigungen, Handbuch, Glossar, Beförderungen und Fragen.", "Bedienung"),
+            Fix("2.1.18-editor-bilder", "Zwei Bilder in derselben Zeile gehen beim Speichern nicht mehr "
+                + "verloren.", "Bedienung"),
+            Fix("2.1.19-noosei-kontingent", "Ein individuelles Kontingent lässt sich bestätigen, ohne dass sich "
+                + "der Wert dabei jedes Mal vervielfacht.", "NOOSEI"),
         ], "1.5"),
     ];
 }

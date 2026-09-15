@@ -453,6 +453,33 @@ public class AgentManagementServiceTests
     }
 
     [Fact]
+    public async Task MasterDataChangeAsync_KeepsADuplicateLegacyBadgeNumberOfItsOwnAgent()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("a", AgentStatus.Active, cfg: x => x.BadgeNumber = "V"),
+            NewAgent("b", AgentStatus.Active, cfg: x => x.BadgeNumber = "V"));
+
+        await f.Svc.MasterDataChangeAsync("a", "Real", "Changed", "V", Admin());
+
+        var a = Reload(f, "a");
+        Assert.Equal("Changed", a.Codename);
+        Assert.Equal("V", a.BadgeNumber);
+    }
+
+    [Fact]
+    public async Task MasterDataChangeAsync_StillRejectsAForeignBadgeNumber()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("a", AgentStatus.Active, cfg: x => x.BadgeNumber = "V"),
+            NewAgent("b", AgentStatus.Active, cfg: x => x.BadgeNumber = "IX"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.MasterDataChangeAsync("a", null, "A", "IX", Admin()));
+    }
+
+    [Fact]
     public async Task NameChangeRequest_Then_Approve_Flow()
     {
         using var f = Make();

@@ -188,7 +188,7 @@ Behörde schreiben. Was nach außen geht, entscheidet immer ein ausdrücklicher 
 
 ### Öffentlicher Bereich
 
-Vollständig gebaut (PublicPlan.md Phase 1–18). Ab Werk ist fast alles **aus** - ein Deploy veröffentlicht nichts.
+Vollständig gebaut (Phase 1–18). Ab Werk ist fast alles **aus** - ein Deploy veröffentlicht nichts.
 
 **Grundgerüst & Betrieb**
 - **Öffentliche Startseite** `/` - anonyme Landing-Seite mit Gefahrenlage-Kachel, Zahlenband, zuletzt ausgeschriebenen Steckbriefen, aktueller Pressemitteilung und Einstiegen zu Hinweis, Karriere und Bürgerkonto. Jeder Block liest seinen eigenen Modul-Schalter und seine eigene Quelle, damit ein Ausfall nur den eigenen Block leert; die Tab-Leiste baut sich aus den aktiven Modulen. Einheitliche Außen-Shell (`PublicSiteLayout` + `PublicHeader` + `PublicNav`), ein Agenten-Login wird nach außen nicht angeboten.
@@ -518,12 +518,11 @@ scripts/                 deploy.ps1, backup-db.ps1, setup-demo.ps1, dotnet-tools
 
 - [`CLAUDE.md`](CLAUDE.md) - Codebase-Konventionen, Architektur, Gotchas
 - [`AGENTS.md`](AGENTS.md) - Agent-/Contributor-Hinweise
-- [`Plan.md`](Plan.md) - Phasenplan: Status, Datenmodell, Rechte-Matrix, Glossar
-- [`PublicPlan.md`](PublicPlan.md) - Öffentlicher Bereich, Phase 1–18 (alle gebaut)
-- [`AlgoPlan.md`](AlgoPlan.md) - Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
 - [`claude-memory/`](claude-memory/) - Detailwissen je Bereich: **warum** eine Regel existiert, nicht nur dass sie gilt
-- [`DEPLOYMENT.md`](DEPLOYMENT.md) - Server-Setup (nginx → Kestrel → MariaDB), systemd, Troubleshooting
-- [`GoalOfTheSite.txt`](GoalOfTheSite.txt) - Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) - Server-Setup (nginx → Kestrel → MariaDB), systemd, Troubleshooting
+- [`docs/CODE_REVIEW_TODO.md`](docs/CODE_REVIEW_TODO.md) - bekannte Tech-Debt-/Review-Findings
+- [`docs/CachePlan.md`](docs/CachePlan.md) - Caching und Ladezeiten
+- [`docs/DEPLOYMENT-DEMO.md`](docs/DEPLOYMENT-DEMO.md) - Demo-Instanz
 
 ---
 

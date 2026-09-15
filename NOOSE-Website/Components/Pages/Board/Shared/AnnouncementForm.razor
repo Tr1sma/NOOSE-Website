@@ -87,6 +87,10 @@
     /// <summary>Reads the final editor HTML so the parent can persist it on save.</summary>
     public async Task<string?> GetContentHtmlAsync() => _editor is null ? Input.Content : await _editor.GetHtmlAsync();
 
+    /// <summary>Drops the browser draft after the parent stored the text; without it the next "new announcement"
+    /// offers the already published one back as unsaved work.</summary>
+    public Task MarkSavedAsync() => _editor?.MarkSavedAsync() ?? Task.CompletedTask;
+
     protected override async Task OnInitializedAsync()
     {
         if (ShowBroadcastOptions)

@@ -210,6 +210,24 @@ public sealed class ChangelogTests
         Assert.Equal("1.0.200", (await check.Aenderungsfassungen.SingleAsync(r => r.Version == "1.1")).BuildNumber);
     }
 
+    [Fact]
+    public async Task A_restart_does_not_stamp_an_older_release()
+    {
+        using var ctx = new SqliteTestContext();
+        ChangelogContent.SeededRelease[] two =
+        [
+            .. OneRelease(),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+                [new("1.1-a", ChangelogKind.Verbessert, "Etwas wurde besser.", null)]),
+        ];
+
+        await SeedAsync(ctx, two, 1, "1.0.500");
+        await SeedAsync(ctx, two, 1, "1.0.500");
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(1, await check.Aenderungsfassungen.CountAsync(r => r.BuildNumber != null));
+    }
+
     // --- the service ------------------------------------------------------
 
     [Fact]

@@ -168,7 +168,7 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=15");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=16");
             _ref = DotNetObjectReference.Create(this);
             // the editor types a caption line; the stored row carries figure/figcaption
             Value = RichTextFigure.ToEditor(Value);
@@ -305,6 +305,34 @@ else if (_lastCost is { } cost)
         !Compact && !string.IsNullOrWhiteSpace(DraftKey) && _user?.GetAgentId() is { Length: > 0 } me
             ? me + ":" + DraftKey
             : null;
+
+    /// <summary>Drops a draft by key, for a caller that stores the row AFTER the editor is gone.</summary>
+    /// <remarks>
+    /// A dialog closes on Save and its caller persists afterwards, so <see cref="MarkSavedAsync"/> is unreachable
+    /// at the only moment it would be correct. Calling it inside the dialog instead would delete the draft even
+    /// when the write then fails — the one case the draft exists for. Call this after the write succeeded.
+    /// Failures are swallowed: a lingering draft is a nuisance, a broken save path is not.
+    /// </remarks>
+    public static async Task DiscardDraftAsync(IJSRuntime js, string? agentId, string? draftKey)
+    {
+        if (string.IsNullOrWhiteSpace(agentId) || string.IsNullOrWhiteSpace(draftKey))
+        {
+            return;
+        }
+        try
+        {
+            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=16");
+            await module.InvokeVoidAsync("entwurfVerwerfenNachSchluessel", agentId + ":" + draftKey);
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+        catch (Exception)
+        {
+            /* best effort */
+        }
+    }
 
     /// <summary>Called from JS when a browser-local draft for this field exists.</summary>
     [JSInvokable]

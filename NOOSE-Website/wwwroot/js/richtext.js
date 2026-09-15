@@ -1058,7 +1058,22 @@ function haengeSuchenAn(element) {
 
     const editor = () => element.__nooseQuill;
 
-    // a match overlapping an embed returns true and is never rewritten
+    // Haystack in QUILL's index space, not getText()'s. getText() drops embeds outright while each embed
+    // occupies exactly one position in the document, so a hit found in the former and deleted in the latter
+    // is off by the number of preceding embeds - it eats neighbouring characters and can dissolve a stored
+    // @{Typ:Id} token. One placeholder per embed keeps string offset and Quill index the same number; the
+    // placeholder is a NUL, which no needle from the search field can ever contain, so a hit also cannot
+    // overlap an embed in the first place.
+    const dokumentText = () => {
+        const ops = (editor().getContents().ops) || [];
+        let text = '';
+        for (const op of ops) {
+            text += typeof op.insert === 'string' ? op.insert : '\u0000';
+        }
+        return text;
+    };
+
+    // second line of defence: a match overlapping an embed is never rewritten
     const beruehrtEmbed = (bereich) => {
         return editor().getContents(bereich.index, bereich.length).ops.some((op) => typeof op.insert !== 'string');
     };
@@ -1083,7 +1098,7 @@ function haengeSuchenAn(element) {
         if (!editor()) {
             return;
         }
-        const quelle = editor().getText();
+        const quelle = dokumentText();
         zustand.quelle = quelle;
         const nadel = feld.value;
         const vorher = ab < 0 && zustand.aktuell >= 0 && zustand.treffer[zustand.aktuell]
@@ -1112,8 +1127,8 @@ function haengeSuchenAn(element) {
         anzeigen();
     };
 
-    // a match set only stays valid while the document text is untouched
-    const veraltet = () => zustand.quelle !== null && zustand.quelle !== editor().getText();
+    // a match set only stays valid while the document is untouched - same index space as neuSuchen
+    const veraltet = () => zustand.quelle !== null && zustand.quelle !== dokumentText();
 
     const springen = (richtung) => {
         if (zustand.treffer.length === 0 || !editor()) {
@@ -1398,6 +1413,19 @@ export async function entwurfVerwerfen(element) {
     const db = await ladeEntwurfsDb();
     if (db) {
         await entwurfLoeschen(db, zustand.schluessel);
+    }
+}
+
+// Drops one draft by its key, without the editor that wrote it. A dialog closes before its caller stores the
+// row, so the editor is already gone by the time the save is known to have worked - and marking saved inside
+// the dialog would throw the draft away on a failed save, exactly when it is the only copy left.
+export async function entwurfVerwerfenNachSchluessel(schluessel) {
+    if (!schluessel) {
+        return;
+    }
+    const db = await ladeEntwurfsDb();
+    if (db) {
+        await entwurfLoeschen(db, schluessel);
     }
 }
 

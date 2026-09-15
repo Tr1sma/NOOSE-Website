@@ -85,5 +85,5 @@ systemctl reload nginx
 
 echo ""
 echo "==> FERTIG. Demo-Instanz vorbereitet (Backup, DB, Env, Dienst, nginx)."
-echo "    Weiter auf dem PC:  .\\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo"
+echo "    Weiter auf dem PC:  .\\scripts\\deploy.ps1 -AppDir /var/www/noose-demo -Service noose-demo"
 echo "    Danach TLS:         certbot --nginx -d demo.noose.info"

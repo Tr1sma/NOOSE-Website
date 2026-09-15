@@ -448,8 +448,29 @@ else
 
     private async Task EntrySaveAsync(PublicFaqEntryRow entry)
     {
-        var html = _answerEditor is null ? _editAnswer : await _answerEditor.GetHtmlAsync();
-        await RunAsync(() => SaveEntryAsync(entry, html), "Frage gespeichert.");
+        // held across the save: LoadAsync may clear the field while we still need the instance
+        var editor = _answerEditor;
+        var html = editor is null ? _editAnswer : await editor.GetHtmlAsync();
+        _saving = true;
+        try
+        {
+            await SaveEntryAsync(entry, html);
+            if (editor is not null)
+            {
+                // only once the row is stored: a failed save must keep the browser draft
+                await editor.MarkSavedAsync();
+            }
+            Snackbar.Add("Frage gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
         _editAnswer = HtmlCleanup.Clean(html);
     }
 

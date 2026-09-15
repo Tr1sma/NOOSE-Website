@@ -3,6 +3,7 @@
 @inject IAgentManagementService AgentService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -101,6 +102,8 @@
         try
         {
             await PersonnelFileService.PromotionRequestAsync(Agent.Id, choice.TargetRank, choice.Justification, _user);
+            // the dialog closed before this write, so its draft is dropped here - by key, and only on success
+            await RichTextEditor.DiscardDraftAsync(JS, _user.GetAgentId(), $"beforderung:{Agent.Id}");
             Snackbar.Add("Beförderungsantrag eingereicht.", Severity.Success);
             await LoadAsync();
         }

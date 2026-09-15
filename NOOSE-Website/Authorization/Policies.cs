@@ -9,6 +9,14 @@ public static class Policies
     /// <summary>Leadership: rank ≥ Supervisory Special Agent or admin.</summary>
     public const string Leadership = "Fuehrung";
 
+    /// <summary>The write half of <see cref="Leadership"/>: the changelog editor on /einstellungen.</summary>
+    /// <remarks>
+    /// Mirrors <c>Permission.RequireChangelogWrite</c>. <see cref="LeadershipPage"/> has no write check, so it
+    /// opens the editorial controls for the read-only supervision and for the demo principal - which carries
+    /// Director - and both then get a refusal from the service after filling in a dialog.
+    /// </remarks>
+    public const string LeadershipWrite = "FuehrungSchreiben";
+
     /// <summary>Technical system role.</summary>
     public const string Admin = "Admin";
 

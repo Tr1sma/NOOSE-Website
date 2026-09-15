@@ -379,7 +379,7 @@ identisch. **Echtes Geld sieht ausschließlich der KI-Eigner**, alle anderen rec
 
 ## Öffentlicher Bereich
 
-Vollständig gebaut, Phase 1–18 aus `PublicPlan.md`: Bürgerkonten, Modulgerüst, redaktionelle Seiten,
+Vollständig gebaut, Phase 1–18: Bürgerkonten, Modulgerüst, redaktionelle Seiten,
 Fahndung samt Ausbau und Sachfahndung, Kopfgeld, Bürgerhinweise mit Triage/Übernahme, Belohnung,
 Ticket-Chat, Bürger-Vorlagen, Organisationsprofile, Einspruch, Presse, Warnungen, Gesetzesauszüge,
 Lageberichte, Gefahrenlage-Ampel, öffentliche Zahlen, die Suchanbindung, Führungsprofile und die
@@ -556,7 +556,7 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
 | **Personalakte** | Dienstgrad-Verlauf, Notizen, Beförderungen, Ausbildungsmodule je Agent |
 | **Beförderung** | Antrags-/Entscheidungs-Workflow (`AgentPromotionRequest`) |
 | **Taskforce** | Einheit mit Genehmigung; Scope innerbehördlich/überbehördlich |
-| **EHK-Score / Bedrohungs-Score** | Automatischer Gefährdungswert (0–100) je Fraktion/Person, siehe `AlgoPlan.md` |
+| **EHK-Score / Bedrohungs-Score** | Automatischer Gefährdungswert (0–100) je Fraktion/Person |
 | **Aktenzeichen** | Menschenlesbare ID, z. B. `NOOSE-P-2026-0001` |
 | **Wartungsmodus** | In `MainLayout.razor` erzwungen (keine Middleware); Admins behalten Zugriff |
 | **Klarname / Codename** | Realname (führungs-/nicht-OnlyReader-only) vs. Dienst-Codename |
@@ -564,13 +564,9 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
 
 ## Weiterführende Docs
 
-- `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `README.md` — Funktionsübersicht (Features-Sektion, intern + öffentlich), Schnellstart, Deployment
-- `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 18 Phasen; **alle gebaut**
-- `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
-- `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
-- `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings
+- `docs/DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
+- `docs/CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings
 - `IdeenBacklog.md` — Feature-Roadmap: 66 bewertete Vorschläge, einzeln entschieden (28 angenommen,
   31 vorgemerkt, 3 abgelehnt). Je Vorschlag **die Dateien, an denen er ansetzt**. Vor einem neuen
   Feature dort nachsehen — die Analyse ist gemacht, und ein abgelehnter Punkt trägt seinen Grund.
