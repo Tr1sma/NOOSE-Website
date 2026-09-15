@@ -59,6 +59,50 @@ Keiner davon kostet Daten oder Geld; 38 braucht eine Migration, 23 einen Eingrif
 
 ---
 
+## Dritte Runde: Nachprüfung durch drei unabhängige Prüfer
+
+Zwei Bereiche waren in der ersten Runde nie geprüft worden — die zuständigen Agenten wurden abgebrochen,
+bevor sie etwas lieferten. Beide wurden nachgeholt; dazu eine adversariale Prüfung der Fixes selbst.
+
+**NOOSEI-Anbieterumschaltung (`3daa507`) — sauber.** Kein P0/P1/P2. Insbesondere geprüft und in Ordnung:
+`ILlmService` ist DB-frei geblieben; Adresse und Schlüssel werden je Anfrage auf der `HttpRequestMessage`
+gesetzt, nicht auf dem gepoolten Client — ein Schlüssel kann nicht an den fremden Endpunkt geraten, und ein
+Test hält genau das fest; ein Anbieter ohne Schlüssel lässt sich gar nicht erst auswählen; DeepSeek meldet
+keine Kosten, aber der Token-Preis-Boden verhindert eine Nullbuchung; der Schreibpfad trägt
+`Permission.RequireAiOwner` als erste Anweisung; keines der beiden Panels zeigt echtes Geld.
+Ein P3 bleibt offen: `DossierSummaryService` liest den Anbieter für das Modell-Label ein zweites Mal statt
+ihn aus der Antwort zu nehmen — unter der 10-Sekunden-Cache-Race steht dort der falsche Name. Reines
+Anzeigefeld, die Abrechnung läuft korrekt über das Anfrageprotokoll.
+
+**Handbuch-Seeder und Schema — drei Befunde, alle behoben:**
+
+| Befund | Behebung |
+|---|---|
+| **P1** Modell sagte `HasMaxLength(64)`, Migration und Datenbank stehen auf `varchar(120)` — die Grenze galt nur im C#-Modell, und der nächste Scaffold hätte ein überraschendes `ALTER` vorgeschlagen. **Das war ein Fehler in meinem eigenen Fix.** | Spalte zurück auf 120. Die echte 64er-Regel lebt in `HandbookService.Slug`, wo jeder Schreibpfad durchläuft — ohne Migration, ohne Drift. |
+| **P2** Kein Test auf die Slug-Länge, und der Seeder schreibt den ausgelieferten Slug roh durch. Ein künftiger Inhalt über 64 Zeichen hätte den **App-Start** abgebrochen. | Neuer Stolperdraht `Every_shipped_slug_fits_the_search_index`. |
+| **P2** Zwei Artikel beanspruchten denselben `NavKey` „handbuch" — der Hilfe-Knopf hätte nur den mit der kleineren Sortierung gefunden. | Der Zweitanspruch ist entfernt, `HandbookContent.Revision` hochgezählt, und `Every_shipped_nav_key_is_claimed_only_once` fängt den nächsten Fall ab. |
+
+**Adversariale Prüfung der Fixes — zwei P1, beide behoben:**
+
+| Befund | Behebung |
+|---|---|
+| **P1** `RichTextFigure.ToStored` zählte ein Quill-`<br>` als Inhalt, wodurch die Faltung im Normalfall nicht mehr griff — die Beschriftung wäre ganz ausgefallen. | `<br>` wird vor der Zählung übersprungen, mit eigenem Test. |
+| **P1** Der zweite Commit änderte `richtext.js` erneut, ohne `?v=` zu erhöhen — genau der Fehler, den Befund 7 beschreibt. | Beide Importstellen auf `?v=17`. |
+
+Dazu drei P3 aus derselben Prüfung: `ArticleIdOf` war toter Code (entfernt); `RichTextAnchors.ToStored`
+behielt eine vorhandene `id` unbesehen, sodass eine eingefügte Überschrift ihren eigenen Namen mitbrachte
+(nur noch Werte, die diese Regel selbst erzeugt hätte, überleben — mit zwei Tests); und der Übertrag einer
+Woche, die stabil unter Aufschlag lief, fällt jetzt grundsätzlich niedriger aus als früher. Letzteres ist
+die dokumentierte, bewusst konservative Seite von Befund 24.
+
+Ausdrücklich geprüft und **in Ordnung**: der Indexraum von Suchen/Ersetzen (Embed = genau ein Zeichen,
+kein rohes NUL-Byte im Quelltext), der `id`-Handler des Sanitizers, `RichTextAnchorFields` als echte
+Obermenge der Bild-Träger, die Redaktions-Bedingung im Handbuch (spiegelt
+`Permission.RequireHrbOrLeadershipWrite` exakt), die drei neuen `InternalAgent`-Gates (sperren niemanden
+aus, der vorher hereindurfte) und beide neuen `IsInternalAgent`-Filter.
+
+---
+
 ## P0 — Kritisch
 
 ### 1. Kontingent-Dialog schlägt den Aufschlag ein zweites Mal auf — Ratsche auf echtes Geld

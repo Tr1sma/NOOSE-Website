@@ -62,11 +62,16 @@ public static class RichTextFigure
         var changed = false;
         foreach (var line in document.QuerySelectorAll("p").OfType<IElement>().ToList())
         {
-            // exactly one element and it is the image: folding a line that carries more would drop the rest with
-            // the paragraph it replaces. TextContent cannot catch that - an <img> contributes no text - so a
-            // second picture pasted into the same line used to vanish on save, before it was ever written to a file.
-            if (line.ChildElementCount != 1
-                || line.FirstElementChild is not { } image
+            // the picture has to be the ONLY thing on the line: the fold replaces the whole paragraph, so
+            // anything else standing in it went down with it - a second picture pasted without an Enter between
+            // them vanished on save, before it was ever written to a file. TextContent cannot catch that,
+            // an <img> contributes no text. A stray <br> is ignored: Quill leaves one behind often enough,
+            // and treating it as content would quietly switch captions off altogether.
+            var inhalt = line.Children
+                .Where(k => !k.NodeName.Equals("BR", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (inhalt.Count != 1
+                || inhalt[0] is not { } image
                 || !image.NodeName.Equals("IMG", StringComparison.OrdinalIgnoreCase)
                 || !string.IsNullOrWhiteSpace(line.TextContent))
             {

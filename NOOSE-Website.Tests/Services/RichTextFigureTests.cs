@@ -34,6 +34,20 @@ public sealed class RichTextFigureTests
         Assert.Contains("textbilder/b", stored);
     }
 
+    /// <summary>Quill leaves a stray break in a block often enough. Counting it as content would switch the
+    /// whole caption feature off, which is a worse failure than the one the strict count prevents.</summary>
+    [Fact]
+    public void ToStored_FoldsAnImageLineThatAlsoCarriesAStrayBreak()
+    {
+        var stored = RichTextFigure.ToStored(
+            "<p><img src=\"/dateien/textbilder/a\"><br></p>"
+            + "<p class=\"noose-bildtext\">Lagebild Hafen</p>");
+
+        Assert.Contains("<figure", stored);
+        Assert.Contains("figcaption", stored);
+        Assert.Contains("Lagebild Hafen", stored);
+    }
+
     /// <summary>A linked picture: the anchor is part of the line and must not be dropped either.</summary>
     [Fact]
     public void ToStored_LeavesALinkedImageAlone()

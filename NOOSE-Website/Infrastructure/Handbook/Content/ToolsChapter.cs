@@ -186,7 +186,9 @@ internal static class ToolsChapter
                 <p>Wichtig: Sobald du einen mitgelieferten Artikel speicherst, gehört er
                 <strong>dir</strong>. Nachgelieferte Fassungen überschreiben ihn nie wieder. Das gilt genauso
                 für gelöschte Artikel - was im Papierkorb liegt, kommt nicht von selbst zurück.</p>
-                """,
-                NavKey: "handbuch"),
+                """),
+            // deliberately no NavKey: "handbuch" belongs to "Hilfe finden" in the first chapter. A key
+            // claimed twice means the help button resolves to whichever article sorts first, and the
+            // other is never reachable through it.
         ]);
 }

@@ -42,6 +42,28 @@ public sealed class RichTextAnchorsTests
         Assert.Contains("id=\"lage-3\"", stored);
     }
 
+    /// <summary>The sanitizer lets an id through on a heading, so a pasted one arrives here. Keeping it would
+    /// hand an author a document-wide name of his choosing; only an id this rule could have written survives,
+    /// which is what makes saving twice idempotent.</summary>
+    [Fact]
+    public void ToStored_ReplacesAnIdItWouldNotHaveWritten()
+    {
+        var stored = RichTextAnchors.ToStored("<h2 id=\"Fremder Wert!\">Lagebild</h2>");
+
+        Assert.DoesNotContain("Fremder", stored);
+        Assert.Contains("id=\"lagebild\"", stored);
+    }
+
+    /// <summary>An id this rule produced is kept, otherwise every save would renumber the anchors and break
+    /// every link already written against them.</summary>
+    [Fact]
+    public void ToStored_KeepsAnIdItCouldHaveWritten()
+    {
+        var stored = RichTextAnchors.ToStored("<h2 id=\"lagebild-2\">Lagebild</h2>");
+
+        Assert.Contains("id=\"lagebild-2\"", stored);
+    }
+
     [Fact]
     public void Slug_TransliteratesGermanAndDropsPunctuation()
     {

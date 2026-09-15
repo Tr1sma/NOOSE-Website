@@ -400,6 +400,38 @@ public sealed class HandbookTests
         Assert.Empty(dirty);
     }
 
+    /// <summary>The seeder writes a shipped slug straight through, without the cleaner that shortens an
+    /// editor's. A shipped one over the search-index width would therefore fail the index insert on first
+    /// start — and the seeder runs inside the startup block, so that is a dead app, not a red page.</summary>
+    [Fact]
+    public void Every_shipped_slug_fits_the_search_index()
+    {
+        var toolang = HandbookContent.Chapters.Select(c => c.Slug)
+            .Concat(HandbookContent.Chapters.SelectMany(c => c.Articles).Select(a => a.Slug))
+            .Where(s => s.Length > HandbookService.MaxSlugLength)
+            .ToList();
+
+        Assert.True(toolang.Count == 0,
+            $"Slug länger als {HandbookService.MaxSlugLength} Zeichen: {string.Join(", ", toolang)}");
+    }
+
+    /// <summary>A nav key belongs to exactly one article: the help button resolves a menu entry to an article,
+    /// and two claimants mean the one with the higher sort order is simply never found.</summary>
+    [Fact]
+    public void Every_shipped_nav_key_is_claimed_only_once()
+    {
+        var doppelt = HandbookContent.Chapters
+            .SelectMany(c => c.Articles)
+            .Select(a => a.NavKey)
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .GroupBy(k => k!, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        Assert.True(doppelt.Count == 0, "Nav-Schlüssel mehrfach vergeben: " + string.Join(", ", doppelt));
+    }
+
     /// <summary>A diagram key that resolves to nothing renders nothing - silently, which is why this is a test.</summary>
     [Fact]
     public void Every_shipped_diagram_key_names_a_drawing()

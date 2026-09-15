@@ -32,10 +32,21 @@ public static partial class RichTextAnchors
         {
             return html;
         }
+        // An id that this rule could have produced is kept, so saving twice does not renumber the anchors and
+        // every link written against them survives. Anything else is dropped and replaced: the sanitizer lets
+        // an id through on a heading, so a pasted or hand-written one would otherwise keep whatever name it
+        // brought - and an id is a document-wide name that can shadow one the page itself uses.
         var used = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var heading in headings.Where(h => !string.IsNullOrWhiteSpace(h.Id)))
+        foreach (var heading in headings)
         {
-            used.Add(heading.Id);
+            if (IsOwnSlug(heading.Id))
+            {
+                used.Add(heading.Id);
+            }
+            else if (!string.IsNullOrEmpty(heading.Id))
+            {
+                heading.RemoveAttribute("id");
+            }
         }
         var changed = false;
         foreach (var heading in headings)
@@ -49,8 +60,17 @@ public static partial class RichTextAnchors
             used.Add(slug);
             changed = true;
         }
-        return changed ? Serialize(document) : html;
+        // an id was dropped even if none was added, so compare against the input rather than trusting the flag
+        var ausgabe = Serialize(document);
+        return changed || !string.Equals(ausgabe, html, StringComparison.Ordinal) ? ausgabe : html;
     }
+
+    /// <summary>Whether an id looks like one this class would have written.</summary>
+    private static bool IsOwnSlug(string? id)
+        => !string.IsNullOrEmpty(id)
+        && id.All(c => (c >= 'a' && c <= 'z') || char.IsAsciiDigit(c) || c == '-')
+        && !id.StartsWith('-')
+        && !id.EndsWith('-');
 
     /// <summary>Builds the list markup the editor inserts at the caret.</summary>
     /// <remarks>The level belongs on the item, not on the wrapper: Quill rebuilds the surrounding list from

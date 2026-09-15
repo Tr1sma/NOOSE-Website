@@ -400,9 +400,6 @@ else
         });
     }
 
-    private string? ArticleIdOf(string? slug)
-        => slug is null ? null : _allArticles.FirstOrDefault(a => a.Slug == slug)?.Id;
-
     private async Task GuardAsync(Func<Task> action)
     {
         try
