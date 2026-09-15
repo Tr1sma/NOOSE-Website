@@ -99,8 +99,7 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
     public async Task<ChangelogRelease> CreateReleaseAsync(ChangelogReleaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireChangelogWrite(actor);
-        var version = Clean(input.Version, 32)
-            ?? throw new InvalidOperationException("Die Fassung braucht eine Versionsnummer.");
+        var version = CleanVersion(input.Version);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (await db.Aenderungsfassungen.AnyAsync(r => r.Version == version, cancellationToken))
@@ -124,8 +123,7 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
     public async Task RefreshReleaseAsync(string id, ChangelogReleaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireChangelogWrite(actor);
-        var version = Clean(input.Version, 32)
-            ?? throw new InvalidOperationException("Die Fassung braucht eine Versionsnummer.");
+        var version = CleanVersion(input.Version);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var release = await db.Aenderungsfassungen.FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
@@ -248,5 +246,19 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
             return null;
         }
         return trimmed.Length > max ? trimmed[..max] : trimmed;
+    }
+
+    private static string CleanVersion(string? value)
+    {
+        var version = Clean(value, 32);
+        var parts = version?.Split('.');
+        if (parts is not { Length: 3 }
+            || parts[2].Length != 2
+            || parts.Any(p => p.Length == 0 || !p.All(char.IsAsciiDigit)))
+        {
+            throw new InvalidOperationException("Die Fassung braucht eine Versionsnummer im Format 2.1.00.");
+        }
+
+        return version!;
     }
 }

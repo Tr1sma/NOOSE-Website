@@ -33,13 +33,91 @@ public static class ChangelogSeeder
         string? buildNumber,
         CancellationToken cancellationToken = default)
     {
+        await RenameLegacyVersionsAsync(db, releases, cancellationToken);
         await SeedReleasesAsync(db, releases, cancellationToken);
         var releaseIdByVersion = await db.Aenderungsfassungen
             .Select(r => new { r.Version, r.Id })
             .ToDictionaryAsync(r => r.Version, r => r.Id, StringComparer.Ordinal, cancellationToken);
 
+        await RenameLegacyEntryKeysAsync(db, releases, releaseIdByVersion, cancellationToken);
         await SeedEntriesAsync(db, releases, revision, releaseIdByVersion, cancellationToken);
         await StampBuildNumberAsync(db, buildNumber ?? RunningBuild(), cancellationToken);
+    }
+
+    private static async Task RenameLegacyVersionsAsync(
+        AppDbContext db,
+        IReadOnlyList<ChangelogContent.SeededRelease> releases,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Aenderungsfassungen.ToListAsync(cancellationToken);
+        var byVersion = rows.ToDictionary(r => r.Version, StringComparer.Ordinal);
+        var changed = false;
+
+        foreach (var release in releases.Where(r => r.LegacyVersion is not null))
+        {
+            if (byVersion.ContainsKey(release.Version)
+                || !byVersion.TryGetValue(release.LegacyVersion!, out var row))
+            {
+                continue;
+            }
+
+            byVersion.Remove(row.Version);
+            row.Version = release.Version;
+            byVersion.Add(row.Version, row);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static async Task RenameLegacyEntryKeysAsync(
+        AppDbContext db,
+        IReadOnlyList<ChangelogContent.SeededRelease> releases,
+        IReadOnlyDictionary<string, string> releaseIdByVersion,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Aenderungseintraege
+            .IgnoreQueryFilters()
+            .Where(e => e.SeedKey != null)
+            .ToListAsync(cancellationToken);
+        var byKey = rows.ToDictionary(e => e.SeedKey!, StringComparer.Ordinal);
+        var changed = false;
+
+        foreach (var release in releases.Where(r => r.LegacyVersion is not null))
+        {
+            if (!releaseIdByVersion.TryGetValue(release.Version, out var releaseId))
+            {
+                continue;
+            }
+
+            foreach (var shipped in release.Entries)
+            {
+                var suffixStart = shipped.Key.IndexOf('-');
+                if (suffixStart < 0)
+                {
+                    continue;
+                }
+                var legacyKey = release.LegacyVersion + shipped.Key[suffixStart..];
+                if (byKey.ContainsKey(shipped.Key) || !byKey.TryGetValue(legacyKey, out var row))
+                {
+                    continue;
+                }
+
+                byKey.Remove(legacyKey);
+                row.SeedKey = shipped.Key;
+                row.ReleaseId = releaseId;
+                byKey.Add(shipped.Key, row);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task SeedReleasesAsync(

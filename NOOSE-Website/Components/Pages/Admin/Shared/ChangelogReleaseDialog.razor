@@ -4,9 +4,9 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudTextField @bind-Value="_version" Label="Fassung" Variant="Variant.Outlined"
-                          Required="true" RequiredError="Die Fassung braucht eine Versionsnummer."
-                          MaxLength="32" Placeholder="z. B. 1.4"
-                          HelperText="Frei vergeben. Die Build-Nummer stempelt der Server beim nächsten Start selbst dazu." />
+                           Required="true" RequiredError="Die Fassung braucht eine Versionsnummer."
+                           MaxLength="32" Placeholder="z. B. 2.1.00"
+                           HelperText="Dreiteilig vergeben. Die Build-Nummer stempelt der Server beim nächsten Start selbst dazu." />
 
             <MudDatePicker @bind-Date="_date" Label="Datum" Variant="Variant.Outlined"
                            DateFormat="dd.MM.yyyy" Editable="true" />

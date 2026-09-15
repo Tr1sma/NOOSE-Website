@@ -91,6 +91,42 @@ public sealed class ChangelogTests
     }
 
     [Fact]
+    public async Task Legacy_versions_and_keys_are_renamed_without_duplicates()
+    {
+        using var ctx = new SqliteTestContext();
+        ChangelogContent.SeededRelease[] legacy =
+        [
+            new("1.4", new DateTime(2026, 9, 12), "Handbuch",
+                [new("1.4-handbuch", ChangelogKind.Neu, "Handbuch.", "Handbuch")]),
+        ];
+        await SeedAsync(ctx, legacy, 1, "1.0.100");
+
+        string releaseId;
+        string entryId;
+        await using (var before = ctx.NewContext())
+        {
+            releaseId = (await before.Aenderungsfassungen.SingleAsync()).Id;
+            entryId = (await before.Aenderungseintraege.SingleAsync()).Id;
+        }
+
+        ChangelogContent.SeededRelease[] current =
+        [
+            new("2.0.00", new DateTime(2026, 9, 12), "Handbuch",
+                [new("2.0.02-handbuch", ChangelogKind.Neu, "Handbuch.", "Handbuch")], "1.4"),
+        ];
+        await SeedAsync(ctx, current, 1, "1.0.200");
+
+        await using var check = ctx.NewContext();
+        var release = await check.Aenderungsfassungen.SingleAsync();
+        var entry = await check.Aenderungseintraege.SingleAsync();
+        Assert.Equal(releaseId, release.Id);
+        Assert.Equal("2.0.00", release.Version);
+        Assert.Equal(entryId, entry.Id);
+        Assert.Equal("2.0.02-handbuch", entry.SeedKey);
+        Assert.Equal(releaseId, entry.ReleaseId);
+    }
+
+    [Fact]
     public async Task An_untouched_line_follows_a_new_revision()
     {
         using var ctx = new SqliteTestContext();
@@ -306,6 +342,19 @@ public sealed class ChangelogTests
         Assert.True(row.IsCustomised);
     }
 
+    [Theory]
+    [InlineData("2.1")]
+    [InlineData("2.1.0")]
+    [InlineData("2.1.100")]
+    public async Task A_release_version_requires_two_update_digits(string version)
+    {
+        using var ctx = new SqliteTestContext();
+        var (service, _) = NewHost(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateReleaseAsync(
+            new ChangelogReleaseInput(version, DateTime.Today, null, 0, true), Leader()));
+    }
+
     // --- the shipped content ---------------------------------------------
 
     [Fact]
@@ -323,6 +372,21 @@ public sealed class ChangelogTests
 
         Assert.Equal(versions.Count, versions.Distinct(StringComparer.Ordinal).Count());
         Assert.All(ChangelogContent.Releases, r => Assert.NotEmpty(r.Entries));
+    }
+
+    [Fact]
+    public void Every_shipped_version_and_key_uses_sequential_two_digit_updates()
+    {
+        Assert.All(ChangelogContent.Releases, release =>
+        {
+            Assert.Matches(@"^\d+\.\d+\.\d{2}$", release.Version);
+            Assert.InRange(release.Entries.Length, 1, 100);
+            var family = release.Version[..release.Version.LastIndexOf('.')];
+            for (var i = 0; i < release.Entries.Length; i++)
+            {
+                Assert.StartsWith($"{family}.{i:00}-", release.Entries[i].Key);
+            }
+        });
     }
 
     /// <summary>The real shipped list against the real schema — the closest a test gets to a first start.</summary>

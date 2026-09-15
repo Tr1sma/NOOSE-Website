@@ -491,12 +491,14 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
   Sperrliste dagegen. Aus *„Partition the rate limiters"* wird **„Anmeldeseite lässt sich nicht mehr von außen
   blockieren"**.
 - **Nichts eintragen** für Umbenennungen, Tests, Doku, Refactorings — alles, was von außen unsichtbar ist.
-- **Neue Zeile:** an die passende `SeededRelease` anhängen, `Key` stabil und einmalig (`<fassung>-<kurz>`).
+- **Neue Zeile:** an die passende `SeededRelease` anhängen. `Key` ist stabil und einmalig im Format
+  `<major>.<minor>.<laufende-zweistellige-nummer>-<kurz>`; die dritte Zahl startet je Fassung bei `00` und
+  steigt pro Eintrag um eins (`2.1.00-name`, `2.1.01-name`).
   Eine neue Zeile braucht **keine** Revisions-Erhöhung; sie wird an ihrem fehlenden Key erkannt.
 - **Bestehende Zeile umformulieren:** `ChangelogContent.Revision` **hochzählen**. Der Seeder schreibt dann
   unberührte Zeilen neu — und lässt redaktionell bearbeitete (`IstAngepasst`) für immer in Ruhe. Ohne Bump
   passiert nichts.
-- **Neue Fassung:** `SeededRelease` mit selbst vergebener Version anlegen. **Die Build-Nummer nicht eintragen** —
+- **Neue Fassung:** `SeededRelease` mit Version im Format `X.X.XX` anlegen. **Die Build-Nummer nicht eintragen** —
   `BuildNumber.txt` ist gitignored und beim Schreiben unbekannt; `ChangelogSeeder` stempelt sie beim ersten
   Start nach dem Deploy auf die neueste Fassung ohne Stempel.
 - **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` der Fassung ist
