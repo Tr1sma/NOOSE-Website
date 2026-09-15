@@ -41,6 +41,15 @@ public static class LlmQuotaMath
 
     public static decimal ToCents(long tokens) => tokens / (decimal)TokensPerCent;
 
+    /// <summary>Weekly base after the active upstream's boost — every other figure is derived from it, so the
+    /// carry cap, the ceiling and the daily limit all move with the boost by construction.</summary>
+    /// <remarks>Applied to the base and not to the ceiling, for the same reason the daily limit is: a boost is
+    /// meant to buy more questions on a cheaper endpoint, not to make an inherited carry-over compound.</remarks>
+    public static long Boosted(long baseWeekly, int boostPercent)
+        => baseWeekly <= 0 || boostPercent <= 0
+            ? Math.Max(0L, baseWeekly)
+            : baseWeekly + baseWeekly * Math.Min(boostPercent, LlmProviderSettings.MaxBoostPercent) / 100L;
+
     /// <summary>Hard ceiling on what a week may inherit: the rank's share of its OWN base.</summary>
     public static long CarryCap(long baseWeekly, int carryPercent)
         => baseWeekly <= 0 || carryPercent <= 0 ? 0L : baseWeekly * carryPercent / 100L;

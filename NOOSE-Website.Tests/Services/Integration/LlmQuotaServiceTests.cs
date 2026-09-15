@@ -22,11 +22,11 @@ public sealed class LlmQuotaServiceTests
     private static ClaimsPrincipal Leader()
         => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).Build();
 
-    private static LlmQuotaService Build(SqliteTestContext ctx, LlmQuotaConfig? config = null)
+    private static LlmQuotaService Build(SqliteTestContext ctx, LlmQuotaConfig? config = null, int boostPercent = 0)
     {
         var configService = Substitute.For<ILlmQuotaConfigService>();
         configService.GetAsync(Arg.Any<CancellationToken>()).Returns(config ?? LlmQuotaConfig.Default());
-        return new LlmQuotaService(ctx.Factory, configService,
+        return new LlmQuotaService(ctx.Factory, configService, NooseiProviderStub.Returning(boostPercent: boostPercent),
             Options.Create(new LlmOptions()), NullLogger<LlmQuotaService>.Instance);
     }
 
@@ -105,6 +105,34 @@ public sealed class LlmQuotaServiceTests
         Assert.Equal(50_000L, status.BaseWeekly);
         Assert.Equal(25, status.CarryPercent);
         Assert.False(status.IsOverride);
+    }
+
+    [Fact]
+    public async Task TheActiveUpstreamsBoost_LiftsTheWeeklyBase()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.SeniorSpecialAgent);
+
+        var status = await Build(ctx, boostPercent: 100).GetStatusAsync(AgentId, Leader());
+
+        Assert.Equal(100_000L, status.BaseWeekly);
+        // derived from the base, so both move with it — that is why the boost is applied there
+        Assert.Equal(25_000L, status.CarryCap);
+        Assert.Equal(LlmQuotaMath.DailyLimit(100_000, LlmRankQuota.DefaultDailyPercent), status.DailyLimit);
+    }
+
+    /// <summary>An individual allowance says who may spend how much; the boost says what the endpoint costs.
+    /// They are different questions, so the boost rides on top of an override too.</summary>
+    [Fact]
+    public async Task TheBoost_AlsoLiftsAnIndividualOverride()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent, over: 10_000);
+
+        var status = await Build(ctx, boostPercent: 50).GetStatusAsync(AgentId, Leader());
+
+        Assert.Equal(15_000L, status.BaseWeekly);
+        Assert.True(status.IsOverride);
     }
 
     [Fact]

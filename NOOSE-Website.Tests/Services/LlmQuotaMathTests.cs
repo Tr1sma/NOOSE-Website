@@ -145,6 +145,30 @@ public class LlmQuotaMathTests
     public void DailyLimit_IsAShareOfTheBase(long baseWeekly, int percent, long expected)
         => Assert.Equal(expected, LlmQuotaMath.DailyLimit(baseWeekly, percent));
 
+    [Theory]
+    [InlineData(20_000, 0, 20_000)]      // no boost leaves the configured quota exactly as it was
+    [InlineData(20_000, 100, 40_000)]    // +100 % doubles it
+    [InlineData(20_000, 50, 30_000)]
+    [InlineData(0, 300, 0)]              // a rank without a quota gains nothing from a boost
+    [InlineData(20_000, -10, 20_000)]    // a negative share is not a deduction
+    public void Boosted_LiftsTheBaseByItsShare(long baseWeekly, int boost, long expected)
+        => Assert.Equal(expected, LlmQuotaMath.Boosted(baseWeekly, boost));
+
+    [Fact]
+    public void Boosted_IsCappedAtTheMaximumShare()
+        => Assert.Equal(
+            LlmQuotaMath.Boosted(20_000, LlmProviderSettings.MaxBoostPercent),
+            LlmQuotaMath.Boosted(20_000, LlmProviderSettings.MaxBoostPercent + 10_000));
+
+    [Fact]
+    public void Boosted_CarriesTheCapAndTheDailyLimitWithIt()
+    {
+        // the whole point of boosting the base rather than the ceiling: everything derived moves along
+        var boosted = LlmQuotaMath.Boosted(20_000, 100);
+        Assert.Equal(LlmQuotaMath.CarryCap(40_000, 25), LlmQuotaMath.CarryCap(boosted, 25));
+        Assert.Equal(LlmQuotaMath.DailyLimit(40_000, 40), LlmQuotaMath.DailyLimit(boosted, 40));
+    }
+
     [Fact]
     public void ClampCarryIn_HoldsAStoredCarryToTheCurrentCap()
     {

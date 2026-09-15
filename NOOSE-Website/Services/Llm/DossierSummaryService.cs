@@ -37,6 +37,7 @@ public interface IDossierSummaryService
 public sealed class DossierSummaryService(
     IDbContextFactory<AppDbContext> dbFactory,
     INooseiGateway noosei,
+    INooseiProviderService providerService,
     IOptions<LlmOptions> options) : IDossierSummaryService
 {
     private readonly LlmOptions _o = options.Value;
@@ -114,7 +115,8 @@ public sealed class DossierSummaryService(
         existing.BriefJson = JsonSerializer.Serialize(brief, DossierBrief.Json);
         existing.SchemaVersion = NooseiSchemas.KurzbriefVersion;
         existing.PromptVersion = NooseiPrompts.BriefPromptVersion;
-        existing.Model = _o.ModelFor(LlmFeature.Brief);
+        // the upstream the brief actually ran on; a model id only identifies a model together with its endpoint
+        existing.Model = _o.ModelFor((await providerService.GetStateAsync(cancellationToken)).Active, LlmFeature.Brief);
         existing.GeneratedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 

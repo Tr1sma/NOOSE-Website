@@ -469,6 +469,98 @@ public class LlmServiceTests
         Assert.Equal("vendor/model", handler.LastBody!.RootElement.GetProperty("model").GetString());
     }
 
+    // ---------------------------------------------------------------- upstream
+
+    private static LlmRequest DeepSeekReq()
+        => new(
+            [LlmMessage.System("sys"), LlmMessage.User("user")],
+            new LlmCallContext(LlmFeature.Chat, Provider: LlmProvider.DeepSeek));
+
+    private static LlmOptions BothUpstreams(Action<LlmOptions>? configure = null) => Options(o =>
+    {
+        o.DeepSeek.BaseUrl = "https://deepseek.test/v1";
+        o.DeepSeek.ApiKey = "deepseek-key";
+        o.DeepSeek.Model = "deepseek-flash";
+        configure?.Invoke(o);
+    });
+
+    [Fact]
+    public async Task Complete_AddressesTheUpstreamNamedOnTheContext()
+    {
+        var (svc, handler) = Build(BothUpstreams(), Ok());
+
+        await svc.CompleteAsync(DeepSeekReq(), Agent());
+
+        Assert.Equal("https://deepseek.test/v1/chat/completions", handler.LastUri!.ToString());
+        Assert.Equal("deepseek-flash", handler.LastBody!.RootElement.GetProperty("model").GetString());
+    }
+
+    /// <summary>The key travels with the request, never on the pooled client — otherwise one upstream's
+    /// credentials reach the other the moment the switch is flipped.</summary>
+    [Fact]
+    public async Task Complete_SendsEachUpstreamsOwnKey()
+    {
+        var (deepSeek, deepSeekHandler) = Build(BothUpstreams(), Ok());
+        await deepSeek.CompleteAsync(DeepSeekReq(), Agent());
+        Assert.Equal("deepseek-key", deepSeekHandler.LastAuthorization);
+
+        var (router, routerHandler) = Build(BothUpstreams(), Ok());
+        await router.CompleteAsync(Req(), Agent());
+        Assert.Equal("test-key", routerHandler.LastAuthorization);
+    }
+
+    /// <summary>Both fields are OpenRouter extensions; a direct endpoint rejects the request outright.</summary>
+    [Fact]
+    public async Task Complete_OmitsTheRouterOnlyFields_ForADirectUpstream()
+    {
+        var options = BothUpstreams(o => o.Providers.Add("deepinfra"));
+        var (svc, handler) = Build(options, Ok());
+
+        await svc.CompleteAsync(DeepSeekReq() with { RequireCapableProviders = true }, Agent());
+
+        var payload = handler.LastBody!.RootElement;
+        Assert.False(payload.TryGetProperty("usage", out _));
+        Assert.False(payload.TryGetProperty("provider", out _));
+    }
+
+    [Fact]
+    public async Task Complete_KeepsTheRouterOnlyFields_ForOpenRouter()
+    {
+        var options = BothUpstreams(o => o.Providers.Add("deepinfra"));
+        var (svc, handler) = Build(options, Ok());
+
+        await svc.CompleteAsync(Req(requireCapableProviders: true), Agent());
+
+        var payload = handler.LastBody!.RootElement;
+        Assert.True(payload.GetProperty("usage").GetProperty("include").GetBoolean());
+        Assert.True(payload.GetProperty("provider").GetProperty("require_parameters").GetBoolean());
+    }
+
+    /// <summary>A direct endpoint names no upstream of its own, so the log row would otherwise say nothing.</summary>
+    [Fact]
+    public async Task Complete_NamesTheUpstream_WhenTheAnswerDoesNot()
+    {
+        var (svc, _) = Build(BothUpstreams(), Json(HttpStatusCode.OK, """
+            {"id":"gen-1","model":"deepseek-flash",
+             "choices":[{"message":{"content":"Antwort"},"finish_reason":"stop"}],
+             "usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}
+            """));
+
+        var result = await svc.CompleteAsync(DeepSeekReq(), Agent());
+
+        Assert.Equal("DeepSeek", result.Provider);
+        Assert.Equal("deepseek-flash", result.Model);
+    }
+
+    [Fact]
+    public async Task Complete_Throws_WhenTheSelectedUpstreamIsNotConfigured()
+    {
+        var (svc, handler) = Build(Options(), Ok());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync(DeepSeekReq(), Agent()));
+        Assert.Equal(0, handler.Calls);
+    }
+
     /// <summary>Replays queued responses in order; <see cref="Hang"/> blocks until the attempt's token fires.</summary>
     private sealed class StubHandler(params HttpResponseMessage?[] responses) : HttpMessageHandler
     {
@@ -481,10 +573,17 @@ public class LlmServiceTests
 
         public JsonDocument? LastBody { get; private set; }
 
+        public Uri? LastUri { get; private set; }
+
+        public string? LastAuthorization { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
             LastBody = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            // read off the message now: it is disposed the moment the attempt's using-scope ends
+            LastUri = request.RequestUri;
+            LastAuthorization = request.Headers.Authorization?.Parameter;
 
             var response = _index < responses.Length ? responses[_index] : Ok();
             _index++;

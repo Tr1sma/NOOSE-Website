@@ -1,6 +1,7 @@
 @using Microsoft.Extensions.Options
 @using NOOSE_Website.Models.Llm
 @inject IOptions<LlmOptions> Options
+@inject INooseiProviderService Providers
 
 @{
     var o = Options.Value;
@@ -10,53 +11,93 @@
 {
     <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
         NOOSEI ist nicht einsatzbereit. Endpoint, Modell und Schlüssel kommen aus den User Secrets bzw. den
-        Umgebungsvariablen (<code>Llm__ApiKey</code>, <code>Llm__Model</code>) — nicht aus der Datenbank.
+        Umgebungsvariablen (<code>Llm__ApiKey</code>, <code>Llm__Model</code>, für DeepSeek
+        <code>Llm__DeepSeek__ApiKey</code>) — nicht aus der Datenbank.
     </MudAlert>
 }
 else
 {
-    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">NOOSEI ist einsatzbereit.</MudAlert>
+    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+        NOOSEI ist einsatzbereit — über @LlmProviderDisplay.Name(_active).
+    </MudAlert>
 }
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
     Diese Werte sind Deploy-Konfiguration und hier bewusst nur lesbar — der Schlüssel darf die Datenbank nie sehen.
     Die einzige Stelle der Seite, an der das technische Modell überhaupt genannt wird.
+    Welcher Anbieter genutzt wird, steht unter <i>Anbieter</i>.
 </MudText>
 
+@foreach (var provider in LlmProviderDisplay.All)
+{
+    <MudText Typo="Typo.subtitle2" Class="mb-2">
+        <MudIcon Icon="@LlmProviderDisplay.Icon(provider)" Size="Size.Small" Class="mr-1" />
+        @LlmProviderDisplay.Name(provider)
+        @if (provider == _active)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">aktiv</MudChip>
+        }
+    </MudText>
+    <MudSimpleTable Dense="true" Elevation="0" Class="mb-4">
+        <tbody>
+            @{
+                var fallback = o.ModelFor(provider, LlmFeature.Chat);
+                var standard = provider == LlmProvider.DeepSeek ? o.DeepSeek.Model : o.Model;
+            }
+            <tr><td style="width:260px;">Modell (Standard)</td><td><code>@(string.IsNullOrWhiteSpace(standard) ? "—" : standard)</code></td></tr>
+            @foreach (var feature in LlmFeatureDisplay.All)
+            {
+                var model = o.ModelFor(provider, feature);
+                @* only the overrides are worth a row; the rest is the default above *@
+                if (!string.Equals(model, standard, StringComparison.Ordinal))
+                {
+                    <tr>
+                        <td>Modell · @LlmFeatureDisplay.Name(feature)</td>
+                        <td><code>@model</code></td>
+                    </tr>
+                }
+            }
+            <tr><td>Endpoint</td><td class="mud-text-secondary">@Host(o.BaseUrlFor(provider))</td></tr>
+            <tr><td>Schlüssel hinterlegt</td><td>@(string.IsNullOrWhiteSpace(o.ApiKeyFor(provider)) ? "Nein" : "Ja")</td></tr>
+            @if (provider == LlmProvider.OpenRouter)
+            {
+                <tr>
+                    <td>Anbieter dahinter</td>
+                    <td class="mud-text-secondary">
+                        @(o.Providers.Count > 0 ? string.Join(", ", o.Providers) : $"automatisch ({o.ProviderSort})")
+                        @if (o.IgnoreProviders.Count > 0)
+                        {
+                            <text> · ausgeschlossen: @string.Join(", ", o.IgnoreProviders)</text>
+                        }
+                    </td>
+                </tr>
+            }
+            else
+            {
+                @* the token floor is the whole meter here, so a model without a price would be free *@
+                <tr>
+                    <td>Verbrauch gemessen über</td>
+                    <td class="mud-text-secondary">
+                        @(o.PriceFor(fallback) is null
+                            ? "Pauschale — für dieses Modell ist kein Preis hinterlegt"
+                            : "hinterlegten Modellpreis (DeepSeek meldet keine Kosten)")
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+<MudText Typo="Typo.subtitle2" Class="mb-2">Gemeinsam</MudText>
 <MudSimpleTable Dense="true" Elevation="0">
     <tbody>
         <tr><td style="width:260px;">Aktiv</td><td>@(o.Enabled ? "Ja" : "Nein")</td></tr>
-        <tr><td>Modell (Standard)</td><td><code>@(string.IsNullOrWhiteSpace(o.Model) ? "—" : o.Model)</code></td></tr>
-        @foreach (var feature in LlmFeatureDisplay.All)
-        {
-            var model = o.ModelFor(feature);
-            @* only the overrides are worth a row; the rest is the default above *@
-            if (!string.Equals(model, o.Model, StringComparison.Ordinal))
-            {
-                <tr>
-                    <td>Modell · @LlmFeatureDisplay.Name(feature)</td>
-                    <td><code>@model</code></td>
-                </tr>
-            }
-        }
-        <tr><td>Endpoint</td><td class="mud-text-secondary">@Host(o.BaseUrl)</td></tr>
-        <tr><td>Schlüssel hinterlegt</td><td>@(string.IsNullOrWhiteSpace(o.ApiKey) ? "Nein" : "Ja")</td></tr>
         <tr>
             <td>Verschlusssachen nach außen</td>
             <td>@(o.AllowClassifiedEgress ? "Erlaubt (im Rahmen der eigenen Sichtbarkeit)" : "Gesperrt")</td>
         </tr>
         <tr><td>Werkzeuge (Aktenzugriff)</td><td>@(o.ToolsEnabled ? $"An, max. {o.MaxToolRounds} Runden" : "Aus")</td></tr>
         <tr><td>Strukturierte Ausgaben</td><td>@o.StructuredOutput</td></tr>
-        <tr>
-            <td>Anbieter</td>
-            <td class="mud-text-secondary">
-                @(o.Providers.Count > 0 ? string.Join(", ", o.Providers) : $"automatisch ({o.ProviderSort})")
-                @if (o.IgnoreProviders.Count > 0)
-                {
-                    <text> · ausgeschlossen: @string.Join(", ", o.IgnoreProviders)</text>
-                }
-            </td>
-        </tr>
         <tr>
             <td>Zeitlimits</td>
             <td class="mud-text-secondary">
@@ -68,6 +109,11 @@ else
 </MudSimpleTable>
 
 @code {
+    private LlmProvider _active;
+
+    protected override async Task OnInitializedAsync()
+        => _active = (await Providers.GetStateAsync()).Active;
+
     private static string Host(string? baseUrl)
         => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : (baseUrl ?? "—");
 }

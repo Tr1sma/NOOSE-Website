@@ -70,6 +70,7 @@ public interface INooseiGateway
 public class NooseiGateway(
     ILlmService llm,
     ILlmQuotaService quota,
+    INooseiProviderService providerService,
     IOptions<LlmOptions> options,
     ILogger<NooseiGateway> logger) : INooseiGateway
 {
@@ -89,6 +90,9 @@ public class NooseiGateway(
     {
         var status = await quota.EnsureAvailableAsync(actor, cancellationToken);
         var agentId = actor.GetAgentId() ?? throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
+        // resolved once, then carried through every round: a turn that straddles a switch of the upstream would
+        // otherwise send half its transcript to one endpoint under one model id and half to the other
+        var provider = (await providerService.GetStateAsync(cancellationToken)).Active;
 
         // the whole turn gets one budget; HttpClient.Timeout only bounds a single round
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -131,7 +135,7 @@ public class NooseiGateway(
                 LlmResult result;
                 try
                 {
-                    result = await llm.CompleteAsync(Round(call, messages, offerTools), actor, turnCts.Token);
+                    result = await llm.CompleteAsync(Round(call, provider, messages, offerTools), actor, turnCts.Token);
                 }
                 catch (LlmCapabilityException ex) when (ex.ToolsRelated && offerTools)
                 {
@@ -139,7 +143,7 @@ public class NooseiGateway(
                     logger.LogWarning(ex, "NOOSEI: Endpunkt unterstützt keine Werkzeuge, Anfrage ohne Aktenzugriff wiederholt.");
                     degraded = true;
                     result = await llm.CompleteAsync(
-                        Round(call, Flattened(messages), offerTools: false, sendTools: false), actor, turnCts.Token);
+                        Round(call, provider, Flattened(messages), offerTools: false, sendTools: false), actor, turnCts.Token);
                 }
 
                 total += result.Usage;
@@ -213,7 +217,7 @@ public class NooseiGateway(
                 withdrawal = LlmToolWithdrawal.Answered;
             }
             var trace = Trace(last, attempts, modelMs, toolCalls, barren.Count, degraded, withdrawal, null);
-            var charge = await ChargeAsync(agentId, call, total, last, refs, rounds, watch, success: true, error: null, trace);
+            var charge = await ChargeAsync(agentId, call, provider, total, last, refs, rounds, watch, success: true, error: null, trace);
             return new NooseiAnswer(last?.Text, total, charge, rounds, messages, degraded,
                 string.Equals(last?.FinishReason, "length", StringComparison.OrdinalIgnoreCase),
                 refs,
@@ -230,7 +234,7 @@ public class NooseiGateway(
                 LlmToolWithdrawal.TimeSpent, LlmFailureKind.Timeout);
             // booked as a success because the agent did get an answer; the failure kind is what says it was cut short
             var charge = await ChargeAsync(
-                agentId, call, total, last, refs, rounds, watch, success: true, error: TurnTimedOut, trace);
+                agentId, call, provider, total, last, refs, rounds, watch, success: true, error: TurnTimedOut, trace);
             logger.LogWarning(
                 "NOOSEI-Turn nach {Elapsed} ms abgelaufen, Teilantwort ausgeliefert (Funktion {Feature}, {Rounds} Runden)",
                 watch.ElapsedMilliseconds, call.Feature, rounds);
@@ -243,7 +247,7 @@ public class NooseiGateway(
             var trace = Trace(last, attempts, modelMs, toolCalls, barren.Count, degraded, withdrawal,
                 LlmRequestTrace.Classify(ex, cancellationToken.IsCancellationRequested));
             // a failed call still gets a log row: it may have cost real money, and it must show up in the overview
-            var charge = await ChargeAsync(agentId, call, total, last, refs, rounds, watch, success: false, error: ex.Message, trace);
+            var charge = await ChargeAsync(agentId, call, provider, total, last, refs, rounds, watch, success: false, error: ex.Message, trace);
             logger.LogWarning(ex, "NOOSEI-Anfrage fehlgeschlagen (Funktion {Feature}, {Rounds} Runden, Kontingent {Tokens})",
                 call.Feature, rounds, charge.QuotaTokens);
             throw;
@@ -307,9 +311,10 @@ public class NooseiGateway(
     /// <summary>One round. Withdrawing the tools means <c>tool_choice: none</c>, never dropping the tool block:
     /// a transcript that still carries tool roles without it is an invalid request shape, and omitting it breaks
     /// the cached prompt prefix on exactly the round with the largest transcript.</summary>
-    private LlmRequest Round(NooseiCall call, IReadOnlyList<LlmMessage> messages, bool offerTools, bool sendTools = true) => new(
+    private LlmRequest Round(
+        NooseiCall call, LlmProvider provider, IReadOnlyList<LlmMessage> messages, bool offerTools, bool sendTools = true) => new(
         messages,
-        new LlmCallContext(call.Feature, call.ConversationId, call.EntityType, call.EntityId),
+        new LlmCallContext(call.Feature, call.ConversationId, call.EntityType, call.EntityId, Provider: provider),
         sendTools ? call.Tools : null,
         call.ResponseFormat,
         call.Temperature,
@@ -354,15 +359,17 @@ public class NooseiGateway(
     }
 
     private async Task<LlmQuotaCharge> ChargeAsync(
-        string agentId, NooseiCall call, LlmUsage total, LlmResult? last, IReadOnlyList<LlmContextRef> refs,
-        int rounds, Stopwatch watch, bool success, string? error, LlmRequestTrace? trace = null)
+        string agentId, NooseiCall call, LlmProvider provider, LlmUsage total, LlmResult? last,
+        IReadOnlyList<LlmContextRef> refs, int rounds, Stopwatch watch, bool success, string? error,
+        LlmRequestTrace? trace = null)
     {
         var input = new LlmChargeInput(
             agentId,
             call.Feature,
             total,
-            last?.Model ?? _o.ModelFor(call.Feature),
-            last?.Provider,
+            // the model of the upstream this turn actually ran on; the price table is keyed by exactly that
+            last?.Model ?? _o.ModelFor(provider, call.Feature),
+            last?.Provider ?? LlmProviderDisplay.Name(provider),
             (int)Math.Min(watch.ElapsedMilliseconds, int.MaxValue),
             Math.Max(0, rounds - 1),
             success,
