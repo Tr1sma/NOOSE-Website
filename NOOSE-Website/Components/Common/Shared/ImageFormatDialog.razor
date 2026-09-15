@@ -1,0 +1,63 @@
+@* Picture format: size, alignment, alt text, caption and removal; opened by clicking the picture. *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Bild formatieren</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pt-2">
+            <MudSelect T="string" Label="Größe" Value="_width" ValueChanged="@(v => _width = v)" Variant="Variant.Outlined"
+                       HelperText="Anteil der Textbreite">
+                <MudSelectItem Value="@(string.Empty)">Original</MudSelectItem>
+                <MudSelectItem Value="@("25%")">25 %</MudSelectItem>
+                <MudSelectItem Value="@("50%")">50 %</MudSelectItem>
+                <MudSelectItem Value="@("75%")">75 %</MudSelectItem>
+                <MudSelectItem Value="@("100%")">Volle Breite</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="string" Label="Ausrichtung" Value="_alignment" ValueChanged="@(v => _alignment = v)" Variant="Variant.Outlined">
+                <MudSelectItem Value="@(string.Empty)">Links</MudSelectItem>
+                <MudSelectItem Value="@("center")">Zentriert</MudSelectItem>
+                <MudSelectItem Value="@("right")">Rechts</MudSelectItem>
+            </MudSelect>
+            <MudTextField T="string" Label="Beschriftung" @bind-Value="_caption" Variant="Variant.Outlined"
+                          HelperText="Erscheint als Bildtext unter dem Bild" />
+            <MudTextField T="string" Label="Alternativtext" @bind-Value="_alt" Variant="Variant.Outlined"
+                          HelperText="Kurze Beschreibung für Screenreader und Suchmaschinen" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="Entfernen">Entfernen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Uebernehmen">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Alt { get; set; } = string.Empty;
+    [Parameter] public string Width { get; set; } = string.Empty;
+    [Parameter] public string Alignment { get; set; } = string.Empty;
+    [Parameter] public string Caption { get; set; } = string.Empty;
+
+    private string _width = string.Empty;
+    private string _alignment = string.Empty;
+    private string _caption = string.Empty;
+    private string _alt = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _width = Width;
+        _alignment = Alignment;
+        _caption = Caption;
+        _alt = Alt;
+    }
+
+    private void Uebernehmen()
+        => MudDialog.Close(DialogResult.Ok(new ImageFormatResult(_width, _alignment, _alt, _caption, false)));
+
+    private void Entfernen()
+        => MudDialog.Close(DialogResult.Ok(new ImageFormatResult(null, null, null, null, true)));
+
+    private void Abbrechen() => MudDialog.Cancel();
+}

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -195,5 +196,39 @@ public class TextImageServiceTests
         Assert.Null(await service.GetAccessAsync(id, ClaimsPrincipalBuilder.Agent().WithRank(Rank.SpecialAgent)));
         Assert.NotNull(await service.GetAccessAsync(id,
             ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent)));
+    }
+
+    [Fact]
+    public async Task GetAccessAsync_AnswersARichTextCarrierThroughTheRecordGate()
+    {
+        // the interceptor files rich-text pictures under their own record instead of a mention token
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("agent-9"));
+            db.AgentNotes.Add(new AgentNote
+            {
+                Id = "n1", AgentId = "agent-9", EntryDate = DateTime.UtcNow, Text = "<p>Vermerk</p>",
+            });
+            await db.SaveChangesAsync();
+        }
+        var id = await RowAsync(ctx, nameof(AgentNote), "n1");
+        var (service, _) = Build(ctx);
+
+        Assert.Null(await service.GetAccessAsync(id, ClaimsPrincipalBuilder.Agent().WithRank(Rank.SpecialAgent)));
+        Assert.NotNull(await service.GetAccessAsync(id,
+            ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent)));
+    }
+
+    [Fact]
+    public async Task GetAccessAsync_RefusesACarrierTypeNobodyRegistered()
+    {
+        // an unregistered type must not fall through to a "visible" answer
+        using var ctx = new SqliteTestContext();
+        var id = await RowAsync(ctx, "GibtEsNicht", "x");
+        var (service, _) = Build(ctx);
+
+        Assert.Null(await service.GetAccessAsync(id,
+            ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director)));
     }
 }

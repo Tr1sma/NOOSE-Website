@@ -21,6 +21,7 @@ using NOOSE_Website.Components.Recruiting;
 using NOOSE_Website.Components.Public;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Infrastructure.Announcements;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
@@ -84,6 +85,7 @@ builder.Services.AddCircuitServicesAccessor();
 builder.Services.AddSingleton<ICurrentUserService, CurrentUserService>();
 // interceptors must be Singleton: resolved from the root provider of the singleton DbContext factory; per-context state lives in a ConditionalWeakTable
 builder.Services.AddSingleton<ReadOnlyBarrierInterceptor>();
+builder.Services.AddSingleton<RichTextHtmlInterceptor>();
 builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
 builder.Services.AddSingleton<WatchlistChangeInterceptor>();
 builder.Services.AddSingleton<SearchIndexInterceptor>();
@@ -93,6 +95,8 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, serverVersion)
            .AddInterceptors(
                sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
+               // before audit: the TextImage rows it adds still need their stamp
+               sp.GetRequiredService<RichTextHtmlInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
                sp.GetRequiredService<WatchlistChangeInterceptor>(),
                sp.GetRequiredService<SearchIndexInterceptor>()) // last: rebuilds the search side-index from final state

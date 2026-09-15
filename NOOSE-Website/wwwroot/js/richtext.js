@@ -4,6 +4,7 @@ let quillLadenPromise = null;
 let tabellenModulPromise = null; // table handler
 let groessenRegistriert = false;
 let erwaehnungRegistriert = false;
+let bildtextRegistriert = false;
 const SCHRIFTGROESSEN = ['0.75em', '1.5em', '2.5em']; // inline font-size values
 const SCROLL_TOLERANZ = 2; // ignore sub-pixel drift
 const ERWAEHNUNG_BLOT = 'erwaehnung';
@@ -259,18 +260,77 @@ function haengeScrollWaechterAn(element) {
 // what quill's image blot writes instead of a src outside its own http/https/data whitelist
 const QUILL_ABGEWIESEN = '//:0';
 
+// pasted screenshots are the real size driver; the row keeps whatever arrives here
+const BILD_MAX_KANTE = 2000;
+const BILD_MAX_BYTES = 1024 * 1024;
+
+// scales down and re-encodes as webp, the original on any doubt
+async function verkleinereBild(datei) {
+    if (!datei || datei.type === 'image/gif') {
+        return datei; // canvas would kill the animation
+    }
+    try {
+        const quelle = await ladeBitmap(datei);
+        const kante = Math.max(quelle.width, quelle.height);
+        if (kante <= BILD_MAX_KANTE && datei.size <= BILD_MAX_BYTES) {
+            if (quelle.close) {
+                quelle.close();
+            }
+            return datei;
+        }
+        const faktor = Math.min(1, BILD_MAX_KANTE / kante);
+        const breite = Math.max(1, Math.round(quelle.width * faktor));
+        const hoehe = Math.max(1, Math.round(quelle.height * faktor));
+        const flaeche = document.createElement('canvas');
+        flaeche.width = breite;
+        flaeche.height = hoehe;
+        flaeche.getContext('2d').drawImage(quelle, 0, 0, breite, hoehe);
+        if (quelle.close) {
+            quelle.close();
+        }
+        const kleiner = await new Promise((fertig) => flaeche.toBlob(fertig, 'image/webp', 0.86));
+        // null without webp support, and a bigger file is never worth it
+        return kleiner && kleiner.size < datei.size ? kleiner : datei;
+    } catch (e) {
+        return datei; // scaling must never block a paste
+    }
+}
+
+function ladeBitmap(datei) {
+    if (window.createImageBitmap) {
+        return window.createImageBitmap(datei);
+    }
+    return new Promise((fertig, fehler) => {
+        const quelle = new Image();
+        const adresse = URL.createObjectURL(datei);
+        quelle.onload = () => {
+            URL.revokeObjectURL(adresse);
+            fertig(quelle);
+        };
+        quelle.onerror = () => {
+            URL.revokeObjectURL(adresse);
+            fehler(new Error('bitmap'));
+        };
+        quelle.src = adresse;
+    });
+}
+
+function alsDatenUrl(blob) {
+    return new Promise((fertig, fehler) => {
+        const leser = new FileReader();
+        leser.onload = () => fertig(leser.result);
+        leser.onerror = () => fehler(leser.error);
+        leser.readAsDataURL(blob);
+    });
+}
+
 // data uri of the first image on the clipboard, null when there is none or it cannot be read
 function liesZwischenablageBild(daten) {
     const bild = Array.from((daten && daten.files) || []).find(d => d.type.startsWith('image/'));
     if (!bild) {
         return Promise.resolve(null);
     }
-    return new Promise((resolve) => {
-        const leser = new FileReader();
-        leser.onload = () => resolve(leser.result);
-        leser.onerror = () => resolve(null);
-        leser.readAsDataURL(bild);
-    });
+    return verkleinereBild(bild).then(alsDatenUrl).catch(() => null);
 }
 
 function zaehleBilder(html) {
@@ -302,13 +362,11 @@ function haengeBildEinfuegungAn(element) {
         }
         ereignis.preventDefault();
         ereignis.stopPropagation();
-        const leser = new FileReader();
-        leser.onload = () => {
+        verkleinereBild(bild).then(alsDatenUrl).then((dataUrl) => {
             const bereich = editor.getSelection(true);
-            editor.insertEmbed(bereich.index, 'image', leser.result, 'user');
+            editor.insertEmbed(bereich.index, 'image', dataUrl, 'user');
             editor.setSelection(bereich.index + 1, 0, 'silent');
-        };
-        leser.readAsDataURL(bild);
+        }).catch(() => { /* ignore */ });
     }, true); // capture runs before quill's own handler
 }
 
@@ -349,12 +407,7 @@ async function ersetzeDurchDataUrl(editor, quelle, element) {
         if (!blob.type.startsWith('image/')) {
             return;
         }
-        dataUrl = await new Promise((resolve, reject) => {
-            const leser = new FileReader();
-            leser.onload = () => resolve(leser.result);
-            leser.onerror = reject;
-            leser.readAsDataURL(blob);
-        });
+        dataUrl = await alsDatenUrl(await verkleinereBild(blob));
     } catch (e) {
         if (!rueckfall) {
             return; // cors, offline, no bitmap: keep the original src
@@ -1286,6 +1339,137 @@ function meldeKi(element, zustand, modus) {
         });
 }
 
+// caption line of a picture: a normal paragraph with a marker class, folded into figcaption on save
+function registriereBildtext() {
+    if (bildtextRegistriert || !window.Quill) {
+        return;
+    }
+    const Block = window.Quill.import('blots/block');
+    class BildtextBlot extends Block {
+        static formats(knoten) {
+            return knoten.classList.contains('noose-bildtext') ? true : undefined;
+        }
+        format(name, wert) {
+            if (name === 'bildtext') {
+                this.domNode.classList.toggle('noose-bildtext', !!wert);
+            } else {
+                super.format(name, wert);
+            }
+        }
+    }
+    BildtextBlot.blotName = 'bildtext';
+    BildtextBlot.className = 'noose-bildtext';
+    window.Quill.register(BildtextBlot, true);
+    bildtextRegistriert = true;
+}
+
+// the line after the given one, or null at the document end
+function naechsteZeile(editor, zeile) {
+    if (!zeile) {
+        return null;
+    }
+    const ende = editor.getIndex(zeile) + zeile.length();
+    if (ende >= editor.getLength() - 1) {
+        return null;
+    }
+    const [naechste] = editor.getLine(ende);
+    return naechste || null;
+}
+
+function zeilenText(editor, zeile) {
+    return zeile ? editor.getText(editor.getIndex(zeile), Math.max(0, zeile.length() - 1)).trim() : '';
+}
+
+function istBildtext(zeile) {
+    return !!(zeile && zeile.domNode && zeile.domNode.classList.contains('noose-bildtext'));
+}
+
+function liesBildtext(editor, index) {
+    const [zeile] = editor.getLine(index);
+    const naechste = naechsteZeile(editor, zeile);
+    return istBildtext(naechste) ? zeilenText(editor, naechste) : '';
+}
+
+// writes or removes the caption line below an image line
+function setzeBildtext(editor, index, text, ausrichtung) {
+    const [zeile] = editor.getLine(index);
+    const naechste = naechsteZeile(editor, zeile);
+    const vorhanden = istBildtext(naechste);
+    const neu = (text || '').trim();
+    if (!vorhanden && !neu) {
+        return;
+    }
+    if (vorhanden) {
+        const start = editor.getIndex(naechste);
+        if (!neu) {
+            const laenge = naechste.length();
+            editor.deleteText(start, laenge, 'user');
+            // the empty line stays behind: drop its newline too when something follows it
+            if (editor.getLength() > start + 1 && editor.getText(start, 1) === '\n') {
+                editor.deleteText(start, 1, 'user');
+            }
+            return;
+        }
+        editor.deleteText(start, Math.max(0, naechste.length() - 1), 'user');
+        editor.insertText(start, neu, 'user');
+        editor.formatLine(start, neu.length, 'bildtext', true, 'user');
+        editor.formatLine(start, neu.length, 'align', ausrichtung || false, 'user');
+        return;
+    }
+    const ende = zeile ? editor.getIndex(zeile) + zeile.length() : index + 1;
+    editor.insertText(ende, neu + '\n', 'user');
+    editor.formatLine(ende, neu.length, 'bildtext', true, 'user');
+    editor.formatLine(ende, neu.length, 'align', ausrichtung || false, 'user');
+}
+
+// click on a picture reports its current format to .NET, which opens the format dialog
+function haengeBildBearbeitungAn(element, editor) {
+    element.addEventListener('click', (ereignis) => {
+        if (!(ereignis.target instanceof HTMLImageElement)) {
+            return;
+        }
+        const zustand = element.__nooseBildOptionen;
+        if (!zustand || zustand.tot || !zustand.dotnetRef) {
+            return;
+        }
+        const blot = window.Quill.find(ereignis.target);
+        if (!blot) {
+            return;
+        }
+        const index = editor.getIndex(blot);
+        const [zeile] = editor.getLine(index);
+        const klasse = zeile && zeile.domNode ? zeile.domNode.className : '';
+        const ausrichtung = /ql-align-(center|right|justify)/.exec(klasse);
+        zustand.dotnetRef
+            .invokeMethodAsync('OnImageClicked', index,
+                ereignis.target.getAttribute('alt') || '',
+                ereignis.target.getAttribute('width') || '',
+                ausrichtung ? ausrichtung[1] : '',
+                liesBildtext(editor, index))
+            .catch(() => { /* ignore */ });
+    });
+}
+
+// applies the dialog result to the picture at that index
+export function setBildOptionen(element, index, optionen) {
+    const editor = element && element.__nooseQuill;
+    if (!editor || index < 0 || index >= editor.getLength()) {
+        return;
+    }
+    const breite = optionen.width || false;
+    const ausrichtung = optionen.alignment || false;
+    if (optionen.remove) {
+        setzeBildtext(editor, index, '', null);
+        editor.deleteText(index, 1, 'user');
+        return;
+    }
+    editor.formatText(index, 1, 'width', breite, 'user');
+    editor.formatText(index, 1, 'alt', optionen.alt || false, 'user');
+    editor.formatLine(index, 1, 'align', ausrichtung, 'user');
+    setzeBildtext(editor, index, optionen.caption || '', optionen.alignment || null);
+    editor.focus();
+}
+
 export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel) {
     await ladeQuill();
     if (!element) {
@@ -1293,6 +1477,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     }
     registriereGroessen();
     registriereErwaehnung();
+    registriereBildtext();
     const tableHandler = await ladeTabellenModul();
 
     const toolbarGruppen = kompakt ? [
@@ -1373,6 +1558,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     haengeScrollWaechterAn(element);
     haengeBildEinfuegungAn(element);
     registriereBildMatcher(editor, element);
+    element.__nooseBildOptionen = { dotnetRef, tot: false };
+    haengeBildBearbeitungAn(element, editor);
 
     if (minHeight) {
         editor.root.style.minHeight = minHeight;
@@ -1574,11 +1761,17 @@ export function destroyRichText(element) {
             clearTimeout(entwurf.schreiben);
         }
     }
+    const bildOptionen = element.__nooseBildOptionen;
+    if (bildOptionen) {
+        bildOptionen.tot = true;
+        bildOptionen.dotnetRef = null;
+    }
     element.__nooseErwaehnung = null;
     element.__nooseBefehle = null;
     element.__nooseSuchen = null;
     element.__nooseVollbild = null;
     element.__nooseEntwurf = null;
+    element.__nooseBildOptionen = null;
     element.__nooseKi = null;
     element.__nooseQuill = null;
 }

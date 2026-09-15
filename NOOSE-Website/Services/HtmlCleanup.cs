@@ -82,6 +82,7 @@ public static partial class HtmlCleanup
             "p", "br", "span", "b", "strong", "i", "em", "u", "s",
             "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a", "img",
             "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
+            "figure", "figcaption",
         })
         {
             s.AllowedTags.Add(tag);

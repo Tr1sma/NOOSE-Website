@@ -162,8 +162,10 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=13");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=15");
             _ref = DotNetObjectReference.Create(this);
+            // the editor types a caption line; the stored row carries figure/figcaption
+            Value = RichTextFigure.ToEditor(Value);
             await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight,
                 AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope);
             _ready = true;
@@ -192,6 +194,47 @@ else if (_lastCost is { } cost)
         if (ValueChanged.HasDelegate)
         {
             await ValueChanged.InvokeAsync(html);
+        }
+    }
+
+    private bool _imageDialogOpen;
+
+    /// <summary>Opens the picture format dialog after a click on an image; JS reports the current values.</summary>
+    [JSInvokable]
+    public async Task OnImageClicked(int index, string alt, string width, string alignment, string caption)
+    {
+        if (_imageDialogOpen || _module is null)
+        {
+            return;
+        }
+        _imageDialogOpen = true;
+        try
+        {
+            var parameters = new DialogParameters<ImageFormatDialog>
+            {
+                { x => x.Alt, alt },
+                { x => x.Width, width },
+                { x => x.Alignment, alignment },
+                { x => x.Caption, caption },
+            };
+            var dialog = await Dialogs.ShowAsync<ImageFormatDialog>("Bild formatieren", parameters);
+            var result = await dialog.Result;
+            if (result is { Canceled: false, Data: ImageFormatResult format })
+            {
+                await _module.InvokeVoidAsync("setBildOptionen", _element, index, format);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "WYSIWYG-Editor: Bild-Dialog fehlgeschlagen (JS-Interop).");
+        }
+        finally
+        {
+            _imageDialogOpen = false;
         }
     }
 
@@ -534,8 +577,9 @@ else if (_lastCost is { } cost)
         }
         try
         {
-            await _module.InvokeVoidAsync("setHtml", _element, html ?? string.Empty, await LabelsAsync(html));
-            Value = html;
+            var editorHtml = RichTextFigure.ToEditor(html);
+            await _module.InvokeVoidAsync("setHtml", _element, editorHtml, await LabelsAsync(editorHtml));
+            Value = editorHtml;
             Analyze(Value);
         }
         catch (JSDisconnectedException)

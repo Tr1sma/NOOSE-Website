@@ -3,11 +3,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>Image pasted into a plain-text field, referenced from that text by a mention token.</summary>
+/// <summary>Image pasted into a text field, referenced from that text by a mention token or by URL.</summary>
 /// <remarks>
-/// The file lives outside wwwroot and the text keeps only <c>@{TextImage:Id}</c>, so a chat row, a comment and an
-/// audit entry stay readable text instead of a megabyte of base64. EntityType/EntityId name the record whose
-/// visibility governs the picture: the delivery endpoint asks that record, never the token holder.
+/// The file lives outside wwwroot and the text keeps only <c>@{TextImage:Id}</c> or <c>/dateien/textbilder/{Id}</c>,
+/// so a chat row, a comment and an audit entry stay readable text instead of a megabyte of base64. EntityType/EntityId
+/// name the record whose visibility governs the picture: the delivery endpoint asks that record, never the token holder.
 /// </remarks>
 [Table("Textbilder")]
 public class TextImage : IAuditable, ISoftDelete

@@ -73,7 +73,8 @@ public class TextImageService(
     /// a reference that does not resolve — soft-deleted, or a taskforce the viewer is not in — is a miss, and a
     /// classified record needs the classified read. Two types cannot answer through it: a library document carries
     /// three secrecy flags plus per-agent revocation, and a personal file carries no flag at all although only
-    /// leadership may read it.
+    /// leadership may read it. A rich-text carrier answers through <see cref="Visibility"/> instead, and only
+    /// when its type is registered — anything else is a miss rather than a fall-through.
     /// </remarks>
     private static async Task<bool> MaySeeOwnerAsync(AppDbContext db, string entityType, string entityId,
         ClaimsPrincipal user, CancellationToken cancellationToken)
@@ -86,6 +87,10 @@ public class TextImageService(
         if (entityType == nameof(Agent))
         {
             return user.IsLeadership();
+        }
+        if (RichTextImageFields.IsRegistered(entityType))
+        {
+            return await Visibility.IsRecordVisibleAsync(db, entityType, entityId, ViewerScope.From(user), cancellationToken);
         }
 
         var map = await RecordsReference.ResolveAsync(db, [(entityType, entityId)], cancellationToken,

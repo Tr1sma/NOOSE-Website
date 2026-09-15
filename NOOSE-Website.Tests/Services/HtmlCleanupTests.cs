@@ -256,6 +256,30 @@ public class HtmlCleanupTests
     }
 
     [Fact]
+    public void Clean_FigureWithCaptionAndScript_KeepsTheFigureOnly()
+    {
+        // the stored shape of a caption is a real figure
+        var result = HtmlCleanup.Clean(
+            "<figure class=\"ql-align-center\"><img src=\"/dateien/textbilder/a\">"
+            + "<figcaption>Lagebild<script>steal()</script></figcaption></figure>");
+
+        Assert.Contains("<figure", result);
+        Assert.Contains("<figcaption", result);
+        Assert.Contains("Lagebild", result);
+        Assert.DoesNotContain("script", result);
+    }
+
+    [Fact]
+    public void Clean_ImageWithRelativeFileUrl_KeepsSrc()
+    {
+        // the rich-text interceptor rewrites base64 into this shape
+        var result = HtmlCleanup.Clean("<p>x</p><img src=\"/dateien/textbilder/abc-123\">");
+
+        Assert.Contains("<img", result);
+        Assert.Contains("/dateien/textbilder/abc-123", result);
+    }
+
+    [Fact]
     public void Clean_ImageWithDataUri_KeepsSrc()
     {
         // quill embeds images as base64 data URIs

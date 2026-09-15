@@ -264,7 +264,7 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=13`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=15`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
 - **Ablehnen, Schließen und eine nicht bestandene Sicherheitsüberprüfung sperren 14 Tage.** Die Dauer, das
   Aktiv-Prädikat (`IstBlacklist || GesperrtBis > jetzt`, es gibt keine `IstAktiv`-Spalte) und die
   Lokal→UTC-Umrechnung des `MudDatePicker` liegen zusammen in `Services/BewerbungssperreRules.cs`. Die Sperre
@@ -307,6 +307,19 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   `ql-indent-N`, `ql-align-*`). `HtmlCleanup` erlaubt genau `data-checked` — keine pauschale `data-*`-Freigabe.
   Reine Leseansichten laden kein `quill.snow.css`; die Darstellung steht deshalb zusätzlich in `app.css` unter
   `.dokument-html`. Ein neues Blockformat braucht damit immer drei Stellen: Toolbar, Sanitizer, Lese-CSS.
+- **Bilder im Fließtext liegen als Datei auf der Trägerakte, nicht als Base64 in der Spalte.**
+  `RichTextHtmlInterceptor` (nach der Schreib-Sperre, **vor** dem Audit — die neuen `TextImage`-Zeilen brauchen
+  ihren Stempel) hebt jedes `data:image/...` in die Dateiablage, schreibt `/dateien/textbilder/{id}` und reinigt
+  danach erneut. `RichTextImageFields` ist die **Allowlist** — Schreib- **und** Lesepfad: `TextImageService`
+  antwortet für registrierte Typen über `Visibility.IsRecordVisibleAsync`, alles andere bleibt unsichtbar.
+  Öffentliche Träger (Presse, Warnungen, FAQ, Seiten, Lageberichte, Fraktionsprofil) stehen bewusst **nicht**
+  drin, ihr Endpunkt ist intern. Zu groß/fremder Typ/kein Gate ⇒ Base64 bleibt stehen.
+- **Beschriftung: Der Editor tippt eine Zeile, die Akte trägt eine `<figure>`.** `richtext.js` markiert die
+  Zeile mit `noose-bildtext` (eigenes Zeilenformat), `RichTextFigure.ToStored`/`ToEditor` falten sie beim
+  Speichern bzw. entfalten beim Laden — beide Richtungen in C# und getestet, weil ein verlustbehafteter
+  Rundlauf still die Beschriftung frisst. Breite ist das Quill-`width`-Attribut (Prozent), gelesen über
+  `img[width="…"]` in `app.css`; `figure`/`figcaption` stehen im Sanitizer. Ein Klick aufs Bild öffnet
+  `ImageFormatDialog`.
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
 - **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen. Dokumentierte Ausnahmen von dieser Guard-Pflicht: `FactionRecency.StampAsync`, `PublicWantedService.CountViewAsync`, `TipPriorityService` und `RecomputeConfirmedTipsAsync` — abgeleitete Werte hinter einem schon abgesicherten Schreibpfad.

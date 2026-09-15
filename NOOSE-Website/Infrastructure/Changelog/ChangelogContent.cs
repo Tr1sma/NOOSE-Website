@@ -220,6 +220,8 @@ public static class ChangelogContent
                 + "durchsuchen und ersetzen.", "Bedienung"),
             Neu("2.1.08-editor-entwurf", "Ein nicht gespeicherter Text geht nicht mehr verloren: Beim nächsten "
                 + "Öffnen bietet der Editor ihn zur Wiederherstellung an.", "Bedienung"),
+            Neu("2.1.09-editor-bilder", "Bilder im Text lassen sich jetzt in der Größe anpassen, ausrichten "
+                + "und mit einer Beschriftung versehen – ein Klick auf das Bild öffnet die Einstellungen.", "Bedienung"),
         ], "1.5"),
     ];
 }

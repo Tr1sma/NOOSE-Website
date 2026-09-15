@@ -214,6 +214,19 @@ html, body {
         font-style: normal;
     }
 
+/* Picture width picked in the image dialog: quill stores it as the width attribute, so the CSS keys off it. */
+.ql-editor img[width="25%"], .dokument-html img[width="25%"] { width: 25%; }
+.ql-editor img[width="50%"], .dokument-html img[width="50%"] { width: 50%; }
+.ql-editor img[width="75%"], .dokument-html img[width="75%"] { width: 75%; }
+.ql-editor img[width="100%"], .dokument-html img[width="100%"] { width: 100%; }
+
+/* Caption line while it is still editable; the stored shape is a figcaption with the same look. */
+.ql-editor .noose-bildtext {
+    margin-top: -0.5rem;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8rem;
+}
+
 /* Toolbar-Symbole/Labels im Dunkeln sichtbar machen. */
 .ql-snow .ql-stroke {
     stroke: var(--mud-palette-text-secondary);
@@ -592,6 +605,26 @@ html, body {
 
     .dokument-html img {
         max-width: 100%;
+    }
+
+    /* Stored caption shape; a caption line on a carrier that is not folded still renders with the same look. */
+    .dokument-html figure {
+        margin: .75rem 0;
+    }
+
+    .dokument-html figcaption,
+    .dokument-html .noose-bildtext {
+        margin-top: .25rem;
+        color: var(--mud-palette-text-secondary);
+        font-size: .8rem;
+    }
+
+    .dokument-html figure.ql-align-center {
+        text-align: center;
+    }
+
+    .dokument-html figure.ql-align-right {
+        text-align: right;
     }
 
     /* Quill block formats stored in the html: alignment, indentation and checklists. Read views and
