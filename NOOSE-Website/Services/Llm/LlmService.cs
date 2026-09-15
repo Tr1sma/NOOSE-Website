@@ -1,17 +1,21 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Thin OpenAI-compatible chat client (OpenRouter). One call = one round = one HTTP request; the tool loop
-/// lives a layer up. All calls are gated by <see cref="Permission.RequireLlmUse"/>.</summary>
-/// <remarks>Deliberately database-free: metering and quota belong to the gateway, so this stays testable with nothing
-/// but a stubbed HttpMessageHandler and a charge never lands inside the retry loop.</remarks>
+/// <summary>Thin OpenAI-compatible chat client. One call = one round = one HTTP request; the tool loop lives a
+/// layer up. All calls are gated by <see cref="Permission.RequireLlmUse"/>.</summary>
+/// <remarks>Deliberately database-free: metering, quota and the choice of upstream belong to the gateway, so this
+/// stays testable with nothing but a stubbed HttpMessageHandler and a charge never lands inside the retry loop.
+/// The upstream arrives on <see cref="LlmCallContext.Provider" /> already resolved; address, key and model are
+/// then read from the options under it, so feature and model still cannot drift apart.</remarks>
 public interface ILlmService
 {
     bool IsConfigured { get; }
@@ -37,12 +41,18 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
     public async Task<LlmResult> CompleteAsync(LlmRequest request, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLlmUse(actor);
-        if (!_o.IsConfigured)
+        var provider = request.Context.Provider;
+        if (!_o.IsConfiguredFor(provider))
         {
             throw new InvalidOperationException("NOOSEI ist nicht konfiguriert.");
         }
 
-        var payload = Payload(request);
+        var model = _o.ModelFor(provider, request.Context.Feature);
+        var payload = Payload(request, provider, model);
+        // absolute per request, not a client BaseAddress: the upstream can change between two rounds of the same
+        // deployment, and a pooled client that carried one endpoint's key would then hand it to the other
+        var endpoint = new Uri(_o.BaseUrlFor(provider).TrimEnd('/') + "/chat/completions");
+        var key = _o.ApiKeyFor(provider);
         var client = httpFactory.CreateClient("llm");
         var attempts = Math.Max(0, _o.Retries) + 1;
         var watch = Stopwatch.StartNew();
@@ -56,7 +66,12 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                 using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 attemptCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _o.AttemptTimeoutSeconds)));
 
-                using var response = await client.PostAsJsonAsync("chat/completions", payload, attemptCts.Token);
+                using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
+                {
+                    Content = JsonContent.Create(payload),
+                };
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+                using var response = await client.SendAsync(message, attemptCts.Token);
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
@@ -80,24 +95,26 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                         continue;
                     }
 
-                    logger.LogError("KI-Aufruf endgültig fehlgeschlagen: HTTP {Status} {Detail} (Modell {Model}, {Elapsed} ms)",
-                        status, detail, _o.Model, watch.ElapsedMilliseconds);
+                    logger.LogError("KI-Aufruf endgültig fehlgeschlagen: HTTP {Status} {Detail} (Anbieter {Provider}, Modell {Model}, {Elapsed} ms)",
+                        status, detail, provider, model, watch.ElapsedMilliseconds);
                     throw new InvalidOperationException(Public(
                         $"NOOSEI antwortete nicht (Fehler {status}). Bitte später erneut versuchen.", detail));
                 }
 
                 var doc = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, attemptCts.Token);
                 var choice = doc?.Choices?.FirstOrDefault();
-                logger.LogInformation("KI-Antwort ok: Modell {Model}, Provider {Provider}, Versuch {Attempt}/{Attempts}, {Elapsed} ms, Kosten {Cost}",
-                    doc?.Model ?? _o.Model, doc?.Provider ?? "?", attempt, attempts, watch.ElapsedMilliseconds, doc?.Usage?.Cost ?? 0m);
+                // only OpenRouter names who served the round; a direct endpoint IS the answer to that question
+                var served = doc?.Provider ?? LlmProviderDisplay.Name(provider);
+                logger.LogInformation("KI-Antwort ok: Modell {Model}, Anbieter {Provider}, Versuch {Attempt}/{Attempts}, {Elapsed} ms, Kosten {Cost}",
+                    doc?.Model ?? model, served, attempt, attempts, watch.ElapsedMilliseconds, doc?.Usage?.Cost ?? 0m);
 
                 return new LlmResult(
                     // raw on purpose: an empty answer must stay empty, never a sentence that could end up in a document
                     Text: choice?.Message?.Content,
                     ToolCalls: ToolCalls(choice?.Message?.ToolCalls),
                     Usage: Usage(doc?.Usage),
-                    Provider: doc?.Provider,
-                    Model: doc?.Model ?? _o.Model,
+                    Provider: served,
+                    Model: doc?.Model ?? model,
                     FinishReason: choice?.FinishReason,
                     GenerationId: doc?.Id,
                     Attempts: attempt,
@@ -118,8 +135,8 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                     await DelayAsync(attempt, null, cancellationToken);
                     continue;
                 }
-                logger.LogError("KI-Endpunkt hat in {Attempts} Versuchen nicht geantwortet (Modell {Model}, {Elapsed} ms)",
-                    attempts, _o.Model, watch.ElapsedMilliseconds);
+                logger.LogError("KI-Endpunkt hat in {Attempts} Versuchen nicht geantwortet (Anbieter {Provider}, Modell {Model}, {Elapsed} ms)",
+                    attempts, provider, model, watch.ElapsedMilliseconds);
                 throw new InvalidOperationException(
                     "NOOSEI hat nicht rechtzeitig geantwortet. Bitte später erneut versuchen.");
             }
@@ -131,7 +148,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                     await DelayAsync(attempt, null, cancellationToken);
                     continue;
                 }
-                logger.LogError(ex, "KI-Endpunkt nicht erreichbar (Modell {Model})", _o.Model);
+                logger.LogError(ex, "KI-Endpunkt nicht erreichbar (Anbieter {Provider}, Modell {Model})", provider, model);
                 throw new InvalidOperationException(Public("NOOSEI ist derzeit nicht erreichbar.", ex.Message));
             }
         }
@@ -177,17 +194,21 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
 
     // ---- wire format ----
 
-    private Dictionary<string, object?> Payload(LlmRequest request)
+    private Dictionary<string, object?> Payload(LlmRequest request, LlmProvider provider, string model)
     {
         var payload = new Dictionary<string, object?>
         {
             // the feature decides the model, so proofreading need not run on the analysis model
-            ["model"] = _o.ModelFor(request.Context.Feature),
+            ["model"] = model,
             ["temperature"] = request.Temperature,
             ["messages"] = request.Messages.Select(Wire).ToArray(),
-            // cost accounting for the quota subsystem
-            ["usage"] = new { include = true },
         };
+        if (provider == LlmProvider.OpenRouter)
+        {
+            // cost accounting for the quota subsystem; an OpenRouter extension, and a direct endpoint rejects
+            // the field outright — DeepSeek is metered from the token floor in LlmQuotaMath instead
+            payload["usage"] = new { include = true };
+        }
         if (request.MaxTokens is { } max)
         {
             payload["max_tokens"] = max;
@@ -210,7 +231,8 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
         {
             payload["response_format"] = Format(format);
         }
-        if (Routing(request.RequireCapableProviders) is { } routing)
+        // routing picks who serves a model behind OpenRouter; a direct endpoint has nothing to route
+        if (provider == LlmProvider.OpenRouter && Routing(request.RequireCapableProviders) is { } routing)
         {
             payload["provider"] = routing;
         }

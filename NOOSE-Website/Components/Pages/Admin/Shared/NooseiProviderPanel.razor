@@ -1,0 +1,155 @@
+﻿@using System.Security.Claims
+@using Microsoft.Extensions.Options
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Models.Llm
+@inject IOptions<LlmOptions> Options
+@inject INooseiProviderService Providers
+@inject ISnackbar Snackbar
+
+@{
+    var o = Options.Value;
+}
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Über welchen Anbieter NOOSEI fragt — und wie viel Kontingent das den Agenten wert ist. Der Aufschlag gilt
+    nur, solange der zugehörige Anbieter aktiv ist: Er hebt das Wochenkontingent jedes Dienstgrades um diesen
+    Anteil, und Übertrag wie Tagesgrenze wachsen automatisch mit. Ein günstigerer Anbieter wird damit zu mehr
+    Fragen je Agent statt zu einer kleineren Rechnung.
+    Schlüssel und Modell je Anbieter bleiben Deploy-Konfiguration und stehen unter <i>NOOSEI-Betrieb</i>.
+</MudText>
+
+@if (!_mayEdit)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        Nur der KI-Eigner kann den Anbieter wechseln. Du siehst die Einstellung hier lesend.
+    </MudAlert>
+}
+
+@if (_settings is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @* deliberately not nullable: "installation default" is what an untouched deployment already does, and
+       offering it as a choice would render as an empty field the moment it is picked *@
+    <MudSelect T="LlmProvider" Value="_choice" ValueChanged="@(p => _choice = p)" Label="Anbieter"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mb-4"
+               HelperText="Gilt sofort für jede neue Anfrage; eine laufende Antwort bleibt bei ihrem Anbieter.">
+        @foreach (var provider in LlmProviderDisplay.All)
+        {
+            <MudSelectItem T="LlmProvider" Value="@provider" Disabled="!o.IsConfiguredFor(provider)">
+                @LlmProviderDisplay.Name(provider)@(o.IsConfiguredFor(provider) ? string.Empty : " — nicht hinterlegt")
+            </MudSelectItem>
+        }
+    </MudSelect>
+
+    <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+        <thead>
+            <tr>
+                <th>Anbieter</th>
+                <th style="width:150px;">Einsatzbereit</th>
+                <th style="width:180px;">Kontingent-Aufschlag</th>
+                <th style="width:200px;" class="text-right">Wochenkontingent dann</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var provider in LlmProviderDisplay.All)
+            {
+                var boost = _settings.BoostFor(provider);
+                var active = _choice == provider;
+                <tr>
+                    <td>
+                        <MudIcon Icon="@LlmProviderDisplay.Icon(provider)" Size="Size.Small" Class="mr-2" />
+                        @LlmProviderDisplay.Name(provider)
+                        @if (active)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">aktiv</MudChip>
+                        }
+                    </td>
+                    <td class="mud-text-secondary">@(o.IsConfiguredFor(provider) ? "Ja" : "Schlüssel/Modell fehlt")</td>
+                    <td>
+                        <MudNumericField T="int" Value="boost" ValueChanged="@(v => SetBoost(provider, v))"
+                                         Min="0" Max="@LlmProviderSettings.MaxBoostPercent" Step="10"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
+                                         Adornment="Adornment.End" AdornmentText="%" />
+                    </td>
+                    @* the whole site runs on de-DE, so the format already writes a comma *@
+                    <td class="text-right mud-text-secondary">@($"×{(100 + boost) / 100m:0.00}")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+
+    @if (!o.IsConfigured)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-4">
+            Für keinen Anbieter sind Schlüssel und Modell hinterlegt — NOOSEI antwortet derzeit gar nicht.
+        </MudAlert>
+    }
+
+    @if (_mayEdit)
+    {
+        <MudStack Row="true" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_busy">Speichern</MudButton>
+        </MudStack>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private LlmProviderSettings? _settings;
+    private LlmProvider _choice;
+    private bool _mayEdit;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // the AI owner pays the bill, so the endpoint and what it is worth in quota are theirs alone
+        _mayEdit = _user.IsAiOwner() && _user.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            // never the cached state here: the editor must show what is actually stored
+            _settings = await Providers.GetEditableAsync();
+            // an untouched installation has no stored choice yet, so start where requests actually go today
+            _choice = Options.Value.Resolve(_settings.Active);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void SetBoost(LlmProvider provider, int percent) => _settings?.SetBoost(provider, percent);
+
+    private async Task SaveAsync()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            _settings.Active = _choice;
+            await Providers.SaveAsync(_settings, _user);
+            Snackbar.Add("Anbieter gespeichert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

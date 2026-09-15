@@ -56,9 +56,45 @@
   sonst wäre das Werkzeug ein Rechte-Orakel über Bereiche, die das Schema ohnehin nennt.
 - **`DossierContextBuilder` ist `partial` über zwei Dateien** (Aktenarten / Betrieb). Der Drift-Scan liest
   `DossierContextBuilder*.cs` — wer nur die Hauptdatei scannt, bekommt einen falsch-roten Wächter und entschärft ihn.
-- **Modell pro Funktion** über `LlmOptions.ModelByFeature` (`ModelFor(feature)`, leer = Standardmodell).
-  `LlmService` löst es aus `request.Context.Feature` auf — es gibt bewusst kein `Model` auf `LlmRequest`, damit
-  Funktion und Modell nicht auseinanderlaufen können. Sichtbar bleibt es nur in `/einstellungen?tab=noosei`.
+- **Modell pro Funktion** über `LlmOptions.ModelByFeature` (`ModelFor(provider, feature)`, leer = Standardmodell
+  des Anbieters). `LlmService` löst es aus `request.Context.Feature` **und** `request.Context.Provider` auf — es
+  gibt bewusst kein `Model` auf `LlmRequest`, damit Funktion und Modell nicht auseinanderlaufen können. Sichtbar
+  bleibt es nur in `/einstellungen?tab=noosei`.
+- **Zwei Anbieter, eine Achse: `LlmProvider`** (`OpenRouter` | `DeepSeek`). **Nicht zu verwechseln mit
+  `LlmOptions.Providers`** — das ist OpenRouters eigene Anbieterliste (*wer* ein Modell hinter OpenRouter
+  bedient), `LlmProvider` entscheidet, *ob OpenRouter überhaupt im Weg steht*.
+  - **Schlüssel, Adresse und Modell bleiben Deploy-Konfiguration** (`Llm__ApiKey`/`Llm__Model` für OpenRouter,
+    `Llm__DeepSeek__ApiKey` usw.). Die OpenRouter-Felder stehen deshalb weiter **flach** auf `LlmOptions`: sie
+    unter eine Sektion zu ziehen würde die Produktions-Env-Vars still entkonfigurieren.
+  - **Die Wahl liegt in der Datenbank** (`SystemSetting` `KiAnbieter`, `INooseiProviderService`, 10 s Cache) und
+    gehört **allein dem KI-Eigner** (`Permission.RequireAiOwner` — dieselbe Achse wie die Kontingent-Regeln, nicht
+    Admin). Führung liest sie nur.
+  - **`LlmOptions.Resolve` gibt nie einen unbenutzbaren Anbieter zurück**: eine gespeicherte Wahl ohne Schlüssel
+    oder Modell fällt auf `DefaultProvider` bzw. den ersten konfigurierten zurück. Genau deshalb darf
+    `IsConfigured` weiter **synchron** „irgendein Anbieter ist bereit" heißen — jede Seite, die es fragt, kann
+    die DB nicht abwarten. Zusätzlich lehnt `SaveAsync` eine Wahl ohne Schlüssel von vornherein ab.
+  - **`LlmService` bleibt DB-frei.** Der Anbieter kommt fertig aufgelöst auf `LlmCallContext.Provider` an; das
+    **Gateway löst ihn genau einmal je Turn** auf. Ein Turn, der einen Umschaltvorgang überspannt, schickt sonst
+    die halbe Unterhaltung an das eine und die halbe an das andere Ziel — unter zwei verschiedenen Modell-Ids.
+  - **Adresse und Schlüssel hängen am Request, nicht am `HttpClient`.** Der `llm`-Client trägt nur noch Timeout
+    und Attributionsköpfe; eine `BaseAddress` oder ein `Authorization`-Default im DI würde den Schlüssel des
+    einen Anbieters an den anderen ausliefern, sobald jemand umschaltet.
+  - **`usage: {include:true}` und der `provider`-Block sind OpenRouter-Erweiterungen** und werden für ein direktes
+    Ziel **weggelassen** — DeepSeek lehnt die Anfrage sonst ab.
+  - **DeepSeek meldet keine Kosten.** Damit ist der Token-Boden aus `LlmQuotaMath.FromCost(...)` der *ganze*
+    Zähler: ein DeepSeek-Modell **ohne** Preis in `PriceByModel` wäre praktisch gratis. `LlmDeepSeekOptions`
+    liefert deshalb ab Werk den **Spitzenpreis** von `deepseek-flash` mit (ein Boden, der zu wenig berechnet, ist
+    ein Loch; einer, der zu viel berechnet, kostet nur Kontingent), und `/einstellungen?tab=noosei` sagt es an,
+    wenn für das aktive Modell kein Preis hinterlegt ist. `PriceFor` sucht in beiden Tabellen — Modell-Ids sind
+    anbieter-spezifisch (`deepseek/deepseek-v4.1-flash` vs. `deepseek-flash`) und können nicht kollidieren.
+  - **Der Anbieter steht in der Protokollzeile.** Meldet die Antwort keinen (direktes Ziel), trägt der Gateway
+    den Anbieternamen selbst ein — sonst ist die Spalte für jede DeepSeek-Anfrage leer.
+- **Kontingent-Aufschlag je Anbieter** (`LlmProviderSettings.BoostPercent`, 0–400 %, KI-Eigner-only): Er gilt
+  **nur, solange sein Anbieter aktiv ist**, und liegt auf der **Basis**, nicht auf der Decke
+  (`LlmQuotaMath.Boosted`, angewandt in `LlmQuotaService.BuildStatusAsync`). Damit wachsen Übertrag, Decke und
+  Tagesgrenze baulich mit, und ein Übertrag compoundiert trotzdem nicht — dieselbe Begründung wie bei der
+  Tagesgrenze. Er liegt **auch auf einem individuellen `LlmQuotaOverride`**: das Override sagt, *wer* wie viel
+  darf, der Aufschlag, *was der Endpunkt kostet* — zwei verschiedene Fragen.
 - **Der Akten-Anker der Unterhaltung wird jede Runde neu geprüft**, nicht einmal beim Anlegen: `?akte=Typ:Id`
   ist eine Nutzereingabe, und die Systemzeile nennt die Akte beim Namen. Ohne
   `Visibility.IsRecordVisibleAsync` gegen den *aktuellen* Scope wäre der Anker ein Existenz-Orakel.

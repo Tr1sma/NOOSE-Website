@@ -220,6 +220,8 @@ public static class ChangelogContent
                 + "durchsuchen und ersetzen.", "Bedienung"),
             Neu("2.1.08-editor-entwurf", "Ein nicht gespeicherter Text geht nicht mehr verloren: Beim nächsten "
                 + "Öffnen bietet der Editor ihn zur Wiederherstellung an.", "Bedienung"),
+            Neu("2.1.09-noosei-kontingent", "Das NOOSEI-Wochenkontingent lässt sich für alle Dienstgrade zugleich "
+                + "anheben, ohne die Regeln je Dienstgrad anzufassen.", "NOOSEI"),
         ], "1.5"),
     ];
 }

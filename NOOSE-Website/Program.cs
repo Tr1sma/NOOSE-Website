@@ -220,26 +220,22 @@ builder.Services.AddScoped<ICounterIntelRuleService, CounterIntelRuleService>();
 builder.Services.AddScoped<ICounterIntelService, CounterIntelService>();
 builder.Services.AddScoped<IInformantService, InformantService>();
 
-// AI assistant (OpenAI-compatible / OpenRouter). Key comes from user-secrets / env, never the repo.
+// AI assistant (OpenAI-compatible: OpenRouter or DeepSeek). Keys come from user-secrets / env, never the repo.
 builder.Services.Configure<NOOSE_Website.Models.Llm.LlmOptions>(
     builder.Configuration.GetSection(NOOSE_Website.Models.Llm.LlmOptions.SectionName));
 builder.Services.AddHttpClient("llm", (sp, client) =>
 {
     var o = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NOOSE_Website.Models.Llm.LlmOptions>>().Value;
-    if (!string.IsNullOrWhiteSpace(o.BaseUrl))
-    {
-        client.BaseAddress = new Uri(o.BaseUrl.TrimEnd('/') + "/");
-    }
-    if (!string.IsNullOrWhiteSpace(o.ApiKey))
-    {
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.ApiKey);
-    }
+    // No BaseAddress and no key here: the upstream is a runtime choice, and a pooled client that carried one
+    // endpoint's credentials would hand them to the other. LlmService addresses and authorises each request.
     client.DefaultRequestHeaders.TryAddWithoutValidation("HTTP-Referer", "https://noose.info");
     client.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", "NOOSE Intelligence");
     // Ceiling over all attempts; the per-attempt budget lives in LlmService.
     client.Timeout = TimeSpan.FromSeconds(Math.Max(5, o.TotalTimeoutSeconds));
 });
 builder.Services.AddScoped<ILlmService, LlmService>();
+// Which upstream NOOSEI talks to, and the quota boost it earns — the AI owner's switch.
+builder.Services.AddScoped<INooseiProviderService, NooseiProviderService>();
 // NOOSEI token quota: the gateway is the only path to the transport, so nothing bypasses the meter.
 builder.Services.AddScoped<ILlmQuotaConfigService, LlmQuotaConfigService>();
 builder.Services.AddScoped<ILlmQuotaService, LlmQuotaService>();
