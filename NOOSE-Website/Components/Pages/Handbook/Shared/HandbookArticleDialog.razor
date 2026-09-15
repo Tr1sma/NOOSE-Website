@@ -30,14 +30,16 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Direkte Anrede, kurze Sätze. Ein Fachwort beim ersten Auftreten erklären.
             </MudText>
-            <RichTextEditor @bind-Value="_contentHtml" MinHeight="260px" />
+            <RichTextEditor @bind-Value="_contentHtml" MinHeight="260px"
+                            DraftKey='@($"handbuch:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}:anleitung")' />
 
             <MudText Typo="Typo.subtitle2" Class="mt-2">Im Rollenspiel bedeutet das … (optional)</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Was dieselbe Sache im Spiel bedeutet. Steht später in einem abgesetzten Kasten, damit man
                 Anleitung und Spielregel auseinanderhalten kann.
             </MudText>
-            <RichTextEditor @bind-Value="_roleplayHtml" MinHeight="140px" />
+            <RichTextEditor @bind-Value="_roleplayHtml" MinHeight="140px"
+                            DraftKey='@($"handbuch:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}:rollenspiel")' />
 
             <MudStack Row="true" Spacing="2">
                 <MudSelect T="string" @bind-Value="_diagramKey" Label="Diagramm (optional)"
@@ -79,6 +81,9 @@
 
     [Parameter] public IReadOnlyList<HandbookChapter> Chapters { get; set; } = [];
     [Parameter] public HandbookArticleInput? Preset { get; set; }
+
+    /// <summary>Id of the article being edited; null for a new one (only scopes the browser draft).</summary>
+    [Parameter] public string? EntityId { get; set; }
 
     private string _chapterId = string.Empty;
     private string _slug = string.Empty;
@@ -124,12 +129,14 @@
         IDialogService dialog,
         string title,
         IReadOnlyList<HandbookChapter> chapters,
-        HandbookArticleInput? preset = null)
+        HandbookArticleInput? preset = null,
+        string? entityId = null)
     {
         var parameters = new DialogParameters<HandbookArticleDialog>
         {
             { x => x.Chapters, chapters },
             { x => x.Preset, preset },
+            { x => x.EntityId, entityId },
         };
         var reference = await dialog.ShowAsync<HandbookArticleDialog>(title, parameters,
             new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true });

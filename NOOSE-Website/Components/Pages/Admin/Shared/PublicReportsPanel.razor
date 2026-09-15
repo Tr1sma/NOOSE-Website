@@ -52,7 +52,8 @@ else if (_edit is not null)
 
             <MudText Typo="Typo.subtitle2">Entwurf</MudText>
             @* keyed by row: switching reports must re-initialise Quill instead of keeping the previous content *@
-            <RichTextEditor @ref="_editor" @key="_editorKey" Value="@_draftHtml" MinHeight="360px" />
+            <RichTextEditor @ref="_editor" @key="_editorKey" Value="@_draftHtml" MinHeight="360px"
+                            DraftKey='@(_edit is null ? null : $"lagebericht:{_edit.Id}")' />
         </MudStack>
     </MudPaper>
 }
@@ -268,6 +269,10 @@ else
             _edit.DraftHtml = _editor is null ? _draftHtml : await _editor.GetHtmlAsync();
 
             await Reports.SaveDraftAsync(_edit, _user);
+            if (_editor is not null)
+            {
+                await _editor.MarkSavedAsync();
+            }
             Snackbar.Add("Entwurf gespeichert.", Severity.Success);
             await LoadAsync();
             CloseEditor();

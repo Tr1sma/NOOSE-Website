@@ -45,7 +45,8 @@ else
             <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
             @* RecruitingTemplate, nicht Document: nur dieser Kontext prüft NAME/BEWERBER/… auf Anzahl UND
                Groß-/Kleinschreibung — sonst schaltet eine „Korrektur" die Schwärzung still ab. *@
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.RecruitingTemplate" />
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.RecruitingTemplate"
+                            DraftKey='@(_edit ? $"bewerbungs-vorlage:{Id}" : "bewerbungs-vorlage:neu")' />
         </MudStack>
     </MudPaper>
 }
@@ -105,6 +106,7 @@ else
             {
                 await TemplateService.CreateAsync(_name, _description, html, _isActive, _user);
             }
+            await _editor.MarkSavedAsync();
             Snackbar.Add("Vorlage gespeichert.", Severity.Success);
             Nav.NavigateTo("/bewerbungen?tab=vorlagen");
         }

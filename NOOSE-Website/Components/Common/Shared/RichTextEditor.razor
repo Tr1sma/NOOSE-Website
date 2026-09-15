@@ -1,5 +1,6 @@
 @* Reusable Quill WYSIWYG editor; read final HTML via GetHtmlAsync. All JS interop is guarded so a JS error never kills the circuit. *@
 @using System.Security.Claims
+@using System.Text.RegularExpressions
 @using NOOSE_Website.Authorization
 @using NOOSE_Website.Models.Llm
 @inject IJSRuntime JS
@@ -26,6 +27,40 @@
                        Style="@($"position:absolute;z-index:10;min-width:280px;max-width:420px;top:{_mentionTop}px;left:{_mentionLeft}px;")" />
     }
 </div>
+@if (_draftFound is { } draftZeit)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <MudText Typo="Typo.body2">
+                Nicht gespeicherter Entwurf vom @DateTimeOffset.FromUnixTimeMilliseconds(draftZeit).ToLocalTime().ToString("g") gefunden.
+            </MudText>
+            <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" OnClick="RestoreDraftAsync">Wiederherstellen</MudButton>
+            <MudButton Size="Size.Small" Color="Color.Default" OnClick="DiscardDraftAsync">Verwerfen</MudButton>
+        </MudStack>
+    </MudAlert>
+}
+@if (!Compact && _ready)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1 flex-wrap">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            @_wordCount.ToString("N0") Wörter · @_charCount.ToString("N0") Zeichen
+        </MudText>
+        @if (_headings.Count > 0)
+        {
+            <MudMenu Label="@($"Gliederung ({_headings.Count})")" Variant="Variant.Text" Size="Size.Small"
+                     StartIcon="@Icons.Material.Filled.Toc">
+                @for (var i = 0; i < _headings.Count; i++)
+                {
+                    var idx = i;
+                    var entry = _headings[i];
+                    <MudMenuItem OnClick="@(() => JumpAsync(idx))" Style="@($"padding-left:{8 + (entry.Level - 1) * 14}px;")">
+                        @entry.Text
+                    </MudMenuItem>
+                }
+            </MudMenu>
+        }
+    </MudStack>
+}
 @if (_aiBusy)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-1" />
@@ -49,6 +84,13 @@ else if (_lastCost is { } cost)
 @code {
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Leaner toolbar and no status bar; for narrow surfaces like the applicant chat.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>Scope for the browser-local draft, e.g. "document:{id}"; null switches recovery off.</summary>
+    /// <remarks>The component prefixes the agent id, so two agents on one device never see each other's drafts.</remarks>
+    [Parameter] public string? DraftKey { get; set; }
 
     /// <summary>Optional CSS min-height for the editor area (e.g. "360px"); default keeps Quill's own height.</summary>
     [Parameter] public string? MinHeight { get; set; }
@@ -120,11 +162,12 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=12");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=13");
             _ref = DotNetObjectReference.Create(this);
             await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight,
-                AiEnabled, MentionsEnabled, await LabelsAsync(Value));
+                AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope);
             _ready = true;
+            Analyze(Value);
         }
         catch (JSDisconnectedException)
         {
@@ -143,9 +186,146 @@ else if (_lastCost is { } cost)
     public async Task OnHtmlChanged(string html)
     {
         Value = html;
+        Analyze(html);
+        // JSInvokable does not re-render on its own; without this the counters freeze
+        StateHasChanged();
         if (ValueChanged.HasDelegate)
         {
             await ValueChanged.InvokeAsync(html);
+        }
+    }
+
+    private sealed record Heading(int Level, string Text);
+
+    private static readonly Regex HeadingRegex = new("<h([1-3])\\b[^>]*>(.*?)</h\\1>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private int _wordCount;
+    private int _charCount;
+    private List<Heading> _headings = new();
+
+    /// <summary>Feeds the status bar: word and character count plus the heading outline.</summary>
+    private void Analyze(string? html)
+    {
+        var source = html ?? string.Empty;
+        var text = HtmlCleanup.PlainText(source);
+        _charCount = text.Length;
+        _wordCount = text.Length == 0 ? 0 : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        var headings = new List<Heading>();
+        foreach (Match match in HeadingRegex.Matches(source))
+        {
+            var label = HtmlCleanup.PlainText(match.Groups[2].Value);
+            if (label.Length > 0)
+            {
+                headings.Add(new Heading(int.Parse(match.Groups[1].Value), label));
+            }
+        }
+        _headings = headings;
+    }
+
+    /// <summary>Moves the caret to the nth heading and scrolls it into view.</summary>
+    private async Task JumpAsync(int index)
+    {
+        if (_module is null)
+        {
+            return;
+        }
+        try
+        {
+            await _module.InvokeVoidAsync("springeZuUeberschrift", _element, index);
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "WYSIWYG-Editor: Sprung zur Überschrift fehlgeschlagen (JS-Interop).");
+        }
+    }
+
+    private long? _draftFound;
+
+    /// <summary>Agent-bound draft scope; without one the browser keeps nothing.</summary>
+    private string? DraftScope =>
+        !Compact && !string.IsNullOrWhiteSpace(DraftKey) && _user?.GetAgentId() is { Length: > 0 } me
+            ? me + ":" + DraftKey
+            : null;
+
+    /// <summary>Called from JS when a browser-local draft for this field exists.</summary>
+    [JSInvokable]
+    public Task OnDraftFound(long zeit)
+    {
+        if (_disposed || DraftScope is null)
+        {
+            return Task.CompletedTask;
+        }
+        _draftFound = zeit;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task RestoreDraftAsync()
+    {
+        _draftFound = null;
+        if (_module is null)
+        {
+            return;
+        }
+        try
+        {
+            var fresh = await _module.InvokeAsync<string?>("entwurfAnwenden", _element);
+            if (fresh is not null)
+            {
+                Value = fresh;
+                if (ValueChanged.HasDelegate)
+                {
+                    await ValueChanged.InvokeAsync(fresh);
+                }
+            }
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "WYSIWYG-Editor: Entwurf konnte nicht wiederhergestellt werden (JS-Interop).");
+        }
+    }
+
+    private async Task DiscardDraftAsync()
+    {
+        _draftFound = null;
+        if (_module is null)
+        {
+            return;
+        }
+        try
+        {
+            await _module.InvokeVoidAsync("entwurfVerwerfen", _element);
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception)
+        {
+            /* best effort */
+        }
+    }
+
+    /// <summary>Call after a successful save so the browser drops the draft; safe to call always.</summary>
+    public async Task MarkSavedAsync()
+    {
+        _draftFound = null;
+        StateHasChanged();
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        try
+        {
+            await _module.InvokeVoidAsync("entwurfAlsGespeichertMarkieren", _element);
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception)
+        {
+            /* best effort */
         }
     }
 
@@ -356,6 +536,7 @@ else if (_lastCost is { } cost)
         {
             await _module.InvokeVoidAsync("setHtml", _element, html ?? string.Empty, await LabelsAsync(html));
             Value = html;
+            Analyze(Value);
         }
         catch (JSDisconnectedException)
         {

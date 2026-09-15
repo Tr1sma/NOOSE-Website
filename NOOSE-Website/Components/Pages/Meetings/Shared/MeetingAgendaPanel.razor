@@ -86,7 +86,8 @@ else
                                 <MudText Typo="Typo.subtitle2" Class="mb-2">Notiz</MudText>
                                 @if (CanNote)
                                 {
-                                    <RichTextEditor @ref="_itemEditor" @key="item.Id" Value="@_noteHtml" MinHeight="220px" Ai="TextAssistContext.AgendaNote" AiSubject="@item.Title" Mentions="true" />
+                                    <RichTextEditor @ref="_itemEditor" @key="item.Id" Value="@_noteHtml" MinHeight="220px" Ai="TextAssistContext.AgendaNote" AiSubject="@item.Title" Mentions="true"
+                                                    DraftKey='@($"tagesordnung:{item.Id}")' />
                                     <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
                                         <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                                                    OnClick="@(() => NoteSaveAsync(item))" Disabled="@_saving">
@@ -194,6 +195,7 @@ else
                 return;
             }
             await MeetingService.AgendaItemNoteAsync(itemId, html, item.Done, User);
+            await _itemEditor.MarkSavedAsync();
             _noteHtml = HtmlCleanup.Clean(html);
             Snackbar.Add("Notiz automatisch gespeichert.", Severity.Info);
             await LoadAsync();
@@ -220,6 +222,7 @@ else
             // read the definitive HTML straight from Quill
             var html = await _itemEditor.GetHtmlAsync();
             await MeetingService.AgendaItemNoteAsync(item.Id, html, item.Done, User);
+            await _itemEditor.MarkSavedAsync();
             _noteHtml = html;
             Snackbar.Add("Notiz gespeichert.", Severity.Success);
             await LoadAsync();

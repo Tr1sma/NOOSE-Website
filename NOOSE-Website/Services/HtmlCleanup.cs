@@ -98,7 +98,7 @@ public static partial class HtmlCleanup
             "href", "target", "rel", "class", "style", "src", "alt",
             "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
             "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
-            "data-row", "data-col", "data-w", "data-full",
+            "data-row", "data-col", "data-w", "data-full", "data-checked",
         })
         {
             s.AllowedAttributes.Add(attr);

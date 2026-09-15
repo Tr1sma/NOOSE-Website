@@ -9,7 +9,8 @@
 
     <MudItem xs="12">
         <MudText Typo="Typo.subtitle2" Class="mb-1">Inhalt</MudText>
-        <RichTextEditor @ref="_editor" Value="@_content" MinHeight="320px" Ai="TextAssistContext.Announcement" AiSubject="@Input.Title" Mentions="true" />
+        <RichTextEditor @ref="_editor" Value="@_content" MinHeight="320px" Ai="TextAssistContext.Announcement" AiSubject="@Input.Title" Mentions="true"
+                        DraftKey='@($"ankuendigung:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}")' />
     </MudItem>
 
     <MudItem xs="12">
@@ -70,6 +71,9 @@
 
     /// <summary>Show broadcast options (leadership, create only).</summary>
     [Parameter] public bool ShowBroadcastOptions { get; set; }
+
+    /// <summary>Id of the announcement being edited; null for a new one (only scopes the browser draft).</summary>
+    [Parameter] public string? EntityId { get; set; }
 
     /// <summary>Controls whether leadership-only broadcast targets are loaded.</summary>
     [Parameter] public bool IsLeadership { get; set; }

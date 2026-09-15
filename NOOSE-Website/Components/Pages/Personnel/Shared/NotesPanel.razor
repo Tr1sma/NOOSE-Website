@@ -46,7 +46,8 @@
                         }
                     </MudSelect>
                 }
-                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" Ai="TextAssistContext.PersonnelNote" Mentions="true" />
+                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" Ai="TextAssistContext.PersonnelNote" Mentions="true"
+                                DraftKey='@($"personalnotiz:{AgentId}")' />
                 <div>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newHtml))">Hinzufügen</MudButton>
@@ -213,6 +214,7 @@
         {
             var when = (_entryDate ?? DateTime.Now).Date + (_entryTime ?? TimeSpan.Zero);
             await PersonnelFileService.NoteCreateAsync(AgentId, _kind, _artFreetext, when, _executorIds.ToList(), html, _user);
+            await _editor.MarkSavedAsync();
             _newHtml = string.Empty;
             _artFreetext = null;
             _executorIds = new List<string>();

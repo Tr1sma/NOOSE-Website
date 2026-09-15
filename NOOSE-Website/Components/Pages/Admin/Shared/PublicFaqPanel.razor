@@ -191,7 +191,8 @@ else
                                                         @* no Ai and no Mentions: this is outward text, and a
                                                            resolved mention would print an internal record name *@
                                                         <RichTextEditor @ref="_answerEditor" @key="entry.Id"
-                                                                        Value="@_editAnswer" MinHeight="240px" />
+                                                                        Value="@_editAnswer" MinHeight="240px"
+                                                                        DraftKey='@($"faq:{entry.Id}")' />
                                                     </div>
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">

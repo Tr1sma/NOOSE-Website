@@ -96,7 +96,8 @@ else
 
             <div>
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Beschreibung</MudText>
-                <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" Ai="TextAssistContext.Activity" Mentions="true" />
+                <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" Ai="TextAssistContext.Activity" Mentions="true"
+                                DraftKey='@(_edit ? $"aktivitaet:{Id}" : "aktivitaet:neu")' />
             </div>
         </MudStack>
     </MudPaper>
@@ -284,6 +285,7 @@ else
                 id = created.Id;
             }
 
+            await _editor.MarkSavedAsync();
             Snackbar.Add("Aktivität gespeichert.", Severity.Success);
             Nav.NavigateTo($"/aktivitaeten/{id}");
         }

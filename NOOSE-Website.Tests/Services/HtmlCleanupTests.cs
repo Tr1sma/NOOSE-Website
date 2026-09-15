@@ -345,6 +345,34 @@ public class HtmlCleanupTests
     }
 
     [Fact]
+    public void Clean_Checklist_KeepsDataChecked()
+    {
+        // quill puts data-checked on the ul, not on the li (see the vendored list blot)
+        var result = HtmlCleanup.Clean("<ul data-checked=\"true\"><li>done</li></ul><ul data-checked=\"false\"><li>open</li></ul>");
+
+        Assert.Contains("data-checked=\"true\"", result);
+        Assert.Contains("data-checked=\"false\"", result);
+    }
+
+    [Fact]
+    public void Clean_UnknownDataAttribute_IsDropped()
+    {
+        var result = HtmlCleanup.Clean("<p data-foo=\"x\">text</p>");
+
+        Assert.DoesNotContain("data-foo", result);
+        Assert.Contains("text", result);
+    }
+
+    [Fact]
+    public void Clean_IndentAndAlignClasses_ArePreserved()
+    {
+        var result = HtmlCleanup.Clean("<p class=\"ql-align-center ql-indent-1\">x</p>");
+
+        Assert.Contains("ql-align-center", result);
+        Assert.Contains("ql-indent-1", result);
+    }
+
+    [Fact]
     public void Clean_TableColspanAttribute_IsPreserved()
     {
         var result = HtmlCleanup.Clean(

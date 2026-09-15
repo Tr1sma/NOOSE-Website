@@ -322,7 +322,7 @@ else
         var preset = new HandbookArticleInput(article.ChapterId, article.Slug, article.Title, article.Summary,
             article.ContentHtml, article.RoleplayHtml, article.DiagramKey, article.NavKey,
             article.SortOrder, article.IsVisible);
-        var input = await HandbookArticleDialog.ShowAsync(DialogService, "Artikel bearbeiten", _allChapters, preset);
+        var input = await HandbookArticleDialog.ShowAsync(DialogService, "Artikel bearbeiten", _allChapters, preset, entityId: id);
         if (input is null)
         {
             return;
@@ -367,7 +367,7 @@ else
     {
         var preset = new GlossaryTermInput(term.Term, term.Synonyms, term.ShortDefinition,
             term.ExplanationHtml, ArticleIdOf(term.ArticleSlug), true);
-        var input = await GlossaryTermDialog.ShowAsync(DialogService, "Begriff bearbeiten", _allArticles, preset);
+        var input = await GlossaryTermDialog.ShowAsync(DialogService, "Begriff bearbeiten", _allArticles, preset, entityId: term.Id);
         if (input is null)
         {
             return;

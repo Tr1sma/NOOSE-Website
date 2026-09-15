@@ -63,7 +63,8 @@ else
             </MudAlert>
 
             <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.DocumentTemplate" Mentions="true" />
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.DocumentTemplate" Mentions="true"
+                            DraftKey='@(_edit ? $"vorlage-dokument:{Id}" : "vorlage-dokument:neu")' />
         </MudStack>
     </MudPaper>
 }
@@ -143,6 +144,7 @@ else
                 await TemplateService.CreateAsync(input, _user);
             }
 
+            await _editor.MarkSavedAsync();
             Snackbar.Add("Vorlage gespeichert.", Severity.Success);
             Nav.NavigateTo("/einstellungen?tab=vorlagen-dokument");
         }

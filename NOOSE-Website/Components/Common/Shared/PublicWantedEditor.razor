@@ -150,7 +150,8 @@ else
                     @if (_chargeSeen)
                     {
                         @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
-                        <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.ChargeHtml" MinHeight="240px" />
+                        <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.ChargeHtml" MinHeight="240px"
+                                        DraftKey='@($"fahndung:{_draft.Id}")' />
                     }
                 </MudStack>
             </MudTabPanel>
@@ -336,6 +337,10 @@ else
     private async Task SaveAsync() => await RunAsync(async () =>
     {
         await StoreAsync();
+        if (_editor is not null)
+        {
+            await _editor.MarkSavedAsync();
+        }
         Snackbar.Add("Ausschreibung gespeichert.", Severity.Success);
     });
 

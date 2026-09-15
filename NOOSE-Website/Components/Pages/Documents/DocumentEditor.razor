@@ -73,7 +73,8 @@ else
                 </MudSelect>
             }
 
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.Document" AiSubject="@_title" Mentions="true" />
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.Document" AiSubject="@_title" Mentions="true"
+                            DraftKey='@(_edit ? $"dokument:{Id}" : $"dokument:neu:{_entityType}:{_entityId}")' />
         </MudStack>
     </MudPaper>
 }
@@ -227,6 +228,7 @@ else
                 }
             }
 
+            await _editor.MarkSavedAsync();
             Snackbar.Add("Dokument gespeichert.", Severity.Success);
             Nav.NavigateTo(TargetBySave(id));
         }

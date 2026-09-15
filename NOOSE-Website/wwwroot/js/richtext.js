@@ -24,6 +24,120 @@ function registriereGroessen() {
     groessenRegistriert = true;
 }
 
+function beschrifteAuswahl(leiste, format, labels, titel) {
+    const auswahl = leiste.querySelector('select.ql-' + format);
+    const picker = leiste.querySelector('.ql-picker.ql-' + format);
+    if (!auswahl || !picker) {
+        return;
+    }
+    for (const option of auswahl.options) {
+        option.dataset.label = labels[option.value] || labels[''];
+    }
+    for (const item of picker.querySelectorAll('.ql-picker-item')) {
+        item.dataset.label = labels[item.dataset.value || ''] || labels[''];
+    }
+    const label = picker.querySelector('.ql-picker-label');
+    if (!label) {
+        return;
+    }
+    label.title = titel;
+    label.setAttribute('aria-label', titel);
+    const aktualisieren = () => {
+        label.dataset.label = labels[auswahl.value] || labels[''];
+    };
+    auswahl.addEventListener('change', aktualisieren);
+    aktualisieren();
+}
+
+// on the narrow-screen strip the picker dropdowns sit inside overflow-x:auto and would be clipped:
+// re-anchor them against the viewport (the toolbar carries no transform, so fixed works here)
+function loeseDropdownsAusScrollStrip(leiste) {
+    const schmal = window.matchMedia('(max-width: 960px)');
+    for (const picker of leiste.querySelectorAll('.ql-picker')) {
+        const beschriftung = picker.querySelector('.ql-picker-label');
+        const auswahl = picker.querySelector('.ql-picker-options');
+        if (!beschriftung || !auswahl) {
+            continue;
+        }
+        beschriftung.addEventListener('click', () => {
+            if (beschriftung.closest('.mud-dialog')) {
+                // inside a dialog the toolbar wraps instead (transform would pin position:fixed to the dialog)
+                return;
+            }
+            if (!schmal.matches) {
+                // wide again: hand positioning back to quill's own absolute rules
+                auswahl.style.position = '';
+                auswahl.style.top = '';
+                auswahl.style.left = '';
+                auswahl.style.zIndex = '';
+                return;
+            }
+            // quill toggles ql-expanded on the same click; measure after the handler ran
+            requestAnimationFrame(() => {
+                if (!picker.classList.contains('ql-expanded') || !picker.isConnected) {
+                    return;
+                }
+                const suche = beschriftung.getBoundingClientRect();
+                auswahl.style.position = 'fixed';
+                auswahl.style.top = (suche.bottom + 4) + 'px';
+                auswahl.style.left = Math.max(4, Math.min(suche.left, window.innerWidth - auswahl.offsetWidth - 8)) + 'px';
+                auswahl.style.zIndex = '12';
+            });
+        });
+    }
+}
+
+function beschrifteToolbar(leiste, tableHandler) {
+    const werkzeuge = [
+        ['button.ql-bold', 'Fett (Strg+B)'],
+        ['button.ql-italic', 'Kursiv (Strg+I)'],
+        ['button.ql-underline', 'Unterstreichen (Strg+U)'],
+        ['button.ql-strike', 'Durchstreichen'],
+        ['button.ql-list[value="ordered"]', 'Nummerierte Liste'],
+        ['button.ql-list[value="bullet"]', 'Aufzählung'],
+        ['button.ql-list[value="check"]', 'Checkliste'],
+        ['button.ql-indent[value="-1"]', 'Einzug verringern'],
+        ['button.ql-indent[value="+1"]', 'Einzug erhöhen'],
+        ['.ql-align .ql-picker-label', 'Ausrichtung'],
+        ['button.ql-blockquote', 'Zitat'],
+        ['button.ql-code-block', 'Codeblock'],
+        ['button.ql-link', 'Link einfügen (Strg+K)'],
+        ['button.ql-image', 'Bild einfügen'],
+        ['button.ql-clean', 'Formatierung entfernen'],
+        ['button.ql-noose-suchen', 'Suchen und Ersetzen (Strg+F)'],
+        ['button.ql-noose-vollbild', 'Vollbild (Esc beendet)'],
+        ['.ql-color .ql-picker-label', 'Textfarbe'],
+        ['.ql-background .ql-picker-label', 'Hintergrundfarbe'],
+    ];
+    if (tableHandler) {
+        werkzeuge.push(['.ql-' + tableHandler.toolName + ' .ql-picker-label', 'Tabelle einfügen']);
+    }
+    for (const [selector, titel] of werkzeuge) {
+        for (const element of leiste.querySelectorAll(selector)) {
+            element.title = titel;
+            element.setAttribute('aria-label', titel);
+        }
+    }
+    const ausrichtung = { '': 'Linksbündig', center: 'Zentriert', right: 'Rechtsbündig', justify: 'Blocksatz' };
+    for (const element of leiste.querySelectorAll('.ql-align .ql-picker-item')) {
+        const titel = ausrichtung[element.dataset.value || ''] || 'Ausrichtung';
+        element.title = titel;
+        element.setAttribute('aria-label', titel);
+    }
+    beschrifteAuswahl(leiste, 'header', {
+        '': 'Text',
+        '1': 'Überschrift 1',
+        '2': 'Überschrift 2',
+        '3': 'Überschrift 3',
+    }, 'Textstil');
+    beschrifteAuswahl(leiste, 'size', {
+        '': 'Normal',
+        '0.75em': 'Klein',
+        '1.5em': 'Groß',
+        '2.5em': 'Sehr groß',
+    }, 'Schriftgröße');
+}
+
 // Stored html carries the bare @{Typ:Id} token, same as every plain-text field — a frozen label would leak
 // the name of a classified record into search snippets, Discord embeds and LLM context. The chip below is
 // view-only: built on load, dissolved back into the token on read.
@@ -444,6 +558,146 @@ function haengeErwaehnungAn(element, editor, zustand) {
     element.addEventListener('keydown', zustand.tasten, true);
 }
 
+// slash menu: a "/" at the start of an empty line offers the block formats. Entirely client-side —
+// the commands are static, so a Blazor round trip would only add latency to a keystroke.
+const BEFEHLE = [
+    { id: 'text', name: 'Text', beschreibung: 'Normaler Absatz', form: null, suche: ['text', 'absatz'] },
+    { id: 'h1', name: 'Überschrift 1', beschreibung: 'Kapitel', form: 'header', wert: 1, suche: ['h1', 'überschrift 1'] },
+    { id: 'h2', name: 'Überschrift 2', beschreibung: 'Abschnitt', form: 'header', wert: 2, suche: ['h2', 'überschrift 2'] },
+    { id: 'h3', name: 'Überschrift 3', beschreibung: 'Unterabschnitt', form: 'header', wert: 3, suche: ['h3', 'überschrift 3'] },
+    { id: 'liste', name: 'Aufzählung', beschreibung: 'Punkte ohne Reihenfolge', form: 'list', wert: 'bullet', suche: ['aufzählung', 'liste', 'punkte'] },
+    { id: 'nummern', name: 'Nummerierte Liste', beschreibung: 'Schritte mit Reihenfolge', form: 'list', wert: 'ordered', suche: ['nummeriert', 'liste', '1.'] },
+    { id: 'check', name: 'Checkliste', beschreibung: 'Abzuhakende Punkte', form: 'list', wert: 'unchecked', suche: ['checkliste', 'aufgabe', 'todo'] },
+    { id: 'zitat', name: 'Zitat', beschreibung: 'Abgesetzter Auszug', form: 'blockquote', wert: true, suche: ['zitat', '>'] },
+    { id: 'code', name: 'Codeblock', beschreibung: 'Feste Zeilenumbrüche, Monospace', form: 'code-block', wert: true, suche: ['code', 'codeblock'] },
+];
+
+function haengeBefehlsMenueAn(element, editor) {
+    const huelle = element.parentElement;
+    if (!huelle) {
+        return null;
+    }
+    const zustand = { tot: false, offen: false, index: 0, treffer: [], start: 0, laenge: 0, masse: null, tasten: null };
+    element.__nooseBefehle = zustand;
+
+    const panel = document.createElement('div');
+    panel.className = 'noose-befehle';
+    panel.setAttribute('role', 'listbox');
+    panel.hidden = true;
+    huelle.appendChild(panel);
+
+    const schliessen = () => {
+        zustand.offen = false;
+        panel.hidden = true;
+    };
+
+    const zeigen = () => {
+        zustand.index = Math.min(zustand.index, Math.max(0, zustand.treffer.length - 1));
+        panel.innerHTML = '';
+        zustand.treffer.forEach((befehl, i) => {
+            const eintrag = document.createElement('div');
+            eintrag.className = 'noose-befehl' + (i === zustand.index ? ' noose-befehl-aktiv' : '');
+            eintrag.setAttribute('role', 'option');
+            eintrag.setAttribute('aria-selected', i === zustand.index ? 'true' : 'false');
+            const titel = document.createElement('strong');
+            titel.textContent = befehl.name;
+            const text = document.createElement('span');
+            text.textContent = befehl.beschreibung;
+            eintrag.appendChild(titel);
+            eintrag.appendChild(text);
+            eintrag.addEventListener('pointerdown', (ereignis) => {
+                ereignis.preventDefault();
+                anwenden(befehl);
+            });
+            panel.appendChild(eintrag);
+        });
+        if (zustand.masse) {
+            panel.style.top = Math.round(zustand.masse.bottom + element.offsetTop) + 'px';
+            panel.style.left = Math.round(zustand.masse.left + element.offsetLeft) + 'px';
+        }
+        panel.hidden = false;
+        zustand.offen = true;
+    };
+
+    const anwenden = (befehl) => {
+        if (!zustand.offen || !befehl) {
+            return;
+        }
+        const start = zustand.start;
+        const laenge = zustand.laenge;
+        schliessen();
+        if (laenge > 0) {
+            editor.deleteText(start, laenge, 'user');
+        }
+        // a block choice replaces the list format, it never nests inside one
+        if (befehl.form !== 'list') {
+            editor.formatLine(start, 1, 'list', false);
+        }
+        editor.formatLine(start, 1, befehl.form || 'header', befehl.form === null ? false : befehl.wert);
+        editor.setSelection(start, 0, 'silent');
+        editor.focus();
+    };
+
+    const pruefen = () => {
+        if (zustand.tot) {
+            return;
+        }
+        const bereich = editor.getSelection();
+        if (!bereich || bereich.length > 0 || bereich.index < 1) {
+            schliessen();
+            return;
+        }
+        const [zeile] = editor.getLine(bereich.index - 1);
+        if (!zeile) {
+            schliessen();
+            return;
+        }
+        const start = editor.getIndex(zeile);
+        const text = editor.getText(start, bereich.index - start);
+        const treffer = /^\/([a-zA-ZäöüÄÖÜß]*)$/.exec(text);
+        if (!treffer) {
+            schliessen();
+            return;
+        }
+        const suche = treffer[1].toLowerCase();
+        const gefiltert = BEFEHLE.filter((befehl) => befehl.suche.some((wort) => wort.startsWith(suche)));
+        if (gefiltert.length === 0) {
+            schliessen();
+            return;
+        }
+        zustand.treffer = gefiltert;
+        zustand.start = start;
+        zustand.laenge = text.length;
+        zustand.masse = editor.getBounds(bereich.index);
+        zustand.index = 0;
+        zeigen();
+    };
+
+    zustand.tasten = (ereignis) => {
+        if (!zustand.offen || ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].indexOf(ereignis.key) < 0) {
+            return;
+        }
+        ereignis.preventDefault();
+        ereignis.stopPropagation();
+        if (ereignis.key === 'Escape') {
+            schliessen();
+            return;
+        }
+        if (ereignis.key === 'Enter' || ereignis.key === 'Tab') {
+            anwenden(zustand.treffer[zustand.index]);
+            return;
+        }
+        const schritt = ereignis.key === 'ArrowDown' ? 1 : -1;
+        zustand.index = (zustand.index + schritt + zustand.treffer.length) % zustand.treffer.length;
+        zeigen();
+    };
+    element.addEventListener('keydown', zustand.tasten, true);
+
+    editor.on('text-change', pruefen);
+    editor.on('selection-change', pruefen);
+    return zustand;
+}
+
 /// tells the editor whether the picker is open, so it may claim the arrow keys
 export function setzeErwaehnungOffen(element, offen) {
     const zustand = element && element.__nooseErwaehnung;
@@ -469,6 +723,532 @@ export function erwaehnungEinfuegen(element, start, laenge, token, beschriftung)
     editor.setSelection(start + 2, 0, 'silent');
     editor.focus();
     return leseHtml(editor);
+}
+
+let komfortSymboleRegistriert = false;
+
+function registriereKomfortSymbole() {
+    if (komfortSymboleRegistriert || !window.Quill) {
+        return;
+    }
+    const symbole = window.Quill.import('ui/icons');
+    symbole['noose-suchen'] = '<svg viewBox="0 0 18 18"><circle class="ql-stroke" cx="7.5" cy="7.5" r="4.5" fill="none"/><line class="ql-stroke" x1="11" y1="11" x2="15.5" y2="15.5"/></svg>';
+    symbole['noose-vollbild'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M3 7V3h4M11 3h4v4M15 11v4h-4M7 15H3v-4"/></svg>';
+    komfortSymboleRegistriert = true;
+}
+
+// find and replace over the editor text. Replacing works on real text only and skips matches that sit
+// inside an embed (a mention chip), so a sweep can never dissolve a stored @{Typ:Id} token.
+function haengeSuchenAn(element) {
+    const huelle = element.parentElement;
+    if (!huelle) {
+        return null;
+    }
+    const zustand = { offen: false, treffer: [], aktuell: -1, quelle: null, feld: null, tasten: null };
+    element.__nooseSuchen = zustand;
+
+    const panel = document.createElement('div');
+    panel.className = 'noose-suchen noose-suchen-versteckt';
+    const oberste = document.createElement('div');
+    oberste.className = 'noose-suchen-zeile';
+    const feld = document.createElement('input');
+    feld.type = 'text';
+    feld.placeholder = 'Suchen';
+    feld.className = 'noose-suchen-feld';
+    const ersatzfeld = document.createElement('input');
+    ersatzfeld.type = 'text';
+    ersatzfeld.placeholder = 'Ersetzen';
+    ersatzfeld.className = 'noose-suchen-feld';
+    const zaehler = document.createElement('span');
+    zaehler.className = 'noose-suchen-zaehler';
+    const weitere = document.createElement('div');
+    weitere.className = 'noose-suchen-zeile';
+    const knopf = (titel, beschriftung, aktion) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.title = titel;
+        b.textContent = beschriftung;
+        b.addEventListener('pointerdown', (ereignis) => {
+            ereignis.preventDefault();
+            aktion();
+        });
+        weitere.appendChild(b);
+        return b;
+    };
+    knopf('Vorheriger Treffer', 'Zurück', () => springen(-1));
+    knopf('Nächster Treffer', 'Weiter', () => springen(1));
+    knopf('Diesen Treffer ersetzen', 'Ersetzen', () => ersetzeAktuell());
+    knopf('Alle Treffer ersetzen', 'Alle ersetzen', () => ersetzeAlle());
+    knopf('Schließen (Esc)', 'Schließen', () => schliessen());
+    oberste.appendChild(feld);
+    oberste.appendChild(ersatzfeld);
+    oberste.appendChild(zaehler);
+    panel.appendChild(oberste);
+    panel.appendChild(weitere);
+    huelle.appendChild(panel);
+
+    const editor = () => element.__nooseQuill;
+
+    // a match overlapping an embed returns true and is never rewritten
+    const beruehrtEmbed = (bereich) => {
+        return editor().getContents(bereich.index, bereich.length).ops.some((op) => typeof op.insert !== 'string');
+    };
+
+    const anzeigen = () => {
+        zaehler.textContent = zustand.treffer.length === 0
+            ? '0 Treffer'
+            : (zustand.aktuell + 1) + '/' + zustand.treffer.length;
+        if (zustand.aktuell < 0) {
+            return;
+        }
+        const bereich = zustand.treffer[zustand.aktuell];
+        editor().setSelection(bereich.index, bereich.length, 'silent');
+        const [zeile] = editor().getLine(bereich.index);
+        if (zeile && zeile.domNode && zeile.domNode.scrollIntoView) {
+            zeile.domNode.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    };
+
+    // ab < 0 keeps the current hit, otherwise searches forward from that index
+    const neuSuchen = (ab) => {
+        if (!editor()) {
+            return;
+        }
+        const quelle = editor().getText();
+        zustand.quelle = quelle;
+        const nadel = feld.value;
+        const vorher = ab < 0 && zustand.aktuell >= 0 && zustand.treffer[zustand.aktuell]
+            ? zustand.treffer[zustand.aktuell].index
+            : ab;
+        zustand.treffer = [];
+        if (nadel) {
+            const klein = quelle.toLowerCase();
+            const gesucht = nadel.toLowerCase();
+            let pos = 0;
+            while ((pos = klein.indexOf(gesucht, pos)) >= 0) {
+                zustand.treffer.push({ index: pos, length: nadel.length });
+                pos += Math.max(1, nadel.length);
+            }
+        }
+        zustand.aktuell = -1;
+        for (let i = 0; i < zustand.treffer.length; i++) {
+            if (zustand.treffer[i].index >= Math.max(0, vorher)) {
+                zustand.aktuell = i;
+                break;
+            }
+        }
+        if (zustand.aktuell < 0 && zustand.treffer.length > 0) {
+            zustand.aktuell = 0;
+        }
+        anzeigen();
+    };
+
+    // a match set only stays valid while the document text is untouched
+    const veraltet = () => zustand.quelle !== null && zustand.quelle !== editor().getText();
+
+    const springen = (richtung) => {
+        if (zustand.treffer.length === 0 || !editor()) {
+            return;
+        }
+        zustand.aktuell = (zustand.aktuell + richtung + zustand.treffer.length) % zustand.treffer.length;
+        anzeigen();
+    };
+
+    const ersetzeAktuell = () => {
+        if (zustand.aktuell < 0 || !editor()) {
+            return;
+        }
+        if (veraltet()) {
+            // someone kept typing: rebuild the hit list, the next click replaces
+            neuSuchen(0);
+            return;
+        }
+        const bereich = zustand.treffer[zustand.aktuell];
+        if (beruehrtEmbed(bereich)) {
+            springen(1);
+            return;
+        }
+        editor().deleteText(bereich.index, bereich.length, 'user');
+        if (ersatzfeld.value) {
+            editor().insertText(bereich.index, ersatzfeld.value, 'user');
+        }
+        neuSuchen(bereich.index);
+    };
+
+    const ersetzeAlle = () => {
+        if (!editor()) {
+            return;
+        }
+        if (veraltet()) {
+            neuSuchen(0);
+        }
+        const bereiche = zustand.treffer.slice().reverse();
+        for (const bereich of bereiche) {
+            if (beruehrtEmbed(bereich)) {
+                continue;
+            }
+            editor().deleteText(bereich.index, bereich.length, 'user');
+            if (ersatzfeld.value) {
+                editor().insertText(bereich.index, ersatzfeld.value, 'user');
+            }
+        }
+        neuSuchen(0);
+    };
+
+    const schliessen = () => {
+        zustand.offen = false;
+        panel.classList.add('noose-suchen-versteckt');
+        if (editor()) {
+            editor().focus();
+        }
+    };
+
+    const oeffnen = () => {
+        zustand.offen = true;
+        panel.classList.remove('noose-suchen-versteckt');
+        feld.focus();
+        feld.select();
+        neuSuchen(0);
+    };
+    zustand.oeffnen = oeffnen;
+
+    feld.addEventListener('input', () => neuSuchen(0));
+    feld.addEventListener('keydown', (ereignis) => {
+        if (ereignis.key === 'Enter') {
+            ereignis.preventDefault();
+            springen(ereignis.shiftKey ? -1 : 1);
+        } else if (ereignis.key === 'Escape') {
+            ereignis.preventDefault();
+            schliessen();
+        }
+    });
+
+    zustand.tasten = (ereignis) => {
+        if ((ereignis.ctrlKey || ereignis.metaKey) && (ereignis.key === 'f' || ereignis.key === 'F')) {
+            ereignis.preventDefault();
+            ereignis.stopPropagation();
+            oeffnen();
+        }
+    };
+    element.addEventListener('keydown', zustand.tasten, true);
+    return zustand;
+}
+
+// ---- draft recovery (IndexedDB) ----
+// Unsaved text is kept in the browser so a broken circuit or an accidental navigation cannot swallow a long
+// report. IndexedDB, not localStorage: base64 images would blow the 5 MB string quota on the first screenshot.
+const ENTWURF_DB = 'noose-rte';
+const ENTWURF_STORE = 'entwuerfe';
+const ENTWURF_ALTER_TAGE = 30;
+const ENTWURF_VERZOEGERUNG = 800;
+
+let entwurfDbPromise = null;
+let entwurfAufgeraeumt = false;
+
+function ladeEntwurfsDb() {
+    if (entwurfDbPromise) {
+        return entwurfDbPromise;
+    }
+    entwurfDbPromise = new Promise((resolve) => {
+        if (!window.indexedDB) {
+            resolve(null);
+            return;
+        }
+        try {
+            const anfrage = window.indexedDB.open(ENTWURF_DB, 1);
+            anfrage.onupgradeneeded = () => {
+                const db = anfrage.result;
+                if (!db.objectStoreNames.contains(ENTWURF_STORE)) {
+                    db.createObjectStore(ENTWURF_STORE, { keyPath: 'schluessel' });
+                }
+            };
+            anfrage.onsuccess = () => resolve(anfrage.result);
+            anfrage.onerror = () => resolve(null);
+        } catch (e) {
+            // private mode and hardened browsers may throw right here
+            resolve(null);
+        }
+    });
+    return entwurfDbPromise;
+}
+
+function entwurfSchreiben(db, eintrag) {
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction(ENTWURF_STORE, 'readwrite');
+            tx.objectStore(ENTWURF_STORE).put(eintrag);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+function entwurfLesen(db, schluessel) {
+    return new Promise((resolve) => {
+        try {
+            const anfrage = db.transaction(ENTWURF_STORE, 'readonly').objectStore(ENTWURF_STORE).get(schluessel);
+            anfrage.onsuccess = () => resolve(anfrage.result || null);
+            anfrage.onerror = () => resolve(null);
+        } catch (e) {
+            resolve(null);
+        }
+    });
+}
+
+function entwurfLoeschen(db, schluessel) {
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction(ENTWURF_STORE, 'readwrite');
+            tx.objectStore(ENTWURF_STORE).delete(schluessel);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+// stale drafts of any field are dropped once per session, so nothing prehistoric resurfaces
+function entwurfAufraeumen(db) {
+    if (entwurfAufgeraeumt) {
+        return;
+    }
+    entwurfAufgeraeumt = true;
+    try {
+        const grenze = Date.now() - ENTWURF_ALTER_TAGE * 86400000;
+        const tx = db.transaction(ENTWURF_STORE, 'readwrite');
+        const speicher = tx.objectStore(ENTWURF_STORE);
+        const lauf = speicher.openCursor();
+        lauf.onsuccess = () => {
+            const cursor = lauf.result;
+            if (!cursor) {
+                return;
+            }
+            if (!cursor.value || cursor.value.zeit < grenze) {
+                cursor.delete();
+            }
+            cursor.continue();
+        };
+    } catch (e) {
+        /* best effort */
+    }
+}
+
+// key = agent + scope, supplied by the component; the plain text never lands in the key
+function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
+    if (!schluessel) {
+        return null;
+    }
+    const zustand = { schluessel, basis: leseHtml(editor), schreiben: null, tot: false };
+    element.__nooseEntwurf = zustand;
+
+    ladeEntwurfsDb().then(async (db) => {
+        if (!db || zustand.tot) {
+            return;
+        }
+        entwurfAufraeumen(db);
+        const eintrag = await entwurfLesen(db, schluessel);
+        if (!eintrag || zustand.tot) {
+            return;
+        }
+        if (Date.now() - eintrag.zeit > ENTWURF_ALTER_TAGE * 86400000) {
+            entwurfLoeschen(db, schluessel);
+            return;
+        }
+        const aktuell = leseHtml(editor);
+        if (eintrag.html === aktuell) {
+            entwurfLoeschen(db, schluessel);
+            return;
+        }
+        // the user already typed on: their text wins, the stored draft must not pop up over it
+        if (leseHtml(editor) !== zustand.basis) {
+            return;
+        }
+        dotnetRef.invokeMethodAsync('OnDraftFound', eintrag.zeit).catch(() => { });
+    });
+
+    editor.on('text-change', () => {
+        if (zustand.tot) {
+            return;
+        }
+        if (zustand.schreiben) {
+            clearTimeout(zustand.schreiben);
+        }
+        zustand.schreiben = setTimeout(async () => {
+            const db = await ladeEntwurfsDb();
+            if (!db || zustand.tot) {
+                return;
+            }
+            const html = leseHtml(editor);
+            if (html === zustand.basis || html.length === 0) {
+                // back to the saved state (or still empty): nothing worth recovering
+                await entwurfLoeschen(db, schluessel);
+                return;
+            }
+            await entwurfSchreiben(db, { schluessel, html, zeit: Date.now() });
+        }, ENTWURF_VERZOEGERUNG);
+    });
+
+    return zustand;
+}
+
+/// applies the stored draft; returns the fresh html or null when there is none
+export async function entwurfAnwenden(element) {
+    const editor = element && element.__nooseQuill;
+    const zustand = element && element.__nooseEntwurf;
+    if (!editor || !zustand) {
+        return null;
+    }
+    const db = await ladeEntwurfsDb();
+    if (!db) {
+        return null;
+    }
+    const eintrag = await entwurfLesen(db, zustand.schluessel);
+    if (!eintrag) {
+        return null;
+    }
+    const beschriftungen = element.__nooseErwaehnung ? element.__nooseErwaehnung.beschriftungen : null;
+    editor.setText('');
+    editor.clipboard.dangerouslyPasteHTML(tokenZuChip(eintrag.html, beschriftungen));
+    // the baseline stays the server content: until the next save the restored text is unsaved and
+    // must keep autosaving, otherwise a second disconnect would swallow it after all
+    editor.focus();
+    return leseHtml(editor);
+}
+
+export async function entwurfVerwerfen(element) {
+    const zustand = element && element.__nooseEntwurf;
+    if (!zustand) {
+        return;
+    }
+    const db = await ladeEntwurfsDb();
+    if (db) {
+        await entwurfLoeschen(db, zustand.schluessel);
+    }
+}
+
+// called by the page after a successful save or send: the draft may go, the current html is the baseline
+export async function entwurfAlsGespeichertMarkieren(element) {
+    const editor = element && element.__nooseQuill;
+    const zustand = element && element.__nooseEntwurf;
+    if (!zustand) {
+        return;
+    }
+    const db = await ladeEntwurfsDb();
+    if (db) {
+        await entwurfLoeschen(db, zustand.schluessel);
+    }
+    if (editor) {
+        zustand.basis = leseHtml(editor);
+    }
+}
+
+// fullscreen writing mode; native fullscreen first (a dialog ancestor carries transform:scale(1), which
+// would anchor a fixed overlay to the dialog instead of the viewport), CSS overlay as fallback
+function haengeVollbildAn(element) {
+    const huelle = element.parentElement;
+    if (!huelle) {
+        return null;
+    }
+    const zustand = { aktiv: false, nativ: false, tasten: null, wechsel: null };
+    element.__nooseVollbild = zustand;
+
+    const knopfMarkieren = (aktiv) => {
+        const toolbar = element.__nooseQuill ? element.__nooseQuill.getModule('toolbar') : null;
+        const knopf = toolbar ? toolbar.container.querySelector('.ql-noose-vollbild') : null;
+        if (knopf) {
+            knopf.classList.toggle('ql-active', aktiv);
+        }
+    };
+
+    const setzen = (aktiv) => {
+        zustand.aktiv = aktiv;
+        huelle.classList.toggle('noose-rte-vollbild', aktiv);
+        knopfMarkieren(aktiv);
+        try {
+            if (aktiv && typeof huelle.requestFullscreen === 'function') {
+                const versprechen = huelle.requestFullscreen();
+                if (versprechen && versprechen.catch) {
+                    versprechen.catch(() => { /* the CSS overlay carries on */ });
+                }
+            } else if (!aktiv && document.fullscreenElement === huelle) {
+                document.exitFullscreen().catch(() => { });
+            }
+        } catch (e) {
+            /* CSS overlay only */
+        }
+    };
+    zustand.umschalten = () => setzen(!zustand.aktiv);
+
+    // native Escape leaves fullscreen without our key handler; keep class and button in step
+    zustand.wechsel = () => {
+        if (document.fullscreenElement === huelle) {
+            zustand.nativ = true;
+            return;
+        }
+        if (zustand.nativ && zustand.aktiv) {
+            zustand.nativ = false;
+            setzen(false);
+        }
+    };
+    document.addEventListener('fullscreenchange', zustand.wechsel);
+
+    zustand.tasten = (ereignis) => {
+        if (zustand.aktiv && ereignis.key === 'Escape') {
+            ereignis.preventDefault();
+            ereignis.stopPropagation();
+            setzen(false);
+        }
+    };
+    element.addEventListener('keydown', zustand.tasten, true);
+    return zustand;
+}
+
+// markdown-style block markers: typed "## " or "- " at the start of a line turn into the block format.
+// text-change fires after the marker is in the document, so the marker is removed again right away —
+// a keyboard-binding return value differs between quill versions, this path is stable.
+function haengeBlockKuerzelAn(editor) {
+    const kuerzel = [
+        { muster: /^(#{1,3}) $/, form: 'header', wert: (treffer) => treffer[1].length },
+        { muster: /^(-|\*) $/, form: 'list', wert: () => 'bullet' },
+        { muster: /^1\. $/, form: 'list', wert: () => 'ordered' },
+        { muster: /^\[\] $/, form: 'list', wert: () => 'unchecked' },
+        { muster: /^> $/, form: 'blockquote', wert: () => true },
+    ];
+    let umwandelt = false;
+    editor.on('text-change', (delta, alt, quelle) => {
+        if (umwandelt || quelle !== 'user') {
+            return;
+        }
+        const bereich = editor.getSelection();
+        if (!bereich || bereich.length > 0 || bereich.index < 2) {
+            return;
+        }
+        const [zeile] = editor.getLine(bereich.index - 1);
+        if (!zeile) {
+            return;
+        }
+        const start = editor.getIndex(zeile);
+        const text = editor.getText(start, bereich.index - start);
+        for (const regel of kuerzel) {
+            const treffer = regel.muster.exec(text);
+            if (!treffer) {
+                continue;
+            }
+            umwandelt = true;
+            editor.deleteText(start, treffer[0].length, 'user');
+            // a block marker replaces the list format instead of nesting inside it
+            if (regel.form !== 'list') {
+                editor.formatLine(start, 1, 'list', false);
+            }
+            editor.formatLine(start, 1, regel.form, regel.wert(treffer));
+            editor.setSelection(start, 0, 'silent');
+            umwandelt = false;
+            break;
+        }
+    });
 }
 
 function setzeKiBeschaeftigt(element, beschaeftigt) {
@@ -506,7 +1286,7 @@ function meldeKi(element, zustand, modus) {
         });
 }
 
-export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen) {
+export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel) {
     await ladeQuill();
     if (!element) {
         return;
@@ -515,17 +1295,23 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     registriereErwaehnung();
     const tableHandler = await ladeTabellenModul();
 
-    const toolbarGruppen = [
+    const toolbarGruppen = kompakt ? [
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }, { list: 'check' }],
+        ['blockquote', 'link', 'image', 'clean'],
+    ] : [
         [{ header: [1, 2, 3, false] }],
         [{ size: ['0.75em', false, '1.5em', '2.5em'] }],
         ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ list: 'ordered' }, { list: 'bullet' }, { list: 'check' }],
+        [{ indent: '-1' }, { indent: '+1' }],
+        [{ align: [] }],
         ['blockquote', 'code-block'],
         [{ color: [] }, { background: [] }],
         ['link', 'image', 'clean'],
     ];
     const module = {};
-    if (tableHandler) {
+    if (tableHandler && !kompakt) {
         // table toolbar
         toolbarGruppen.push([{ [tableHandler.toolName]: [] }]);
         module[tableHandler.moduleName] = {
@@ -541,20 +1327,39 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
         beschriftungen: Object.assign({}, beschriftungen),
     };
 
+    if (!kompakt) {
+        registriereKomfortSymbole();
+        toolbarGruppen.push(['noose-suchen', 'noose-vollbild']);
+    }
+
     if (kiAktiv) {
         registriereKiSymbole();
         toolbarGruppen.push([KI_KORREKTUR, KI_SCHREIBEN]);
     }
 
+    const handlers = {};
+    if (kiAktiv) {
+        handlers[KI_KORREKTUR] = () => meldeKi(element, zustand, 'korrigieren');
+        handlers[KI_SCHREIBEN] = () => meldeKi(element, zustand, 'schreiben');
+    }
+    if (!kompakt) {
+        handlers['noose-suchen'] = () => {
+            const suchen = element.__nooseSuchen;
+            if (suchen) {
+                suchen.oeffnen();
+            }
+        };
+        handlers['noose-vollbild'] = () => {
+            const vollbild = element.__nooseVollbild;
+            if (vollbild) {
+                vollbild.umschalten();
+            }
+        };
+    }
+
     // container/handlers form, not the plain array: the table tool must stay inside container, and the
     // table module swaps toolbar.handlers per instance — writing to Quill's shared DEFAULTS would fight that
-    module.toolbar = {
-        container: toolbarGruppen,
-        handlers: kiAktiv ? {
-            [KI_KORREKTUR]: () => meldeKi(element, zustand, 'korrigieren'),
-            [KI_SCHREIBEN]: () => meldeKi(element, zustand, 'schreiben'),
-        } : {},
-    };
+    module.toolbar = { container: toolbarGruppen, handlers };
 
     const editor = new window.Quill(element, {
         theme: 'snow',
@@ -593,6 +1398,13 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     });
 
     element.__nooseQuill = editor;
+    if (!kompakt) {
+        haengeBlockKuerzelAn(editor);
+        haengeBefehlsMenueAn(element, editor);
+        haengeSuchenAn(element);
+        haengeVollbildAn(element);
+        haengeEntwurfAn(element, editor, dotnetRef, entwurfSchluessel);
+    }
 
     if (kiAktiv) {
         // Quill puts no title on toolbar buttons
@@ -607,6 +1419,9 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
             }
         }
     }
+    const leiste = editor.getModule('toolbar').container;
+    beschrifteToolbar(leiste, tableHandler);
+    loeseDropdownsAusScrollStrip(leiste);
 }
 
 /// applies a NOOSEI result; returns the fresh html, or null when the editor moved on meanwhile
@@ -685,6 +1500,26 @@ export function getHtml(element) {
     return editor ? leseHtml(editor) : '';
 }
 
+/// moves the caret to the nth heading (h1-h3, document order) and scrolls it into view
+export function springeZuUeberschrift(element, nummer) {
+    const editor = element && element.__nooseQuill;
+    if (!editor) {
+        return;
+    }
+    // empty headings are skipped, the same way the C# outline builds its list
+    const ziel = Array.from(editor.root.querySelectorAll('h1, h2, h3'))
+        .filter((element) => (element.textContent || '').trim().length > 0)[nummer];
+    if (!ziel) {
+        return;
+    }
+    const blot = window.Quill.find(ziel);
+    if (blot) {
+        editor.setSelection(editor.getIndex(blot), 0, 'silent');
+    }
+    ziel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    editor.focus();
+}
+
 export function destroyRichText(element) {
     if (!element) {
         return;
@@ -707,7 +1542,43 @@ export function destroyRichText(element) {
             element.removeEventListener('keydown', erwaehnungen.tasten, true);
         }
     }
+    const befehle = element.__nooseBefehle;
+    if (befehle) {
+        befehle.tot = true;
+        befehle.offen = false;
+        if (befehle.tasten) {
+            element.removeEventListener('keydown', befehle.tasten, true);
+        }
+    }
+    const suchen = element.__nooseSuchen;
+    if (suchen && suchen.tasten) {
+        element.removeEventListener('keydown', suchen.tasten, true);
+    }
+    const vollbild = element.__nooseVollbild;
+    if (vollbild) {
+        vollbild.aktiv = false;
+        if (vollbild.tasten) {
+            element.removeEventListener('keydown', vollbild.tasten, true);
+        }
+        if (vollbild.wechsel) {
+            document.removeEventListener('fullscreenchange', vollbild.wechsel);
+        }
+        if (element.parentElement) {
+            element.parentElement.classList.remove('noose-rte-vollbild');
+        }
+    }
+    const entwurf = element.__nooseEntwurf;
+    if (entwurf) {
+        entwurf.tot = true;
+        if (entwurf.schreiben) {
+            clearTimeout(entwurf.schreiben);
+        }
+    }
     element.__nooseErwaehnung = null;
+    element.__nooseBefehle = null;
+    element.__nooseSuchen = null;
+    element.__nooseVollbild = null;
+    element.__nooseEntwurf = null;
     element.__nooseKi = null;
     element.__nooseQuill = null;
 }

@@ -214,6 +214,12 @@ public static class ChangelogContent
                 + "Verknüpftes nicht mehr vor.", "Bedienung"),
             Fix("2.1.05-tagesordnung-notiz", "Die erste Zeile einer Notiz in der Tagesordnung liegt nicht mehr unter "
                 + "der Formatierungsleiste.", "Besprechungen"),
+            Neu("2.1.06-editor-struktur", "Der Texteditor hat jetzt Checklisten, Einzüge und Ausrichtung, und über "
+                + "den Schrägstrich am Zeilenanfang lassen sich Überschriften und Listen einfügen.", "Bedienung"),
+            Neu("2.1.07-editor-komfort", "Lange Texte zeigen Wortzahl und Gliederung und lassen sich im Vollbild "
+                + "durchsuchen und ersetzen.", "Bedienung"),
+            Neu("2.1.08-editor-entwurf", "Ein nicht gespeicherter Text geht nicht mehr verloren: Beim nächsten "
+                + "Öffnen bietet der Editor ihn zur Wiederherstellung an.", "Bedienung"),
         ], "1.5"),
     ];
 }

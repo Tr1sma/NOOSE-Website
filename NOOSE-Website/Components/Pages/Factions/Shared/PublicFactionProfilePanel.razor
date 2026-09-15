@@ -88,7 +88,8 @@
                 Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
             </MudText>
             @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
-            <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.DescriptionHtml" MinHeight="200px" />
+            <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.DescriptionHtml" MinHeight="200px"
+                            DraftKey='@($"orgprofil:{_draft.Id}")' />
 
             @if (!_mayWrite)
             {
@@ -200,6 +201,10 @@
     private async Task SaveAsync() => await RunAsync(async () =>
     {
         await StoreAsync();
+        if (_editor is not null)
+        {
+            await _editor.MarkSavedAsync();
+        }
         Snackbar.Add("Profil gespeichert.", Severity.Success);
     });
 

@@ -16,7 +16,8 @@
                           HelperText="Ein Satz, ohne Formatierung. Genau dieser Text steht später in der Erklär-Blase." />
 
             <MudText Typo="Typo.subtitle2" Class="mt-2">Ausführlich (optional)</MudText>
-            <RichTextEditor @bind-Value="_explanationHtml" MinHeight="140px" />
+            <RichTextEditor @bind-Value="_explanationHtml" MinHeight="140px"
+                            DraftKey='@($"glossar:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}")' />
 
             <MudSelect T="string" @bind-Value="_articleId" Label="Vertiefender Artikel (optional)"
                        Variant="Variant.Outlined" Clearable="true"
@@ -45,6 +46,9 @@
 
     [Parameter] public IReadOnlyList<HandbookArticle> Articles { get; set; } = [];
     [Parameter] public GlossaryTermInput? Preset { get; set; }
+
+    /// <summary>Id of the term being edited; null for a new one (only scopes the browser draft).</summary>
+    [Parameter] public string? EntityId { get; set; }
 
     private string _term = string.Empty;
     private string? _synonyms;
@@ -77,12 +81,14 @@
         IDialogService dialog,
         string title,
         IReadOnlyList<HandbookArticle> articles,
-        GlossaryTermInput? preset = null)
+        GlossaryTermInput? preset = null,
+        string? entityId = null)
     {
         var parameters = new DialogParameters<GlossaryTermDialog>
         {
             { x => x.Articles, articles },
             { x => x.Preset, preset },
+            { x => x.EntityId, entityId },
         };
         var reference = await dialog.ShowAsync<GlossaryTermDialog>(title, parameters,
             new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
