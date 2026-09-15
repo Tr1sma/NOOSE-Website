@@ -184,7 +184,7 @@ Behörde schreiben. Was nach außen geht, entscheidet immer ein ausdrücklicher 
 - **OnlyReader** (TeamLead ohne Admin) - liest alles, schreibt nichts, sieht nie Klarnamen.
 - **Kill-Switch** - Sperrung/Rangänderung beendet Sessions in ≤30 s (Security-Stamp-Rotation).
 - **Demo-Instanz** (demo.noose.info) - read-only, anonym browsbar als Demo-Agent, idempotenter Demo-Daten-Seed.
-- **Deploy/Backup-Skripte** - `deploy.ps1` (tar → scp → Service-Swap → Health-Check, mit Demo-Schutz) und `backup-db.ps1` (mysqldump + Download, Retention).
+- **Deploy/Backup-Skripte** (`scripts/`) - `deploy.ps1` (tar → scp → Service-Swap → Health-Check, mit Demo-Schutz) und `backup-db.ps1` (mysqldump + Download, Retention).
 
 ### Öffentlicher Bereich
 
@@ -422,7 +422,7 @@ dotnet user-secrets set "Bootstrap:AdminDiscordId" "YOUR_DISCORD_ID"
 
 `DatabaseConnectionResolver` probt zuerst `ProductionConnection` (5 s Reachability), fällt sonst auf `DefaultConnection` zurück → derselbe Build läuft lokal und auf dem Server.
 
-**Build & Run** (alle Befehle aus dem Repo-Root)
+**Build & Run** (alle Befehle aus dem Repo-Root, außer `dotnet ef` — siehe „Datenbank & Migrationen")
 
 ```powershell
 # Build
@@ -442,14 +442,17 @@ dotnet watch --project NOOSE-Website/NOOSE-Website.csproj run
 
 ## Datenbank & Migrationen
 
-`dotnet-ef` ist ein **lokales** Tool (gepinnt auf 9.0.17). Vor jedem `dotnet ef` einmalig restoren:
+`dotnet-ef` ist ein **lokales** Tool (gepinnt auf 9.0.17). Das Manifest liegt in `scripts/dotnet-tools.json` — die Befehle laufen deshalb aus `scripts/`; aus dem Repo-Root melden sie `dotnet-ef nicht vorhanden`. `--startup-project` muss mit angegeben werden, weil der Startup-Default das aktuelle Verzeichnis ist:
 
 ```powershell
+cd scripts
 # MUSS vor jedem dotnet-ef-Aufruf laufen
 dotnet tool restore
 
 # Dev-Server vorher stoppen (bin-Lock), dann:
-dotnet ef migrations add Phase77_<Name> --project NOOSE-Website/NOOSE-Website.csproj
+dotnet ef migrations add PhaseNN_<Name> `
+    --project ../NOOSE-Website/NOOSE-Website.csproj `
+    --startup-project ../NOOSE-Website/NOOSE-Website.csproj
 ```
 
 Der Ordner enthält derzeit **132 Migrationen** in zwei parallelen Präfix-Familien: `PhaseNN_<Name>` für den internen
@@ -466,9 +469,9 @@ sortiert wird über den Zeitstempel im Dateinamen.
 Deploy aus **64-bit Windows PowerShell** (sonst OpenSSH WOW64-Redirect):
 
 ```powershell
-.\deploy.ps1                # publish → tar → scp → Service-Swap → /health-Check
-.\deploy.ps1 -SkipPublish   # vorhandenen ./publish-Ordner wiederverwenden
-.\deploy.ps1 -NoPause       # ohne Pause (CI/Terminal)
+.\scripts\deploy.ps1                # publish → tar → scp → Service-Swap → /health-Check
+.\scripts\deploy.ps1 -SkipPublish   # vorhandenen .\scripts\publish-Ordner wiederverwenden
+.\scripts\deploy.ps1 -NoPause       # ohne Pause (CI/Terminal)
 ```
 
 Ziel: `root@195.20.225.12`, systemd-Service `noose`, App-Dir `/var/www/noose`. Publish wird mit `tar` gepackt (nie `Compress-Archive`), per `scp` hochgeladen, Service getauscht, `/health` geprüft.
@@ -506,7 +509,7 @@ NOOSE-Website/
 ├── Infrastructure/    Interceptors, Broadcaster, Worker, Audit, Storage, Seeder
 ├── Theme/             NooseTheme.cs (Dark-Palette)
 └── wwwroot/lib/       Quill, vis-network, FullCalendar, ECharts (self-hosted)
-deploy.ps1
+scripts/                 deploy.ps1, backup-db.ps1, setup-demo.ps1, dotnet-tools.json
 ```
 
 ---

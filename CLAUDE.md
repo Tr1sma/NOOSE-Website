@@ -46,7 +46,8 @@ und genau das verhindert die Fehler, die dort schon einmal passiert sind.
 
 ## Befehle
 
-Alle Befehle aus dem **Repo-Root** ausführen.
+Alle Befehle aus dem **Repo-Root** ausführen — außer den EF-Befehlen, die aus `scripts/` laufen
+(dort liegt das Tool-Manifest, siehe unten).
 
 ```bash
 # Build
@@ -56,20 +57,25 @@ dotnet build NOOSE-Website.slnx
 dotnet run   --project NOOSE-Website/NOOSE-Website.csproj
 dotnet watch --project NOOSE-Website/NOOSE-Website.csproj run   # Hot Reload
 
-# EF-Migrationen (dotnet-ef ist LOKALES Tool, gepinnt auf 9.0.17)
-dotnet tool restore                                             # EINMALIG, vor jedem 'dotnet ef'
-dotnet ef migrations add Phase23_<Name> --project NOOSE-Website/NOOSE-Website.csproj
+# EF-Migrationen — aus scripts/ ausführen (Manifest scripts/dotnet-tools.json, gepinnt auf 9.0.17).
+# Aus dem Repo-Root schlagen 'dotnet tool restore'/'dotnet ef' fehl ("dotnet-ef nicht vorhanden").
+cd scripts
+dotnet tool restore                                             # vor jedem 'dotnet ef'
+dotnet ef migrations add PhaseNN_<Name> `
+    --project ../NOOSE-Website/NOOSE-Website.csproj `
+    --startup-project ../NOOSE-Website/NOOSE-Website.csproj     # Startup-Default ist das aktuelle Verzeichnis
+cd ..
 # 'dotnet ef database update' ist i.d.R. UNNÖTIG — Migrationen werden beim App-Start
 # automatisch via db.Database.MigrateAsync() angewendet (Program.cs).
 
 # Deploy nach Produktion (root@195.20.225.12, systemd-Service 'noose', /var/www/noose)
-.\deploy.ps1                # publish → tar → scp → service-swap (behält App_Data) → /health-check
-.\deploy.ps1 -SkipPublish   # vorhandenen ./publish-Ordner wiederverwenden
-.\deploy.ps1 -NoPause       # ohne "Enter zum Schließen" (CI/Terminal)
+.\scripts\deploy.ps1                # publish → tar → scp → service-swap (behält App_Data) → /health-check
+.\scripts\deploy.ps1 -SkipPublish   # vorhandenen ./scripts/publish-Ordner wiederverwenden
+.\scripts\deploy.ps1 -NoPause       # ohne "Enter zum Schließen" (CI/Terminal)
 ```
 
-- **Test-Projekt `NOOSE-Website.Tests`** (xunit, ~3.5k Tests): `dotnet test NOOSE-Website.slnx`. Helfer in `Tests/Infrastructure/`: `SqliteTestContext` (In-Memory-SQLite + `IDbContextFactory`), `Seed.*` (Entity-Fabriken), `ClaimsPrincipalBuilder` (Rang/Flags/Claims). **Kein bUnit** → `.razor`-Komponenten sind nicht testbar; testbare Logik gehört in den Service-Layer.
-- `deploy.ps1` aus **64-bit Windows PowerShell** starten (sonst wird OpenSSH WOW64-redirected). Nutzt `tar` + `scp`/`ssh`.
+- **Test-Projekt `NOOSE-Website.Tests`** (xunit, ~3.5k Tests): `dotnet test NOOSE-Website.Tests/NOOSE-Website.Tests.csproj` — läuft auf In-Memory-SQLite, braucht **keine** Datenbank. Helfer in `Tests/Infrastructure/`: `SqliteTestContext` (In-Memory-SQLite + `IDbContextFactory`), `Seed.*` (Entity-Fabriken), `ClaimsPrincipalBuilder` (Rang/Flags/Claims). **Kein bUnit** → `.razor`-Komponenten sind nicht testbar; testbare Logik gehört in den Service-Layer.
+- `scripts\deploy.ps1` aus **64-bit Windows PowerShell** starten (sonst wird OpenSSH WOW64-redirected). Nutzt `tar` + `scp`/`ssh`.
 
 ### Secrets & Config
 
@@ -252,7 +258,7 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 
 - **Nach Route-Änderungen die App wirklich starten, nicht nur bauen.** Zwei Komponenten auf derselben
   `@page` sind kein Compilerfehler — sie werfen erst beim Aufbau der Routing-Tabelle zur Laufzeit.
-- **`dotnet tool restore` vor jedem `dotnet ef`** — `dotnet-ef` ist lokal-gepinnt (9.0.17), nicht global.
+- **`dotnet tool restore` vor jedem `dotnet ef`** — `dotnet-ef` ist lokal-gepinnt (9.0.17), nicht global. Beides aus `scripts/` ausführen (dort liegt `dotnet-tools.json`); aus dem Repo-Root schlägt der Aufruf fehl.
 - **EF/Identity nicht auf 10.x** (Pomelo-9-Kollision).
 - **Vor `dotnet ef migrations add` den Dev-Server stoppen** (bin-Lock), dann neu bauen.
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
