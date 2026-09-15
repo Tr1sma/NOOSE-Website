@@ -224,6 +224,15 @@ public static class ChangelogContent
                 + "und mit einer Beschriftung versehen – ein Klick auf das Bild öffnet die Einstellungen.", "Bedienung"),
             Neu("2.1.10-noosei-kontingent", "Das NOOSEI-Wochenkontingent lässt sich für alle Dienstgrade zugleich "
                 + "anheben, ohne die Regeln je Dienstgrad anzufassen.", "NOOSEI"),
+            Neu("2.1.11-editor-einfuegen", "Eingefügtes aus Word oder einer Webseite kommt jetzt aufgeräumt an, und "
+                + "mit Strg+Shift+V fügt man nur den reinen Text ein.", "Bedienung"),
+            Neu("2.1.12-editor-struktur", "Hinweis-, Warnungs- und Info-Kästen, Trennlinien und ein "
+                + "Inhaltsverzeichnis lassen sich jetzt direkt im Text setzen.", "Bedienung"),
+            Neu("2.1.13-editor-komfort", "Der Editor zeigt, wann der Entwurf zuletzt gesichert wurde, hat Knöpfe "
+                + "für Rückgängig und Wiederholen, und Strg+S speichert.", "Bedienung"),
+            Neu("2.1.14-editor-auswahl", "Über markiertem Text schwebt jetzt eine kleine Leiste mit den "
+                + "wichtigsten Formaten, und eingefügte Bilder werden automatisch verkleinert, damit alles "
+                + "schnell bleibt.", "Bedienung"),
         ], "1.5"),
     ];
 }

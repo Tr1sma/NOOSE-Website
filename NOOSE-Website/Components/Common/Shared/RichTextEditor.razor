@@ -59,6 +59,12 @@
                 }
             </MudMenu>
         }
+        @if (_draftSavedAt is { } draftZeit)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Entwurf gesichert @draftZeit.ToString("HH:mm")
+            </MudText>
+        }
     </MudStack>
 }
 @if (_aiBusy)
@@ -199,6 +205,11 @@ else if (_lastCost is { } cost)
 
     private bool _imageDialogOpen;
 
+    /// <summary>Builds the table of contents from the headings the editor reported; the ids come from save.</summary>
+    [JSInvokable]
+    public Task<string> OnTocRequested(List<TocEntry> entries)
+        => Task.FromResult(RichTextAnchors.BuildToc(entries ?? []));
+
     /// <summary>Opens the picture format dialog after a click on an image; JS reports the current values.</summary>
     [JSInvokable]
     public async Task OnImageClicked(int index, string alt, string width, string alignment, string caption)
@@ -308,6 +319,29 @@ else if (_lastCost is { } cost)
         return Task.CompletedTask;
     }
 
+    private DateTime? _draftSavedAt;
+
+    /// <summary>Called from JS after the draft was written (0 when it was dropped again).</summary>
+    [JSInvokable]
+    public Task OnDraftSaved(long zeit)
+    {
+        if (_disposed)
+        {
+            return Task.CompletedTask;
+        }
+        _draftSavedAt = zeit > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(zeit).LocalDateTime : null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Wired by pages that have a save button; Ctrl+S calls it.</summary>
+    [Parameter]
+    public EventCallback OnSaveRequested { get; set; }
+
+    /// <summary>Ctrl+S in the editor; the page decides what saving means.</summary>
+    [JSInvokable]
+    public Task OnSaveShortcut() => OnSaveRequested.HasDelegate ? OnSaveRequested.InvokeAsync() : Task.CompletedTask;
+
     private async Task RestoreDraftAsync()
     {
         _draftFound = null;
@@ -356,6 +390,7 @@ else if (_lastCost is { } cost)
     public async Task MarkSavedAsync()
     {
         _draftFound = null;
+        _draftSavedAt = null;
         StateHasChanged();
         if (_module is null || !_ready)
         {

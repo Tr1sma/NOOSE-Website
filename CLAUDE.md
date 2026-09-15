@@ -320,6 +320,18 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   Rundlauf still die Beschriftung frisst. Breite ist das Quill-`width`-Attribut (Prozent), gelesen über
   `img[width="…"]` in `app.css`; `figure`/`figcaption` stehen im Sanitizer. Ein Klick aufs Bild öffnet
   `ImageFormatDialog`.
+- **Einfügen wird gegen dieselbe Allowlist geputzt wie das Speichern.** `HtmlCleanup.Profile` liefert die
+  Listen, `initRichText` bekommt sie als Parameter; der Paste-Pfad wirft unbekannte Tags/Attribute/Styles
+  schon im Browser weg, macht aus Word-Listen echte Listen und aus `font-weight`/`font-style`/`text-decoration`
+  die Formate `<strong>`/`<em>`/`<u>`/`<s>`. Diese Übersetzung ist der Grund, warum die CSS-Allowlist des
+  Sanitizers kein `font-weight` braucht. Strg+Shift+V fügt reinen Text ein. Ein neuer Sanitizer-Eintrag landet
+  damit automatisch auch im Editor — die Listen **nicht** im JS duplizieren.
+- **Struktur-Bausteine sind Klassen bzw. Blöcke, kein Markup-Zoo:** `noose-kasten-hinweis|warnung|info`
+  (Zeilenformat, Text bleibt tippbar), `trenner` (`<hr>`-Block-Embed), `noose-inhaltsverzeichnis` (Liste).
+  Heading-Ids vergibt `RichTextAnchors.ToStored` beim Speichern; `BuildToc` nutzt **dieselbe** Slug-Regel,
+  sonst läuft der Link ins Leere. `id`/`hr` stehen deshalb im Sanitizer, `scroll-margin-top` hält den Anker
+  unter der App-Bar frei. Die Auswahl-Blase ist eigenes JS (`.noose-auswahl`), Rückgängig/Wiederholen hängen
+  am History-Modul, Strg+S nur an `OnSaveRequested` (Seiten verdrahten ihren Speichern-Knopf).
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
 - **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen. Dokumentierte Ausnahmen von dieser Guard-Pflicht: `FactionRecency.StampAsync`, `PublicWantedService.CountViewAsync`, `TipPriorityService` und `RecomputeConfirmedTipsAsync` — abgeleitete Werte hinter einem schon abgesicherten Schreibpfad.

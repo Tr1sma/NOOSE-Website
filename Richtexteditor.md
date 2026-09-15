@@ -40,33 +40,38 @@ Jedes Paket endet mit Build, Tests, Changelog-Zeile, `?v=`-Bump und Klicktest. K
 
 ## Paket 2 — Einfüge-Sauberkeit (WYSIWYG stimmt)
 
-- [ ] **2.1 Whitelist als eine Wahrheit** — `HtmlCleanup` exponiert Tags/Attribute/CSS-Properties/Schemes;
-  `RichTextEditor` übergibt sie an `initRichText`.
-- [ ] **2.2 Clipboard-Matcher** — unbekannte Tags (`div`→`p`), Attribute und `mso-*` verwerfen,
-  Inline-Styles kürzen, Klassen-Whitelist (`ql-*`, `noose-*`), leere Spans/`<br>`-Ketten aufräumen.
-- [ ] **2.3 Strg+Shift+V** — Einfügen ohne Formatierung (reiner Text).
-- [ ] **2.4 Profil-Tests** — C#-Profil gegen `HtmlCleanupTests` absichern.
+- [x] **2.1 Whitelist als eine Wahrheit** — `HtmlCleanup.Profile` (Tags/Attribute/CSS-Properties/Schemes) ist
+  aus denselben Arrays gebaut, die der Sanitizer benutzt; `initRichText` bekommt es als Parameter.
+- [x] **2.2 Clipboard-Matcher** — der Einfüge-Pfad putzt vor Quill: unbekannte Tags werden entpackt,
+  `script`/`style`/`meta`/Kommentare fliegen, Attribute/Klassen/Inline-Styles gegen das Profil gefiltert,
+  Word-Listen (`mso-list`) werden echte Listen, `font-weight`/`font-style`/`text-decoration` zu
+  `<strong>`/`<em>`/`<u>`/`<s>` (deshalb braucht der Sanitizer kein `font-weight`).
+- [x] **2.3 Strg+Shift+V** — fügt über `navigator.clipboard.readText` reinen Text ein.
+- [x] **2.4 Profil-Tests** — `Profile_NamesTheAllowlistTheEditorCleansAgainst` hält die Liste gegen die
+  Erwartungen der Editor-Funktionen; durch die gemeinsame Quelle ist Drift strukturell ausgeschlossen.
 
 ## Paket 3 — Struktur für große Texte
 
-- [ ] **3.1 Hinweis-Kästen** — Hinweis/Warnung/Info als Zeilenformat (Text bleibt tippbar), Toolbar +
-  Slash, Lese-/Druck-CSS.
-- [ ] **3.2 Trennlinie** — `<hr>` als Block-Embed, Sanitizer + CSS + Slash/Toolbar.
-- [ ] **3.3 Tabellen-Feinschliff** — Einfüge-Hinweis, Kopfzeilen-Optik, Zellhintergrund, Lese-/Druckprüfung.
-- [ ] **3.4 Inhaltsverzeichnis** — `RichTextAnchors` vergibt beim Speichern `id` an `h1–h3` (Slug-Regeln
-  wie Handbuch, Dubletten `-2`), TOC-Befehl erzeugt normale Liste mit `#id`-Links aus denselben Slugs,
-  „Verzeichnis aktualisieren"; Sanitizer muss `id` erlauben, Lese-CSS `scroll-margin-top`.
-  Tests: Idempotenz, Dubletten, `id` überlebt `HtmlCleanup`.
+- [x] **3.1 Hinweis-Kästen** — `noose-kasten-hinweis|warnung|info` als Zeilenformat (Text bleibt tippbar),
+  drei Toolbar-Knöpfe, Slash-Einträge, Editor- und Lese-CSS. Kein Sanitizer-Eintrag nötig (nur Klassen).
+- [x] **3.2 Trennlinie** — `trenner` als `<hr>`-Block-Embed, Toolbar-Knopf und Slash-Eintrag, `hr` im Sanitizer.
+- [x] **3.3 Tabellen-Feinschliff** — Modul-Kontextmenü und Tooltip waren vorhanden; Kopfzeilen (`th`) haben
+  jetzt eine eigene Optik. Ein Einfüge-Hinweis bleibt offen (bewusst, das Modul zeigt sein Menü selbst).
+- [x] **3.4 Inhaltsverzeichnis** — `RichTextAnchors.ToStored` vergibt beim Speichern Ids an `h1–h3`
+  (Slug-Regeln wie Handbuch, Dubletten `-2`), `BuildToc` baut aus denselben Slugs die Liste; Toolbar-Knopf
+  und Slash-Eintrag, `id` im Sanitizer, `scroll-margin-top` gegen die App-Bar. Die Ids entstehen erst beim
+  Speichern — vor dem ersten Speichern zeigt ein TOC-Link im Editor noch ins Leere (dokumentiert).
 
 ## Paket 4 — Gefühl & Feinschliff
 
-- [ ] **4.1 Undo/Redo-Knöpfe** (History-Modul; Ctrl+Z/Y läuft bereits).
-- [ ] **4.2 Speicherstatus** in der Statuszeile („Entwurf gesichert 12:03").
-- [ ] **4.3 Kürzel** — Ctrl+K (Link), Ctrl+S über `OnSaveRequested`.
-- [ ] **4.4 Auswahl-Bubble** — eigenes JS-Overlay über der Markierung (Fett/Kursiv/Unterstrichen/
-  Durchgestrichen/Link/Formatierung entfernen), versteckt bei leerer Auswahl, Esc, Scroll, Vollbild;
-  aus im Kompaktmodus.
-- [ ] **4.5 Kleinigkeiten** — Tooltips/Aria neuer Knöpfe, Fokus zurück nach Dialogschluss.
+- [x] **4.1 Undo/Redo-Knöpfe** (History-Modul; Ctrl+Z/Y läuft bereits).
+- [x] **4.2 Speicherstatus** — JS meldet nach jedem Entwurfs-Schreibvorgang `OnDraftSaved`; die Statuszeile
+  zeigt „Entwurf gesichert HH:mm", `MarkSavedAsync` löscht die Anzeige.
+- [x] **4.3 Kürzel** — Ctrl+K öffnet den Link-Dialog, Ctrl+S ruft `OnSaveRequested` (verdrahtet in
+  Dokument- und Aktivitäts-Editor; weitere Seiten können den Callback anschließen).
+- [x] **4.4 Auswahl-Bubble** — eigenes JS-Overlay (`.noose-auswahl`) mit Fett/Kursiv/Unterstrichen/
+  Durchgestrichen/Link/Formatierung entfernen; verschwindet bei leerer Auswahl, im Kompaktmodus aus.
+- [x] **4.5 Kleinigkeiten** — Tooltips/Aria für alle neuen Knöpfe, Fokus zurück ins Feld nach dem Bild-Dialog.
 
 ## Fortschritt
 

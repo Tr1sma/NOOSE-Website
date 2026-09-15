@@ -227,6 +227,48 @@ html, body {
     font-size: 0.8rem;
 }
 
+/* Callout, divider and table of contents look the same while editing. */
+.ql-editor .noose-kasten {
+    border-left: 3px solid var(--mud-palette-lines-default);
+    border-radius: 0 6px 6px 0;
+    padding: .35rem .6rem;
+    background-color: rgba(var(--mud-palette-text-primary-rgb), .04);
+}
+
+.ql-editor .noose-kasten-hinweis {
+    border-left-color: var(--mud-palette-info);
+    background-color: rgba(var(--mud-palette-info-rgb), .10);
+}
+
+.ql-editor .noose-kasten-warnung {
+    border-left-color: var(--mud-palette-warning);
+    background-color: rgba(var(--mud-palette-warning-rgb), .10);
+}
+
+.ql-editor .noose-kasten-info {
+    border-left-color: var(--mud-palette-primary);
+    background-color: rgba(var(--mud-palette-primary-rgb), .08);
+}
+
+.ql-editor hr {
+    border: none;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    margin: 1rem 0;
+}
+
+.ql-editor .noose-inhaltsverzeichnis {
+    margin: .5rem 0 1rem;
+    padding-left: 1.25rem;
+}
+
+    .ql-editor .noose-inhaltsverzeichnis .noose-toc-2 {
+        margin-left: 1rem;
+    }
+
+    .ql-editor .noose-inhaltsverzeichnis .noose-toc-3 {
+        margin-left: 2rem;
+    }
+
 /* Toolbar-Symbole/Labels im Dunkeln sichtbar machen. */
 .ql-snow .ql-stroke {
     stroke: var(--mud-palette-text-secondary);
@@ -353,6 +395,44 @@ html, body {
     color: var(--mud-palette-text-secondary);
     white-space: nowrap;
 }
+
+/* Schwebende Mini-Leiste über einer Textauswahl (richtext.js) */
+.noose-auswahl {
+    position: absolute;
+    z-index: 12;
+    display: flex;
+    gap: .15rem;
+    padding: .2rem .25rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    background-color: var(--mud-palette-surface);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+}
+
+    /* display:flex would beat the hidden attribute, so it is repeated here */
+    .noose-auswahl[hidden] {
+        display: none;
+    }
+
+    .noose-auswahl button {
+        min-width: 26px;
+        padding: .15rem .35rem;
+        border: none;
+        border-radius: 4px;
+        background-color: transparent;
+        color: var(--mud-palette-text-primary);
+        font-size: .8125rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .noose-auswahl button:hover {
+            background-color: rgba(var(--mud-palette-primary-rgb), .16);
+        }
+
+        .noose-auswahl button.noose-auswahl-aktiv {
+            background-color: rgba(var(--mud-palette-primary-rgb), .28);
+        }
 
 /* Schreib-Vollbild (richtext.js): Hülle füllt das Fenster, nur der Textbereich scrollt */
 .noose-rte-vollbild {
@@ -626,6 +706,62 @@ html, body {
     .dokument-html figure.ql-align-right {
         text-align: right;
     }
+
+    /* Callout paragraphs: a class on the paragraph, so the sanitizer needs no entry for them. */
+    .dokument-html .noose-kasten {
+        border-left: 3px solid var(--mud-palette-lines-default);
+        border-radius: 0 6px 6px 0;
+        padding: .5rem .75rem;
+        background-color: rgba(var(--mud-palette-text-primary-rgb), .04);
+    }
+
+    .dokument-html .noose-kasten-hinweis {
+        border-left-color: var(--mud-palette-info);
+        background-color: rgba(var(--mud-palette-info-rgb), .10);
+    }
+
+    .dokument-html .noose-kasten-warnung {
+        border-left-color: var(--mud-palette-warning);
+        background-color: rgba(var(--mud-palette-warning-rgb), .10);
+    }
+
+    .dokument-html .noose-kasten-info {
+        border-left-color: var(--mud-palette-primary);
+        background-color: rgba(var(--mud-palette-primary-rgb), .08);
+    }
+
+    .dokument-html hr {
+        border: none;
+        border-top: 1px solid var(--mud-palette-lines-default);
+        margin: 1rem 0;
+    }
+
+    .dokument-html th {
+        background-color: rgba(var(--mud-palette-primary-rgb), .08);
+        font-weight: 600;
+    }
+
+    /* A toc link jumps to a heading; without the offset the app bar covers it. */
+    .dokument-html :is(h1, h2, h3)[id] {
+        scroll-margin-top: 88px;
+    }
+
+    .dokument-html .noose-inhaltsverzeichnis {
+        margin: .5rem 0 1rem;
+        padding-left: 1.25rem;
+    }
+
+        .dokument-html .noose-inhaltsverzeichnis .noose-toc-2 {
+            margin-left: 1rem;
+        }
+
+        .dokument-html .noose-inhaltsverzeichnis .noose-toc-3 {
+            margin-left: 2rem;
+        }
+
+        .dokument-html .noose-inhaltsverzeichnis a {
+            color: var(--mud-palette-primary);
+        }
 
     /* Quill block formats stored in the html: alignment, indentation and checklists. Read views and
        print never load quill.snow.css, so everything the editor can produce is stated here too. */

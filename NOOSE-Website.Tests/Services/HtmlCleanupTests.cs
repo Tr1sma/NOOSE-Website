@@ -256,6 +256,38 @@ public class HtmlCleanupTests
     }
 
     [Fact]
+    public void Profile_NamesTheAllowlistTheEditorCleansAgainst()
+    {
+        // richtext.js builds its paste cleaner from this list; a missing entry makes editor and storage disagree
+        var profile = HtmlCleanup.Profile;
+
+        Assert.Contains("figure", profile.Tags);
+        Assert.Contains("figcaption", profile.Tags);
+        Assert.Contains("hr", profile.Tags);
+        Assert.Contains("img", profile.Tags);
+        Assert.Contains("id", profile.Attributes);
+        Assert.Contains("data-checked", profile.Attributes);
+        Assert.Contains("src", profile.Attributes);
+        Assert.Contains("width", profile.CssProperties);
+        Assert.Contains("color", profile.CssProperties);
+        Assert.Contains("data", profile.Schemes);
+        Assert.DoesNotContain("script", profile.Tags);
+        Assert.DoesNotContain("iframe", profile.Tags);
+        Assert.DoesNotContain("onerror", profile.Attributes);
+    }
+
+    [Fact]
+    public void Clean_HeadingIdAndDivider_AreKept()
+    {
+        // heading anchors for the table of contents and the divider embed
+        var result = HtmlCleanup.Clean("<h2 id=\"lagebild\">Lagebild</h2><hr>");
+
+        Assert.Contains("id=\"lagebild\"", result);
+        Assert.Contains("Lagebild", result);
+        Assert.Contains("<hr", result);
+    }
+
+    [Fact]
     public void Clean_FigureWithCaptionAndScript_KeepsTheFigureOnly()
     {
         // the stored shape of a caption is a real figure

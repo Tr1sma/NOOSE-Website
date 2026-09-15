@@ -84,12 +84,12 @@ public static partial class HtmlCleanup
         "p", "br", "span", "b", "strong", "i", "em", "u", "s",
         "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a", "img",
         "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
-        "figure", "figcaption",
+        "figure", "figcaption", "hr",
     ];
 
     private static readonly string[] AllowedAttributeNames =
     [
-        "href", "target", "rel", "class", "style", "src", "alt",
+        "href", "target", "rel", "class", "style", "src", "alt", "id",
         "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
         "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
         "data-row", "data-col", "data-w", "data-full", "data-checked",

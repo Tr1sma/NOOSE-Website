@@ -92,6 +92,7 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
             var html = (string)entry.Property(field).CurrentValue!;
             var entityId = (string)entry.Property("Id").CurrentValue!;
             var stored = RichTextFigure.ToStored(html);
+            stored = RichTextAnchors.ToStored(stored);
             var replaced = await ReplaceImagesAsync(ctx, storage, entry.Metadata.ClrType.Name, entityId, stored, cancellationToken);
             if (ReferenceEquals(stored, html) && ReferenceEquals(replaced, stored))
             {

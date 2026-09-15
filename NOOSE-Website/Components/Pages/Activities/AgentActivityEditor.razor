@@ -97,6 +97,7 @@ else
             <div>
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Beschreibung</MudText>
                 <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" Ai="TextAssistContext.Activity" Mentions="true"
+                                OnSaveRequested="SaveAsync"
                                 DraftKey='@(_edit ? $"aktivitaet:{Id}" : "aktivitaet:neu")' />
             </div>
         </MudStack>

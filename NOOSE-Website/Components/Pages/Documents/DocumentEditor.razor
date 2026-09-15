@@ -74,6 +74,7 @@ else
             }
 
             <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.Document" AiSubject="@_title" Mentions="true"
+                            OnSaveRequested="SaveAsync"
                             DraftKey='@(_edit ? $"dokument:{Id}" : $"dokument:neu:{_entityType}:{_entityId}")' />
         </MudStack>
     </MudPaper>

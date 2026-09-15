@@ -5,6 +5,8 @@ let tabellenModulPromise = null; // table handler
 let groessenRegistriert = false;
 let erwaehnungRegistriert = false;
 let bildtextRegistriert = false;
+let kastenRegistriert = false;
+let trennerRegistriert = false;
 const SCHRIFTGROESSEN = ['0.75em', '1.5em', '2.5em']; // inline font-size values
 const SCROLL_TOLERANZ = 2; // ignore sub-pixel drift
 const ERWAEHNUNG_BLOT = 'erwaehnung';
@@ -107,6 +109,11 @@ function beschrifteToolbar(leiste, tableHandler) {
         ['button.ql-clean', 'Formatierung entfernen'],
         ['button.ql-noose-suchen', 'Suchen und Ersetzen (Strg+F)'],
         ['button.ql-noose-vollbild', 'Vollbild (Esc beendet)'],
+        ['button.ql-noose-kasten-hinweis', 'Hinweis-Kasten'],
+        ['button.ql-noose-kasten-warnung', 'Warnung-Kasten'],
+        ['button.ql-noose-kasten-info', 'Info-Kasten'],
+        ['button.ql-noose-trenner', 'Trennlinie'],
+        ['button.ql-noose-toc', 'Inhaltsverzeichnis einfügen'],
         ['.ql-color .ql-picker-label', 'Textfarbe'],
         ['.ql-background .ql-picker-label', 'Hintergrundfarbe'],
     ];
@@ -388,6 +395,193 @@ function istUnerreichbar(quelle) {
     return /^(file|cid):/i.test(quelle) || /^[a-z]:[\\/]/i.test(quelle);
 }
 
+const PROFILE_KLASSEN = /^(ql-|noose-|erwaehnung$|dokument-html$)/;
+
+// Word and web pastes bring markup the server would strip later; the editor cleans it up front, against the
+// same lists the sanitizer uses, so what is typed already looks like what is stored.
+function haengeEinfuegeSauberungAn(element, editor, profil) {
+    if (!profil) {
+        return;
+    }
+    const tags = new Set((profil.tags || []).map((t) => String(t).toUpperCase()));
+    const attrs = new Set((profil.attributes || []).map((a) => String(a).toLowerCase()));
+    const css = new Set((profil.cssProperties || []).map((p) => String(p).toLowerCase()));
+
+    const istBallast = (name) => name === 'SCRIPT' || name === 'STYLE' || name === 'META'
+        || name === 'LINK' || name === 'TITLE' || name === 'HEAD';
+
+    // stylings Word writes as inline css, mapped onto the formats the editor actually has
+    const semantikAusStil = (knoten, deklarationen) => {
+        const marken = [];
+        for (const [eigenschaft, wert] of deklarationen) {
+            const klein = String(wert || '').toLowerCase();
+            if (eigenschaft === 'font-weight' && (klein.includes('bold') || parseInt(klein, 10) >= 600)) {
+                marken.push('strong');
+            } else if (eigenschaft === 'font-style' && klein.includes('italic')) {
+                marken.push('em');
+            } else if (eigenschaft === 'text-decoration' && klein.includes('underline')) {
+                marken.push('u');
+            } else if (eigenschaft === 'text-decoration' && klein.includes('line-through')) {
+                marken.push('s');
+            } else if (eigenschaft === 'text-align' && ['center', 'right', 'justify'].includes(klein)) {
+                knoten.classList.add('ql-align-' + klein);
+            }
+        }
+        return marken;
+    };
+
+    // the translated declarations must not stay behind as inline css
+    const UEBERSETZT = new Set(['font-weight', 'font-style', 'text-decoration']);
+
+    const filtereAttribute = (knoten) => {
+        const deklarationen = Array.from(knoten.style).map((p) => [p.toLowerCase(), knoten.style.getPropertyValue(p)]);
+        const marken = semantikAusStil(knoten, deklarationen);
+        for (const attribut of Array.from(knoten.attributes)) {
+            if (!attrs.has(attribut.name.toLowerCase())) {
+                knoten.removeAttribute(attribut.name);
+            }
+        }
+        const klassen = (knoten.getAttribute('class') || '').split(/\s+/).filter((k) => PROFILE_KLASSEN.test(k));
+        if (klassen.length > 0) {
+            knoten.setAttribute('class', klassen.join(' '));
+        } else {
+            knoten.removeAttribute('class');
+        }
+        const behalten = deklarationen.filter(([p]) => css.has(p) && !(marken.length > 0 && UEBERSETZT.has(p)));
+        if (behalten.length > 0) {
+            knoten.setAttribute('style', behalten.map(([p, w]) => p + ':' + w).join(';'));
+        } else {
+            knoten.removeAttribute('style');
+        }
+        wickleInMarken(knoten, marken);
+    };
+
+    // a span becomes the mark itself, anything else gets its content wrapped, so quill finds a real format
+    const wickleInMarken = (knoten, marken) => {
+        if (marken.length === 0) {
+            return;
+        }
+        const dokument = knoten.ownerDocument;
+        let innen;
+        if (knoten.tagName === 'SPAN') {
+            const ersatz = dokument.createElement(marken[0]);
+            while (knoten.firstChild) {
+                ersatz.appendChild(knoten.firstChild);
+            }
+            knoten.replaceWith(ersatz);
+            innen = ersatz;
+        } else {
+            innen = dokument.createElement(marken[0]);
+            while (knoten.firstChild) {
+                innen.appendChild(knoten.firstChild);
+            }
+            knoten.appendChild(innen);
+        }
+        for (const marke of marken.slice(1)) {
+            const weiter = dokument.createElement(marke);
+            while (innen.firstChild) {
+                weiter.appendChild(innen.firstChild);
+            }
+            innen.appendChild(weiter);
+            innen = weiter;
+        }
+    };
+
+    // Word marks every bullet paragraph and puts the glyph in a hidden span; both go
+    const wandleWordListen = (wurzel) => {
+        let liste = null;
+        for (const absatz of Array.from(wurzel.querySelectorAll('p'))) {
+            const stil = (absatz.getAttribute('style') || '') + ' ' + (absatz.getAttribute('class') || '');
+            if (!/mso-list/i.test(stil)) {
+                liste = null;
+                continue;
+            }
+            const punkt = absatz.ownerDocument.createElement('li');
+            while (absatz.firstChild) {
+                punkt.appendChild(absatz.firstChild);
+            }
+            absatz.replaceWith(punkt);
+            if (liste) {
+                liste.appendChild(punkt);
+                continue;
+            }
+            liste = punkt.ownerDocument.createElement('ul');
+            punkt.before(liste);
+            liste.appendChild(punkt);
+        }
+        for (const rest of Array.from(wurzel.querySelectorAll('[style*="mso-"]'))) {
+            rest.remove();
+        }
+    };
+
+    const saeubere = (eltern) => {
+        for (const kind of Array.from(eltern.childNodes)) {
+            if (kind.nodeType === Node.COMMENT_NODE) {
+                kind.remove();
+                continue;
+            }
+            if (kind.nodeType !== Node.ELEMENT_NODE) {
+                continue;
+            }
+            const name = kind.tagName.toUpperCase();
+            if (istBallast(name)) {
+                kind.remove();
+                continue;
+            }
+            if (!tags.has(name)) {
+                // unknown wrapper: keep what is inside, drop the tag
+                saeubere(kind);
+                while (kind.firstChild) {
+                    eltern.insertBefore(kind.firstChild, kind);
+                }
+                kind.remove();
+                continue;
+            }
+            filtereAttribute(kind);
+            saeubere(kind);
+        }
+    };
+
+    const einfuegungSaeubern = (html) => {
+        const flaeche = document.createElement('template');
+        flaeche.innerHTML = html;
+        // list detection needs Word's original styles, cleaning removes them
+        wandleWordListen(flaeche.content);
+        saeubere(flaeche.content);
+        return flaeche.innerHTML;
+    };
+
+    element.addEventListener('paste', (ereignis) => {
+        const daten = ereignis.clipboardData;
+        const html = daten ? daten.getData('text/html') : '';
+        if (!html) {
+            return; // plain text and bitmaps keep the regular path
+        }
+        const sauber = einfuegungSaeubern(html);
+        ereignis.preventDefault();
+        ereignis.stopImmediatePropagation();
+        editor.clipboard.dangerouslyPasteHTML(sauber, 'user');
+    }, true);
+
+    // Strg+Shift+V: insert what was copied as plain text
+    element.addEventListener('keydown', (ereignis) => {
+        if (!(ereignis.ctrlKey || ereignis.metaKey) || !ereignis.shiftKey
+            || String(ereignis.key || '').toLowerCase() !== 'v') {
+            return;
+        }
+        if (!navigator.clipboard || !navigator.clipboard.readText) {
+            return;
+        }
+        ereignis.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+            const bereich = editor.getSelection(true);
+            const inhalt = String(text || '').replace(/\r\n/g, '\n');
+            editor.insertText(bereich.index, inhalt, 'user');
+            editor.setSelection(bereich.index + inhalt.length, 0, 'silent');
+        }).catch(() => { /* ignore */ });
+    }, true);
+}
+
 // fetch + swap every matching img blot
 async function ersetzeDurchDataUrl(editor, quelle, element) {
     // the bitmap of the same paste: the only readable copy when the src itself is not
@@ -623,6 +817,11 @@ const BEFEHLE = [
     { id: 'check', name: 'Checkliste', beschreibung: 'Abzuhakende Punkte', form: 'list', wert: 'unchecked', suche: ['checkliste', 'aufgabe', 'todo'] },
     { id: 'zitat', name: 'Zitat', beschreibung: 'Abgesetzter Auszug', form: 'blockquote', wert: true, suche: ['zitat', '>'] },
     { id: 'code', name: 'Codeblock', beschreibung: 'Feste Zeilenumbrüche, Monospace', form: 'code-block', wert: true, suche: ['code', 'codeblock'] },
+    { id: 'hinweis', name: 'Hinweis-Kasten', beschreibung: 'Hervorgehobener Hinweis', form: 'kasten', wert: 'hinweis', suche: ['hinweis', 'kasten'] },
+    { id: 'warnung', name: 'Warnung-Kasten', beschreibung: 'Hervorgehobene Warnung', form: 'kasten', wert: 'warnung', suche: ['warnung', 'kasten', 'achtung'] },
+    { id: 'info', name: 'Info-Kasten', beschreibung: 'Hervorgehobene Information', form: 'kasten', wert: 'info', suche: ['info', 'kasten'] },
+    { id: 'trenner', name: 'Trennlinie', beschreibung: 'Waagerechter Trenner', einfuegen: 'trenner', suche: ['trenner', 'linie', '---'] },
+    { id: 'toc', name: 'Inhaltsverzeichnis', beschreibung: 'Liste der Überschriften', aktion: 'toc', suche: ['inhalt', 'verzeichnis', 'toc'] },
 ];
 
 function haengeBefehlsMenueAn(element, editor) {
@@ -681,6 +880,16 @@ function haengeBefehlsMenueAn(element, editor) {
         schliessen();
         if (laenge > 0) {
             editor.deleteText(start, laenge, 'user');
+        }
+        if (befehl.einfuegen === 'trenner') {
+            editor.insertEmbed(start, 'trenner', true, 'user');
+            editor.setSelection(start + 1, 0, 'silent');
+            editor.focus();
+            return;
+        }
+        if (befehl.aktion === 'toc') {
+            fordereInhaltsverzeichnisAn(element);
+            return;
         }
         // a block choice replaces the list format, it never nests inside one
         if (befehl.form !== 'list') {
@@ -787,6 +996,13 @@ function registriereKomfortSymbole() {
     const symbole = window.Quill.import('ui/icons');
     symbole['noose-suchen'] = '<svg viewBox="0 0 18 18"><circle class="ql-stroke" cx="7.5" cy="7.5" r="4.5" fill="none"/><line class="ql-stroke" x1="11" y1="11" x2="15.5" y2="15.5"/></svg>';
     symbole['noose-vollbild'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M3 7V3h4M11 3h4v4M15 11v4h-4M7 15H3v-4"/></svg>';
+    symbole['noose-kasten-hinweis'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M3 4h12v8H9l-3 3v-3H3z"/></svg>';
+    symbole['noose-kasten-warnung'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M9 3l6.5 11.5h-13z"/><line class="ql-stroke" x1="9" y1="8" x2="9" y2="11"/><line class="ql-stroke" x1="9" y1="12.4" x2="9" y2="13.1"/></svg>';
+    symbole['noose-kasten-info'] = '<svg viewBox="0 0 18 18"><circle class="ql-stroke" cx="9" cy="9" r="6" fill="none"/><line class="ql-stroke" x1="9" y1="8" x2="9" y2="12.4"/><line class="ql-stroke" x1="9" y1="5.4" x2="9" y2="6.1"/></svg>';
+    symbole['noose-trenner'] = '<svg viewBox="0 0 18 18"><line class="ql-stroke" x1="2.5" y1="9" x2="15.5" y2="9"/><circle class="ql-fill" cx="9" cy="6" r="1"/><circle class="ql-fill" cx="9" cy="12" r="1"/></svg>';
+    symbole['noose-toc'] = '<svg viewBox="0 0 18 18"><line class="ql-stroke" x1="3" y1="5" x2="15" y2="5"/><line class="ql-stroke" x1="6" y1="9" x2="15" y2="9"/><line class="ql-stroke" x1="9" y1="13" x2="15" y2="13"/></svg>';
+    symbole['noose-rueckgaengig'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M7 5L3 9l4 4"/><path class="ql-stroke" fill="none" d="M3 9h7a5 5 0 0 1 0 10"/></svg>';
+    symbole['noose-wiederholen'] = '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M11 5l4 4-4 4"/><path class="ql-stroke" fill="none" d="M15 9H8a5 5 0 0 0 0 10"/></svg>';
     komfortSymboleRegistriert = true;
 }
 
@@ -1138,9 +1354,12 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
             if (html === zustand.basis || html.length === 0) {
                 // back to the saved state (or still empty): nothing worth recovering
                 await entwurfLoeschen(db, schluessel);
+                dotnetRef.invokeMethodAsync('OnDraftSaved', 0).catch(() => { });
                 return;
             }
-            await entwurfSchreiben(db, { schluessel, html, zeit: Date.now() });
+            const eintrag = { schluessel, html, zeit: Date.now() };
+            await entwurfSchreiben(db, eintrag);
+            dotnetRef.invokeMethodAsync('OnDraftSaved', eintrag.zeit).catch(() => { });
         }, ENTWURF_VERZOEGERUNG);
     });
 
@@ -1363,6 +1582,118 @@ function registriereBildtext() {
     bildtextRegistriert = true;
 }
 
+const KASTEN_ARTEN = ['hinweis', 'warnung', 'info'];
+
+// callout line: a class on the paragraph, no new tag, so the sanitizer needs no entry
+function registriereKaesten() {
+    if (kastenRegistriert || !window.Quill) {
+        return;
+    }
+    const Block = window.Quill.import('blots/block');
+    class KastenBlot extends Block {
+        static formats(knoten) {
+            const treffer = new RegExp('noose-kasten-(' + KASTEN_ARTEN.join('|') + ')').exec(knoten.className);
+            return treffer ? treffer[1] : undefined;
+        }
+        format(name, wert) {
+            if (name !== 'kasten') {
+                super.format(name, wert);
+                return;
+            }
+            for (const art of KASTEN_ARTEN) {
+                this.domNode.classList.remove('noose-kasten-' + art);
+            }
+            this.domNode.classList.toggle('noose-kasten', !!wert);
+            if (wert) {
+                this.domNode.classList.add('noose-kasten-' + wert);
+            }
+        }
+    }
+    KastenBlot.blotName = 'kasten';
+    KastenBlot.className = 'noose-kasten';
+    window.Quill.register(KastenBlot, true);
+    kastenRegistriert = true;
+}
+
+// divider as an atomic block embed
+function registriereTrenner() {
+    if (trennerRegistriert || !window.Quill) {
+        return;
+    }
+    const BlockEmbed = window.Quill.import('blots/block/embed');
+    class TrennerBlot extends BlockEmbed {
+        static value() {
+            return true;
+        }
+    }
+    TrennerBlot.blotName = 'trenner';
+    TrennerBlot.tagName = 'HR';
+    window.Quill.register(TrennerBlot, true);
+    trennerRegistriert = true;
+}
+
+function schalteKasten(element, art) {
+    const editor = element && element.__nooseQuill;
+    if (!editor) {
+        return;
+    }
+    const bereich = editor.getSelection(true);
+    const aktuell = editor.getFormat(bereich.index).kasten;
+    editor.formatLine(bereich.index, Math.max(1, bereich.length), 'kasten', aktuell === art ? false : art, 'user');
+    editor.focus();
+}
+
+function einfuegenTrenner(element) {
+    const editor = element && element.__nooseQuill;
+    if (!editor) {
+        return;
+    }
+    const bereich = editor.getSelection(true);
+    editor.insertEmbed(bereich.index, 'trenner', true, 'user');
+    editor.setSelection(bereich.index + 1, 0, 'silent');
+    editor.focus();
+}
+
+// headings. The ids are assigned on save; the returned markup links to those slugs.
+function fordereInhaltsverzeichnisAn(element) {
+    const editor = element && element.__nooseQuill;
+    const zustand = element && element.__nooseInhalt;
+    if (!editor || !zustand || zustand.tot || !zustand.dotnetRef || zustand.laeuft) {
+        return;
+    }
+    const eintraege = Array.from(editor.root.querySelectorAll('h1, h2, h3'))
+        .map((knoten) => ({ level: Number(knoten.tagName.substring(1)), text: (knoten.textContent || '').trim() }))
+        .filter((eintrag) => eintrag.text.length > 0);
+    if (eintraege.length === 0) {
+        return;
+    }
+    zustand.laeuft = true;
+    zustand.dotnetRef.invokeMethodAsync('OnTocRequested', eintraege)
+        .then((html) => {
+            if (html) {
+                setInhaltsverzeichnis(element, html);
+            }
+        })
+        .catch(() => { /* ignore */ })
+        .finally(() => {
+            zustand.laeuft = false;
+        });
+}
+
+// inserts the list built by .NET at the caret
+export function setInhaltsverzeichnis(element, html) {
+    const editor = element && element.__nooseQuill;
+    if (!editor || !html) {
+        return;
+    }
+    const Delta = window.Quill.import('delta');
+    const bereich = editor.getSelection(true);
+    const eingefuegt = editor.clipboard.convert(html);
+    editor.updateContents(new Delta().retain(bereich.index).concat(eingefuegt), 'user');
+    editor.setSelection(bereich.index + eingefuegt.length(), 0, 'silent');
+    editor.focus();
+}
+
 // the line after the given one, or null at the document end
 function naechsteZeile(editor, zeile) {
     if (!zeile) {
@@ -1470,7 +1801,124 @@ export function setBildOptionen(element, index, optionen) {
     editor.focus();
 }
 
-export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel) {
+// Ctrl+K opens the link tooltip, Ctrl+S asks the page to save
+function haengeTastenkuerzelAn(editor, dotnetRef) {
+    editor.keyboard.addBinding({ key: 'k', shortKey: true }, () => {
+        const bereich = editor.getSelection(true);
+        const text = bereich.length > 0 ? editor.getText(bereich.index, bereich.length).trim() : '';
+        try {
+            if (editor.theme && editor.theme.tooltip) {
+                editor.theme.tooltip.edit('link', /^https?:/i.test(text) ? text : '');
+                editor.theme.tooltip.show();
+            }
+        } catch (e) {
+            /* ignore */
+        }
+        return false;
+    });
+    editor.keyboard.addBinding({ key: 's', shortKey: true }, () => {
+        dotnetRef.invokeMethodAsync('OnSaveShortcut').catch(() => { /* ignore */ });
+        return false;
+    });
+}
+
+// floating mini bar over a selection: the formats one reaches for without leaving the text
+function haengeAuswahlBlaseAn(element, editor) {
+    const huelle = element.parentElement;
+    if (!huelle) {
+        return null;
+    }
+    const zustand = { tot: false, index: 0, laenge: 0 };
+    element.__nooseAuswahl = zustand;
+
+    const blase = document.createElement('div');
+    blase.className = 'noose-auswahl';
+    blase.hidden = true;
+    huelle.appendChild(blase);
+
+    const verstecken = () => {
+        blase.hidden = true;
+    };
+
+    const knoepfe = [];
+    const knopf = (format, titel, inhalt) => {
+        const knopfElement = document.createElement('button');
+        knopfElement.type = 'button';
+        knopfElement.title = titel;
+        knopfElement.setAttribute('aria-label', titel);
+        knopfElement.textContent = inhalt;
+        knopfElement.addEventListener('pointerdown', (ereignis) => {
+            ereignis.preventDefault();
+            editor.format(format, !editor.getFormat(zustand.index)[format], 'user');
+            aktualisieren();
+        });
+        blase.appendChild(knopfElement);
+        knoepfe.push([knopfElement, format]);
+    };
+    knopf('bold', 'Fett', 'B');
+    knopf('italic', 'Kursiv', 'I');
+    knopf('underline', 'Unterstrichen', 'U');
+    knopf('strike', 'Durchgestrichen', 'S');
+
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.title = 'Link';
+    link.setAttribute('aria-label', 'Link einfügen');
+    link.textContent = 'Link';
+    link.addEventListener('pointerdown', (ereignis) => {
+        ereignis.preventDefault();
+        try {
+            if (editor.theme && editor.theme.tooltip) {
+                editor.theme.tooltip.edit('link', '');
+                editor.theme.tooltip.show();
+            }
+        } catch (e) {
+            /* ignore */
+        }
+    });
+    blase.appendChild(link);
+
+    const klar = document.createElement('button');
+    klar.type = 'button';
+    klar.title = 'Formatierung entfernen';
+    klar.setAttribute('aria-label', 'Formatierung entfernen');
+    klar.textContent = 'Klar';
+    klar.addEventListener('pointerdown', (ereignis) => {
+        ereignis.preventDefault();
+        editor.removeFormat(zustand.index, zustand.laenge, 'user');
+        aktualisieren();
+    });
+    blase.appendChild(klar);
+
+    const aktualisieren = () => {
+        if (zustand.tot) {
+            return;
+        }
+        const bereich = editor.getSelection();
+        if (!bereich || bereich.length === 0) {
+            verstecken();
+            return;
+        }
+        zustand.index = bereich.index;
+        zustand.laenge = bereich.length;
+        const masse = editor.getBounds(bereich.index, bereich.length);
+        blase.hidden = false;
+        const breite = blase.offsetWidth || 180;
+        const hoehe = blase.offsetHeight || 30;
+        blase.style.top = Math.max(0, Math.round(masse.top + element.offsetTop - hoehe - 8)) + 'px';
+        blase.style.left = Math.max(0, Math.round(masse.left + element.offsetLeft + masse.width / 2 - breite / 2)) + 'px';
+        const formate = editor.getFormat(bereich.index, bereich.length);
+        for (const [knopfElement, format] of knoepfe) {
+            knopfElement.classList.toggle('noose-auswahl-aktiv', !!formate[format]);
+        }
+    };
+
+    editor.on('selection-change', aktualisieren);
+    editor.on('text-change', aktualisieren);
+    return zustand;
+}
+
+export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel, profil) {
     await ladeQuill();
     if (!element) {
         return;
@@ -1478,6 +1926,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     registriereGroessen();
     registriereErwaehnung();
     registriereBildtext();
+    registriereKaesten();
+    registriereTrenner();
     const tableHandler = await ladeTabellenModul();
 
     const toolbarGruppen = kompakt ? [
@@ -1514,6 +1964,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
 
     if (!kompakt) {
         registriereKomfortSymbole();
+        toolbarGruppen.push(['noose-rueckgaengig', 'noose-wiederholen']);
+        toolbarGruppen.push(['noose-kasten-hinweis', 'noose-kasten-warnung', 'noose-kasten-info', 'noose-trenner', 'noose-toc']);
         toolbarGruppen.push(['noose-suchen', 'noose-vollbild']);
     }
 
@@ -1528,6 +1980,25 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
         handlers[KI_SCHREIBEN] = () => meldeKi(element, zustand, 'schreiben');
     }
     if (!kompakt) {
+        handlers['noose-rueckgaengig'] = () => {
+            const verlauf = editor.getModule('history');
+            if (verlauf) {
+                verlauf.undo();
+                editor.focus();
+            }
+        };
+        handlers['noose-wiederholen'] = () => {
+            const verlauf = editor.getModule('history');
+            if (verlauf) {
+                verlauf.redo();
+                editor.focus();
+            }
+        };
+        for (const art of KASTEN_ARTEN) {
+            handlers['noose-kasten-' + art] = () => schalteKasten(element, art);
+        }
+        handlers['noose-trenner'] = () => einfuegenTrenner(element);
+        handlers['noose-toc'] = () => fordereInhaltsverzeichnisAn(element);
         handlers['noose-suchen'] = () => {
             const suchen = element.__nooseSuchen;
             if (suchen) {
@@ -1558,8 +2029,13 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     haengeScrollWaechterAn(element);
     haengeBildEinfuegungAn(element);
     registriereBildMatcher(editor, element);
+    haengeEinfuegeSauberungAn(element, editor, profil);
     element.__nooseBildOptionen = { dotnetRef, tot: false };
     haengeBildBearbeitungAn(element, editor);
+    haengeTastenkuerzelAn(editor, dotnetRef);
+    if (!kompakt) {
+        haengeAuswahlBlaseAn(element, editor);
+    }
 
     if (minHeight) {
         editor.root.style.minHeight = minHeight;
@@ -1591,6 +2067,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
         haengeSuchenAn(element);
         haengeVollbildAn(element);
         haengeEntwurfAn(element, editor, dotnetRef, entwurfSchluessel);
+        element.__nooseInhalt = { dotnetRef, tot: false };
     }
 
     if (kiAktiv) {
@@ -1766,12 +2243,23 @@ export function destroyRichText(element) {
         bildOptionen.tot = true;
         bildOptionen.dotnetRef = null;
     }
+    const inhalt = element.__nooseInhalt;
+    if (inhalt) {
+        inhalt.tot = true;
+        inhalt.dotnetRef = null;
+    }
+    const auswahl = element.__nooseAuswahl;
+    if (auswahl) {
+        auswahl.tot = true;
+    }
     element.__nooseErwaehnung = null;
     element.__nooseBefehle = null;
     element.__nooseSuchen = null;
     element.__nooseVollbild = null;
     element.__nooseEntwurf = null;
     element.__nooseBildOptionen = null;
+    element.__nooseInhalt = null;
+    element.__nooseAuswahl = null;
     element.__nooseKi = null;
     element.__nooseQuill = null;
 }
