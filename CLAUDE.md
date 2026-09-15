@@ -292,8 +292,10 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **Die Quill-Werkzeugleiste ist `position: sticky` und hängt an der Höhe der `MudAppBar`.**
   `app.css` setzt `top: var(--noose-rte-toolbar-top, 64px)`; im Dialog überschreibt
   `.mud-dialog .ql-toolbar.ql-snow` die Variable auf `0px`, unter dem sm-Breakpoint auf `56px`. Wird die
-  App-Bar höher, klebt die Leiste darunter fest — beides gehört zusammen geändert. Kein `?v=` nötig:
-  `app.css` läuft über `@Assets["app.css"]` und wird von `MapStaticAssets` gefingerprinted.
+  App-Bar höher, klebt die Leiste darunter fest — beides gehört zusammen geändert. Ein ausgeklapptes
+   Expansion-Panel macht seine Hülle zum Scrollport; die `.mud-collapse-entered .mud-collapse-wrapper:has(.ql-toolbar)`-
+   Ausnahme stellt für Editoren den Seiten-Scrollport wieder her. Kein `?v=` nötig: `app.css` läuft über
+   `@Assets["app.css"]` und wird von `MapStaticAssets` gefingerprinted.
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
 - **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen. Dokumentierte Ausnahmen von dieser Guard-Pflicht: `FactionRecency.StampAsync`, `PublicWantedService.CountViewAsync`, `TipPriorityService` und `RecomputeConfirmedTipsAsync` — abgeleitete Werte hinter einem schon abgesicherten Schreibpfad.

@@ -212,6 +212,8 @@ public static class ChangelogContent
                 "Bewerbungen"),
             Besser("2.1.04-verknuepfen", "Beim Verknüpfen sieht das Fenster überall gleich aus und schlägt schon "
                 + "Verknüpftes nicht mehr vor.", "Bedienung"),
+            Fix("2.1.05-tagesordnung-notiz", "Die erste Zeile einer Notiz in der Tagesordnung liegt nicht mehr unter "
+                + "der Formatierungsleiste.", "Besprechungen"),
         ], "1.5"),
     ];
 }

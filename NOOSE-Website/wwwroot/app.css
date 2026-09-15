@@ -158,6 +158,11 @@ html, body {
     overflow: visible;
 }
 
+/* Restore page scrollport. */
+.mud-collapse-entered .mud-collapse-wrapper:has(.ql-toolbar) {
+    overflow: visible;
+}
+
 .ql-container.ql-snow {
     border-bottom-left-radius: 6px;
     border-bottom-right-radius: 6px;
