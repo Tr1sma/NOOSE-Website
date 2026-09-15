@@ -54,12 +54,13 @@ public sealed class NooseiGatewayTests
         var configService = Substitute.For<ILlmQuotaConfigService>();
         configService.GetAsync(Arg.Any<CancellationToken>()).Returns(LlmQuotaConfig.Default());
         var tuning = Options.Create(Tuning(configure));
-        var quota = new LlmQuotaService(ctx.Factory, configService, tuning, NullLogger<LlmQuotaService>.Instance);
+        var providers = NooseiProviderStub.Returning();
+        var quota = new LlmQuotaService(ctx.Factory, configService, providers, tuning, NullLogger<LlmQuotaService>.Instance);
 
         var llm = Substitute.For<ILlmService>();
         llm.IsConfigured.Returns(true);
 
-        var gateway = new NooseiGateway(llm, quota, tuning, NullLogger<NooseiGateway>.Instance);
+        var gateway = new NooseiGateway(llm, quota, providers, tuning, NullLogger<NooseiGateway>.Instance);
         return (gateway, llm, quota);
     }
 

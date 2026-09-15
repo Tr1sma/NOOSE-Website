@@ -222,6 +222,8 @@ public static class ChangelogContent
                 + "Öffnen bietet der Editor ihn zur Wiederherstellung an.", "Bedienung"),
             Neu("2.1.09-editor-bilder", "Bilder im Text lassen sich jetzt in der Größe anpassen, ausrichten "
                 + "und mit einer Beschriftung versehen – ein Klick auf das Bild öffnet die Einstellungen.", "Bedienung"),
+            Neu("2.1.10-noosei-kontingent", "Das NOOSEI-Wochenkontingent lässt sich für alle Dienstgrade zugleich "
+                + "anheben, ohne die Regeln je Dienstgrad anzufassen.", "NOOSEI"),
         ], "1.5"),
     ];
 }

@@ -93,6 +93,11 @@
                    Icon="@Icons.Material.Filled.SmartToy">
         <NooseiOperationsPanel />
     </RecordSection>
+    @* the switch itself is AI-owner-only inside the panel; leadership reads which upstream is serving them *@
+    <RecordSection Group="KI" Slug="ki-anbieter" Label="Anbieter"
+                   Icon="@Icons.Material.Filled.SwapHoriz">
+        <NooseiProviderPanel />
+    </RecordSection>
     <RecordSection Group="KI" Slug="ki-regeln" Label="Token-Regeln"
                    Icon="@Icons.Material.Filled.Rule">
         <LlmQuotaRulesPanel />

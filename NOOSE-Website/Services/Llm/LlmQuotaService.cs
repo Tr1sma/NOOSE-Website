@@ -48,6 +48,7 @@ public interface ILlmQuotaService
 public class LlmQuotaService(
     IDbContextFactory<AppDbContext> dbFactory,
     ILlmQuotaConfigService configService,
+    INooseiProviderService providerService,
     IOptions<LlmOptions> options,
     ILogger<LlmQuotaService> logger) : ILlmQuotaService
 {
@@ -61,17 +62,19 @@ public class LlmQuotaService(
     private async Task<LlmQuotaStatus> StatusAsync(string agentId, CancellationToken cancellationToken)
     {
         var config = await configService.GetAsync(cancellationToken);
+        var boost = (await providerService.GetStateAsync(cancellationToken)).BoostPercent;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken)
             ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
         var snapshot = await QuotaSnapshot.LoadAsync(db, [agentId], cancellationToken);
-        return await BuildStatusAsync(db, agent, config, snapshot, cancellationToken);
+        return await BuildStatusAsync(db, agent, config, boost, snapshot, cancellationToken);
     }
 
     public async Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireQuotaRead(actor);
         var config = await configService.GetAsync(cancellationToken);
+        var boost = (await providerService.GetStateAsync(cancellationToken)).BoostPercent;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agents = await db.Users.AsNoTracking().OnlySelectable()
             .OrderBy(a => a.Codename)
@@ -83,7 +86,7 @@ public class LlmQuotaService(
         var list = new List<LlmQuotaStatus>(agents.Count);
         foreach (var agent in agents)
         {
-            list.Add(await BuildStatusAsync(db, agent, config, snapshot, cancellationToken));
+            list.Add(await BuildStatusAsync(db, agent, config, boost, snapshot, cancellationToken));
         }
         return list;
     }
@@ -334,11 +337,14 @@ public class LlmQuotaService(
     }
 
     private static async Task<LlmQuotaStatus> BuildStatusAsync(
-        AppDbContext db, Agent agent, LlmQuotaConfig config, QuotaSnapshot snapshot, CancellationToken cancellationToken)
+        AppDbContext db, Agent agent, LlmQuotaConfig config, int boostPercent, QuotaSnapshot snapshot,
+        CancellationToken cancellationToken)
     {
         var (year, week) = IsoWeekPeriod.Current();
         var rules = config.For(agent.Rank);
-        var baseWeekly = agent.LlmQuotaOverride ?? rules.BaseWeekly;
+        // the boost sits on top of an individual override too: it says what the active upstream costs, not who
+        // is allowed how much, and those are two different questions
+        var baseWeekly = LlmQuotaMath.Boosted(agent.LlmQuotaOverride ?? rules.BaseWeekly, boostPercent);
         var carryIn = await CloseElapsedAsync(db, agent, snapshot, baseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
         return new LlmQuotaStatus(agent.Id, agent.Codename, agent.Rank, year, week,
             baseWeekly, carryIn, snapshot.Consumed(agent.Id, year, week), rules.CarryOverPercent,

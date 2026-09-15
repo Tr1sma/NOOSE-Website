@@ -167,7 +167,7 @@ else if (_lastCost is { } cost)
             // the editor types a caption line; the stored row carries figure/figcaption
             Value = RichTextFigure.ToEditor(Value);
             await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight,
-                AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope);
+                AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope, HtmlCleanup.Profile);
             _ready = true;
             Analyze(Value);
         }

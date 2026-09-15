@@ -72,18 +72,52 @@ public static partial class HtmlCleanup
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 
+    /// <summary>Allowlist of the sanitizer and of the editor's paste cleaner; one table, two consumers.</summary>
+    public sealed record ContentProfile(
+        IReadOnlyList<string> Tags,
+        IReadOnlyList<string> Attributes,
+        IReadOnlyList<string> CssProperties,
+        IReadOnlyList<string> Schemes);
+
+    private static readonly string[] AllowedTagNames =
+    [
+        "p", "br", "span", "b", "strong", "i", "em", "u", "s",
+        "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a", "img",
+        "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
+        "figure", "figcaption",
+    ];
+
+    private static readonly string[] AllowedAttributeNames =
+    [
+        "href", "target", "rel", "class", "style", "src", "alt",
+        "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
+        "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
+        "data-row", "data-col", "data-w", "data-full", "data-checked",
+    ];
+
+    private static readonly string[] AllowedCssPropertyNames =
+    [
+        "color", "background-color", "text-align", "font-size",
+        "width", "height", "vertical-align",
+        "border", "border-color", "border-style", "border-width",
+    ];
+
+    private static readonly string[] AllowedSchemeNames =
+    [
+        "http", "https", "mailto",
+        "data", // pasted images arrive as data uris
+    ];
+
+    /// <summary>What the sanitizer keeps; the editor cleans a paste against the same lists.</summary>
+    public static ContentProfile Profile { get; } = new(
+        AllowedTagNames, AllowedAttributeNames, AllowedCssPropertyNames, AllowedSchemeNames);
+
     private static HtmlSanitizer Generate(bool allowDiffMarks = false, bool allowImagePlaceholder = false)
     {
         var s = new HtmlSanitizer();
 
         s.AllowedTags.Clear();
-        foreach (var tag in new[]
-        {
-            "p", "br", "span", "b", "strong", "i", "em", "u", "s",
-            "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a", "img",
-            "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
-            "figure", "figcaption",
-        })
+        foreach (var tag in AllowedTagNames)
         {
             s.AllowedTags.Add(tag);
         }
@@ -94,13 +128,7 @@ public static partial class HtmlCleanup
         }
 
         s.AllowedAttributes.Clear();
-        foreach (var attr in new[]
-        {
-            "href", "target", "rel", "class", "style", "src", "alt",
-            "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
-            "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
-            "data-row", "data-col", "data-w", "data-full", "data-checked",
-        })
+        foreach (var attr in AllowedAttributeNames)
         {
             s.AllowedAttributes.Add(attr);
         }
@@ -110,22 +138,16 @@ public static partial class HtmlCleanup
         }
 
         s.AllowedCssProperties.Clear();
-        foreach (var prop in new[]
-        {
-            "color", "background-color", "text-align", "font-size",
-            "width", "height", "vertical-align",
-            "border", "border-color", "border-style", "border-width",
-        })
+        foreach (var prop in AllowedCssPropertyNames)
         {
             s.AllowedCssProperties.Add(prop);
         }
 
         s.AllowedSchemes.Clear();
-        s.AllowedSchemes.Add("http");
-        s.AllowedSchemes.Add("https");
-        s.AllowedSchemes.Add("mailto");
-        // quill embeds pasted/picked images as base64 data URIs
-        s.AllowedSchemes.Add("data");
+        foreach (var scheme in AllowedSchemeNames)
+        {
+            s.AllowedSchemes.Add(scheme);
+        }
 
         // data: stays image-only; a data: href is a phishing vector
         s.PostProcessNode += (_, e) =>

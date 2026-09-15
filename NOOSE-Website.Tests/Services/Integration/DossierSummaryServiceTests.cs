@@ -36,7 +36,7 @@ public sealed class DossierSummaryServiceTests
     }
 
     private static DossierSummaryService Svc(SqliteTestContext ctx, INooseiGateway gateway, bool allowClassifiedEgress = false)
-        => new(ctx.Factory, gateway, Options.Create(new LlmOptions
+        => new(ctx.Factory, gateway, NooseiProviderStub.Returning(), Options.Create(new LlmOptions
         {
             Enabled = true,
             ApiKey = "k",
