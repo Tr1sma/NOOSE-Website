@@ -215,6 +215,56 @@ public partial class PublicPageScanTests
             "Jede öffentliche Seite sagt, wie ihr Link außerhalb aussieht: " + string.Join(", ", offenders));
     }
 
+    /// <summary>The preview rule follows the ROUTE, not the folder.</summary>
+    /// <remarks>
+    /// <see cref="PublicRoutes"/> decides what an anonymous visitor may open and a crawler may index, and that set
+    /// is not the same as <c>Pages/Public</c>: the legal pages live elsewhere, are linked from the footer of every
+    /// public page, and had no preview at all — a shared link to them unfurled as a bare address. Scanning by
+    /// folder could never have seen them.
+    /// </remarks>
+    [Fact]
+    public void EveryPubliclyRoutedPageDeclaresItsLinkPreview()
+    {
+        var root = Root();
+        Assert.True(Directory.Exists(root), $"Komponentenordner nicht gefunden: {root}");
+
+        var offenders = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(root, "*.razor", SearchOption.AllDirectories).Order())
+        {
+            var name = Path.GetFileName(file);
+            if (PreviewExempt.ContainsKey(name))
+            {
+                continue;
+            }
+            var code = Code(file);
+            if (code.Contains("<LinkPreview", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            foreach (Match treffer in PageDirective().Matches(code))
+            {
+                var route = treffer.Groups[1].Value;
+                // a parameter segment is not part of the prefix PublicRoutes matches on
+                var klammer = route.IndexOf('{');
+                if (klammer >= 0)
+                {
+                    route = route[..klammer].TrimEnd('/');
+                }
+                if (route.Length > 1 && NOOSE_Website.Services.Public.PublicRoutes.IsPublic(route))
+                {
+                    offenders.Add(name);
+                    break;
+                }
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "Öffentlich erreichbar, aber ohne Link-Vorschau: " + string.Join(", ", offenders.Distinct().Order()));
+    }
+
+    [GeneratedRegex("""@page\s+"([^"]+)"\s*""")]
+    private static partial Regex PageDirective();
+
     [Fact]
     public void TheHeadOfAPublicPageIsWrittenInOnePlace()
     {

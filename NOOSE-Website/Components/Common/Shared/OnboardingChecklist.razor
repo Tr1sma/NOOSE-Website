@@ -31,9 +31,15 @@
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@step.Title</MudText>
                         }
+                        else if (step.Href is { Length: > 0 } ziel)
+                        {
+                            <MudLink Href="@ziel" Typo="Typo.body2">@step.Title</MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@step.Text</MudText>
+                        }
                         else
                         {
-                            <MudLink Href="@step.Href" Typo="Typo.body2">@step.Title</MudLink>
+                            @* nowhere to send him: the step is done in a dialog, and the text says where *@
+                            <MudText Typo="Typo.body2">@step.Title</MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@step.Text</MudText>
                         }
                     </div>

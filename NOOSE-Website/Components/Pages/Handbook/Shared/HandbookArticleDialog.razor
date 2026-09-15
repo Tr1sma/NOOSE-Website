@@ -19,7 +19,7 @@
                           Required="true" RequiredError="Der Artikel braucht einen Titel." MaxLength="200" />
 
             <MudTextField @bind-Value="_slug" Label="Adresse (Slug)" Variant="Variant.Outlined"
-                          Required="true" RequiredError="Der Artikel braucht eine Adresse." MaxLength="120"
+                          Required="true" RequiredError="Der Artikel braucht eine Adresse." MaxLength="64"
                           HelperText="Teil der Adresse: /handbuch/…. Kleinbuchstaben und Bindestriche; wird beim Speichern bereinigt." />
 
             <MudTextField @bind-Value="_summary" Label="Kurzbeschreibung" Variant="Variant.Outlined"

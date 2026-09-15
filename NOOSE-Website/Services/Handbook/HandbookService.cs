@@ -131,12 +131,24 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             chapter.Slug, chapter.Title);
     }
 
-    public async Task<List<GlossaryTermView>> GetGlossaryAsync(CancellationToken cancellationToken = default)
+    public Task<List<GlossaryTermView>> GetGlossaryAsync(CancellationToken cancellationToken = default)
+        => LoadTermsAsync(includeHidden: false, cancellationToken);
+
+    public Task<List<GlossaryTermView>> GetAllTermsAsync(CancellationToken cancellationToken = default)
+        => LoadTermsAsync(includeHidden: true, cancellationToken);
+
+    /// <summary>The glossary, optionally including withdrawn terms.</summary>
+    /// <remarks>
+    /// A term is withdrawn with <c>IsVisible</c> rather than deleted, so there is no trash to fetch it back from
+    /// and the unique index keeps its name occupied. Without a list that shows the hidden ones, the switch was a
+    /// one-way door: the term was gone from every page and could not be created again either.
+    /// </remarks>
+    private async Task<List<GlossaryTermView>> LoadTermsAsync(bool includeHidden, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var terms = await db.HandbuchBegriffe.AsNoTracking()
-            .Where(t => t.IsVisible)
+            .Where(t => includeHidden || t.IsVisible)
             .OrderBy(t => t.Term)
             .ToListAsync(cancellationToken);
         if (terms.Count == 0)
@@ -148,7 +160,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         var articles = articleIds.Count == 0
             ? []
             : await db.HandbuchArtikel.AsNoTracking()
-                .Where(a => articleIds.Contains(a.Id) && a.IsVisible)
+                .Where(a => articleIds.Contains(a.Id) && (includeHidden || a.IsVisible))
                 .Select(a => new { a.Id, a.Slug, a.Title })
                 .ToListAsync(cancellationToken);
         var byId = articles.ToDictionary(a => a.Id);
@@ -156,8 +168,10 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         return terms.Select(t =>
         {
             var link = t.ArticleId is not null && byId.TryGetValue(t.ArticleId, out var a) ? a : null;
+            // ArticleId comes straight from the row: the slug is only a display value and is null for a target
+            // the reader may not see, so an editor rebuilding the id from it would save the link away
             return new GlossaryTermView(t.Id, t.Term, t.Synonyms, t.ShortDefinition, t.ExplanationHtml,
-                link?.Slug, link?.Title);
+                link?.Slug, link?.Title, t.ArticleId, t.IsVisible);
         }).ToList();
     }
 
@@ -527,8 +541,22 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         {
             slug = slug.Replace("--", "-", StringComparison.Ordinal);
         }
-        return string.IsNullOrEmpty(slug) ? null : (slug.Length > 120 ? slug[..120] : slug);
+        if (slug.Length > MaxSlugLength)
+        {
+            // trimmed again: the cut can land on a separator, and a trailing hyphen is an ugly permanent address
+            slug = slug[..MaxSlugLength].TrimEnd('-');
+        }
+        return string.IsNullOrEmpty(slug) ? null : slug;
     }
+
+    /// <summary>Longest address an article or chapter may carry.</summary>
+    /// <remarks>
+    /// Not a free choice: the article slug is its key in the search side index, and the EntityId columns there
+    /// are varchar(64). A longer slug makes the index insert fail, which fails the whole SaveChanges — the
+    /// article is then not written at all and the editor sees a raw database error. The chapter column is 80,
+    /// so one number is safe for both.
+    /// </remarks>
+    public const int MaxSlugLength = 64;
 
     /// <summary>Filtered HTML, or null when nothing survives - an empty string would render an empty box.</summary>
     private static string? CleanHtml(string? html)

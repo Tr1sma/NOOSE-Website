@@ -256,18 +256,15 @@ html, body {
     margin: 1rem 0;
 }
 
-.ql-editor .noose-inhaltsverzeichnis {
-    margin: .5rem 0 1rem;
-    padding-left: 1.25rem;
+/* Table of contents: Quill builds the surrounding list itself, so the wrapper class never reaches the
+   document — the level rides on the list item, which is what these rules have to hang on. */
+.ql-editor li.noose-toc-2 {
+    margin-left: 1rem;
 }
 
-    .ql-editor .noose-inhaltsverzeichnis .noose-toc-2 {
-        margin-left: 1rem;
-    }
-
-    .ql-editor .noose-inhaltsverzeichnis .noose-toc-3 {
-        margin-left: 2rem;
-    }
+.ql-editor li.noose-toc-3 {
+    margin-left: 2rem;
+}
 
 /* Toolbar-Symbole/Labels im Dunkeln sichtbar machen. */
 .ql-snow .ql-stroke {
@@ -746,22 +743,18 @@ html, body {
         scroll-margin-top: 88px;
     }
 
-    .dokument-html .noose-inhaltsverzeichnis {
-        margin: .5rem 0 1rem;
-        padding-left: 1.25rem;
+    /* same as in the editor: the level class sits on the list item, the wrapper never survives the insert */
+    .dokument-html li.noose-toc-2 {
+        margin-left: 1rem;
     }
 
-        .dokument-html .noose-inhaltsverzeichnis .noose-toc-2 {
-            margin-left: 1rem;
-        }
+    .dokument-html li.noose-toc-3 {
+        margin-left: 2rem;
+    }
 
-        .dokument-html .noose-inhaltsverzeichnis .noose-toc-3 {
-            margin-left: 2rem;
-        }
-
-        .dokument-html .noose-inhaltsverzeichnis a {
-            color: var(--mud-palette-primary);
-        }
+    .dokument-html li[class*="noose-toc-"] a {
+        color: var(--mud-palette-primary);
+    }
 
     /* Quill block formats stored in the html: alignment, indentation and checklists. Read views and
        print never load quill.snow.css, so everything the editor can produce is stated here too. */

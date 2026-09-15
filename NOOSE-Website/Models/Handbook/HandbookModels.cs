@@ -35,6 +35,11 @@ public sealed record HandbookArticleView(
 public sealed record HandbookStepView(int Number, string? IconName, string Title, string Text);
 
 /// <summary>A glossary term, with the article that goes into detail.</summary>
+/// <param name="ArticleId">The stored link, kept apart from the slug on purpose: the slug is only filled for an
+/// article the reader may see, so rebuilding the id from it dropped the assignment as soon as the target was
+/// hidden — and the next unrelated save wrote that emptiness back.</param>
+/// <param name="IsVisible">False for a withdrawn term. Readers never receive one; the editor list does, because
+/// a term has no trash and its name stays taken, so an invisible one would be unreachable forever.</param>
 public sealed record GlossaryTermView(
     string Id,
     string Term,
@@ -42,7 +47,9 @@ public sealed record GlossaryTermView(
     string ShortDefinition,
     string? ExplanationHtml,
     string? ArticleSlug,
-    string? ArticleTitle);
+    string? ArticleTitle,
+    string? ArticleId = null,
+    bool IsVisible = true);
 
 /// <summary>Editable fields of a chapter.</summary>
 public sealed record HandbookChapterInput(

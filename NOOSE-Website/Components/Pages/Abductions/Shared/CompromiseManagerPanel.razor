@@ -119,7 +119,11 @@
     {
         var term = value ?? string.Empty;
         var user = (await AuthStateTask).User;
-        var records = await SearchService.QuickSearchAsync(term, user, 10, token);
+        // same filter as the @-picker: a category that resolves to no reference would be stored and then read
+        // back as "(gelöschte Akte)" for good
+        var records = (await SearchService.QuickSearchAsync(term, user, 10, token))
+            .Where(h => LinkService.KnownTypes.Contains(h.Category, StringComparer.Ordinal))
+            .ToList();
         if (string.IsNullOrWhiteSpace(term))
         {
             return records;

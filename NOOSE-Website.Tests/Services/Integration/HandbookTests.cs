@@ -217,6 +217,29 @@ public sealed class HandbookTests
         Assert.Equal("anmelden", term.ArticleSlug);
     }
 
+    /// <summary>A term is withdrawn with a flag, not deleted: there is no trash for it and its name stays taken.
+    /// The editor list is therefore the only way back, and it also has to carry the stored article link — the
+    /// reader-facing slug is empty for a hidden target, and rebuilding the id from it dropped the assignment.</summary>
+    [Fact]
+    public async Task A_withdrawn_term_stays_reachable_for_the_editor_with_its_link_intact()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+        var service = NewService(ctx);
+        var before = (await service.GetGlossaryAsync()).Single();
+        Assert.NotNull(before.ArticleId);
+
+        await service.RefreshTermAsync(before.Id,
+            new GlossaryTermInput(before.Term, before.Synonyms, before.ShortDefinition,
+                before.ExplanationHtml, before.ArticleId, false),
+            Leader());
+
+        Assert.Empty(await service.GetGlossaryAsync());
+        var hidden = Assert.Single(await service.GetAllTermsAsync());
+        Assert.False(hidden.IsVisible);
+        Assert.Equal(before.ArticleId, hidden.ArticleId);
+    }
+
     [Fact]
     public async Task A_deleted_article_keeps_its_address_blocked()
     {
@@ -322,6 +345,25 @@ public sealed class HandbookTests
 
         // a slug is a URL segment: validated on write, with umlauts transliterated so links stay readable
         Assert.Equal("akten-fuehren", created.Slug);
+    }
+
+    /// <summary>The slug is the article's key in the search side index, whose EntityId columns hold 64
+    /// characters. A longer one fails that insert and takes the article's own SaveChanges with it.</summary>
+    [Fact]
+    public async Task A_very_long_address_is_cut_to_the_search_index_width()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+        var service = NewService(ctx);
+        var chapter = (await service.GetAllChaptersAsync()).First();
+        var wunsch = string.Join("-", Enumerable.Repeat("fahndung", 20));
+
+        var created = await service.CreateArticleAsync(
+            new HandbookArticleInput(chapter.Id, wunsch, "Sehr lange Adresse", null, null, null, null, null, 0, true),
+            Leader());
+
+        Assert.True(created.Slug.Length <= HandbookService.MaxSlugLength);
+        Assert.False(created.Slug.EndsWith('-'));
     }
 
     // --- the shipped content ---------------------------------------------

@@ -53,6 +53,8 @@ public static partial class RichTextAnchors
     }
 
     /// <summary>Builds the list markup the editor inserts at the caret.</summary>
+    /// <remarks>The level belongs on the item, not on the wrapper: Quill rebuilds the surrounding list from
+    /// its own format and drops any class the wrapper carried, so only the item class reaches the document.</remarks>
     public static string BuildToc(IEnumerable<TocEntry> entries)
     {
         var builder = new StringBuilder();

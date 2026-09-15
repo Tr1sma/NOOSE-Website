@@ -135,7 +135,13 @@ public sealed class OnboardingTests
     {
         Assert.All(Onboarding.Steps(Fresh()), s =>
         {
-            Assert.StartsWith("/", s.Href, StringComparison.Ordinal);
+            // a step may have no route - the menu customiser is a dialog - but a route that IS named has to be
+            // one, and it must not point at the dashboard, which is the page the checklist itself sits on
+            if (s.Href is not null)
+            {
+                Assert.StartsWith("/", s.Href, StringComparison.Ordinal);
+                Assert.NotEqual("/dashboard", s.Href);
+            }
             Assert.False(string.IsNullOrWhiteSpace(s.Icon));
             Assert.False(string.IsNullOrWhiteSpace(s.Title));
             Assert.False(string.IsNullOrWhiteSpace(s.Text));

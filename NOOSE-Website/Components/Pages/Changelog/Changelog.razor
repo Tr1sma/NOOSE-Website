@@ -1,5 +1,6 @@
 @* What changed on this site, in the reader's language, grouped by release. *@
 @page "/neuerungen"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @using System.Reflection
 @inject IChangelogService ChangelogService
 @inject INavPreferencesService NavPreferences

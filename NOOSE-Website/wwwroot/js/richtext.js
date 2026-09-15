@@ -891,11 +891,20 @@ function haengeBefehlsMenueAn(element, editor) {
             fordereInhaltsverzeichnisAn(element);
             return;
         }
-        // a block choice replaces the list format, it never nests inside one
-        if (befehl.form !== 'list') {
-            editor.formatLine(start, 1, 'list', false);
+        if (befehl.form === null) {
+            // "plain paragraph" has to clear EVERY block format. Parchment only swaps a blot out when the
+            // name matches it, so asking a blockquote or a code block to unset 'header' did nothing at all -
+            // the entry ate the typed slash and left the line exactly as it was.
+            for (const form of ['header', 'blockquote', 'code-block', 'list']) {
+                editor.formatLine(start, 1, form, false);
+            }
+        } else {
+            // a block choice replaces the list format, it never nests inside one
+            if (befehl.form !== 'list') {
+                editor.formatLine(start, 1, 'list', false);
+            }
+            editor.formatLine(start, 1, befehl.form, befehl.wert);
         }
-        editor.formatLine(start, 1, befehl.form || 'header', befehl.form === null ? false : befehl.wert);
         editor.setSelection(start, 0, 'silent');
         editor.focus();
     };
@@ -910,7 +919,9 @@ function haengeBefehlsMenueAn(element, editor) {
             return;
         }
         const [zeile] = editor.getLine(bereich.index - 1);
-        if (!zeile) {
+        if (!zeile || istCodeblock(zeile)) {
+            // a slash is literal inside a code block, and an open menu would swallow the Enter that is
+            // supposed to start the next code line
             schliessen();
             return;
         }
@@ -1506,6 +1517,12 @@ function haengeVollbildAn(element) {
     return zustand;
 }
 
+// True for the one blot whose content is meant to stay literal. Quill keeps a whole code block in a single
+// blot, so its first line looks exactly like the start of an empty paragraph to every caret-based check.
+function istCodeblock(zeile) {
+    return !!zeile && !!zeile.statics && zeile.statics.blotName === 'code-block';
+}
+
 // markdown-style block markers: typed "## " or "- " at the start of a line turn into the block format.
 // text-change fires after the marker is in the document, so the marker is removed again right away —
 // a keyboard-binding return value differs between quill versions, this path is stable.
@@ -1527,7 +1544,9 @@ function haengeBlockKuerzelAn(editor) {
             return;
         }
         const [zeile] = editor.getLine(bereich.index - 1);
-        if (!zeile) {
+        if (!zeile || istCodeblock(zeile)) {
+            // inside a code block "#", "-" and ">" are literal content; converting them eats the typed
+            // characters and lifts the line out of the block the author just opened
             return;
         }
         const start = editor.getIndex(zeile);
@@ -1641,6 +1660,25 @@ function registriereKaesten() {
     KastenBlot.className = 'noose-kasten';
     window.Quill.register(KastenBlot, true);
     kastenRegistriert = true;
+}
+
+// Depth of a table-of-contents entry, as a class Quill is willing to carry.
+// clipboard.convert() keeps only formats Parchment knows: the level classes of the inserted list were
+// dropped on the way in, so every entry came out flat and the CSS written for them never matched.
+// A class attributor reads the trailing segment of "noose-toc-2" as its value, which is exactly the level.
+let tocKlasseRegistriert = false;
+
+function registriereTocKlasse() {
+    if (tocKlasseRegistriert || !window.Quill) {
+        return;
+    }
+    const Parchment = window.Quill.import('parchment');
+    const TocEbene = new Parchment.Attributor.Class('tocebene', 'noose-toc', {
+        scope: Parchment.Scope.BLOCK,
+        whitelist: ['1', '2', '3'],
+    });
+    window.Quill.register(TocEbene, true);
+    tocKlasseRegistriert = true;
 }
 
 // divider as an atomic block embed
@@ -1956,6 +1994,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     registriereBildtext();
     registriereKaesten();
     registriereTrenner();
+    registriereTocKlasse();
     const tableHandler = await ladeTabellenModul();
 
     const toolbarGruppen = kompakt ? [

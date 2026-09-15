@@ -253,6 +253,12 @@ public class AbductionService(
         {
             throw new InvalidOperationException("Bitte eine Akte zum Verknüpfen auswählen.");
         }
+        // filtering the picker is not enough, the socket takes whatever it is sent: a type that resolves to no
+        // reference would be stored and then read back as a deleted record on every load, with no way to remove it
+        if (!LinkService.KnownTypes.Contains(targetType, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException("Dieser Aktentyp kann nicht als kompromittiert vermerkt werden.");
+        }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (!await db.AgentAbductions.AnyAsync(a => a.Id == abductionId, cancellationToken))

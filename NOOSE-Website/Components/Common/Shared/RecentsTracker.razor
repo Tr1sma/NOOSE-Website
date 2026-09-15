@@ -10,6 +10,9 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     private string? _agentId;
+
+    // the checklist is internal-only: a partner collects marks it never gets to see
+    private bool _intern;
     private string? _lastPath;
     private ViewerScope _scope;
 
@@ -19,6 +22,7 @@
         {
             var user = (await AuthStateTask).User;
             _agentId = user.GetAgentId();
+            _intern = user.IsInternalAgent();
             _scope = ViewerScope.From(user);
         }
         Nav.LocationChanged += OnLocationChanged;
@@ -60,7 +64,7 @@
             await NavPrefs.PushRecentAsync(_agentId, item);
             // latched here rather than read out of Recents later: that list is capped at 15 and would
             // un-complete the step after fifteen other visits
-            if (loc.IsRecord)
+            if (loc.IsRecord && _intern)
             {
                 await NavPrefs.MarkOnboardingStepAsync(_agentId, Onboarding.StepRecord);
             }

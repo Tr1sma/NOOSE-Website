@@ -1828,7 +1828,9 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<HandbookArticle>(b =>
         {
             b.Property(a => a.ChapterId).HasMaxLength(64).IsRequired();
-            b.Property(a => a.Slug).HasMaxLength(120).IsRequired();
+            // 64, not more: the slug is this article's key in the search side index, whose EntityId columns are
+            // varchar(64) — a longer one fails that insert and takes the whole SaveChanges down with it
+            b.Property(a => a.Slug).HasMaxLength(64).IsRequired();
             b.Property(a => a.Title).HasMaxLength(200).IsRequired();
             b.Property(a => a.Summary).HasMaxLength(400);
             b.Property(a => a.ContentHtml).HasColumnType("longtext");

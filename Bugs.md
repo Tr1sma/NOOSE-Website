@@ -35,9 +35,27 @@ Build grün, **738 Tests der betroffenen Bereiche grün**. Keine Migration nöti
 | 10 | `RichTextFigure.ToStored` faltet nur noch eine Zeile mit **genau einem** Bild-Element; Mehrbild- und verlinkte Bilder bleiben unangetastet (zwei neue Tests). |
 | 12, 13, 15, 16, 17, 26, 35, 36, 37, 43 | Von einem zweiten Agenten umgesetzt und von einem unabhängigen Prüfer gegengelesen — alle sieben Punkte korrekt, nichts außerhalb des Auftrags angefasst. |
 
-**In Arbeit:** 8, 9.
+**Zweite Runde, ebenfalls behoben:** 8, 9, 18, 20, 21, 22, 24, 25, 27, 28, 30, 31, 34, 42, 44.
 
-**Offen:** 11, 18–25, 27–34, 38–42, 44.
+| # | Was geändert wurde |
+|---|---|
+| 8 + 31 | Der Slug ist auf **64** Zeichen begrenzt — Spalte, Bereinigung und Eingabefeld gemeinsam, mit der Kopplung an die Suchindex-Breite als Kommentar an beiden Enden. Deckt auch den Kapitel-Fall (Spalte 80) ab. Der Schnitt trimmt jetzt einen Trennstrich am Ende weg. |
+| 9 | Beide Kompromittierungs-Picker filtern auf `LinkService.KnownTypes` wie der @-Picker, und `AddCompromiseAsync` prüft den Typ **serverseitig** — der SignalR-Pfad bleibt sonst offen. |
+| 11 | **Halb.** Der echte Sackgassen-Fall ist weg: neues `GetAllTermsAsync`, die Redaktion sieht ausgeblendete Begriffe markiert und kann sie zurückholen. Kapitel und Artikel bleiben beim Ausblenden weiterhin nur über die Datenbank erreichbar. |
+| 18 | `_allChapters`/`_allArticles` — die beiden Listen, die ganze Artikel samt `longtext` laden — werden nur noch für Redakteure geholt. |
+| 20 | Ein Klassen-Attributor `noose-toc` hält die Ebenen des Inhaltsverzeichnisses über den Einfüge-Vorgang; die CSS hängt jetzt am Listeneintrag statt an einem Wrapper, den Quill ohnehin neu baut. |
+| 21 + 22 | Markdown-Kürzel und Schrägstrich-Menü steigen im Codeblock aus; „Text" räumt alle Blockformate ab statt nur der Überschrift. |
+| 24 | Abgelaufene Wochen werden mit dem **rohen** Grundkontingent geschlossen. Bewusst konservativ: kann nur zu wenig, nie zu viel gewähren. Exakt wäre eine Boost-Spalte auf der Periodenzeile — die braucht eine Migration. |
+| 25 | Artikel- und Glossar-Quellenchips werden getrennt gedeckelt; die Artikel behalten ihre Plätze. |
+| 27 | Der Schritt „Menü angepasst" trägt keinen Link mehr, sondern sagt, wo das Zahnrad sitzt. Der Test verbietet jetzt ausdrücklich eine Route auf `/dashboard`. |
+| 28 | `GlossaryTermView` trägt `ArticleId` und `IsVisible`; das Preset nimmt beide aus der Zeile statt sie aus der Leseansicht zurückzurechnen. |
+| 30 | Beide Stempelstellen prüfen `IsInternalAgent` wie die anderen drei. |
+| 34 | `Designation` ist entfernt. |
+| 42 | Beide Rechtstexte haben eine Vorschau — und ein **neuer** Scan-Test prüft die Regel über `PublicRoutes` statt über den Ordnernamen, damit die nächste öffentliche Seite außerhalb von `Pages/Public` nicht wieder durchrutscht. |
+| 44 | Die drei Seiten tragen `Policies.InternalAgent`, statt sich allein auf das Layout-Gate zu verlassen. |
+
+**Offen:** 19, 23, 29, 32, 33, 38, 39, 40, 41 — und die Kapitel/Artikel-Hälfte von 11.
+Keiner davon kostet Daten oder Geld; 38 braucht eine Migration, 23 einen Eingriff in den Abmelde-Pfad.
 
 ---
 

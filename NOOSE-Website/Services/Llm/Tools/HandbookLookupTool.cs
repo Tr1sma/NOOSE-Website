@@ -91,7 +91,11 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
         }
 
         var sb = new StringBuilder();
-        var refs = new List<LlmContextRef>(cards.Count + terms.Count);
+        // kept apart on purpose. The text is written glossary-first because the clip cuts the tail, but the chip
+        // list is capped from the front - so a broad question that matched eight terms used to leave the articles
+        // the answer was actually built from without a single place to look them up.
+        var articleRefs = new List<LlmContextRef>(cards.Count);
+        var termRefs = new List<LlmContextRef>(terms.Count);
 
         // the glossary first: it is a line per term, while an article body can fill the whole budget, and
         // the clip cuts the tail. Last, a definition could be trimmed away while its source chip survived.
@@ -101,7 +105,7 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
             foreach (var (term, _) in terms)
             {
                 sb.Append("• ").Append(term.Term).Append(" — ").AppendLine(term.ShortDefinition);
-                refs.Add(new LlmContextRef(nameof(GlossaryTerm), term.Id, term.Term));
+                termRefs.Add(new LlmContextRef(nameof(GlossaryTerm), term.Id, term.Term));
             }
             sb.AppendLine();
         }
@@ -115,13 +119,18 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
                 continue;
             }
             Append(sb, article, chapter);
-            refs.Add(new LlmContextRef(nameof(HandbookArticle), article.Slug, article.Title));
+            articleRefs.Add(new LlmContextRef(nameof(HandbookArticle), article.Slug, article.Title));
         }
+
+        // articles keep their slots, the rest goes to terms: the article is what the answer quotes, and it is
+        // capped at MaxArticleBodies anyway, so it can never crowd the list out on its own
+        var refs = articleRefs.Take(MaxRefs).ToList();
+        refs.AddRange(termRefs.Take(Math.Max(0, MaxRefs - refs.Count)));
 
         return new NooseiToolResult(
             NooseiLimits.Clip(sb.ToString(), NooseiLimits.MaxContentResultChars),
             // capped: the chips under an answer are a handful of places to look, not a bibliography
-            refs.Count == 0 ? null : refs.Take(MaxRefs).ToList());
+            refs.Count == 0 ? null : refs);
     }
 
     private static void Append(StringBuilder sb, HandbookArticleView article, string chapter)

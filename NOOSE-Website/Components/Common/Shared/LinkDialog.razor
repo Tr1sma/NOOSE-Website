@@ -356,8 +356,8 @@
     [Parameter] public IReadOnlyList<string>? AllowedTypes { get; set; }
     /// <summary>Already-linked or otherwise blocked ids per type.</summary>
     [Parameter] public IReadOnlyDictionary<string, IReadOnlyList<string>>? Excluded { get; set; }
-    /// <summary>Drives the dialog title.</summary>
-    [Parameter] public string Designation { get; set; } = "Verknüpfung";
+    // no Designation parameter: the title is set by ShowAsync, and a documented parameter the component never
+    // read was a trap - setting it changed nothing, silently
     [Parameter] public string LabelCaption { get; set; } = "Bezeichnung (optional)";
     [Parameter] public string LabelPlaceholder { get; set; } = "z. B. siehe auch / Quelle für";
 
@@ -681,7 +681,6 @@
             { x => x.SourceType, sourceType },
             { x => x.AllowedTypes, allowedTypes },
             { x => x.Excluded, excluded },
-            { x => x.Designation, designation },
             { x => x.LabelCaption, labelCaption },
             { x => x.LabelPlaceholder, labelPlaceholder },
         };

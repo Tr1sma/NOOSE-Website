@@ -249,7 +249,9 @@
         _mayWrite = _user.MayWrite();
 
         var id = _user.GetAgentId();
-        if (id is { Length: > 0 })
+        // same condition as the other stamp sites: a partner reaches this page but never sees the checklist,
+        // so the mark would only cost a read-modify-write of the whole preferences blob
+        if (id is { Length: > 0 } && _user.IsInternalAgent())
         {
             try { await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepProfile); } catch { /* best effort */ }
         }

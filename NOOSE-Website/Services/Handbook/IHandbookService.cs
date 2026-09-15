@@ -23,6 +23,9 @@ public interface IHandbookService
     /// <summary>Visible glossary terms, alphabetical.</summary>
     Task<List<GlossaryTermView>> GetGlossaryAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Every term including withdrawn ones; for the editor, which is the only way back from hiding.</summary>
+    Task<List<GlossaryTermView>> GetAllTermsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The glossary prepared for matching, cached: every rich-text block on a page asks for it.</summary>
     Task<GlossaryMatcher> GetGlossaryMatcherAsync(CancellationToken cancellationToken = default);
 

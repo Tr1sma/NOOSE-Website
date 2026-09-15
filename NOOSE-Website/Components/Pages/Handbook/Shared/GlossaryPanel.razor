@@ -21,6 +21,13 @@ else
                 <MudPaper Elevation="1" Class="pa-3">
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-1">
                         <MudText Typo="Typo.subtitle2">@term.Term</MudText>
+                        @if (!term.IsVisible)
+                        {
+                            @* only the editor list carries these; a reader never receives a withdrawn term *@
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                ausgeblendet
+                            </MudChip>
+                        }
                         <MudSpacer />
                         @if (term.ArticleSlug is { } slug)
                         {

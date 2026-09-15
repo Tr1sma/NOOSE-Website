@@ -26,8 +26,10 @@ public static class Onboarding
     public const int ChaptersToRead = 3;
 
     /// <param name="Key">Stable handle, also the marker written when the step is reached.</param>
-    /// <param name="Href">Where the agent goes to do it.</param>
-    public sealed record Step(string Key, string Title, string Text, string Icon, string Href, bool Done);
+    /// <param name="Href">Where the agent goes to do it, or null when there is nowhere to send him — the menu
+    /// customiser is a dialog behind the drawer, not a route, and linking it to the page the checklist already
+    /// sits on looked like a broken button.</param>
+    public sealed record Step(string Key, string Title, string Text, string Icon, string? Href, bool Done);
 
     /// <summary>Marker for one chapter of the handbook.</summary>
     public static string ChapterStep(string chapterSlug) => ChapterPrefix + chapterSlug;
@@ -55,8 +57,8 @@ public static class Onboarding
                 "Such dir eine Personen- oder Fraktionsakte und sieh dir ihre Abschnitte an.",
                 "FolderShared", "/personen", done.Contains(StepRecord)),
             new("menue", "Menü angepasst",
-                "Blende aus, was du nie brauchst, und hefte an, was du täglich öffnest.",
-                "Tune", "/dashboard", MenuTouched(prefs)),
+                "Im Menü links unten auf das Zahnrad: blende aus, was du nie brauchst, und hefte an, was du täglich öffnest.",
+                "Tune", null, MenuTouched(prefs)),
         ];
     }
 

@@ -258,6 +258,24 @@ public sealed class LlmQuotaServiceTests
         Assert.Equal(5_000L, status.CarryIn);
     }
 
+    /// <summary>A week closes lazily, on the first read of the week that follows it. Whatever surcharge is in
+    /// force at that moment has nothing to do with the week being closed — feeding it in let a week spent on the
+    /// cheaper upstream hand over a multiple of the carry it had earned.</summary>
+    [Fact]
+    public async Task AnElapsedWeek_IsNotClosedWithTodaysBoost()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.SeniorSpecialAgent);
+        var (lastYear, lastWeek) = LastWeek();
+        await ChargeAsync(ctx, lastYear, lastWeek, 10_000);
+
+        // the whole of last week ran without a surcharge; the owner switches upstream before anyone looks
+        var status = await Build(ctx, boostPercent: 400).GetStatusAsync(AgentId, Leader());
+
+        // 25 % of min(50.000 - 10.000, 50.000) = 10.000 — the boosted base would have made it 60.000
+        Assert.Equal(10_000L, status.CarryIn);
+    }
+
     [Fact]
     public async Task NoHistory_MeansNoPhantomCarryOver_AndNoRowsWritten()
     {

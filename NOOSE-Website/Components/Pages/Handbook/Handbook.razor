@@ -1,5 +1,6 @@
 @* The handbook: chapters on a rail, a glossary tab, and a search that stays inside the book. *@
 @page "/handbuch"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IHandbookService HandbookService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -166,6 +167,9 @@ else
     private List<HandbookArticleCard> _hitArticles = [];
     private List<GlossaryTermView> _hitTerms = [];
 
+    /// <summary>Mirrors Permission.RequireHrbOrLeadershipWrite; decides whether the editor lists are loaded at all.</summary>
+    private bool _mayEdit;
+
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     protected override async Task OnInitializedAsync()
@@ -174,6 +178,7 @@ else
         {
             _user = (await AuthState).User;
         }
+        _mayEdit = _user.MayWrite() && _user.IsHrbOrLeadership();
         _search = QueryState.Read(Nav, "suche");
         await LoadAsync();
         OpenTermFromQuery();
@@ -188,13 +193,23 @@ else
     private async Task LoadAsync()
     {
         _chapters = await HandbookService.GetChaptersAsync();
-        _terms = await HandbookService.GetGlossaryAsync();
-        _allChapters = await HandbookService.GetAllChaptersAsync();
+        // an editor also needs the withdrawn terms — hiding one has no trash and keeps its name taken, so this
+        // list is the only way back
+        _terms = _mayEdit
+            ? await HandbookService.GetAllTermsAsync()
+            : await HandbookService.GetGlossaryAsync();
 
+        // editor-only from here: these two load whole articles, bodies included, and every reader was paying
+        // for them although only the redaction dialogs ever read them
+        _allChapters = [];
         _allArticles = [];
-        foreach (var c in _allChapters)
+        if (_mayEdit)
         {
-            _allArticles.AddRange(await HandbookService.GetAllArticlesAsync(c.Id));
+            _allChapters = await HandbookService.GetAllChaptersAsync();
+            foreach (var c in _allChapters)
+            {
+                _allArticles.AddRange(await HandbookService.GetAllArticlesAsync(c.Id));
+            }
         }
         Filter();
     }
@@ -368,8 +383,10 @@ else
 
     private async Task EditTermAsync(GlossaryTermView term)
     {
+        // the stored id and the stored visibility, not values rebuilt from what the reader happens to see:
+        // both used to be guessed here, which dropped the article link and silently unhid the term on save
         var preset = new GlossaryTermInput(term.Term, term.Synonyms, term.ShortDefinition,
-            term.ExplanationHtml, ArticleIdOf(term.ArticleSlug), true);
+            term.ExplanationHtml, term.ArticleId, term.IsVisible);
         var input = await GlossaryTermDialog.ShowAsync(DialogService, "Begriff bearbeiten", _allArticles, preset, entityId: term.Id);
         if (input is null)
         {

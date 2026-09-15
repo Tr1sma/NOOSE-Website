@@ -346,7 +346,12 @@ public class LlmQuotaService(
         // is allowed how much, and those are two different questions
         var rawBaseWeekly = agent.LlmQuotaOverride ?? rules.BaseWeekly;
         var baseWeekly = LlmQuotaMath.Boosted(rawBaseWeekly, boostPercent);
-        var carryIn = await CloseElapsedAsync(db, agent, snapshot, baseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
+        // elapsed weeks close on the RAW base, never on today's boost. Closing is lazy - it happens on the first
+        // read of the new week - so the surcharge in force at that moment is the one the switch left behind, not
+        // the one the week actually ran under. Feeding it in let a week spent entirely on the cheaper upstream
+        // hand over a multiple of the carry it earned. The plain base can only under-grant, which costs nothing.
+        // Exact would mean recording the boost on the period row; that needs a column and a migration.
+        var carryIn = await CloseElapsedAsync(db, agent, snapshot, rawBaseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
         return new LlmQuotaStatus(agent.Id, agent.Codename, agent.Rank, year, week,
             baseWeekly, rawBaseWeekly, boostPercent, carryIn, snapshot.Consumed(agent.Id, year, week), rules.CarryOverPercent,
             agent.LlmQuotaOverride is not null,

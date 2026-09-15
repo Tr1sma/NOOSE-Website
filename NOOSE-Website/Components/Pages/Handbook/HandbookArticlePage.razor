@@ -1,5 +1,6 @@
 @* One article on its own page - the address the help button and the search link to. *@
 @page "/handbuch/{Slug}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IHandbookService HandbookService
 @inject INavPreferencesService NavPrefs
 @inject NavigationManager Nav

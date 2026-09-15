@@ -243,6 +243,19 @@ public static class ChangelogContent
                 + "verloren.", "Bedienung"),
             Fix("2.1.19-noosei-kontingent", "Ein individuelles Kontingent lässt sich bestätigen, ohne dass sich "
                 + "der Wert dabei jedes Mal vervielfacht.", "NOOSEI"),
+            Fix("2.1.20-editor-codeblock", "In einem Codeblock bleiben Raute, Strich und Schrägstrich stehen, "
+                + "statt die Zeile umzuformatieren, und „Text\" löst jetzt auch Zitat und Codeblock auf.", "Bedienung"),
+            Fix("2.1.21-editor-gliederung", "Das eingefügte Inhaltsverzeichnis behält seine Ebenen.", "Bedienung"),
+            Fix("2.1.22-glossar-ausgeblendet", "Ein ausgeblendeter Glossarbegriff ist für die Redaktion wieder "
+                + "sichtbar und lässt sich zurückholen; sein Artikel-Link geht beim Speichern nicht mehr "
+                + "verloren.", "Handbuch"),
+            Fix("2.1.23-handbuch-tempo", "Das Handbuch lädt für Lesende deutlich weniger im Hintergrund.", "Handbuch"),
+            Fix("2.1.24-entfuehrung-auswahl", "Die Auswahl „Kompromittierte Akte\" bietet nur noch echte Akten "
+                + "an – Handbuch-Artikel und Glossarbegriffe standen fälschlich mit drin.", "Akten"),
+            Fix("2.1.25-erste-schritte", "Der Punkt „Menü angepasst\" in den ersten Schritten verweist jetzt "
+                + "auf das Zahnrad im Menü, statt ins Leere zu führen.", "Bedienung"),
+            Fix("2.1.26-rechtstexte", "Geteilte Links auf Datenschutz und Nutzungsbedingungen zeigen jetzt eine "
+                + "Vorschaukarte statt einer nackten Adresse.", "Öffentlich"),
         ], "1.5"),
     ];
 }
