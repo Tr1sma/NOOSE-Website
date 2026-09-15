@@ -207,6 +207,8 @@ public static class ChangelogContent
             Neu("1.5-fahndung-vorschau", "Ein geteilter Fahndungslink zeigt Name, Vorwurf und das Fahndungsfoto.",
                 "Fahndung"),
             Besser("1.5-dienstnummer", "Die Dienstnummer wird aus den freien römischen Nummern gewählt.", "Personal"),
+            Fix("1.5-bewerbung-terminauswahl", "Die Termin-Auswahl in Bewerbungsnachrichten wird nicht mehr abgeschnitten.",
+                "Bewerbungen"),
         ]),
     ];
 }

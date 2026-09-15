@@ -102,13 +102,17 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Termin der Vorlage:</MudText>
                         @if (_needsDate)
                         {
-                            <MudDatePicker @bind-Date="_pickDate" Label="Datum" DateFormat="dd.MM.yyyy" ShowToolbar="false"
-                                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" />
+                            <div style="width:160px; max-width:100%;">
+                                <MudDatePicker @bind-Date="_pickDate" Label="Datum" DateFormat="dd.MM.yyyy" ShowToolbar="false"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </div>
                         }
                         @if (_needsTime)
                         {
-                            <MudTimePicker @bind-Time="_pickTime" Label="Uhrzeit" AmPm="false" ShowToolbar="false"
-                                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" />
+                            <div style="width:140px; max-width:100%;">
+                                <MudTimePicker @bind-Time="_pickTime" Label="Uhrzeit" AmPm="false" ShowToolbar="false"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </div>
                         }
                         <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Check" OnClick="ApplyDateTime"
