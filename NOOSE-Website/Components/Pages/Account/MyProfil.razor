@@ -142,10 +142,16 @@
                                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge"
                                           HelperText="Für alle Nutzer sichtbar – dein überall angezeigter Name." />
 
-                            <MudTextField @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
-                                          ReadOnly="@(!_mayWrite)"
-                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
-                                          HelperText="Für alle Nutzer sichtbar (Freitext, optional)." />
+                            <MudSelect T="string" @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
+                                       ReadOnly="@(!_mayWrite)" Clearable="true"
+                                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                       HelperText="Für alle Nutzer sichtbar (optional). Freie römische Nummern I–XXV.">
+                                <MudSelectItem T="string" Value="@(null as string)">— keine —</MudSelectItem>
+                                @foreach (var badgeNumber in _badgeNumberOptions)
+                                {
+                                    <MudSelectItem T="string" Value="@badgeNumber">@badgeNumber</MudSelectItem>
+                                }
+                            </MudSelect>
 
                             @if (_mayWrite)
                             {
@@ -233,6 +239,7 @@
     private string _codename = string.Empty;
     private string? _realName;
     private string? _badgeNumber;
+    private List<string> _badgeNumberOptions = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -250,6 +257,7 @@
         if (_agent is not null)
         {
             FieldsPrefill();
+            _badgeNumberOptions = await AgentService.GetAvailableBadgeNumbersAsync(_agent.Id);
         }
         if (!string.IsNullOrWhiteSpace(id))
         {
@@ -277,13 +285,13 @@
         {
             _codename = _agent.PendingCodename ?? string.Empty;
             _realName = _agent.PendingRealName;
-            _badgeNumber = _agent.PendingBadgeNumber;
+            _badgeNumber = BadgeNumbers.Normalize(_agent.PendingBadgeNumber);
         }
         else
         {
             _codename = _agent.Codename;
             _realName = _agent.RealName;
-            _badgeNumber = _agent.BadgeNumber;
+            _badgeNumber = BadgeNumbers.Normalize(_agent.BadgeNumber);
         }
     }
 

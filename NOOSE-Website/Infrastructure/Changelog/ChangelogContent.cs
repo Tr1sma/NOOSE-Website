@@ -206,6 +206,7 @@ public static class ChangelogContent
                 + "Titel, Kurztext und Bild.", "Öffentlich"),
             Neu("1.5-fahndung-vorschau", "Ein geteilter Fahndungslink zeigt Name, Vorwurf und das Fahndungsfoto.",
                 "Fahndung"),
+            Besser("1.5-dienstnummer", "Die Dienstnummer wird aus den freien römischen Nummern gewählt.", "Personal"),
         ]),
     ];
 }

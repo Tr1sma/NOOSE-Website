@@ -292,7 +292,8 @@ else
 
     private async Task Edit(Agent agent)
     {
-        var result = await AgentEditDialog.ShowAsync(DialogService, agent);
+        var badgeNumberOptions = await AgentService.GetAvailableBadgeNumbersAsync(agent.Id);
+        var result = await AgentEditDialog.ShowAsync(DialogService, agent, badgeNumberOptions);
         if (result is null)
         {
             return;

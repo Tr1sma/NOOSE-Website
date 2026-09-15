@@ -24,6 +24,8 @@ public class AgentManagementService(
     IConfiguration configuration,
     IAgentAvatarStorageService avatars) : IAgentManagementService
 {
+    private static readonly SemaphoreSlim BadgeNumberGate = new(1, 1);
+
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -55,6 +57,40 @@ public class AgentManagementService(
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await readDb.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
+    }
+
+    public async Task<List<string>> GetAvailableBadgeNumbersAsync(string agentId, CancellationToken cancellationToken = default)
+    {
+        await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var assigned = await readDb.Users.AsNoTracking()
+            .Where(a => a.Id != agentId && (a.BadgeNumber != null || a.PendingBadgeNumber != null))
+            .Select(a => new { a.BadgeNumber, a.PendingBadgeNumber })
+            .ToListAsync(cancellationToken);
+        var target = await readDb.Users.AsNoTracking()
+            .Where(a => a.Id == agentId)
+            .Select(a => new { a.BadgeNumber, a.PendingBadgeNumber })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var taken = assigned
+            .SelectMany(a => new[] { a.BadgeNumber, a.PendingBadgeNumber })
+            .Select(BadgeNumbers.Normalize)
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var options = BadgeNumbers.All.Where(x => !taken.Contains(x)).ToList();
+
+        if (target is not null)
+        {
+            foreach (var value in new[] { target.BadgeNumber, target.PendingBadgeNumber })
+            {
+                var normalized = BadgeNumbers.Normalize(value);
+                if (normalized is not null && !options.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                {
+                    options.Add(normalized);
+                }
+            }
+        }
+
+        return options;
     }
 
     public async Task ReleaseAsync(string agentId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor)
@@ -177,14 +213,24 @@ public class AgentManagementService(
             throw new InvalidOperationException("Der Codename darf nicht leer sein.");
         }
 
-        var agent = await GetOrThrow(agentId);
-        agent.RealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
-        agent.Codename = codename;
-        agent.BadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
-        PendingNameChangeEmpty(agent);
+        await BadgeNumberGate.WaitAsync();
+        try
+        {
+            var agent = await GetOrThrow(agentId);
+            var normalizedBadgeNumber = BadgeNumbers.Normalize(badgeNumber);
+            await ValidateBadgeNumberAsync(agent, normalizedBadgeNumber, allowLegacyValue: true);
+            agent.RealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
+            agent.Codename = codename;
+            agent.BadgeNumber = normalizedBadgeNumber;
+            PendingNameChangeEmpty(agent);
 
-        Audit(agent, AuditAction.Modified, actor, $"Stammdaten geändert (Codename: {agent.Codename})");
-        await Save(agent, newStamp: true); // refresh claims
+            Audit(agent, AuditAction.Modified, actor, $"Stammdaten geändert (Codename: {agent.Codename})");
+            await Save(agent, newStamp: true); // refresh claims
+        }
+        finally
+        {
+            BadgeNumberGate.Release();
+        }
     }
 
     public async Task NameChangeRequestAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)
@@ -196,14 +242,24 @@ public class AgentManagementService(
             throw new InvalidOperationException("Der Codename darf nicht leer sein.");
         }
 
-        var agent = await GetOrThrow(agentId);
-        agent.PendingCodename = codename;
-        agent.PendingRealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
-        agent.PendingBadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
-        agent.NameChangeRequestedAt = DateTime.UtcNow;
+        await BadgeNumberGate.WaitAsync();
+        try
+        {
+            var agent = await GetOrThrow(agentId);
+            var normalizedBadgeNumber = BadgeNumbers.Normalize(badgeNumber);
+            await ValidateBadgeNumberAsync(agent, normalizedBadgeNumber, allowLegacyValue: true);
+            agent.PendingCodename = codename;
+            agent.PendingRealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
+            agent.PendingBadgeNumber = normalizedBadgeNumber;
+            agent.NameChangeRequestedAt = DateTime.UtcNow;
 
-        Audit(agent, AuditAction.Modified, actor, $"Namensänderung beantragt (Codename: {codename})");
-        await Save(agent, newStamp: false);
+            Audit(agent, AuditAction.Modified, actor, $"Namensänderung beantragt (Codename: {codename})");
+            await Save(agent, newStamp: false);
+        }
+        finally
+        {
+            BadgeNumberGate.Release();
+        }
     }
 
     public async Task<List<Agent>> GetPendingNameChangesAsync(CancellationToken cancellationToken = default)
@@ -216,19 +272,30 @@ public class AgentManagementService(
 
     public async Task NameChangeApproveAsync(string agentId, ClaimsPrincipal actor)
     {
-        var agent = await GetOrThrow(agentId);
-        if (agent.NameChangeRequestedAt is null)
+        Agent agent;
+        await BadgeNumberGate.WaitAsync();
+        try
         {
-            throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
+            agent = await GetOrThrow(agentId);
+            if (agent.NameChangeRequestedAt is null)
+            {
+                throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
+            }
+
+            await ValidateBadgeNumberAsync(agent, agent.PendingBadgeNumber, allowLegacyValue: true);
+
+            agent.Codename = agent.PendingCodename ?? string.Empty;
+            agent.RealName = agent.PendingRealName;
+            agent.BadgeNumber = agent.PendingBadgeNumber;
+            PendingNameChangeEmpty(agent);
+
+            Audit(agent, AuditAction.Modified, actor, $"Namensänderung genehmigt (Codename: {agent.Codename})");
+            await Save(agent, newStamp: true);
         }
-
-        agent.Codename = agent.PendingCodename ?? string.Empty;
-        agent.RealName = agent.PendingRealName;
-        agent.BadgeNumber = agent.PendingBadgeNumber;
-        PendingNameChangeEmpty(agent);
-
-        Audit(agent, AuditAction.Modified, actor, $"Namensänderung genehmigt (Codename: {agent.Codename})");
-        await Save(agent, newStamp: true);
+        finally
+        {
+            BadgeNumberGate.Release();
+        }
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde genehmigt.", "/profil"); }
         catch { /* best effort */ }
@@ -967,6 +1034,31 @@ public class AgentManagementService(
         agent.PendingRealName = null;
         agent.PendingBadgeNumber = null;
         agent.NameChangeRequestedAt = null;
+    }
+
+    private async Task ValidateBadgeNumberAsync(Agent agent, string? badgeNumber, bool allowLegacyValue)
+    {
+        if (string.IsNullOrWhiteSpace(badgeNumber))
+        {
+            return;
+        }
+
+        var isLegacyValue = string.Equals(BadgeNumbers.Normalize(agent.BadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(BadgeNumbers.Normalize(agent.PendingBadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase);
+        if (!BadgeNumbers.IsAllowed(badgeNumber) && !(allowLegacyValue && isLegacyValue))
+        {
+            throw new InvalidOperationException("Die Dienstnummer muss eine römische Zahl zwischen I und XXV sein.");
+        }
+
+        var assigned = await db.Users.AsNoTracking()
+            .Where(a => a.Id != agent.Id && (a.BadgeNumber != null || a.PendingBadgeNumber != null))
+            .Select(a => new { a.BadgeNumber, a.PendingBadgeNumber })
+            .ToListAsync();
+        if (assigned.Any(a => string.Equals(BadgeNumbers.Normalize(a.BadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(BadgeNumbers.Normalize(a.PendingBadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("Diese Dienstnummer ist bereits vergeben.");
+        }
     }
 
     private void HistoryEntryAdd(string agentId, Rank? alt, Rank @new, ClaimsPrincipal actor, string reason)

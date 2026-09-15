@@ -16,6 +16,9 @@ public interface IAgentManagementService
 
     Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default);
 
+    /// <summary>Free badge numbers, including the target's already assigned legacy value.</summary>
+    Task<List<string>> GetAvailableBadgeNumbersAsync(string agentId, CancellationToken cancellationToken = default);
+
     /// <summary>Release a pending account and assign rank/TRU/HRB; status becomes Active.</summary>
     Task ReleaseAsync(string agentId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor);
 

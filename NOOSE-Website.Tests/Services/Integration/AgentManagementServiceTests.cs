@@ -168,6 +168,26 @@ public class AgentManagementServiceTests
         Assert.Null(await f.Svc.FindAsync("nope"));
     }
 
+    [Fact]
+    public async Task GetAvailableBadgeNumbersAsync_ExcludesAssignedAndPending_AndKeepsOwnLegacyValue()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("target", AgentStatus.Active, cfg: a => { a.BadgeNumber = "legacy"; a.PendingBadgeNumber = "iv"; }),
+            NewAgent("assigned", AgentStatus.Active, cfg: a => a.BadgeNumber = " II "),
+            NewAgent("pending", AgentStatus.Active, cfg: a => a.PendingBadgeNumber = "V"));
+
+        var options = await f.Svc.GetAvailableBadgeNumbersAsync("target");
+
+        Assert.DoesNotContain("II", options);
+        Assert.DoesNotContain("V", options);
+        Assert.Contains("IV", options);
+        Assert.DoesNotContain("iv", options);
+        Assert.Contains("legacy", options);
+        Assert.Contains("I", options);
+        Assert.Equal(23, options.Count(x => BadgeNumbers.All.Contains(x, StringComparer.OrdinalIgnoreCase)));
+    }
+
     // ---- release / reject ----
 
     [Fact]
@@ -396,12 +416,40 @@ public class AgentManagementServiceTests
         using var f = Make();
         Persist(f.Ctx, NewAgent("t", AgentStatus.Active));
 
-        await f.Svc.MasterDataChangeAsync("t", "  John  ", "  Ghost  ", "  99  ", Admin());
+        await f.Svc.MasterDataChangeAsync("t", "  John  ", "  Ghost  ", "  IX  ", Admin());
 
         var a = Reload(f, "t");
         Assert.Equal("Ghost", a.Codename);
         Assert.Equal("John", a.RealName);
-        Assert.Equal("99", a.BadgeNumber);
+        Assert.Equal("IX", a.BadgeNumber);
+    }
+
+    [Fact]
+    public async Task MasterDataChangeAsync_RejectsInvalidOrAssignedBadgeNumber()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("target", AgentStatus.Active),
+            NewAgent("assigned", AgentStatus.Active, cfg: a => a.BadgeNumber = " IV "),
+            NewAgent("pending", AgentStatus.Active, cfg: a => a.PendingBadgeNumber = "V"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Svc.MasterDataChangeAsync("target", null, "Target", "99", Admin()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Svc.MasterDataChangeAsync("target", null, "Target", "IV", Admin()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            f.Svc.MasterDataChangeAsync("target", null, "Target", "V", Admin()));
+    }
+
+    [Fact]
+    public async Task MasterDataChangeAsync_AllowsUnchangedLegacyBadgeNumber()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("target", AgentStatus.Active, cfg: a => a.BadgeNumber = "legacy"));
+
+        await f.Svc.MasterDataChangeAsync("target", "Real", "Target", "legacy", Admin());
+
+        Assert.Equal("legacy", Reload(f, "target").BadgeNumber);
     }
 
     [Fact]
@@ -410,7 +458,7 @@ public class AgentManagementServiceTests
         using var f = Make();
         Persist(f.Ctx, NewAgent("t", AgentStatus.Active, cfg: a => a.Codename = "Old"));
 
-        await f.Svc.NameChangeRequestAsync("t", "New Real", "NewCode", "7", Admin());
+        await f.Svc.NameChangeRequestAsync("t", "New Real", "NewCode", "VII", Admin());
         var pendings = await f.Svc.GetPendingNameChangesAsync();
         Assert.Contains(pendings, a => a.Id == "t");
 
