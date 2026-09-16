@@ -534,29 +534,47 @@ using (var scope = app.Services.CreateScope())
         await roleManager.CreateAsync(new IdentityRole("Admin"));
     }
 
+    // Content seeders write editorial material, and editorial material can collide with what a redaction has
+    // already written - a unique slug or glossary name held by a row no seeder can see. Each one is isolated so a
+    // collision costs its own content rather than the whole boot: an unhandled throw here aborts startup, systemd
+    // restarts, and the site stays down until somebody edits the database by hand.
+    async Task SeedAsync(string was, Func<Task> seed)
+    {
+        try
+        {
+            await seed();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Seeding {Bereich} fehlgeschlagen; der Start läuft ohne weiter.", was);
+            // the failed rows are still tracked and the next seeder shares this context: it would retry them
+            db.ChangeTracker.Clear();
+        }
+    }
+
     // seed the default recruiting message templates (idempotent)
-    await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+    await SeedAsync("Bewerbungsvorlagen", () => NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db));
 
     // seed the auto-provisioned Sicherheitsüberprüfung case-document template (idempotent)
-    await NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db);
+    await SeedAsync("Sicherheitsüberprüfung", () => NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db));
 
     // seed one switch row per public module (idempotent; never overwrites a stored choice)
-    await NOOSE_Website.Infrastructure.PublicModuleSeeder.SeedAsync(db);
+    await SeedAsync("Modulschalter", () => NOOSE_Website.Infrastructure.PublicModuleSeeder.SeedAsync(db));
 
     // seed the four editorial starter pages as drafts (idempotent; never overwrites an edited page)
-    await NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db);
+    await SeedAsync("Öffentliche Seiten", () => NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db));
 
     // seed the shipped changelog; keeps untouched lines current, never rewrites an edited one, revives nothing
-    await NOOSE_Website.Infrastructure.Changelog.ChangelogSeeder.SeedAsync(db);
+    await SeedAsync("Neuerungen", () => NOOSE_Website.Infrastructure.Changelog.ChangelogSeeder.SeedAsync(db));
 
     // seed the shipped handbook; same promise as the changelog - an edited article is never rewritten
-    await NOOSE_Website.Infrastructure.Handbook.HandbookSeeder.SeedAsync(db);
+    await SeedAsync("Handbuch", () => NOOSE_Website.Infrastructure.Handbook.HandbookSeeder.SeedAsync(db));
 
     // seed the four starting warning chips (only while the table is empty; a deleted one stays deleted)
-    await NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db);
+    await SeedAsync("Warnhinweise", () => NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db));
 
     // seed one starting template per kind (only while the table is empty; a deleted one stays deleted)
-    await NOOSE_Website.Infrastructure.PublicTemplateSeeder.SeedAsync(db);
+    await SeedAsync("Bürger-Vorlagen", () => NOOSE_Website.Infrastructure.PublicTemplateSeeder.SeedAsync(db));
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

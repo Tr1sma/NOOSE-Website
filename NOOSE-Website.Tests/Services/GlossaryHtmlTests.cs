@@ -264,13 +264,26 @@ public sealed class GlossaryHtmlTests
         Assert.Null(matcher.LongestAt("Eine Akte\u0300 hier.", 5));
     }
 
+    // 0 is not outside anything - it is the first valid position, and listing it here only ever passed
+    // because no term starts there. A real bounds slip at index 0 would have gone unnoticed.
     [Theory]
     [InlineData(-1)]
-    [InlineData(0)]
+    [InlineData(-99)]
     [InlineData(11)]
     [InlineData(99)]
     public void An_index_outside_the_text_answers_null(int index)
         => Assert.Null(Standard.LongestAt("kein Wort", index));
+
+    [Fact]
+    public void Index_zero_is_inside_the_text_and_matches_a_term_starting_there()
+    {
+        var matcher = Matcher(Term("t", "Fahndung", "Öffentliche Suche nach einer Person."));
+
+        var hit = matcher.LongestAt("Fahndung läuft", 0);
+
+        Assert.NotNull(hit);
+        Assert.Equal("Fahndung", hit!.Entry.Phrase);
+    }
 
     private static int Occurrences(string haystack, string needle)
     {

@@ -284,7 +284,7 @@ public class AgentManagementService(
                 throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
             }
 
-            await ValidateBadgeNumberAsync(agent, agent.PendingBadgeNumber, allowLegacyValue: true);
+            await ValidateBadgeNumberAsync(agent, agent.PendingBadgeNumber, allowLegacyValue: true, ownValueIsPending: false);
 
             agent.Codename = agent.PendingCodename ?? string.Empty;
             agent.RealName = agent.PendingRealName;
@@ -1040,7 +1040,13 @@ public class AgentManagementService(
         agent.NameChangeRequestedAt = null;
     }
 
-    private async Task ValidateBadgeNumberAsync(Agent agent, string? badgeNumber, bool allowLegacyValue)
+    /// <param name="ownValueIsPending">
+    /// False on the approval path. There the value under test IS <c>PendingBadgeNumber</c>, so counting that as
+    /// "the agent's own" made every approval look like a no-op rename and skipped the conflict query entirely -
+    /// a safety net that read as if it worked. Only the currently held number counts as one's own there.
+    /// </param>
+    private async Task ValidateBadgeNumberAsync(
+        Agent agent, string? badgeNumber, bool allowLegacyValue, bool ownValueIsPending = true)
     {
         if (string.IsNullOrWhiteSpace(badgeNumber))
         {
@@ -1048,7 +1054,8 @@ public class AgentManagementService(
         }
 
         var isLegacyValue = string.Equals(BadgeNumbers.Normalize(agent.BadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(BadgeNumbers.Normalize(agent.PendingBadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase);
+            || (ownValueIsPending
+                && string.Equals(BadgeNumbers.Normalize(agent.PendingBadgeNumber), badgeNumber, StringComparison.OrdinalIgnoreCase));
         if (!BadgeNumbers.IsAllowed(badgeNumber) && !(allowLegacyValue && isLegacyValue))
         {
             throw new InvalidOperationException("Die Dienstnummer muss eine römische Zahl zwischen I und XXV sein.");

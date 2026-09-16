@@ -29,7 +29,8 @@ public interface ILlmQuotaService
     Task<List<LlmQuotaAdjustment>> GetAdjustmentsAsync(string agentId, ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Pre-flight: throws when the actor may not use NOOSEI or has nothing left this week.</summary>
-    Task<LlmQuotaStatus> EnsureAvailableAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task<LlmQuotaStatus> EnsureAvailableAsync(
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default, int? boostPercent = null);
 
     /// <summary>Books a finished call against the running week and returns what it cost.</summary>
     Task<LlmQuotaCharge> TryChargeAsync(LlmChargeInput input, CancellationToken cancellationToken = default);
@@ -59,10 +60,15 @@ public class LlmQuotaService(
     }
 
     /// <summary>Unguarded status, for the pre-flight and the charge — both already know whose quota it is.</summary>
-    private async Task<LlmQuotaStatus> StatusAsync(string agentId, CancellationToken cancellationToken)
+    /// <param name="boostPercent">
+    /// The surcharge the caller has already resolved. The gateway resolves the upstream once per turn and hands it
+    /// in, so the allowance is judged against the same boost the request then spends under - the ten-second cache
+    /// could otherwise turn over between the check here and the charge afterwards.
+    /// </param>
+    private async Task<LlmQuotaStatus> StatusAsync(string agentId, CancellationToken cancellationToken, int? boostPercent = null)
     {
         var config = await configService.GetAsync(cancellationToken);
-        var boost = (await providerService.GetStateAsync(cancellationToken)).BoostPercent;
+        var boost = boostPercent ?? (await providerService.GetStateAsync(cancellationToken)).BoostPercent;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken)
             ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
@@ -113,7 +119,8 @@ public class LlmQuotaService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<LlmQuotaStatus> EnsureAvailableAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task<LlmQuotaStatus> EnsureAvailableAsync(
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default, int? boostPercent = null)
     {
         Permission.RequireLlmUse(actor);
         var agentId = actor.GetAgentId();
@@ -122,7 +129,7 @@ public class LlmQuotaService(
             throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
         }
 
-        var status = await StatusAsync(agentId, cancellationToken);
+        var status = await StatusAsync(agentId, cancellationToken, boostPercent);
         if (status.IsBlocked)
         {
             var reset = status.NextResetLocal is { } at ? at.ToString("dd.MM.yyyy HH:mm") : "dem nächsten Wochenwechsel";

@@ -7,7 +7,7 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <AuthorizeView Policy="@Policies.Leadership">
+    <AuthorizeView Policy="@Policies.LeadershipWrite">
         <MudPaper Class="pa-3" Elevation="1">
             <MudStack Spacing="2">
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
@@ -100,7 +100,7 @@
                             @(string.IsNullOrWhiteSpace(v.AuthorName) ? "—" : v.AuthorName) · erfasst @v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
                     </div>
-                    <AuthorizeView Policy="@Policies.Leadership">
+                    <AuthorizeView Policy="@Policies.LeadershipWrite">
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                        OnClick="@(() => DeleteAsync(v))" aria-label="Eintrag löschen" />
                     </AuthorizeView>

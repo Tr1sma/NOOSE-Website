@@ -52,6 +52,7 @@ public static class HandbookSeeder
         var existing = await db.HandbuchKapitel.IgnoreQueryFilters()
             .Where(c => c.SeedKey != null)
             .ToDictionaryAsync(c => c.SeedKey!, StringComparer.Ordinal, cancellationToken);
+        var owners = await SlugOwnersAsync(db, cancellationToken);
 
         var changed = false;
         for (var i = 0; i < chapters.Count; i++)
@@ -59,7 +60,12 @@ public static class HandbookSeeder
             var shipped = chapters[i];
             if (!existing.TryGetValue(shipped.Key, out var row))
             {
-                db.HandbuchKapitel.Add(new HandbookChapter
+                // an editor's own chapter owns the slug without carrying a seed key, so it is invisible above
+                if (owners.ContainsKey(shipped.Slug))
+                {
+                    continue;
+                }
+                var fresh = new HandbookChapter
                 {
                     Slug = shipped.Slug,
                     Title = shipped.Title,
@@ -70,7 +76,9 @@ public static class HandbookSeeder
                     SeedKey = shipped.Key,
                     SeedRevision = revision,
                     IsCustomised = false,
-                });
+                };
+                db.HandbuchKapitel.Add(fresh);
+                owners[fresh.Slug] = fresh.Id;
                 changed = true;
                 continue;
             }
@@ -93,7 +101,13 @@ public static class HandbookSeeder
                 continue;
             }
 
-            row.Slug = shipped.Slug;
+            // a rename onto a slug somebody else holds would throw just like an insert would
+            if (Free(owners, shipped.Slug, row.Id))
+            {
+                owners.Remove(row.Slug);
+                row.Slug = shipped.Slug;
+                owners[shipped.Slug] = row.Id;
+            }
             row.Title = shipped.Title;
             row.Description = shipped.Description;
             row.IconName = shipped.Icon;
@@ -118,6 +132,9 @@ public static class HandbookSeeder
         var existing = await db.HandbuchArtikel.IgnoreQueryFilters()
             .Where(a => a.SeedKey != null)
             .ToDictionaryAsync(a => a.SeedKey!, StringComparer.Ordinal, cancellationToken);
+        var owners = Owners(await db.HandbuchArtikel.IgnoreQueryFilters()
+            .Select(a => new SlugRow(a.Id, a.Slug))
+            .ToListAsync(cancellationToken));
 
         var written = new List<(HandbookArticle Row, HandbookContent.SeededArticle Shipped)>();
         var changed = false;
@@ -137,6 +154,11 @@ public static class HandbookSeeder
 
                 if (!existing.TryGetValue(shipped.Key, out var row))
                 {
+                    // an editor's own article owns the slug without carrying a seed key, so it is invisible above
+                    if (owners.ContainsKey(shipped.Slug))
+                    {
+                        continue;
+                    }
                     row = new HandbookArticle
                     {
                         ChapterId = chapterRow.Id,
@@ -154,6 +176,7 @@ public static class HandbookSeeder
                         IsCustomised = false,
                     };
                     db.HandbuchArtikel.Add(row);
+                    owners[row.Slug] = row.Id;
                     written.Add((row, shipped));
                     changed = true;
                     continue;
@@ -180,7 +203,13 @@ public static class HandbookSeeder
                     continue;
                 }
 
-                row.Slug = shipped.Slug;
+                // a rename onto a slug somebody else holds would throw just like an insert would
+                if (Free(owners, shipped.Slug, row.Id))
+                {
+                    owners.Remove(row.Slug);
+                    row.Slug = shipped.Slug;
+                    owners[shipped.Slug] = row.Id;
+                }
                 row.Title = shipped.Title;
                 row.Summary = shipped.Summary;
                 row.ContentHtml = HtmlCleanup.Clean(shipped.ContentHtml);
@@ -257,6 +286,9 @@ public static class HandbookSeeder
         var existing = await db.HandbuchBegriffe
             .Where(t => t.SeedKey != null)
             .ToDictionaryAsync(t => t.SeedKey!, StringComparer.Ordinal, cancellationToken);
+        var owners = Owners(await db.HandbuchBegriffe
+            .Select(t => new SlugRow(t.Id, t.Term))
+            .ToListAsync(cancellationToken));
 
         var changed = false;
         foreach (var shipped in terms)
@@ -265,7 +297,12 @@ public static class HandbookSeeder
 
             if (!existing.TryGetValue(shipped.Key, out var row))
             {
-                db.HandbuchBegriffe.Add(new GlossaryTerm
+                // an editor's own term owns the name without carrying a seed key, so it is invisible above
+                if (owners.ContainsKey(shipped.Term))
+                {
+                    continue;
+                }
+                var fresh = new GlossaryTerm
                 {
                     Term = shipped.Term,
                     Synonyms = shipped.Synonyms,
@@ -276,7 +313,9 @@ public static class HandbookSeeder
                     SeedKey = shipped.Key,
                     SeedRevision = revision,
                     IsCustomised = false,
-                });
+                };
+                db.HandbuchBegriffe.Add(fresh);
+                owners[fresh.Term] = fresh.Id;
                 changed = true;
                 continue;
             }
@@ -286,7 +325,13 @@ public static class HandbookSeeder
                 continue;
             }
 
-            row.Term = shipped.Term;
+            // a rename onto a name somebody else holds would throw just like an insert would
+            if (Free(owners, shipped.Term, row.Id))
+            {
+                owners.Remove(row.Term);
+                row.Term = shipped.Term;
+                owners[shipped.Term] = row.Id;
+            }
             row.Synonyms = shipped.Synonyms;
             row.ShortDefinition = shipped.ShortDefinition;
             row.ExplanationHtml = Html(shipped.ExplanationHtml);
@@ -300,6 +345,36 @@ public static class HandbookSeeder
             await db.SaveChangesAsync(cancellationToken);
         }
     }
+
+    /// <summary>One row of a uniquely indexed name column, for the collision guard.</summary>
+    private sealed record SlugRow(string Id, string Name);
+
+    /// <summary>Who currently owns which unique name; the guard against a startup-killing insert.</summary>
+    /// <remarks>
+    /// Slug and glossary term carry a unique index, and a hand-written row holds one without carrying a seed key -
+    /// so the dictionaries above, which are keyed on the seed key, cannot see it. Writing onto such a name throws
+    /// inside the startup seeding block and takes the whole application down, restart loop included. Case-insensitive
+    /// because MySQL compares these columns that way; the in-memory test database does not, and the stricter of the
+    /// two is the safe one to assume.
+    /// </remarks>
+    private static Dictionary<string, string> Owners(IEnumerable<SlugRow> rows)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            map.TryAdd(row.Name, row.Id);
+        }
+        return map;
+    }
+
+    private static async Task<Dictionary<string, string>> SlugOwnersAsync(AppDbContext db, CancellationToken ct)
+        => Owners(await db.HandbuchKapitel.IgnoreQueryFilters()
+            .Select(c => new SlugRow(c.Id, c.Slug))
+            .ToListAsync(ct));
+
+    /// <summary>Whether this row may take that name - free, or already its own.</summary>
+    private static bool Free(IReadOnlyDictionary<string, string> owners, string name, string rowId)
+        => !owners.TryGetValue(name, out var owner) || string.Equals(owner, rowId, StringComparison.Ordinal);
 
     /// <summary>Filtered HTML, or null when nothing survives - an empty string would render an empty box.</summary>
     private static string? Html(string? html)

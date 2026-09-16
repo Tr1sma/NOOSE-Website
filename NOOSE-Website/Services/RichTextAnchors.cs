@@ -39,9 +39,9 @@ public static partial class RichTextAnchors
         var used = new HashSet<string>(StringComparer.Ordinal);
         foreach (var heading in headings)
         {
-            if (IsOwnSlug(heading.Id))
+            if (IsOwnSlug(heading.Id) && heading.Id is { } eigen)
             {
-                used.Add(heading.Id);
+                used.Add(eigen);
             }
             else if (!string.IsNullOrEmpty(heading.Id))
             {

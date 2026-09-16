@@ -265,7 +265,8 @@ public class HtmlCleanupTests
         Assert.Contains("figcaption", profile.Tags);
         Assert.Contains("hr", profile.Tags);
         Assert.Contains("img", profile.Tags);
-        Assert.Contains("id", profile.Attributes);
+        // deliberately absent: an anchor is assigned on save, never carried in from a paste
+        Assert.DoesNotContain("id", profile.Attributes);
         Assert.Contains("data-checked", profile.Attributes);
         Assert.Contains("src", profile.Attributes);
         Assert.Contains("width", profile.CssProperties);
@@ -279,12 +280,25 @@ public class HtmlCleanupTests
     [Fact]
     public void Clean_HeadingIdAndDivider_AreKept()
     {
-        // heading anchors for the table of contents and the divider embed
+        // the divider embed survives the ordinary pass; the anchor does not - only the pass that has just
+        // written it does, so no other rich-text field can carry a document-wide name in from outside
         var result = HtmlCleanup.Clean("<h2 id=\"lagebild\">Lagebild</h2><hr>");
 
-        Assert.Contains("id=\"lagebild\"", result);
+        Assert.DoesNotContain("id=\"lagebild\"", result);
         Assert.Contains("Lagebild", result);
         Assert.Contains("<hr", result);
+    }
+
+    [Fact]
+    public void CleanWithAnchors_KeepsAHeadingIdAndNothingElses()
+    {
+        // the interceptor's pass: RichTextAnchors has just assigned these ids and they have to survive
+        var result = HtmlCleanup.CleanWithAnchors(
+            "<h2 id=\"lagebild\">Lagebild</h2><p id=\"absatz\">Text</p><div id=\"kasten\">Rand</div>");
+
+        Assert.Contains("id=\"lagebild\"", result);
+        Assert.DoesNotContain("id=\"absatz\"", result);
+        Assert.DoesNotContain("id=\"kasten\"", result);
     }
 
     [Fact]

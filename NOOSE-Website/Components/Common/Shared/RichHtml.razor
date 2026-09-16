@@ -26,12 +26,23 @@
     private string? _source;
     private bool _plain;
     private bool _glossary = true;
+    private bool _bubbles;
     private bool _touched;
 
     protected override async Task OnParametersSetAsync()
     {
+        var user = User;
+        if (user is null && AuthStateTask is not null)
+        {
+            user = (await AuthStateTask).User;
+        }
+        // read ahead of the memo: the agent's "explain the jargon" switch is an input of the output too, and
+        // keying only on the parameters left every already-rendered block decorated until the next page change.
+        // Costs nothing - the preferences blob is the one the drawer has cached anyway.
+        var bubbles = await BubblesOnAsync(user);
+
         // the memo has to key on every input, not just the html: toggling Plain alone changes the output
-        if (_touched && _source == Html && _plain == Plain && _glossary == Glossary)
+        if (_touched && _source == Html && _plain == Plain && _glossary == Glossary && _bubbles == bubbles)
         {
             return;
         }
@@ -39,13 +50,8 @@
         _source = Html;
         _plain = Plain;
         _glossary = Glossary;
+        _bubbles = bubbles;
         _rendered = null;
-
-        var user = User;
-        if (user is null && AuthStateTask is not null)
-        {
-            user = (await AuthStateTask).User;
-        }
 
         var html = Html;
 
@@ -58,7 +64,7 @@
         }
 
         // an empty block asks nothing of the glossary, and a page can hold twenty of them
-        if (!string.IsNullOrWhiteSpace(html) && await BubblesOnAsync(user))
+        if (!string.IsNullOrWhiteSpace(html) && bubbles)
         {
             try
             {

@@ -55,7 +55,10 @@ public sealed record NooseiAnswer(
     bool Degraded,
     bool Truncated = false,
     IReadOnlyList<LlmContextRef>? Refs = null,
-    IReadOnlyList<string>? BarrenTools = null);
+    IReadOnlyList<string>? BarrenTools = null,
+    // the model this turn actually ran on. A caller that resolves the upstream a second time for its label can
+    // catch the ten-second cache mid-turn over and record a name the request never used.
+    string? Model = null);
 
 /// <summary>The only way to reach the model. Enforces use permission, the weekly quota and the request log,
 /// so a new feature cannot get free tokens by calling the transport directly.</summary>
@@ -86,13 +89,43 @@ public class NooseiGateway(
 
     public bool IsConfigured => llm.IsConfigured;
 
+    /// <summary>One turn at a time per agent, because the check and the charge are minutes apart.</summary>
+    /// <remarks>
+    /// EnsureAvailableAsync reads the remaining allowance, the model then works for several seconds, and only
+    /// afterwards is anything booked. Two tabs asking at once both saw the same remainder and both went through,
+    /// so a week could be overspent by as many questions as there were tabs - and the bill is real money.
+    /// Striped so the table is bounded; two agents who collide only cost each other a turn.
+    /// </remarks>
+    private static readonly SemaphoreSlim[] Turns =
+        [.. Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1))];
+
+    private static SemaphoreSlim TurnFor(string agentId)
+        => Turns[(int)((uint)StringComparer.Ordinal.GetHashCode(agentId) % Turns.Length)];
+
     public async Task<NooseiAnswer> AskAsync(NooseiCall call, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        var status = await quota.EnsureAvailableAsync(actor, cancellationToken);
+        var id = actor.GetAgentId() ?? throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
+        var turn = TurnFor(id);
+        await turn.WaitAsync(cancellationToken);
+        try
+        {
+            return await AskTurnAsync(call, actor, cancellationToken);
+        }
+        finally
+        {
+            turn.Release();
+        }
+    }
+
+    private async Task<NooseiAnswer> AskTurnAsync(NooseiCall call, ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        // resolved once, then carried through every round AND into the allowance check: a turn that straddles a
+        // switch of the upstream would otherwise send half its transcript to one endpoint under one model id and
+        // half to the other, and be judged against a boost it never spent under
+        var providerState = await providerService.GetStateAsync(cancellationToken);
+        var provider = providerState.Active;
+        var status = await quota.EnsureAvailableAsync(actor, cancellationToken, providerState.BoostPercent);
         var agentId = actor.GetAgentId() ?? throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
-        // resolved once, then carried through every round: a turn that straddles a switch of the upstream would
-        // otherwise send half its transcript to one endpoint under one model id and half to the other
-        var provider = (await providerService.GetStateAsync(cancellationToken)).Active;
 
         // the whole turn gets one budget; HttpClient.Timeout only bounds a single round
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -221,7 +254,8 @@ public class NooseiGateway(
             return new NooseiAnswer(last?.Text, total, charge, rounds, messages, degraded,
                 string.Equals(last?.FinishReason, "length", StringComparison.OrdinalIgnoreCase),
                 refs,
-                barren);
+                barren,
+                last?.Model ?? _o.ModelFor(provider, call.Feature));
         }
         // the turn clock ran out with text already in hand. Handing that over beats a two-minute spinner that ends
         // in nothing while the quota was charged anyway — the agent's own cancel is not this case and falls through.
@@ -239,7 +273,7 @@ public class NooseiGateway(
                 "NOOSEI-Turn nach {Elapsed} ms abgelaufen, Teilantwort ausgeliefert (Funktion {Feature}, {Rounds} Runden)",
                 watch.ElapsedMilliseconds, call.Feature, rounds);
             return new NooseiAnswer(partial + RanOutOfTime, total, charge, rounds, messages, degraded,
-                true, refs, barren);
+                true, refs, barren, last?.Model ?? _o.ModelFor(provider, call.Feature));
         }
         catch (Exception ex)
         {

@@ -139,8 +139,15 @@ public static class Permission
     }
 
     /// <summary>Require promotion authority.</summary>
+    /// <summary>Write guard ahead of the rank guard: the decision changes a rank and writes an audit row.</summary>
+    /// <remarks>
+    /// MayWrite() as well, because the rank alone lets the read-only supervision and the demo visitor - who carry
+    /// Director - through to the save, where the write barrier refuses. By then the rank is already set in memory
+    /// and the audit entry attached; the caller sees a bare exception instead of a refused button.
+    /// </remarks>
     public static void RequirePromotionDecide(ClaimsPrincipal actor)
     {
+        RequireWriteAccess(actor);
         if (!actor.MayPromotionDecide())
         {
             throw new UnauthorizedAccessException(

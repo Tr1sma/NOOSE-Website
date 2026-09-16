@@ -163,11 +163,23 @@ else
     {
         if (!open)
         {
+            // only when this really is the open one: on a direct switch the panel component may report the
+            // close of the old point after the open of the new, and clearing then shut the new one again
+            if (_expandedId != itemId)
+            {
+                return;
+            }
             // save before the editor unmounts, otherwise the typed text is gone silently
             await NoteSaveIfDirtyAsync(itemId);
             _expandedId = null;
             _itemEditor = null;
             return;
+        }
+        // whichever order the two events arrive in, the note that was open is written before it is dropped
+        if (_expandedId is { } offen && offen != itemId)
+        {
+            await NoteSaveIfDirtyAsync(offen);
+            _itemEditor = null;
         }
         var html = await MeetingService.GetItemNoteAsync(itemId, _scope) ?? string.Empty;
         _noteHtml = html;

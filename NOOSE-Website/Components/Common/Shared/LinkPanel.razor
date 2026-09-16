@@ -230,7 +230,8 @@
     private async Task NewLinkAsync()
     {
         var input = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
-            excluded: LinkDialog.Exclusions(selfType: nameof(Person), selfId: PersonId));
+            // the automatic colleague links carry the same LinkKind, so the service refuses them as duplicates too
+            excluded: LinkDialog.Exclusions(_manual.Concat(_colleagues).ToList(), nameof(Person), PersonId));
         if (input is null)
         {
             return;

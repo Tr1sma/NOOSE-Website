@@ -34,6 +34,9 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory, IDi
     public async Task<AgentNote> NoteCreateAsync(string agentId, AgentNoteKind kind, string? artFreetext, DateTime entryDate,
         IReadOnlyCollection<string> executorAgentIds, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        // write guard ahead of the rank guard: the read-only supervision and the demo visitor carry Director,
+        // so the rank alone let them fill in the whole form and fail at the save
+        Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
         var content = NormalizeHtml(text);
         if (string.IsNullOrEmpty(content))
@@ -88,6 +91,7 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory, IDi
 
     public async Task NoteDeleteAsync(string noteId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireWriteAccess(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var note = await db.AgentNotes.FirstOrDefaultAsync(v => v.Id == noteId, cancellationToken);
         if (note is null)
@@ -123,6 +127,7 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory, IDi
 
     public async Task<AgentPromotionRequest> PromotionRequestAsync(string agentId, Rank targetRank, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

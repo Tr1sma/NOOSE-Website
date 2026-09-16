@@ -35,6 +35,12 @@ public interface IHandbookService
     /// <summary>Every article of one chapter including hidden ones; for the editor.</summary>
     Task<List<HandbookArticle>> GetAllArticlesAsync(string chapterId, CancellationToken cancellationToken = default);
 
+    /// <summary>Every article of several chapters, hidden ones included, in one query.</summary>
+    /// <remarks>For the redaction view, which needs the whole book: asking chapter by chapter read every
+    /// longtext body in the handbook once per visit.</remarks>
+    Task<List<HandbookArticle>> GetAllArticlesAsync(
+        IReadOnlyCollection<string> chapterIds, CancellationToken cancellationToken = default);
+
     Task<HandbookChapter> CreateChapterAsync(HandbookChapterInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RefreshChapterAsync(string id, HandbookChapterInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteChapterAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

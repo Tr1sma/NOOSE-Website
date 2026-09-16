@@ -1,22 +1,30 @@
 namespace NOOSE_Website.Models.Handbook;
 
 /// <summary>One chapter with the articles the reader may see.</summary>
+/// <param name="IsVisible">
+/// Always true on the reading path, which never hands out a withdrawn chapter. The redaction view builds its own
+/// list from the full one, and needs to tell the two apart: the rail is the only way to a chapter, so a withdrawn
+/// one that the rail also hides can never be switched back on.
+/// </param>
 public sealed record HandbookChapterView(
     string Id,
     string Slug,
     string Title,
     string? Description,
     string? IconName,
-    IReadOnlyList<HandbookArticleCard> Articles);
+    IReadOnlyList<HandbookArticleCard> Articles,
+    bool IsVisible = true);
 
 /// <summary>An article as it appears in a chapter list or a search result.</summary>
+/// <param name="IsVisible">See <see cref="HandbookChapterView.IsVisible"/>; the same one-way door.</param>
 public sealed record HandbookArticleCard(
     string Id,
     string Slug,
     string Title,
     string? Summary,
     string ChapterSlug,
-    string ChapterTitle);
+    string ChapterTitle,
+    bool IsVisible = true);
 
 /// <summary>A full article, as the reader page renders it.</summary>
 public sealed record HandbookArticleView(

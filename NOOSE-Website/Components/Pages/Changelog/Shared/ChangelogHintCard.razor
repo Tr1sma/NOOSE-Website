@@ -1,6 +1,8 @@
 @* One-off hint that a new release landed since the agent last looked. Renders nothing the rest of the time. *@
+@implements IDisposable
 @inject IChangelogService ChangelogService
 @inject INavPreferencesService NavPreferences
+@inject NavigationManager Nav
 
 @if (_flash is { Count: > 0 } flash)
 {
@@ -60,7 +62,31 @@
             _flash = await ChangelogService.GetNewsSinceAsync(lastSeen);
         }
         catch { /* best effort */ }
+
+        Nav.LocationChanged += OnLocationChanged;
     }
+
+    /// <summary>Stands down once the agent is on the page it points at.</summary>
+    /// <remarks>
+    /// The card lives in the layout, so it survives every internal navigation and never runs its initialiser
+    /// again. Opening /neuerungen through the menu rather than through the button therefore left it standing
+    /// with "2 Neuerungen seit deinem letzten Besuch" for the rest of the session.
+    /// </remarks>
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_flash is null)
+        {
+            return;
+        }
+        var pfad = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+        if (!string.Equals(pfad, "/neuerungen", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        _ = InvokeAsync(DismissAsync);
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 
     private static string Wording(ChangelogNewsFlash flash)
     {

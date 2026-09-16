@@ -719,10 +719,15 @@ public sealed class PermissionTests
 
     // ------------------------------------------------------------ RequireCitizenSubmission
 
+    // the three surprising ones are listed on purpose: MayCitizenSubmit checks authentication and the demo
+    // principal, never the status, and a later status check would otherwise slip in unnoticed
     [Theory]
     [InlineData(AgentStatus.Civilian)]
     [InlineData(AgentStatus.Active)]
     [InlineData(AgentStatus.Applicant)]
+    [InlineData(AgentStatus.Pending)]
+    [InlineData(AgentStatus.Blocked)]
+    [InlineData(AgentStatus.Terminated)]
     public void RequireCitizenSubmission_anySignedInStatus_passes(AgentStatus status)
     {
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);

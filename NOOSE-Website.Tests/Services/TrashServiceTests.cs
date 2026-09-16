@@ -15,6 +15,8 @@ public class TrashServiceTests
 {
     private readonly IPersonService _people = Substitute.For<IPersonService>();
     private readonly ICaseService _cases = Substitute.For<ICaseService>();
+    private readonly IChangelogService _changelog = Substitute.For<IChangelogService>();
+    private readonly IHandbookService _handbook = Substitute.For<IHandbookService>();
 
     private TrashService Build() => new(
         _people,
@@ -45,8 +47,8 @@ public class TrashServiceTests
         Substitute.For<IPressReleaseService>(),
         Substitute.For<IPublicWarningService>(),
         Substitute.For<IPublicReportService>(),
-        Substitute.For<IChangelogService>(),
-        Substitute.For<IHandbookService>());
+        _changelog,
+        _handbook);
 
     [Fact]
     public void Kind_keys_are_unique()
@@ -101,6 +103,35 @@ public class TrashServiceTests
         _cases.GetTrashAsync(Arg.Any<CancellationToken>()).Returns([]);
         var rows = await Build().GetAsync("VORGAENGE");
         Assert.Empty(rows);
+    }
+
+    /// <summary>The two handbook sources sit next to each other with the same shape - a classic swap.</summary>
+    [Theory]
+    [InlineData("neuerungen")]
+    [InlineData("handbuch-kapitel")]
+    [InlineData("handbuch-artikel")]
+    public async Task Restore_of_a_new_source_reaches_its_own_method(string kind)
+    {
+        var actor = new ClaimsPrincipal();
+
+        await Build().RestoreAsync(kind, "zeile-1", actor);
+
+        switch (kind)
+        {
+            case "neuerungen":
+                await _changelog.Received(1).RestoreAsync("zeile-1", actor, Arg.Any<CancellationToken>());
+                break;
+            case "handbuch-kapitel":
+                await _handbook.Received(1).RestoreChapterAsync("zeile-1", actor, Arg.Any<CancellationToken>());
+                await _handbook.DidNotReceive().RestoreArticleAsync(
+                    Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+                break;
+            default:
+                await _handbook.Received(1).RestoreArticleAsync("zeile-1", actor, Arg.Any<CancellationToken>());
+                await _handbook.DidNotReceive().RestoreChapterAsync(
+                    Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+                break;
+        }
     }
 
     [Fact]

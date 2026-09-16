@@ -217,10 +217,22 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
     }
 
     public async Task<List<HandbookArticle>> GetAllArticlesAsync(string chapterId, CancellationToken cancellationToken = default)
+        => await GetAllArticlesAsync([chapterId], cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<List<HandbookArticle>> GetAllArticlesAsync(
+        IReadOnlyCollection<string> chapterIds, CancellationToken cancellationToken = default)
     {
+        if (chapterIds.Count == 0)
+        {
+            return [];
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // one flat WHERE IN for the whole editor, not a round trip per chapter: these rows carry the bodies,
+        // so the loop this replaces read every longtext column in the book on each visit of a redaction page
+        var ids = chapterIds.ToList();
         return await db.HandbuchArtikel.AsNoTracking()
-            .Where(a => a.ChapterId == chapterId)
+            .Where(a => ids.Contains(a.ChapterId))
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
             .ToListAsync(cancellationToken);
     }
@@ -247,7 +259,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             IsCustomised = true,
         };
         db.HandbuchKapitel.Add(chapter);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Adresse „{slug}“ ist bereits vergeben.", cancellationToken);
         Evict();
         return chapter;
     }
@@ -271,7 +283,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         chapter.IsVisible = input.IsVisible;
         // the promise of the seeder: once edited here, the shipped content leaves this row alone for good
         chapter.IsCustomised = true;
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Adresse „{slug}“ ist bereits vergeben.", cancellationToken);
         Evict();
     }
 
@@ -309,6 +321,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             throw new InvalidOperationException("Das gewählte Kapitel wurde nicht gefunden.");
         }
         await RequireFreeArticleSlugAsync(db, slug, null, cancellationToken);
+        await RequireFreeNavKeyAsync(db, Clean(input.NavKey, 64), null, cancellationToken);
 
         var article = new HandbookArticle
         {
@@ -325,7 +338,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             IsCustomised = true,
         };
         db.HandbuchArtikel.Add(article);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Adresse „{slug}“ ist bereits vergeben.", cancellationToken);
         Evict();
         return article;
     }
@@ -344,6 +357,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             throw new InvalidOperationException("Das gewählte Kapitel wurde nicht gefunden.");
         }
         await RequireFreeArticleSlugAsync(db, slug, id, cancellationToken);
+        await RequireFreeNavKeyAsync(db, Clean(input.NavKey, 64), id, cancellationToken);
 
         article.ChapterId = input.ChapterId;
         article.Slug = slug;
@@ -356,7 +370,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         article.SortOrder = input.SortOrder;
         article.IsVisible = input.IsVisible;
         article.IsCustomised = true;
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Adresse „{slug}“ ist bereits vergeben.", cancellationToken);
         Evict();
     }
 
@@ -401,7 +415,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             IsCustomised = true,
         };
         db.HandbuchBegriffe.Add(row);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Den Begriff „{term}“ gibt es bereits.", cancellationToken);
         Evict();
         return row;
     }
@@ -428,7 +442,7 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         row.ArticleId = string.IsNullOrWhiteSpace(input.ArticleId) ? null : input.ArticleId;
         row.IsVisible = input.IsVisible;
         row.IsCustomised = true;
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Den Begriff „{term}“ gibt es bereits.", cancellationToken);
         Evict();
     }
 
@@ -521,6 +535,59 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         }
     }
 
+    /// <summary>One menu entry, one article: the help button resolves a nav key to exactly one of them.</summary>
+    /// <remarks>
+    /// Not a database constraint, because a withdrawn article keeps its key and two withdrawn ones may well share
+    /// it. Unenforced, <c>LoadArticleForNavKeyAsync</c> simply took the smaller sort order, so the "?" button on
+    /// the page silently opened a different article than the one the editor had just pointed at it.
+    /// </remarks>
+    private static async Task RequireFreeNavKeyAsync(AppDbContext db, string? navKey, string? exceptId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(navKey))
+        {
+            return;
+        }
+        var taken = await db.HandbuchArtikel
+            .AnyAsync(a => a.NavKey == navKey && a.IsVisible && (exceptId == null || a.Id != exceptId), ct);
+        if (taken)
+        {
+            throw new InvalidOperationException(
+                $"Auf den Menüpunkt „{navKey}\" zeigt bereits ein anderer Artikel. Ein Menüpunkt hat genau einen.");
+        }
+    }
+
+    /// <summary>Saves and turns a unique-index violation into the message the check above would have given.</summary>
+    /// <remarks>
+    /// The check and the insert are two statements, so two editors can pass the check and collide at the index.
+    /// Without this the loser saw a raw database error instead of "gibt es bereits".
+    /// </remarks>
+    private static async Task SaveAsync(AppDbContext db, string konflikt, CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsDuplicate(ex))
+        {
+            throw new InvalidOperationException(konflikt, ex);
+        }
+    }
+
+    /// <summary>Whether a save failed on a unique index rather than on something else.</summary>
+    private static bool IsDuplicate(DbUpdateException ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            var text = e.Message;
+            if (text.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Validated on write rather than escaped on read, because it is a URL segment.</summary>
     /// <remarks>
     /// Umlauts are transliterated rather than kept: they are letters, so they would survive the filter below and then
@@ -538,7 +605,9 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
             return null;
         }
         var chars = trimmed
-            .Select(c => (c >= 'a' && c <= 'z') || char.IsDigit(c) || c == '-' ? c : '-')
+            // IsAsciiDigit, not IsDigit: the latter is true for Arabic-Indic and Devanagari digits too, and
+            // those would survive into an address the comment above promises will never be percent-encoded
+            .Select(c => (c >= 'a' && c <= 'z') || char.IsAsciiDigit(c) || c == '-' ? c : '-')
             .ToArray();
         var slug = new string(chars).Trim('-');
         while (slug.Contains("--", StringComparison.Ordinal))

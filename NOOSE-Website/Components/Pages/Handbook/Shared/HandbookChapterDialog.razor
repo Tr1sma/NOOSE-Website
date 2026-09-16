@@ -6,7 +6,7 @@
             <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined"
                           Required="true" RequiredError="Das Kapitel braucht einen Titel." MaxLength="160" />
             <MudTextField @bind-Value="_slug" Label="Adresse (Slug)" Variant="Variant.Outlined"
-                          Required="true" RequiredError="Das Kapitel braucht eine Adresse." MaxLength="80"
+                          Required="true" RequiredError="Das Kapitel braucht eine Adresse." MaxLength="@HandbookService.MaxSlugLength"
                           HelperText="Steht als ?tab=… in der Adresse. Wird beim Speichern bereinigt." />
             <MudTextField @bind-Value="_description" Label="Beschreibung" Variant="Variant.Outlined"
                           MaxLength="400" Lines="2"

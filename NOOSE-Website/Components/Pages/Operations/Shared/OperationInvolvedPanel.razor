@@ -57,6 +57,9 @@
 </MudStack>
 
 @code {
+
+    /// <summary>The types this panel offers; the same list goes to the picker and to the service.</summary>
+    private static readonly string[] OrgTypes = [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)];
     [Parameter, EditorRequired] public string OperationId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
@@ -76,7 +79,7 @@
     {
         // Exclude already-involved targets and self.
         var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
-            allowedTypes: [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            allowedTypes: OrgTypes,
             excluded: LinkDialog.Exclusions(_list, nameof(Operation), OperationId),
             designation: "Beteiligten",
             labelCaption: "Notiz (optional)",
@@ -87,7 +90,8 @@
         }
         try
         {
-            await LinkService.CreateAsync(nameof(Operation), OperationId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default);
+            await LinkService.CreateAsync(nameof(Operation), OperationId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default,
+                allowedTargetTypes: OrgTypes);
             Snackbar.Add("Beteiligter gespeichert.", Severity.Success);
             await LoadAsync();
         }

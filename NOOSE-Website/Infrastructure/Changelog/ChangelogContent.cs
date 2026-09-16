@@ -268,6 +268,59 @@ public static class ChangelogContent
                 + "Seite auch zu finden ist.", "Bedienung"),
             Besser("2.1.32-fraktion-wechsel", "Beim Hinzufügen zu einer Fraktion lässt sich eine Person "
                 + "gleich aus ihrer bisherigen Fraktion entfernen.", "Fraktionen"),
+            Fix("2.1.33-word-einfuegen", "Aus Word eingefügte Tabellen und Absätze bleiben vollständig "
+                + "erhalten.", "Bedienung"),
+            Fix("2.1.34-word-listen", "Eine nummerierte Liste aus Word bleibt nummeriert und behält ihre "
+                + "Einrückung.", "Bedienung"),
+            Fix("2.1.35-inhaltsverzeichnis", "Das eingefügte Inhaltsverzeichnis führt jetzt auch in Presse, "
+                + "Warnungen, Lageberichten und Vorlagen zu den Überschriften.", "Bedienung"),
+            Fix("2.1.36-trennlinie", "Ein Text, der nur aus einer Trennlinie besteht, geht beim Speichern "
+                + "nicht mehr verloren.", "Bedienung"),
+            Fix("2.1.37-auswahl-fett", "Der Fett-Knopf über einer gemischt formatierten Auswahl setzt die "
+                + "Fettung, statt sie zu entfernen.", "Bedienung"),
+            Fix("2.1.38-listen-nummern", "Eingerückte nummerierte Listen zählen in der Leseansicht und im "
+                + "Ausdruck richtig durch.", "Bedienung"),
+            Fix("2.1.39-druck-schrift", "Gedruckte Akten zeigen ihren Fließtext wieder in Schwarz statt "
+                + "beinahe weiß.", "Druck"),
+            Fix("2.1.40-editor-schmal", "Suchen und Ersetzen im Texteditor passt auch auf ein schmales "
+                + "Fenster.", "Bedienung"),
+            Fix("2.1.41-entwurf-abmelden", "Beim Abmelden werden die im Browser zwischengespeicherten "
+                + "Entwürfe entfernt.", "Bedienung"),
+            Fix("2.1.42-entwurf-wegklicken", "Ein Entwurf wird auch dann gesichert, wenn direkt nach dem "
+                + "letzten Wort weggeklickt wird.", "Bedienung"),
+            Fix("2.1.43-tagesordnung-notiz", "Beim Wechsel zwischen zwei Tagesordnungspunkten geht eine "
+                + "getippte Notiz nicht mehr verloren.", "Besprechungen"),
+            Fix("2.1.44-handbuch-ausgeblendet", "Ein ausgeblendetes Kapitel und ein ausgeblendeter Artikel "
+                + "bleiben für die Redaktion sichtbar und lassen sich zurückholen.", "Handbuch"),
+            Fix("2.1.45-handbuch-suchtreffer", "Ein Glossartreffer aus der Suche öffnet sich auch dann, wenn "
+                + "das Handbuch schon offen ist; die Adresse bleibt danach sauber.", "Handbuch"),
+            Fix("2.1.46-handbuch-menuepunkt", "Zwei Handbuch-Artikel können nicht mehr denselben Menüpunkt "
+                + "beanspruchen — der „?\"-Knopf zeigt sonst auf den falschen.", "Handbuch"),
+            Fix("2.1.47-handbuch-adresse", "Die Adresse eines Kapitels wird beim Speichern nicht mehr "
+                + "stillschweigend gekürzt.", "Handbuch"),
+            Fix("2.1.48-handbuch-redaktion", "Das Handbuch lädt für die Redaktion spürbar schneller.", "Handbuch"),
+            Fix("2.1.49-handbuch-start", "Ein selbst angelegter Artikel oder Begriff bringt die Seite nach "
+                + "einem Update nicht mehr zum Stillstand.", "Handbuch"),
+            Fix("2.1.50-glossar-am-bild", "Eine Worterklärung fällt nicht mehr aus, wenn direkt daneben ein "
+                + "Bild steht.", "Handbuch"),
+            Fix("2.1.51-glossar-schalter", "Der Schalter „Fachwörter erklären\" wirkt sofort, nicht erst nach "
+                + "einem Seitenwechsel.", "Bedienung"),
+            Fix("2.1.52-neuerungen-karte", "Die Hinweiskarte verschwindet, sobald die Seite mit den Neuerungen "
+                + "geöffnet wurde.", "Bedienung"),
+            Fix("2.1.53-nur-lesen-knoepfe", "Wer nur lesen darf, bekommt keine Knöpfe mehr angeboten, die "
+                + "beim Klick ohnehin abgelehnt werden.", "Bedienung"),
+            Fix("2.1.54-verknuepfen-dublette", "Die Personenakte schlägt beim Verknüpfen keine Akte mehr vor, "
+                + "die schon verknüpft ist.", "Akten"),
+            Fix("2.1.55-entfuehrung-typen", "Auch beim Anlegen und Bearbeiten einer Entführung lassen sich "
+                + "nur echte Akten als kompromittiert vermerken.", "Akten"),
+            Fix("2.1.56-noosei-kontingent-parallel", "Zwei gleichzeitig gestellte NOOSEI-Fragen überziehen das "
+                + "Wochenkontingent nicht mehr.", "NOOSEI"),
+            Fix("2.1.57-noosei-handbuch", "NOOSEI sagt zuverlässig, wenn im Handbuch nichts zu einer Frage "
+                + "steht, statt leer zu antworten.", "NOOSEI"),
+            Fix("2.1.58-bilder-aufraeumen", "Ein ersetztes oder gelöschtes Bild belegt keinen Speicherplatz "
+                + "mehr.", "Bedienung"),
+            Fix("2.1.59-doppelte-eingabe", "Legen zwei Redakteure gleichzeitig dieselbe Fassung oder Adresse "
+                + "an, erscheint eine verständliche Meldung statt einer technischen.", "Bedienung"),
         ], "1.5"),
     ];
 }

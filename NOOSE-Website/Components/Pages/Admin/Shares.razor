@@ -424,7 +424,7 @@ else
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
                 </MudTd>
                 <MudTd DataLabel="Aktion" Style="text-align:right;">
-                    <AuthorizeView Policy="@Policies.PromotionDecide" Context="auth">
+                    <AuthorizeView Policy="@Policies.PromotionDecideWrite" Context="auth">
                         <Authorized>
                             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
                                        StartIcon="@Icons.Material.Filled.Check" Class="mr-2"

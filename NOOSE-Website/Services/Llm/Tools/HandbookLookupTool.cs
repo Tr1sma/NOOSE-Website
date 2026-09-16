@@ -122,6 +122,15 @@ public sealed class HandbookLookupTool(IHandbookService handbook) : INooseiTool
             articleRefs.Add(new LlmContextRef(nameof(HandbookArticle), article.Slug, article.Title));
         }
 
+        // Asked again after the bodies were fetched. The guard above judges the scoring pass, and an article can
+        // be withdrawn between the two - the answer would then be an empty string instead of the honest "nothing
+        // in the handbook", and the model fills an empty answer with an invention.
+        if (articleRefs.Count == 0 && terms.Count == 0)
+        {
+            return new NooseiToolResult(
+                "Dazu steht nichts im Handbuch. Sag das offen, statt eine Bedienung zu erfinden.");
+        }
+
         // articles keep their slots, the rest goes to terms: the article is what the answer quotes, and it is
         // capped at MaxArticleBodies anyway, so it can never crowd the list out on its own
         var refs = articleRefs.Take(MaxRefs).ToList();

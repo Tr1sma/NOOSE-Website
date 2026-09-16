@@ -71,11 +71,13 @@ else
             {
                 return;
             }
-            await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepHandbook);
-            if (_article is not null)
+            // an address that resolves to nothing is not a handbook visit either
+            if (_article is null)
             {
-                await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.ChapterStep(_article.ChapterSlug));
+                return;
             }
+            await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepHandbook);
+            await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.ChapterStep(_article.ChapterSlug));
         }
         catch
         {

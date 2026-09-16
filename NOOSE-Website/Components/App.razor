@@ -32,6 +32,15 @@
     <script>
         // Update the address bar without a Blazor navigation (no LocationChanged → no re-render).
         window.nooseReplaceState = function (url) { history.replaceState(history.state, '', url); };
+
+        // Drop every unsaved editor draft on sign-out. They hold the full text in the clear, classified
+        // documents included, and the housekeeping sweep inside richtext.js only runs when an editor is
+        // opened - so on a shared station nothing would ever remove them. Inline rather than in a module:
+        // the logout form is a plain post on a statically rendered page.
+        window.nooseEntwuerfeLoeschen = function () {
+            try { indexedDB.deleteDatabase('noose-rte'); } catch (e) { /* ignore */ }
+            return true;
+        };
     </script>
 </body>
 

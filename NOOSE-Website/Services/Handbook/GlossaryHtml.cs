@@ -185,9 +185,14 @@ public static class GlossaryHtml
             }
             if (sibling is IElement element && Inline.Contains(element.LocalName))
             {
-                if (Edge(element, forward) is { } inner)
+                if (Edge(element, forward, out var hart) is { } inner)
                 {
                     return inner;
+                }
+                if (hart)
+                {
+                    // an image or a break inside the inline run ends the word just as one beside it would
+                    return null;
                 }
                 current = sibling;
                 continue;
@@ -198,24 +203,36 @@ public static class GlossaryHtml
     }
 
     /// <summary>The first character this node contributes at its leading (or trailing) edge.</summary>
-    private static char? Edge(INode node, bool forward)
+    /// <param name="hardStop">
+    /// True when the search ran into something that ends the word - a block, a break, an image - rather than into
+    /// nothing at all. Both used to answer null, so the caller stepped over an image inside an inline run and read
+    /// the text behind it: "Fahndung&lt;b&gt;&lt;img&gt;sliste&lt;/b&gt;" lost the bubble it was owed.
+    /// </param>
+    private static char? Edge(INode node, bool forward, out bool hardStop)
     {
+        hardStop = false;
         if (node is IText text)
         {
             return text.Data.Length > 0 ? (forward ? text.Data[0] : text.Data[^1]) : null;
         }
         if (node is not IElement element || !Inline.Contains(element.LocalName))
         {
+            hardStop = true;
             return null;
         }
         var children = element.ChildNodes;
         for (var i = 0; i < children.Length; i++)
         {
-            if (Edge(children[forward ? i : children.Length - 1 - i], forward) is { } c)
+            if (Edge(children[forward ? i : children.Length - 1 - i], forward, out hardStop) is { } c)
             {
                 return c;
             }
+            if (hardStop)
+            {
+                return null;
+            }
         }
+        hardStop = false;
         return null;
     }
 }

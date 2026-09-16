@@ -140,7 +140,7 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
             IsVisible = input.IsVisible,
         };
         db.Aenderungsfassungen.Add(release);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Fassung {version} gibt es bereits.", cancellationToken);
         return release;
     }
 
@@ -162,7 +162,7 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
         release.Title = Clean(input.Title, 200);
         release.SortOrder = input.SortOrder;
         release.IsVisible = input.IsVisible;
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveAsync(db, $"Die Fassung {version} gibt es bereits.", cancellationToken);
     }
 
     public async Task<ChangelogEntry> CreateEntryAsync(ChangelogEntryInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -260,6 +260,36 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
         entry.DeletedAt = null;
         entry.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Saves and turns a unique-index violation into the message the check above would have given.</summary>
+    /// <remarks>
+    /// The version check and the insert are two statements, so two editors can both pass the check and collide at
+    /// the index. Without this the loser saw a raw database error instead of "gibt es bereits".
+    /// </remarks>
+    private static async Task SaveAsync(AppDbContext db, string konflikt, CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsDuplicate(ex))
+        {
+            throw new InvalidOperationException(konflikt, ex);
+        }
+    }
+
+    private static bool IsDuplicate(DbUpdateException ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e.Message.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase)
+                || e.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static string? Clean(string? value, int max)

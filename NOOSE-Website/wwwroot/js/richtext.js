@@ -487,30 +487,47 @@ function haengeEinfuegeSauberungAn(element, editor, profil) {
         }
     };
 
-    // Word marks every bullet paragraph and puts the glyph in a hidden span; both go
+    // a glyph like "1." or "a)" is a numbered list; a bullet character is not
+    const NUMMERIERT = /^([0-9]+|[a-z]+|[ivxlcdm]+)[.)]$/i;
+
+    // Word marks every list paragraph with mso-list and puts the glyph in a hidden span of its own. Only that
+    // span goes. Removing every ELEMENT carrying an mso- property - which is what this did - deleted whole Word
+    // tables and ordinary paragraphs along with it; the properties themselves are inline css the allowlist in
+    // filtereAttribute drops anyway.
     const wandleWordListen = (wurzel) => {
         let liste = null;
+        let art = '';
         for (const absatz of Array.from(wurzel.querySelectorAll('p'))) {
             const stil = (absatz.getAttribute('style') || '') + ' ' + (absatz.getAttribute('class') || '');
             if (!/mso-list/i.test(stil)) {
                 liste = null;
                 continue;
             }
+            // "mso-list:l0 level2 lfo1" - the level is the indent Quill stores as a class on the item
+            const ebeneTreffer = /level(\d+)/i.exec(stil);
+            const ebene = Math.min(Math.max(parseInt(ebeneTreffer ? ebeneTreffer[1] : '1', 10) || 1, 1), 8);
+            const marke = absatz.querySelector('[style*="mso-list"]');
+            const zeichen = marke ? (marke.textContent || '').trim() : '';
+            const punktArt = NUMMERIERT.test(zeichen) ? 'ol' : 'ul';
+            if (marke) {
+                marke.remove();
+            }
             const punkt = absatz.ownerDocument.createElement('li');
+            if (ebene > 1) {
+                punkt.setAttribute('class', 'ql-indent-' + (ebene - 1));
+            }
             while (absatz.firstChild) {
                 punkt.appendChild(absatz.firstChild);
             }
             absatz.replaceWith(punkt);
-            if (liste) {
+            if (liste && art === punktArt) {
                 liste.appendChild(punkt);
                 continue;
             }
-            liste = punkt.ownerDocument.createElement('ul');
+            art = punktArt;
+            liste = punkt.ownerDocument.createElement(punktArt);
             punkt.before(liste);
             liste.appendChild(punkt);
-        }
-        for (const rest of Array.from(wurzel.querySelectorAll('[style*="mso-"]'))) {
-            rest.remove();
         }
     };
 
@@ -1234,7 +1251,10 @@ function haengeSuchenAn(element) {
 // report. IndexedDB, not localStorage: base64 images would blow the 5 MB string quota on the first screenshot.
 const ENTWURF_DB = 'noose-rte';
 const ENTWURF_STORE = 'entwuerfe';
-const ENTWURF_ALTER_TAGE = 30;
+// Seven, not thirty: the content is the full text in the clear, classified documents and personnel notes
+// included, and it sits in a browser profile that outlives the session. The sweep only runs when an editor is
+// opened, so the logout form wipes the whole store outright (window.nooseEntwuerfeLoeschen in App.razor).
+const ENTWURF_ALTER_TAGE = 7;
 const ENTWURF_VERZOEGERUNG = 800;
 
 let entwurfDbPromise = null;
@@ -1364,6 +1384,26 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
         dotnetRef.invokeMethodAsync('OnDraftFound', eintrag.zeit).catch(() => { });
     });
 
+    // Named, and hung on the state, so teardown can still flush a write that is only waiting out its debounce.
+    // Cancelling it outright lost exactly the last sentence somebody typed before clicking away - the one case
+    // the draft exists for. Deliberately without a "tot" check: by then the editor is already gone.
+    zustand.jetztSchreiben = async () => {
+        const db = await ladeEntwurfsDb();
+        if (!db) {
+            return;
+        }
+        const html = leseHtml(editor);
+        if (html === zustand.basis || html.length === 0) {
+            // back to the saved state (or still empty): nothing worth recovering
+            await entwurfLoeschen(db, schluessel);
+            dotnetRef.invokeMethodAsync('OnDraftSaved', 0).catch(() => { });
+            return;
+        }
+        const eintrag = { schluessel, html, zeit: Date.now() };
+        await entwurfSchreiben(db, eintrag);
+        dotnetRef.invokeMethodAsync('OnDraftSaved', eintrag.zeit).catch(() => { });
+    };
+
     editor.on('text-change', () => {
         if (zustand.tot) {
             return;
@@ -1371,21 +1411,12 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
         if (zustand.schreiben) {
             clearTimeout(zustand.schreiben);
         }
-        zustand.schreiben = setTimeout(async () => {
-            const db = await ladeEntwurfsDb();
-            if (!db || zustand.tot) {
+        zustand.schreiben = setTimeout(() => {
+            zustand.schreiben = 0;
+            if (zustand.tot) {
                 return;
             }
-            const html = leseHtml(editor);
-            if (html === zustand.basis || html.length === 0) {
-                // back to the saved state (or still empty): nothing worth recovering
-                await entwurfLoeschen(db, schluessel);
-                dotnetRef.invokeMethodAsync('OnDraftSaved', 0).catch(() => { });
-                return;
-            }
-            const eintrag = { schluessel, html, zeit: Date.now() };
-            await entwurfSchreiben(db, eintrag);
-            dotnetRef.invokeMethodAsync('OnDraftSaved', eintrag.zeit).catch(() => { });
+            zustand.jetztSchreiben().catch(() => { });
         }, ENTWURF_VERZOEGERUNG);
     });
 
@@ -1915,7 +1946,11 @@ function haengeAuswahlBlaseAn(element, editor) {
         knopfElement.textContent = inhalt;
         knopfElement.addEventListener('pointerdown', (ereignis) => {
             ereignis.preventDefault();
-            editor.format(format, !editor.getFormat(zustand.index)[format], 'user');
+            // over the whole selection, exactly as the button's own active state is read below. Asking only at
+            // the start inverted the visible state whenever the selection was mixed: "Hello World" with the
+            // first word bold showed the button off, and a click then removed the bold instead of adding it.
+            const aktiv = !!editor.getFormat(zustand.index, zustand.laenge)[format];
+            editor.format(format, !aktiv, 'user');
             aktualisieren();
         });
         blase.appendChild(knopfElement);
@@ -2208,7 +2243,10 @@ function leseHtml(editor) {
     const ohneBild = editor.root.querySelector('img') === null;
     // a mention carries text, but a document consisting only of one is not empty either
     const ohneErwaehnung = editor.root.querySelector('[data-erwaehnung]') === null;
-    return ohneText && ohneTabelle && ohneBild && ohneErwaehnung ? '' : chipZuToken(editor.root);
+    // same for a divider: it is a block embed and therefore carries no text at all, so a document that is
+    // nothing but one divider used to be saved as the empty string and the line was gone
+    const ohneTrenner = editor.root.querySelector('hr') === null;
+    return ohneText && ohneTabelle && ohneBild && ohneErwaehnung && ohneTrenner ? '' : chipZuToken(editor.root);
 }
 
 export function setHtml(element, html, beschriftungen) {
@@ -2302,7 +2340,12 @@ export function destroyRichText(element) {
     if (entwurf) {
         entwurf.tot = true;
         if (entwurf.schreiben) {
+            // flush before cancelling: the pending write holds the newest keystrokes
             clearTimeout(entwurf.schreiben);
+            entwurf.schreiben = 0;
+            if (entwurf.jetztSchreiben) {
+                entwurf.jetztSchreiben().catch(() => { });
+            }
         }
     }
     const bildOptionen = element.__nooseBildOptionen;

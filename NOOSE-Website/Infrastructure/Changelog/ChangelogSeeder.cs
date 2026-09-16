@@ -125,16 +125,27 @@ public static class ChangelogSeeder
         IReadOnlyList<ChangelogContent.SeededRelease> releases,
         CancellationToken cancellationToken)
     {
-        var known = await db.Aenderungsfassungen
-            .Select(r => r.Version)
-            .ToListAsync(cancellationToken);
+        var rows = await db.Aenderungsfassungen.ToListAsync(cancellationToken);
+        var byVersion = new Dictionary<string, ChangelogRelease>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            byVersion.TryAdd(row.Version, row);
+        }
 
         var added = false;
         for (var i = 0; i < releases.Count; i++)
         {
             var r = releases[i];
-            if (known.Contains(r.Version, StringComparer.Ordinal))
+            if (byVersion.TryGetValue(r.Version, out var bestand))
             {
+                // structure follows the shipped list even without a bump, exactly as it does for chapters and
+                // articles: a release inserted in the middle took the sort order of the one it displaced, and
+                // two releases on one date then had no defined order between them
+                if (bestand.SortOrder != i)
+                {
+                    bestand.SortOrder = i;
+                    added = true;
+                }
                 continue;
             }
             db.Aenderungsfassungen.Add(new ChangelogRelease

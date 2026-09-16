@@ -92,9 +92,14 @@ else
         <RecordSectionRail>
             @foreach (var chapter in _chapters)
             {
-                <RecordSection Slug="@chapter.Slug" Label="@chapter.Title" Icon="@Icon(chapter.IconName)">
+                <RecordSection Slug="@chapter.Slug" Label="@(chapter.IsVisible ? chapter.Title : chapter.Title + " (ausgeblendet)")" Icon="@Icon(chapter.IconName)">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="mb-4">
                         <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="flex:1;">
+                            @if (!chapter.IsVisible)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                         Class="mr-2">Ausgeblendet</MudChip>
+                            }
                             @chapter.Description
                         </MudText>
                         <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="kapitelAktion">
@@ -123,7 +128,14 @@ else
                                 <MudPaper Elevation="1" Class="pa-3">
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                         <div style="flex:1;cursor:pointer;" @onclick="@(() => Open(article.Slug))">
-                                            <MudText Typo="Typo.subtitle2">@article.Title</MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudText Typo="Typo.subtitle2">@article.Title</MudText>
+                                                @if (!article.IsVisible)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                                             Variant="Variant.Outlined">Ausgeblendet</MudChip>
+                                                }
+                                            </MudStack>
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@article.Summary</MudText>
                                         </div>
                                         <AuthorizeView Policy="@Policies.HrbOrLeadershipWrite" Context="artikelAktion">
@@ -170,6 +182,15 @@ else
     /// <summary>Mirrors Permission.RequireHrbOrLeadershipWrite; decides whether the editor lists are loaded at all.</summary>
     private bool _mayEdit;
 
+    /// <summary>Last query state acted on, so a repeat render does not re-open what the reader closed.</summary>
+    private (string? Search, string? Term) _queryStand;
+
+    /// <summary>Whether that state has been read once; both halves empty is a legal state of its own.</summary>
+    private bool _gelesen;
+
+    /// <summary>Set once a ?begriff has been resolved; the address is cleaned after the render.</summary>
+    private bool _dropBegriff;
+
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     protected override async Task OnInitializedAsync()
@@ -179,10 +200,7 @@ else
             _user = (await AuthState).User;
         }
         _mayEdit = _user.MayWrite() && _user.IsHrbOrLeadership();
-        _search = QueryState.Read(Nav, "suche");
         await LoadAsync();
-        OpenTermFromQuery();
-        _load = false;
 
         if (_user is not null && _user.IsInternalAgent() && _user.GetAgentId() is { Length: > 0 } id)
         {
@@ -190,9 +208,29 @@ else
         }
     }
 
+    /// <summary>Query state, re-read on every navigation.</summary>
+    /// <remarks>
+    /// Not in the initialiser: /handbuch carries no route parameter, so Blazor reuses this very instance when the
+    /// address changes only in its query - a search hit opened from the command palette while already on the page
+    /// then did nothing at all. The guard keeps a repeat render from re-opening a term the reader has moved on from.
+    /// </remarks>
+    protected override void OnParametersSet()
+    {
+        var such = QueryState.Read(Nav, "suche");
+        var begriff = QueryState.Read(Nav, "begriff");
+        if (_gelesen && _queryStand == (such, begriff))
+        {
+            return;
+        }
+        _gelesen = true;
+        _queryStand = (such, begriff);
+        _search = such;
+        OpenTermFromQuery(begriff);
+        Filter();
+    }
+
     private async Task LoadAsync()
     {
-        _chapters = await HandbookService.GetChaptersAsync();
         // an editor also needs the withdrawn terms — hiding one has no trash and keeps its name taken, so this
         // list is the only way back
         _terms = _mayEdit
@@ -206,12 +244,43 @@ else
         if (_mayEdit)
         {
             _allChapters = await HandbookService.GetAllChaptersAsync();
-            foreach (var c in _allChapters)
-            {
-                _allArticles.AddRange(await HandbookService.GetAllArticlesAsync(c.Id));
-            }
+            // one query for the whole book, not one per chapter: these rows carry the bodies
+            _allArticles = await HandbookService.GetAllArticlesAsync(_allChapters.Select(c => c.Id).ToList());
+            // The rail is built from the full lists for a redaction, withdrawn rows marked. Built from the
+            // reading list it hid exactly the rows somebody had just switched off, and with them the only
+            // button that could switch them back on - a one-way door out of the interface.
+            _chapters = _allChapters.Select(c => new HandbookChapterView(
+                c.Id, c.Slug, c.Title, c.Description, c.IconName,
+                _allArticles.Where(a => a.ChapterId == c.Id)
+                    .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
+                    .Select(a => new HandbookArticleCard(a.Id, a.Slug, a.Title, a.Summary, c.Slug, c.Title, a.IsVisible))
+                    .ToList(),
+                c.IsVisible)).ToList();
         }
+        else
+        {
+            _chapters = await HandbookService.GetChaptersAsync();
+        }
+        _load = false;
         Filter();
+    }
+
+    /// <summary>Drops the consumed ?begriff from the address; needs JS, so not before the first render.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_dropBegriff)
+        {
+            return;
+        }
+        _dropBegriff = false;
+        try
+        {
+            await QueryState.WriteAsync(JS, Nav, ("begriff", null), ("suche", _search));
+        }
+        catch
+        {
+            /* ignore */
+        }
     }
 
     private void Open(string slug) => Nav.NavigateTo($"/handbuch/{slug}");
@@ -222,21 +291,19 @@ else
     /// spaces and umlauts. The id is resolved to the term here and fed into the page's own filter, so the landing
     /// reuses the search rendering rather than a second way of showing one term. An unknown id simply does nothing.
     /// </remarks>
-    private void OpenTermFromQuery()
+    private void OpenTermFromQuery(string? id)
     {
-        if (!string.IsNullOrWhiteSpace(_search))
-        {
-            return;
-        }
-        if (QueryState.Read(Nav, "begriff") is not { Length: > 0 } id)
+        if (!string.IsNullOrWhiteSpace(_search) || string.IsNullOrEmpty(id))
         {
             return;
         }
         if (_terms.FirstOrDefault(t => t.Id == id) is { } term)
         {
             _search = term.Term;
-            Filter();
         }
+        // the parameter has done its work; leaving it in the address re-opened the term on every reload and
+        // turned a shared link into "always this one term", whatever the reader had filtered for since
+        _dropBegriff = true;
     }
 
     private async Task OnSearchAsync()

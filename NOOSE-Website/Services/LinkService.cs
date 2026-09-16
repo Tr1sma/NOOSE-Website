@@ -289,8 +289,17 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         return result;
     }
 
-    public async Task CreateAsync(string sourceType, string sourceId, string targetType, string targetId, string? label, ClaimsPrincipal actor, LinkKind kind = LinkKind.Default, CancellationToken cancellationToken = default)
+    /// <param name="allowedTargetTypes">
+    /// The types the calling panel offers. Passed in and checked here because the picker's own filter is a
+    /// convenience: the socket takes whatever it is sent, so a conflict list could otherwise be handed a ticket
+    /// or a citizen tip over the circuit and would render it forever after as a record of the wrong kind.
+    /// </param>
+    public async Task CreateAsync(string sourceType, string sourceId, string targetType, string targetId, string? label, ClaimsPrincipal actor, LinkKind kind = LinkKind.Default, CancellationToken cancellationToken = default, IReadOnlyCollection<string>? allowedTargetTypes = null)
     {
+        if (allowedTargetTypes is { Count: > 0 } erlaubt && !erlaubt.Contains(targetType, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException("Dieser Aktentyp ist an dieser Stelle nicht verknüpfbar.");
+        }
         if (sourceType == targetType && sourceId == targetId)
         {
             throw new InvalidOperationException("Eine Akte kann nicht mit sich selbst verknüpft werden.");

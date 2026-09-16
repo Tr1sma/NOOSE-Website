@@ -13,7 +13,7 @@ public interface ILinkService
     /// <summary>Internal-agent overload (print pages and non-partner panels); not partner-aware.</summary>
     Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default);
 
-    Task CreateAsync(string sourceType, string sourceId, string targetType, string targetId, string? label, ClaimsPrincipal actor, LinkKind kind = LinkKind.Default, CancellationToken cancellationToken = default);
+    Task CreateAsync(string sourceType, string sourceId, string targetType, string targetId, string? label, ClaimsPrincipal actor, LinkKind kind = LinkKind.Default, CancellationToken cancellationToken = default, IReadOnlyCollection<string>? allowedTargetTypes = null);
 
     /// <summary>Updates the optional label/role of an existing link; null or whitespace clears it.</summary>
     Task UpdateLabelAsync(string linkId, string? label, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

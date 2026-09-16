@@ -459,14 +459,32 @@ public class AbductionService(
     }
 
     /// <summary>Valid, de-duplicated compromise targets from the editor; empty when no leak occurred.</summary>
+    /// <summary>The compromise list of an editor round, deduplicated and checked.</summary>
+    /// <remarks>
+    /// The type check belongs here and not only in <c>AddCompromiseAsync</c>: create and update write the same
+    /// table through this method, and filtering the picker is not enough - the socket takes whatever it is sent.
+    /// A type that resolves to no reference would be stored and then read back as a deleted record on every load.
+    /// </remarks>
     private static List<CompromiseTargetInput> DesiredCompromises(AbductionInput input)
-        => !input.InformationLeaked
-            ? new()
-            : input.Compromises
-                .Where(c => !string.IsNullOrWhiteSpace(c.TargetType) && !string.IsNullOrWhiteSpace(c.TargetId))
-                .GroupBy(c => (c.TargetType, c.TargetId))
-                .Select(g => g.First())
-                .ToList();
+    {
+        if (!input.InformationLeaked)
+        {
+            return new();
+        }
+        var desired = input.Compromises
+            .Where(c => !string.IsNullOrWhiteSpace(c.TargetType) && !string.IsNullOrWhiteSpace(c.TargetId))
+            .GroupBy(c => (c.TargetType, c.TargetId))
+            .Select(g => g.First())
+            .ToList();
+        foreach (var target in desired)
+        {
+            if (!LinkService.KnownTypes.Contains(target.TargetType, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("Dieser Aktentyp kann nicht als kompromittiert vermerkt werden.");
+            }
+        }
+        return desired;
+    }
 
     private static void Validate(AbductionInput input)
     {

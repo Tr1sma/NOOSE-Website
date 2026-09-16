@@ -1,4 +1,7 @@
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Handbook;
+using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -13,10 +16,28 @@ namespace NOOSE_Website.Services;
 public static class RichTextAnchorFields
 {
     /// <summary>Carriers that take anchors but keep their images inline.</summary>
+    /// <remarks>
+    /// Every one of these is edited through a full <c>RichTextEditor</c>, and that toolbar carries the
+    /// "insert table of contents" button unconditionally. A carrier missing here therefore produced a list of
+    /// links to headings that never got an id — a visibly working button doing nothing at all.
+    /// <c>RichTextHtmlInterceptorTests</c> holds every entry here against the model.
+    /// </remarks>
     private static readonly Dictionary<Type, string[]> Extra = new()
     {
         [typeof(HandbookArticle)] = ["ContentHtml", "RoleplayHtml"],
         [typeof(GlossaryTerm)] = ["ExplanationHtml"],
+        [typeof(Pressemitteilung)] = ["DraftHtml", "ContentHtml"],
+        [typeof(OeffentlicheWarnung)] = ["DraftHtml", "ContentHtml"],
+        [typeof(OeffentlicherLagebericht)] = ["DraftHtml", "ContentHtml"],
+        [typeof(OeffentlicheSeite)] = ["DraftHtml", "ContentHtml"],
+        [typeof(OeffentlicheFaqEintrag)] = ["AnswerHtml"],
+        [typeof(OeffentlichesFraktionsprofil)] = ["DescriptionHtml"],
+        [typeof(OeffentlicheFahndung)] = ["ChargeHtml"],
+        // one table for both the library and the recruiting letters
+        [typeof(DocumentTemplate)] = ["ContentHtml"],
+        [typeof(ActivityTemplate)] = ["ContentHtml"],
+        [typeof(PersonnelTemplate)] = ["ContentHtml"],
+        [typeof(AgentPromotionRequest)] = ["Justification"],
     };
 
     /// <summary>The registered carrier types, for the invariants that hold the table against the model.</summary>

@@ -59,6 +59,13 @@ public static class Policies
     /// <summary>Decide promotions: rank ≥ Deputy Director or admin.</summary>
     public const string PromotionDecide = "BefoerderungEntscheiden";
 
+    /// <summary>Decide promotions AND be allowed to write.</summary>
+    /// <remarks>
+    /// Mirrors <c>Permission.RequirePromotionDecide</c>. The plain policy has no write check, so it shows the
+    /// approve and reject buttons to the read-only supervision and to the demo visitor - both carry Director.
+    /// </remarks>
+    public const string PromotionDecideWrite = "BefoerderungEntscheidenSchreiben";
+
     /// <summary>Applicant portal access: signed in with status Applicant.</summary>
     public const string ApplicantPortal = "BewerberPortal";
 

@@ -346,6 +346,8 @@ html, body {
     border-radius: 6px;
     background-color: var(--mud-palette-surface);
     box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+    /* the panel is anchored to the right edge; without a ceiling its row ran off the left one on a phone */
+    max-width: calc(100% - 16px);
 }
 
 .noose-suchen-versteckt {
@@ -356,10 +358,15 @@ html, body {
     display: flex;
     align-items: center;
     gap: .35rem;
+    /* search field, replace field and hit counter sit side by side - they have to be allowed to break */
+    flex-wrap: wrap;
 }
 
 .noose-suchen-feld {
     width: 150px;
+    max-width: 100%;
+    flex: 1 1 8rem;
+    min-width: 6rem;
     padding: .25rem .45rem;
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: 4px;
@@ -680,6 +687,101 @@ html, body {
         padding-left: 1.5rem;
     }
 
+    /* Quill stores an indented list flat: one <ol> whose items carry ql-indent-N. Without its counters the
+       browser simply numbers every item through, so "1. a. b. 2." came out as "1. 2. 3. 4." in every reading
+       and printing view - the editor looked right because it loads quill.snow.css and this does not.
+       Mirrored from there: decimal, lower-alpha, lower-roman, repeating by level. */
+    .dokument-html ol {
+        counter-reset: list-0 list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+    }
+
+    .dokument-html ol > li {
+        list-style-type: none;
+        counter-reset: list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+        counter-increment: list-0;
+    }
+
+        .dokument-html ol > li::before {
+            display: inline-block;
+            white-space: nowrap;
+            width: 1.2em;
+            margin-left: -1.5em;
+            margin-right: .3em;
+            text-align: right;
+            content: counter(list-0, decimal) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-1 {
+        counter-increment: list-1;
+        counter-reset: list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-1::before {
+            content: counter(list-1, lower-alpha) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-2 {
+        counter-increment: list-2;
+        counter-reset: list-3 list-4 list-5 list-6 list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-2::before {
+            content: counter(list-2, lower-roman) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-3 {
+        counter-increment: list-3;
+        counter-reset: list-4 list-5 list-6 list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-3::before {
+            content: counter(list-3, decimal) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-4 {
+        counter-increment: list-4;
+        counter-reset: list-5 list-6 list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-4::before {
+            content: counter(list-4, lower-alpha) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-5 {
+        counter-increment: list-5;
+        counter-reset: list-6 list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-5::before {
+            content: counter(list-5, lower-roman) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-6 {
+        counter-increment: list-6;
+        counter-reset: list-7 list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-6::before {
+            content: counter(list-6, decimal) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-7 {
+        counter-increment: list-7;
+        counter-reset: list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-7::before {
+            content: counter(list-7, lower-alpha) ". ";
+        }
+
+    .dokument-html ol > li.ql-indent-8 {
+        counter-increment: list-8;
+    }
+
+        .dokument-html ol > li.ql-indent-8::before {
+            content: counter(list-8, lower-roman) ". ";
+        }
+
     .dokument-html img {
         max-width: 100%;
     }
@@ -900,6 +1002,22 @@ html, body {
     .mud-typography, .mud-text-secondary, .mud-link, .mud-chip, .mud-alert,
     .mud-table, .mud-table * {
         color: #000 !important;
+    }
+
+    /* Der gerenderte Fließtext braucht eine eigene Zeile: .dokument-html setzt seine Farbe selbst
+       (--mud-palette-text-primary, im Dark-Theme also fast weiß), und eine eigene Deklaration am Element
+       schlägt jede geerbte — auch die mit !important weiter oben. Ohne das druckt jede Akte weiß auf weiß. */
+    .dokument-html, .dokument-html * {
+        color: #000 !important;
+    }
+
+    .dokument-html blockquote,
+    .dokument-html pre,
+    .dokument-html .noose-kasten-hinweis,
+    .dokument-html .noose-kasten-warnung,
+    .dokument-html .noose-kasten-info {
+        background: #f4f4f4 !important;
+        border-color: #999 !important;
     }
 
     .mud-table, .mud-table-container {

@@ -45,6 +45,104 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
+    public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
+    {
+        SweepAsync(eventData.Context, CancellationToken.None).GetAwaiter().GetResult();
+        return base.SavedChanges(eventData, result);
+    }
+
+    public override async ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
+        await SweepAsync(eventData.Context, cancellationToken);
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        Forget(eventData.Context);
+        base.SaveChangesFailed(eventData);
+    }
+
+    public override Task SaveChangesFailedAsync(
+        DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        Forget(eventData.Context);
+        return base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
+    /// <summary>Drops a pending sweep whose save never happened.</summary>
+    /// <remarks>
+    /// Load-bearing. The note holds the html as it would have been stored; left behind after a failed save, the
+    /// next successful save on the same context would clean up against it and delete a picture the text does
+    /// reference - the one case where housekeeping would cost data.
+    /// </remarks>
+    private static void Forget(DbContext? context)
+    {
+        if (context is not null)
+        {
+            Pending.Remove(context);
+        }
+    }
+
+    /// <summary>What a finished save leaves to clean up: the column's final html, per carrier.</summary>
+    private sealed record Sweep(string EntityType, string EntityId, string Html);
+
+    // Handed from SavingChanges to SavedChanges. Keyed on the context because this interceptor is a singleton
+    // and every operation brings its own short-lived one; the table drops the entry with the context.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DbContext, List<Sweep>> Pending = new();
+
+    /// <summary>Removes the pictures the saved text no longer points at, row and file.</summary>
+    /// <remarks>
+    /// After the commit and on a context of its own, deliberately: a query inside SavingChanges shares the save's
+    /// connection, and a picture must not be deleted for a write that then fails. Nothing here may throw either -
+    /// leftover bytes are a housekeeping problem, a broken save is not.
+    /// <para>
+    /// The row goes with ExecuteDelete rather than the soft-delete path: a picture nothing references any more is
+    /// not record material, and its carrier's change is audited anyway. Leaving the row behind while deleting the
+    /// file would be the worst of both - a record pointing at nothing.
+    /// </para>
+    /// </remarks>
+    private async Task SweepAsync(DbContext? context, CancellationToken cancellationToken)
+    {
+        if (context is null || !Pending.TryGetValue(context, out var sweeps))
+        {
+            return;
+        }
+        Pending.Remove(context);
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var storage = scope.ServiceProvider.GetRequiredService<ITextImageStorageService>();
+            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+            await using var db = await factory.CreateDbContextAsync(cancellationToken);
+            foreach (var sweep in sweeps)
+            {
+                var rows = await db.TextImages.AsNoTracking()
+                    .Where(t => t.EntityType == sweep.EntityType && t.EntityId == sweep.EntityId)
+                    .Select(t => new { t.Id, t.FileNameSaved })
+                    .ToListAsync(cancellationToken);
+                var verwaist = rows.Where(r => !sweep.Html.Contains(r.Id, StringComparison.Ordinal)).ToList();
+                if (verwaist.Count == 0)
+                {
+                    continue;
+                }
+                var ids = verwaist.Select(r => r.Id).ToList();
+                await db.TextImages.IgnoreQueryFilters()
+                    .Where(t => ids.Contains(t.Id))
+                    .ExecuteDeleteAsync(cancellationToken);
+                foreach (var row in verwaist)
+                {
+                    storage.Delete(row.FileNameSaved);
+                }
+            }
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
     /// <summary>Whether a column is worth a pass: a picture to file away, a caption to fold, or a heading to anchor.</summary>
     /// <remarks>
     /// The heading arm is load-bearing. Without it the anchor pass only ever saw texts that happened to carry an
@@ -82,7 +180,11 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
                 {
                     continue;
                 }
-                if (property.CurrentValue is not string html || !NeedsRewrite(html))
+                // an image carrier is always worth the pass, even with nothing left to rewrite: removing the last
+                // picture from a text leaves html that needs no rewriting at all, and the sweep afterwards is the
+                // only thing that takes its file and its row with it
+                var traegtBilder = RichTextImageFields.For(entry.Metadata.ClrType).Contains(field);
+                if (property.CurrentValue is not string html || !(traegtBilder || NeedsRewrite(html)))
                 {
                     continue;
                 }
@@ -109,14 +211,24 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
             stored = RichTextAnchors.ToStored(stored);
             // images only for the carriers whose pictures the internal endpoint may serve; anchors reach further,
             // so a handbook article gets its heading ids while its base64 deliberately stays inline
-            var replaced = RichTextImageFields.For(type).Contains(field)
+            var traegtBilder = RichTextImageFields.For(type).Contains(field);
+            var replaced = traegtBilder
                 ? await ReplaceImagesAsync(ctx, storage, type.Name, entityId, stored, cancellationToken)
                 : stored;
+            // CleanWithAnchors, not Clean: the ids RichTextAnchors has just written are dropped by the ordinary
+            // pass, which is exactly what keeps a pasted anchor out of every other rich-text field
+            var sauber = HtmlCleanup.CleanWithAnchors(replaced);
+            if (traegtBilder)
+            {
+                // an image swapped out or deleted leaves its row and its file behind; the sweep after the commit
+                // removes what the saved text no longer points at
+                Pending.GetOrCreateValue(ctx).Add(new Sweep(type.Name, entityId, sauber));
+            }
             if (ReferenceEquals(stored, html) && ReferenceEquals(replaced, stored))
             {
                 continue;
             }
-            entry.Property(field).CurrentValue = HtmlCleanup.Clean(replaced);
+            entry.Property(field).CurrentValue = sauber;
         }
     }
 

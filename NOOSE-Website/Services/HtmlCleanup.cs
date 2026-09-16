@@ -21,6 +21,21 @@ public static partial class HtmlCleanup
         return Generate().Sanitize(html);
     }
 
+    /// <summary>Sanitizes rich text that has just been given heading anchors, keeping them.</summary>
+    /// <remarks>
+    /// For <see cref="Infrastructure.RichTextHtmlInterceptor"/> and nothing else. It runs
+    /// <see cref="RichTextAnchors.ToStored"/> on the carriers in <see cref="RichTextAnchorFields"/> and then
+    /// cleans the result; the ordinary <see cref="Clean"/> would strip the ids it had just written.
+    /// </remarks>
+    public static string CleanWithAnchors(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+        return Generate(allowHeadingIds: true).Sanitize(html);
+    }
+
     /// <summary>Sanitizes NOOSEI diff markup: the same allowlist plus the ins/del marks the diff renderer adds.</summary>
     public static string CleanDiff(string? html)
     {
@@ -111,14 +126,15 @@ public static partial class HtmlCleanup
 
     /// <summary>What the sanitizer keeps; the editor cleans a paste against the same lists.</summary>
     /// <remarks>
-    /// Carries "id" although the global attribute list does not: the editor may keep a heading id while typing,
-    /// and the server decides on save (headings keep it, everything else loses it). Listing it here and nowhere
-    /// else is deliberate — the client cleaner is a convenience, the sanitizer is the rule.
+    /// "id" is not here either. A pasted anchor is never worth keeping: <see cref="RichTextAnchors"/> assigns the
+    /// ids on save, from the heading text, for the carriers registered in <see cref="RichTextAnchorFields"/> — a
+    /// name carried in from somewhere else would only collide with one of those or with the page's own.
     /// </remarks>
     public static ContentProfile Profile { get; } = new(
-        AllowedTagNames, [.. AllowedAttributeNames, "id"], AllowedCssPropertyNames, AllowedSchemeNames);
+        AllowedTagNames, AllowedAttributeNames, AllowedCssPropertyNames, AllowedSchemeNames);
 
-    private static HtmlSanitizer Generate(bool allowDiffMarks = false, bool allowImagePlaceholder = false)
+    private static HtmlSanitizer Generate(
+        bool allowDiffMarks = false, bool allowImagePlaceholder = false, bool allowHeadingIds = false)
     {
         var s = new HtmlSanitizer();
 
@@ -155,19 +171,23 @@ public static partial class HtmlCleanup
             s.AllowedSchemes.Add(scheme);
         }
 
-        // id survives on headings and nowhere else: the table of contents links to them, and RichTextAnchors
-        // writes those ids on save. Kept out of the global allowlist because an id is a document-wide name -
-        // in a comment, a ticket or a public page an author could otherwise shadow an id the page itself uses,
-        // redirect an in-page link, or break a label/aria reference, from any field that accepts rich text.
-        s.RemovingAttribute += (_, e) =>
+        // id survives on headings, and only in the one pass that writes them: RichTextAnchors has just assigned
+        // them inside the interceptor and this call cleans its output. Everywhere else it goes, because an id is
+        // a document-wide name - in a comment, a ticket or a public page an author could otherwise shadow an id
+        // the page itself uses, redirect an in-page link, or break a label/aria reference, from any field that
+        // accepts rich text. H4-H6 are not listed because they are not allowed tags to begin with.
+        if (allowHeadingIds)
         {
-            if (e.Reason == RemoveReason.NotAllowedAttribute
-                && string.Equals(e.Attribute.Name, "id", StringComparison.OrdinalIgnoreCase)
-                && e.Tag.NodeName is "H1" or "H2" or "H3" or "H4" or "H5" or "H6")
+            s.RemovingAttribute += (_, e) =>
             {
-                e.Cancel = true;
-            }
-        };
+                if (e.Reason == RemoveReason.NotAllowedAttribute
+                    && string.Equals(e.Attribute.Name, "id", StringComparison.OrdinalIgnoreCase)
+                    && e.Tag.NodeName is "H1" or "H2" or "H3")
+                {
+                    e.Cancel = true;
+                }
+            };
+        }
 
         // data: stays image-only; a data: href is a phishing vector
         s.PostProcessNode += (_, e) =>

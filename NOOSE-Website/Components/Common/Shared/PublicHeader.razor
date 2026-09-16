@@ -34,7 +34,7 @@
                     </MudBadge>
                 }
                 @Actions
-                <form method="post" action="/Account/Logout">
+                <form method="post" action="/Account/Logout" onsubmit="if (window.nooseEntwuerfeLoeschen) { window.nooseEntwuerfeLoeschen(); }">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="/" />
                     <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"

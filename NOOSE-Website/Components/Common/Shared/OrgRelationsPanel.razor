@@ -53,6 +53,9 @@
 </MudStack>
 
 @code {
+
+    /// <summary>The types this panel offers; the same list goes to the picker and to the service.</summary>
+    private static readonly string[] OrgTypes = [nameof(Faction), nameof(PersonGroup), nameof(Party)];
     [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
     [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
@@ -94,7 +97,7 @@
         // exclude already-linked targets and self
         var all = _lists.Values.SelectMany(l => l).ToList();
         var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
-            allowedTypes: [nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            allowedTypes: OrgTypes,
             excluded: LinkDialog.Exclusions(all, EntityType, EntityId),
             designation: s.Designation,
             labelCaption: "Notiz (optional)",
@@ -105,7 +108,8 @@
         }
         try
         {
-            await LinkService.CreateAsync(EntityType, EntityId, choice.TargetType, choice.TargetId, choice.Label, User, s.Kind);
+            await LinkService.CreateAsync(EntityType, EntityId, choice.TargetType, choice.TargetId, choice.Label, User, s.Kind,
+                allowedTargetTypes: OrgTypes);
             Snackbar.Add($"{s.Designation} gespeichert.", Severity.Success);
             await LoadAsync();
         }

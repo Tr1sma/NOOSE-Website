@@ -61,7 +61,7 @@
                             <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initial(DisplayName(auth.User))</MudAvatar>
                         }
                     </MudLink>
-                    <form method="post" action="/Account/Logout">
+                    <form method="post" action="/Account/Logout" onsubmit="if (window.nooseEntwuerfeLoeschen) { window.nooseEntwuerfeLoeschen(); }">
                         <AntiforgeryToken />
                         <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout"
                                        Color="Color.Inherit" aria-label="Abmelden" title="Abmelden" />

@@ -56,6 +56,9 @@
 </MudStack>
 
 @code {
+
+    /// <summary>The types this panel offers; the same list goes to the picker and to the service.</summary>
+    private static readonly string[] OrgTypes = [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)];
     [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
@@ -81,7 +84,7 @@
     {
         // Exclude already-linked targets and self
         var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
-            allowedTypes: [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)],
+            allowedTypes: OrgTypes,
             excluded: LinkDialog.Exclusions(_list, nameof(Taskforce), TaskforceId),
             designation: "Verknüpfung",
             labelCaption: "Notiz (optional)",
@@ -92,7 +95,8 @@
         }
         try
         {
-            await LinkService.CreateAsync(nameof(Taskforce), TaskforceId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default);
+            await LinkService.CreateAsync(nameof(Taskforce), TaskforceId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default,
+                allowedTargetTypes: OrgTypes);
             Snackbar.Add("Verknüpfung gespeichert.", Severity.Success);
             await LoadAsync();
         }

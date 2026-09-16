@@ -102,9 +102,12 @@ public sealed class DossierSummaryService(
             return View(existing, stale: false);
         }
 
-        var brief = await RequestBriefAsync(entityType, entityId, context.Title, userPrompt, actor, cancellationToken)
-            ?? throw new InvalidOperationException(
+        var (brief, briefModel) = await RequestBriefAsync(entityType, entityId, context.Title, userPrompt, actor, cancellationToken);
+        if (brief is null)
+        {
+            throw new InvalidOperationException(
                 "NOOSEI konnte keinen strukturierten Kurzbrief erzeugen. Bitte später erneut versuchen.");
+        }
 
         if (existing is null)
         {
@@ -116,7 +119,9 @@ public sealed class DossierSummaryService(
         existing.SchemaVersion = NooseiSchemas.KurzbriefVersion;
         existing.PromptVersion = NooseiPrompts.BriefPromptVersion;
         // the upstream the brief actually ran on; a model id only identifies a model together with its endpoint
-        existing.Model = _o.ModelFor((await providerService.GetStateAsync(cancellationToken)).Active, LlmFeature.Brief);
+        // from the answer, not a second lookup: resolving the upstream again can straddle the ten-second
+        // cache and stamp this row with a model the request never ran on
+        existing.Model = briefModel ?? _o.ModelFor((await providerService.GetStateAsync(cancellationToken)).Active, LlmFeature.Brief);
         existing.GeneratedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -131,7 +136,7 @@ public sealed class DossierSummaryService(
     /// provider pool answers a capability failure, never a malformed answer — a provider that accepted the schema
     /// and then wrote nonsense will do it again on the next provider, and the agent pays twice for nothing.
     /// </remarks>
-    private async Task<DossierBrief?> RequestBriefAsync(
+    private async Task<(DossierBrief? Brief, string? Model)> RequestBriefAsync(
         string entityType, string entityId, string title, string userPrompt, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         var rungs = Rungs().ToList();
@@ -155,7 +160,9 @@ public sealed class DossierSummaryService(
 
                 if (Parse(answer.Text) is { } brief)
                 {
-                    return brief;
+                    // the model comes back with the answer: the rung that succeeded decides it, and resolving
+                    // the upstream a second time afterwards can name a different one
+                    return (brief, answer.Model);
                 }
                 // the shape was served, the content was not: skip every rung that only rerolls the provider
                 while (i + 1 < rungs.Count && rungs[i + 1].WidensProvidersOnly)
@@ -168,7 +175,7 @@ public sealed class DossierSummaryService(
             {
             }
         }
-        return null;
+        return (null, null);
     }
 
     private IEnumerable<(string Prompt, LlmResponseFormat Format, bool RequireCapable, bool WidensProvidersOnly)> Rungs()
