@@ -66,8 +66,10 @@ public interface IArchivable
 Implementiert von `Person`, `Faction`, `PersonGroup`, `Party`, `Case`, `Operation`, `Taskforce`.
 
 Spalten (deutsch, wie im Rest des Modells): `IstArchiviert` (`bool`, nicht nullbar, Default `false`),
-`ArchiviertAm` (`datetime?`, UTC), `ArchiviertVonId` (`string?`, FK auf `Agent`, `DeleteBehavior.Restrict`),
-`Archivgrund` (`string?`, 300 Zeichen).
+`ArchiviertAm` (`datetime?`, UTC), `ArchiviertVonId` (`string?`), `Archivgrund` (`string?`, 300 Zeichen).
+
+`ArchiviertVonId` bleibt eine nackte Spalte **ohne** Navigation und ohne FK — genau wie das vorhandene
+`GeloeschtVonId` (`Person.cs:113`). Ein FK auf die Identity-Tabelle wäre die Ausnahme, nicht die Regel.
 
 ### 4.2 Zentraler Helfer
 
@@ -140,7 +142,7 @@ Enum-Name statt eines Absturzes:
 | `GetListAsync` der sieben Dienste | neuer Parameter `ArchiveFilter filter = ArchiveFilter.Active` |
 | `SearchAsync` der sieben Dienste | immer `OnlyActive()` — speist `LinkDialog.razor:538-558`, `QuickAddDialog`, alle Picker |
 | `SearchQuery` | neues Feld `IncludeArchived` (Form wie `Fuzzy`/`Deep`, `Models/Common/SearchQuery.cs`) |
-| Suchanbieter der sieben Typen | `RecordSearchProviders.cs`, `OperationsSearchProviders.cs`: `OnlyActive()` außer bei `query.IncludeArchived` — **in `SearchAsync` und `ResolveIdsAsync`**, sonst holt die phonetische Zweitwelle über `SearchSideIndex` genau die Akten zurück, die die erste Welle ausgelassen hat |
+| Suchanbieter der sieben Typen | `OnlyActive()` außer bei `query.IncludeArchived` — **eine Zeile im privaten `Visible(db, query)`-Helfer** jedes Anbieters (`RecordSearchProviders.cs:77/188/273/354/439/523`, `OperationsSearchProviders.cs:75`). `SearchAsync`, `ResolveIdsAsync`, `QuickAsync` und der Fuzzy-Durchlauf gehen alle dort durch; damit ist die phonetische Zweitwelle über `SearchSideIndex` mit abgedeckt, die sonst genau die Akten zurückgeholt hätte, die die erste Welle ausgelassen hat |
 | `SearchService.QuickSearchAsync` | baut die `SearchQuery` selbst ⇒ Kommandopalette, `MentionService.CandidatesAsync:221` und die Kompromittierungs-Felder sind mit dem Standardwert erledigt |
 | `DashboardService` | Kacheln, Gefährdungsliste und „veraltet"-Zähler auf `OnlyActive()` |
 | `Services/Statistics/*` | `StatisticsService`, `ThreatStatisticsService`, `ThroughputStatisticsService`, `NetworkStatisticsService` und der Lagebericht zählen nur aktive Akten |
