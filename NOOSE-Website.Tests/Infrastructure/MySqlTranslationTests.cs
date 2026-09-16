@@ -1254,6 +1254,16 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.Contains("IstGeloescht", existing, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheRecordArchivePredicate_Translates()
+    {
+        // the archive filter rides on an interface property; SQLite accepts the shape, Pomelo must too
+        var sql = _db.People.OnlyActive().OrderBy(p => p.Name).Take(5).ToQueryString();
+
+        Assert.Contains("IstArchiviert", sql, StringComparison.Ordinal);
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+    }
+
     private static int Occurrences(string text, string needle)
     {
         var count = 0;
