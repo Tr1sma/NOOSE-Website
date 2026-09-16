@@ -323,6 +323,8 @@ public static class ChangelogContent
                 + "an, erscheint eine verständliche Meldung statt einer technischen.", "Bedienung"),
             Fix("2.1.60-einfuegen-ersetzt", "Eingefügter Text landet an der Schreibmarke, statt den bereits "
                 + "geschriebenen Text zu ersetzen.", "Bedienung"),
+            Besser("2.1.61-werkzeugleiste", "Die Werkzeugleiste des Texteditors hebt sich klarer vom "
+                + "Hintergrund ab.", "Bedienung"),
         ], "1.5"),
     ];
 }
