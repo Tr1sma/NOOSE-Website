@@ -95,6 +95,11 @@ public class AgentManagementService(
 
     public async Task ReleaseAsync(string agentId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor)
     {
+        // The page was the only gate. Releasing an account hands out a rank - up to Director - and the socket
+        // takes whatever it is sent, so the check has to sit here, where every path through it passes.
+        Permission.RequireWriteAccess(actor);
+        Permission.RequireLeadership(actor);
+
         var agent = await GetOrThrow(agentId);
         var altRank = agent.Rank;
         agent.Status = AgentStatus.Active;
@@ -117,6 +122,7 @@ public class AgentManagementService(
 
     public async Task ReleaseAsPartnerAsync(string agentId, PartnerAgency agency, PartnerRank partnerRank, ClaimsPrincipal actor)
     {
+        Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
 
         var agent = await GetOrThrow(agentId);
@@ -142,6 +148,10 @@ public class AgentManagementService(
 
     public async Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor)
     {
+        // same reason as the release above: this one blocks an account, and it had no check at all
+        Permission.RequireWriteAccess(actor);
+        Permission.RequireLeadership(actor);
+
         var agent = await GetOrThrow(agentId);
         agent.Status = AgentStatus.Blocked;
         agent.BlockedReason = string.IsNullOrWhiteSpace(reason) ? "Registrierung abgelehnt" : reason;
@@ -152,6 +162,7 @@ public class AgentManagementService(
 
     public async Task PromoteApplicantToAgentAsync(string applicantUserId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor)
     {
+        Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
 
         var agent = await GetOrThrow(applicantUserId);
@@ -212,6 +223,10 @@ public class AgentManagementService(
         {
             throw new InvalidOperationException("Der Codename darf nicht leer sein.");
         }
+
+        // This writes another agent's codename, real name and badge straight through, without the request the
+        // rest of the workforce goes over. Both callers already gate on leadership; the socket did not.
+        Permission.RequireLeadership(actor);
 
         await BadgeNumberGate.WaitAsync();
         try
@@ -661,6 +676,7 @@ public class AgentManagementService(
 
     public async Task BlockAsync(string agentId, string reason, ClaimsPrincipal actor)
     {
+        Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
 
         if (actor.GetAgentId() == agentId)

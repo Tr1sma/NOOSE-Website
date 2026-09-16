@@ -321,6 +321,8 @@ public static class ChangelogContent
                 + "mehr.", "Bedienung"),
             Fix("2.1.59-doppelte-eingabe", "Legen zwei Redakteure gleichzeitig dieselbe Fassung oder Adresse "
                 + "an, erscheint eine verständliche Meldung statt einer technischen.", "Bedienung"),
+            Fix("2.1.60-einfuegen-ersetzt", "Eingefügter Text landet an der Schreibmarke, statt den bereits "
+                + "geschriebenen Text zu ersetzen.", "Bedienung"),
         ], "1.5"),
     ];
 }

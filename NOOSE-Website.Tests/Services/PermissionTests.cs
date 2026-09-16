@@ -73,12 +73,18 @@ public sealed class PermissionTests
         AssertAllowed(() => Permission.RequireWriteAccess(actor));
     }
 
+    /// <summary>The guard and MayWrite() have to agree, or the interface and the service disagree about who writes.</summary>
+    /// <remarks>
+    /// This used to assert the opposite. The guard checked only-reader and partner, MayWrite() checked those two
+    /// plus demo - so every button was hidden from the demo visitor while the service behind it let them through,
+    /// and a whole write path ran before the barrier refused at SaveChanges. The demo SEEDING is unaffected:
+    /// DemoAutoSetup.BuildActor never sets the demo claim, only admin and Director.
+    /// </remarks>
     [Fact]
-    public void RequireWriteAccess_demoVisitor_passes()
+    public void RequireWriteAccess_demoVisitor_throws()
     {
-        // This guard only blocks only-readers and partners; demo is not gated here.
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsDemo();
-        AssertAllowed(() => Permission.RequireWriteAccess(actor));
+        AssertDenied(() => Permission.RequireWriteAccess(actor));
     }
 
     [Fact]

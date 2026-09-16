@@ -168,7 +168,7 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=18");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=19");
             _ref = DotNetObjectReference.Create(this);
             // the editor types a caption line; the stored row carries figure/figcaption
             Value = RichTextFigure.ToEditor(Value);
@@ -321,7 +321,7 @@ else if (_lastCost is { } cost)
         }
         try
         {
-            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=18");
+            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=19");
             await module.InvokeVoidAsync("entwurfVerwerfenNachSchluessel", agentId + ":" + draftKey);
         }
         catch (JSDisconnectedException)

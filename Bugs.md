@@ -29,8 +29,17 @@ das Falsche im Normalbetrieb) → **P2** (Randfall, Last, stiller Teilausfall) �
 
 ## Stand der Behebung
 
-**Behoben: 35 von 36.** `dotnet build NOOSE-Website.slnx` grün (0 Fehler; die Produktions-Warnung
-`CS8604` ist weg). `dotnet test` → **7558 Tests, 0 Fehlschläge**. **Keine Migration nötig.**
+**Behoben: 41 von 42** (35 aus dieser Liste, dazu sechs Nachträge unten). Build grün (0 Fehler; die
+Produktions-Warnung `CS8604` ist weg), `dotnet test` → **7558 Tests, 0 Fehlschläge**.
+**Keine Migration nötig.** Sieben Editor-Fixes sind zusätzlich **im Browser gegen das echte Quill-Bundle
+nachgewiesen** (Tabelle weiter unten).
+
+Dazu sechs Nachträge aus einem zweiten Review (37–42), alle von mir am Code nachgeprüft und behoben —
+siehe die Abschnitte unten. **Einzige verbleibende Entscheidung: die Rotation der
+Data-Protection-Schlüssel**, weil sie alle abmeldet.
+
+Aus demselben zweiten Review **widerlegt**: „Der Testlauf steht aus" (er lief, dreimal) und „Worktree
+dirty" (war zwischenzeitlich richtig, ist inzwischen committet).
 
 **Was der Testlauf nicht abdeckt:** `richtext.js`, `app.css` und die `.razor`-Änderungen — dieses Projekt
 hat kein bUnit, und JS/CSS laufen in keinem Test. Konkret ungetestet und nur gelesen: Word-Einfügen (2, 8),
@@ -81,6 +90,77 @@ einen Blick im Browser brauchen.**
 `RichTextFigureTests.cs` geschrieben worden — einer davon rot. Beide sind entfernt.
 
 **27 Changelog-Zeilen** (`2.1.33` bis `2.1.59`) für alles, was ein Agent von außen bemerkt.
+
+### Nachtrag: ein P0, den dieser Review übersehen hatte
+
+**37. Einfügen aus der Zwischenablage ersetzte das ganze Dokument** — `NOOSE-Website/wwwroot/js/richtext.js:580`
+
+`editor.clipboard.dangerouslyPasteHTML(sauber, 'user')`. Die Methode hat im vendorten Quill 1.3.7 zwei
+Formen, und die mit dem **HTML als erstem Argument** ruft intern `setContents`:
+
+```js
+if ("string" == typeof t) this.quill.setContents(this.convert(t), e)
+```
+
+Das ersetzt alles, was der Editor hält. Einen Satz in einen fertigen Lagebericht einfügen löschte den
+Lagebericht. Betroffen war **jedes** Einfügen von HTML (Word, Webseite, anderer Editor) in **jedem**
+Textfeld der Seite. Die Stelle stammt aus `7e2a19e` und wurde nie im Browser gesehen.
+
+**Behoben:** die Index-Form (`dangerouslyPasteHTML(index, html, source)`) an der Schreibmarke, die Auswahl
+wird vorher gelöscht — so, wie sich ein Einfügen verhält. `?v=` auf **19** an beiden Importstellen.
+`richtext.js:2216` bleibt unverändert: das ist der NOOSEI-Korrekturpfad, wo `index < 0` ausdrücklich
+Vollersatz bedeutet.
+
+**Warum mein Review ihn nicht fand:** der Finder auf dem Einfügepfad hat die Bereinigung gelesen
+(`wandleWordListen`, Befund 2 und 8), nicht die Signatur des Aufrufs dahinter. Eine fremde
+Bibliotheks-API mit zwei Formen fällt bei reiner Codelesung durch, wenn man sie nicht nachschlägt.
+
+### Nachtrag: Rechte-Cluster in der Agentenverwaltung
+
+Aus einem zweiten Review, von mir am Code nachgeprüft und behoben:
+
+| # | Befund | Stand vorher |
+|---|---|---|
+| **38** | `AgentManagementService.ReleaseAsync` — **gar keine Rechteprüfung.** Ein Konto freigeben vergibt einen Dienstgrad bis hinauf zu Director; die einzige Schranke war die Seite. | ohne Guard |
+| **39** | `RejectAsync` — **gar keine Rechteprüfung.** Sperrt ein Konto. | ohne Guard |
+| **40** | `MasterDataChangeAsync` — schreibt Codename, Klarname und Dienstnummer eines **fremden** Kontos direkt durch, am Antragsweg vorbei. Hatte nur `RequireWriteAccess`, also keine Führungsprüfung. | nur Schreibrecht |
+| **41** | `ReleaseAsPartnerAsync`, `PromoteApplicantToAgentAsync`, `BlockAsync` — nur Rang, kein Schreibrecht. | halber Guard |
+| **42** | `Permission.RequireWriteAccess` prüfte `IsOnlyReader() \|\| IsPartner()`, `MayWrite()` zusätzlich `IsDemo()`. Die Oberfläche verbarg den Knopf, der Dienst dahinter ließ den Demo-Besucher durch — ein ganzer Schreibpfad lief, bis die Sperre beim Speichern verweigerte. | Divergenz |
+
+**Behoben:** 38–41 tragen jetzt `RequireWriteAccess` **vor** `RequireLeadership`. 42 ist auf `!actor.MayWrite()`
+umgestellt, damit Guard und Prädikat dieselbe Regel sprechen. Der Test `RequireWriteAccess_demoVisitor_passes`
+hielt genau das alte Verhalten fest — ohne Begründung, nur beschreibend — und ist zu
+`…_demoVisitor_throws` gedreht. **Das Demo-Seeding ist nicht betroffen:** `DemoAutoSetup.BuildActor` setzt
+den Demo-Claim gar nicht, sondern Admin und Director.
+
+### Nachtrag: Data-Protection-Schlüssel
+
+`NOOSE-Website/App_Data/keys/key-*.xml` lagen in der Versionsverwaltung — wer das Repo hat, kann
+Anmelde-Cookies fälschen. **Aus dem Index genommen und in `.gitignore` aufgenommen**, die Dateien bleiben
+lokal liegen (niemand wird abgemeldet). **Das ist nur der halbe Fix:** die Schlüssel stehen weiterhin in der
+git-Historie. Wirksam ist erst eine **Rotation**, und die meldet alle ab — deine Entscheidung, deshalb nicht
+von mir gemacht.
+
+### Im Browser nachgewiesen
+
+Die App selbst konnte ich nicht starten: der `DatabaseConnectionResolver` bevorzugt `ProductionConnection`
+und fällt nur zurück, wenn sie *unerreichbar* ist — ein lokaler Start hätte `MigrateAsync` und alle Seeder
+gegen die **Live-Datenbank** laufen lassen. Stattdessen habe ich `richtext.js` über einen statischen Server
+mit dem echten Quill-Bundle geladen und die Pfade mit synthetischen Zwischenablage-Ereignissen gefahren:
+
+| Befund | Nachweis |
+|---|---|
+| **37** Einfügen | `"ErsteEINGEFUEGTr Absatz…"` — an Position 5, Ausgangstext vollständig erhalten |
+| **2** Word-Raster | Zellentext da, Ausgangstext da |
+| **8** Word-Listen | wird `<ol>`, Ebene 2 trägt `ql-indent-1`, Marker „1." entfernt |
+| **7** Trennlinie | `getHtml` liefert `"<hr><p><br></p>"` statt leer |
+| **6** Auswahl-Blase | zeigt „Fett" bei gemischter Auswahl korrekt als inaktiv; ein Klick **setzt** die Fettung (`<strong>Hallo Welt</strong>`) |
+| **9** Listen-Nummern | gerendert als `1. / a. / b. / 2.` |
+| **18** Suchleiste | `flex-wrap: wrap`, `max-width: calc(100% - 16px)` |
+
+**Weiterhin nur gelesen, nicht gesehen:** die Druckfarbe (Befund 4) — dafür braucht es eine echte
+Druckvorschau — sowie die Handbuch-Rail (5), die Hinweiskarte (21) und der Entwurfs-Rundlauf (17, 29),
+weil die eine angemeldete Sitzung voraussetzen.
 
 ### Bewusst nicht behoben
 

@@ -381,6 +381,12 @@ secrets.json
 NOOSE-Website/App_Data/uploads/
 App_Data/uploads/
 
+# Die Data-Protection-Schlüssel signieren die Anmelde-Cookies. Wer sie hat, kann eine Anmeldung fälschen,
+# also gehören sie in keine Kopie des Repos. Jede Instanz erzeugt sich beim ersten Start ihre eigenen;
+# deshalb schließt deploy.ps1 App_Data vom Löschen aus, damit der Server seine behält.
+NOOSE-Website/App_Data/keys/
+App_Data/keys/
+
 # ----- NOOSE: Deploy-Artefakt (deploy.ps1 packt/entpackt es lokal) -----
 noose-publish.tgz
 /NOOSE-Website/BuildNumber.txt

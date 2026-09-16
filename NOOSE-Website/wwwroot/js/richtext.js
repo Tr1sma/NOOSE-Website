@@ -577,7 +577,14 @@ function haengeEinfuegeSauberungAn(element, editor, profil) {
         const sauber = einfuegungSaeubern(html);
         ereignis.preventDefault();
         ereignis.stopImmediatePropagation();
-        editor.clipboard.dangerouslyPasteHTML(sauber, 'user');
+        // At the caret, never as the whole document. dangerouslyPasteHTML has two shapes, and the one taking the
+        // html FIRST calls setContents - it replaces everything the editor holds. Pasting a sentence into a report
+        // wiped the report. The index form inserts, so the selection has to go first, the way a paste behaves.
+        const bereich = editor.getSelection(true) || { index: editor.getLength(), length: 0 };
+        if (bereich.length > 0) {
+            editor.deleteText(bereich.index, bereich.length, 'user');
+        }
+        editor.clipboard.dangerouslyPasteHTML(bereich.index, sauber, 'user');
     }, true);
 
     // Strg+Shift+V: insert what was copied as plain text

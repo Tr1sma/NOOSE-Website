@@ -41,9 +41,15 @@ public static class Permission
     }
 
     /// <summary>Require write access; denies read-only supervisors and partners.</summary>
+    /// <remarks>
+    /// The same three exclusions as <see cref="AgentPrincipalExtensions.MayWrite"/>, demo included. Without it the
+    /// guard and the predicate disagreed: the interface hid a button from the demo visitor while the service behind
+    /// it waved them through, so a whole write path ran - case numbers drawn, files written, entities mutated in
+    /// memory - until the write barrier refused at SaveChanges and left a bare exception behind.
+    /// </remarks>
     public static void RequireWriteAccess(ClaimsPrincipal actor)
     {
-        if (actor.IsOnlyReader() || actor.IsPartner())
+        if (!actor.MayWrite())
         {
             throw new UnauthorizedAccessException(
                 "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
