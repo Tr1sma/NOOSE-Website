@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Taskforces;
 
 /// <summary>A taskforce as a full record; members are Agents, with no person members and no classification.</summary>
 [Table("Taskforces")]
-public class Taskforce : IAuditable, ISoftDelete
+public class Taskforce : IAuditable, ISoftDelete, IArchivable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -52,4 +52,14 @@ public class Taskforce : IAuditable, ISoftDelete
     public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
+
+    [Column("IstArchiviert")]
+    public bool IsArchived { get; set; }
+    [Column("ArchiviertAm")]
+    public DateTime? ArchivedAt { get; set; }
+    [Column("ArchiviertVonId")]
+    public string? ArchivedById { get; set; }
+    /// <summary>Optional note shown on the banner and in the audit row.</summary>
+    [Column("Archivgrund")]
+    public string? ArchiveReason { get; set; }
 }

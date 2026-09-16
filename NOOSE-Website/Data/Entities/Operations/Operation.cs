@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Operations;
 
 /// <summary>An operation / mission report as a standalone event case file with assigned agents and classification.</summary>
 [Table("Operationen")]
-public class Operation : IAuditable, ISoftDelete, IClassifiableRecord
+public class Operation : IAuditable, ISoftDelete, IClassifiableRecord, IArchivable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -96,4 +96,14 @@ public class Operation : IAuditable, ISoftDelete, IClassifiableRecord
     public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
+
+    [Column("IstArchiviert")]
+    public bool IsArchived { get; set; }
+    [Column("ArchiviertAm")]
+    public DateTime? ArchivedAt { get; set; }
+    [Column("ArchiviertVonId")]
+    public string? ArchivedById { get; set; }
+    /// <summary>Optional note shown on the banner and in the audit row.</summary>
+    [Column("Archivgrund")]
+    public string? ArchiveReason { get; set; }
 }

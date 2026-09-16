@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.People;
 
 /// <summary>Central person record; fully audited and soft-deletable.</summary>
 [Table("Personen")]
-public class Person : IAuditable, ISoftDelete, IClassifiableRecord
+public class Person : IAuditable, ISoftDelete, IClassifiableRecord, IArchivable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -111,6 +111,16 @@ public class Person : IAuditable, ISoftDelete, IClassifiableRecord
     public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
+
+    [Column("IstArchiviert")]
+    public bool IsArchived { get; set; }
+    [Column("ArchiviertAm")]
+    public DateTime? ArchivedAt { get; set; }
+    [Column("ArchiviertVonId")]
+    public string? ArchivedById { get; set; }
+    /// <summary>Optional note shown on the banner and in the audit row.</summary>
+    [Column("Archivgrund")]
+    public string? ArchiveReason { get; set; }
 
     [NotMapped]
     public LifeStatus EffectiveLifeStatus

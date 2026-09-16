@@ -400,7 +400,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(p => p.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(p => p.Name).HasMaxLength(200).IsRequired();
             b.Property(p => p.ThreatDetailJson).HasColumnType("longtext");
+            b.Property(p => p.ArchiveReason).HasMaxLength(300);
             b.HasIndex(p => p.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(p => p.IsArchived);
             b.HasIndex(p => p.Name);
             b.HasIndex(p => p.IsClassified);
             // growth and capture series scan a date window over the whole table
@@ -744,7 +747,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.Targets).HasMaxLength(2000);
             b.Property(f => f.Description).HasMaxLength(2000);
             b.Property(f => f.ThreatDetailJson).HasColumnType("longtext");
+            b.Property(f => f.ArchiveReason).HasMaxLength(300);
             b.HasIndex(f => f.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(f => f.IsArchived);
             b.HasIndex(f => f.Name);
             b.HasIndex(f => f.IsClassified);
 
@@ -837,7 +843,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(g => g.Name).HasMaxLength(200).IsRequired();
             b.Property(g => g.Description).HasMaxLength(2000);
             b.Property(g => g.Targets).HasMaxLength(2000);
+            b.Property(g => g.ArchiveReason).HasMaxLength(300);
             b.HasIndex(g => g.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(g => g.IsArchived);
             b.HasIndex(g => g.Name);
             b.HasIndex(g => g.IsClassified);
 
@@ -874,7 +883,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(p => p.Description).HasMaxLength(2000);
             b.Property(p => p.Targets).HasMaxLength(2000);
             b.Property(p => p.Remarks).HasMaxLength(2000);
+            b.Property(p => p.ArchiveReason).HasMaxLength(300);
             b.HasIndex(p => p.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(p => p.IsArchived);
             b.HasIndex(p => p.Name);
             b.HasIndex(p => p.IsClassified);
 
@@ -913,7 +925,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(o => o.Expiry).HasMaxLength(4000);
             b.Property(o => o.Result).HasMaxLength(4000);
             b.Property(o => o.Remarks).HasMaxLength(2000);
+            b.Property(o => o.ArchiveReason).HasMaxLength(300);
             b.HasIndex(o => o.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(o => o.IsArchived);
             b.HasIndex(o => o.Title);
             b.HasIndex(o => o.Status);
             b.HasIndex(o => o.IsClassified);
@@ -1199,7 +1214,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.Description).HasMaxLength(4000);
             b.Property(v => v.Summary).HasMaxLength(4000);
             b.Property(v => v.ClosingNote).HasMaxLength(4000);
+            b.Property(v => v.ArchiveReason).HasMaxLength(300);
             b.HasIndex(v => v.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(v => v.IsArchived);
             b.HasIndex(v => v.Title);
             b.HasIndex(v => v.Status);
             b.HasIndex(v => v.IsClassified);
@@ -1441,7 +1459,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.Name).HasMaxLength(200).IsRequired();
             b.Property(t => t.Purpose).HasMaxLength(4000);
             b.Property(t => t.Remarks).HasMaxLength(2000);
+            b.Property(t => t.ArchiveReason).HasMaxLength(300);
             b.HasIndex(t => t.CaseNumber).IsUnique();
+            // the stock listings ask for this on every page load
+            b.HasIndex(t => t.IsArchived);
             b.HasIndex(t => t.Name);
             b.HasIndex(t => t.Status);
             b.HasIndex(t => t.IsClassified);

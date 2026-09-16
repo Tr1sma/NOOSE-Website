@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Groups;
 
 /// <summary>A person group (loose collection of people) as a case file with members, assigned agents and classification.</summary>
 [Table("Personengruppen")]
-public class PersonGroup : IAuditable, ISoftDelete, IClassifiableRecord
+public class PersonGroup : IAuditable, ISoftDelete, IClassifiableRecord, IArchivable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -85,4 +85,14 @@ public class PersonGroup : IAuditable, ISoftDelete, IClassifiableRecord
     public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
+
+    [Column("IstArchiviert")]
+    public bool IsArchived { get; set; }
+    [Column("ArchiviertAm")]
+    public DateTime? ArchivedAt { get; set; }
+    [Column("ArchiviertVonId")]
+    public string? ArchivedById { get; set; }
+    /// <summary>Optional note shown on the banner and in the audit row.</summary>
+    [Column("Archivgrund")]
+    public string? ArchiveReason { get; set; }
 }

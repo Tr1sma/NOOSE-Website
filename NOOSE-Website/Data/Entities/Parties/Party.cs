@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Parties;
 
 /// <summary>A party (political organisation) as a full case file with members, assigned agents and classification.</summary>
 [Table("Parteien")]
-public class Party : IAuditable, ISoftDelete, IClassifiableRecord
+public class Party : IAuditable, ISoftDelete, IClassifiableRecord, IArchivable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -81,4 +81,14 @@ public class Party : IAuditable, ISoftDelete, IClassifiableRecord
     public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
+
+    [Column("IstArchiviert")]
+    public bool IsArchived { get; set; }
+    [Column("ArchiviertAm")]
+    public DateTime? ArchivedAt { get; set; }
+    [Column("ArchiviertVonId")]
+    public string? ArchivedById { get; set; }
+    /// <summary>Optional note shown on the banner and in the audit row.</summary>
+    [Column("Archivgrund")]
+    public string? ArchiveReason { get; set; }
 }
