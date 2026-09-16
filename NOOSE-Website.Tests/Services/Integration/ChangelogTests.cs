@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Changelog;
@@ -436,18 +437,61 @@ public sealed class ChangelogTests
     [Fact]
     public void No_shipped_line_talks_about_the_technology()
     {
+        // Substring, not word, on purpose: German compounds are where the jargon hides, and
+        // "Datenbanktabelle" has to fail as surely as "Datenbank".
         string[] forbidden =
         [
             "Migration", "Refactor", "Interceptor", "Service", "Endpoint", "Repository",
-            "Commit", "Branch", "Datenbank", "Tabelle", "Query", "Cache", "API",
+            "Commit", "Branch", "Datenbank", "Tabelle", "Query", "Cache",
         ];
 
         var offenders = ChangelogContent.Releases
             .SelectMany(r => r.Entries)
-            .Where(e => forbidden.Any(f => e.Title.Contains(f, StringComparison.OrdinalIgnoreCase)))
+            .Where(e => forbidden.Any(f => e.Title.Contains(f, StringComparison.OrdinalIgnoreCase))
+                // "API" is the one entry short enough to hide inside an ordinary German word - it sits in the
+                // middle of "Kapitel" - so it is the only one matched as a word rather than as a substring
+                || Regex.IsMatch(e.Title, @"\bAPI\b", RegexOptions.IgnoreCase))
             .Select(e => e.Key)
             .ToList();
 
         Assert.Empty(offenders);
+    }
+
+    /// <summary>The card names a version the reader can actually find on the page.</summary>
+    /// <remarks>
+    /// A release whose lines are all withdrawn is not rendered, so announcing it sent the reader looking for a
+    /// version that is not on /neuerungen at all. The count is unaffected - it only ever counted visible lines.
+    /// </remarks>
+    [Fact]
+    public async Task The_flash_names_the_newest_release_that_still_carries_a_line()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededRelease[] three =
+        [
+            .. OneRelease(),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+                [new("1.1-a", ChangelogKind.Verbessert, "Etwas wurde besser.", null)]),
+            new("1.2", new DateTime(2026, 9, 11), "Zurückgezogen",
+                [new("1.2-a", ChangelogKind.Neu, "Wieder entfernt.", null)]),
+        ];
+        await SeedAsync(ctx, three, 1, "1.0.200");
+
+        await using (var db = ctx.NewContext())
+        {
+            var withdrawn = await db.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.2-a");
+            withdrawn.IsVisible = false;
+            await db.SaveChangesAsync();
+        }
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+
+        Assert.Equal(1, flash.Count);
+        Assert.Equal("1.1", flash.NewestVersion);
     }
 }

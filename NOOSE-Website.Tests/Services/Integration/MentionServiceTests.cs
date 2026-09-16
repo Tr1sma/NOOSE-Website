@@ -73,6 +73,28 @@ public sealed class MentionServiceTests
         Assert.Equal(["GlossaryTerm", "HandbookArticle"], notMentionable);
     }
 
+    /// <summary>A known type is not enough: the id still has to be one the parser accepts.</summary>
+    /// <remarks>
+    /// The demo instance seeds its agent with the row id "demo-agent", which sits in a mentionable type and is
+    /// not a GUID. Offering it wrote @{Agent:demo-agent} into the comment, where MentionParser never matched it
+    /// again and the reader saw the raw token.
+    /// </remarks>
+    [Fact]
+    public async Task CandidatesAsync_DropsAHitWhoseIdIsNotAGuid()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = NewService(ctx,
+        [
+            new QuickHit("Agent", PersonId, "Falcon", "NOOSE-42"),
+            new QuickHit("Agent", "demo-agent", "Demo", string.Empty),
+        ]);
+
+        var candidates = await svc.CandidatesAsync("a", Viewer(mayRealName: false));
+
+        Assert.Contains(candidates, c => c.Id == PersonId);
+        Assert.DoesNotContain(candidates, c => c.Id == "demo-agent");
+    }
+
     // ---- ResolveAsync ------------------------------------------------------
 
     [Fact]
@@ -306,14 +328,15 @@ public sealed class MentionServiceTests
     public async Task CandidatesAsync_IncludesSearchRecords()
     {
         using var ctx = new SqliteTestContext();
-        var hits = new List<QuickHit> { new("Person", "pid", "Max Mustermann", "NOOSE-P-2026-0001") };
+        // a real row id, not a placeholder: the picker only offers what the parser can read back
+        var hits = new List<QuickHit> { new("Person", PersonId, "Max Mustermann", "NOOSE-P-2026-0001") };
         var (svc, _) = NewService(ctx, hits);
 
         var result = await svc.CandidatesAsync("Max", Viewer(mayRealName: false));
 
         var hit = Assert.Single(result);
         Assert.Equal("Person", hit.Type);
-        Assert.Equal("pid", hit.Id);
+        Assert.Equal(PersonId, hit.Id);
         Assert.Equal("Max Mustermann", hit.Display);
         Assert.Equal("NOOSE-P-2026-0001", hit.Sub);
     }

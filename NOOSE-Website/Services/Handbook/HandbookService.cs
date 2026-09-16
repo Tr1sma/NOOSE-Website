@@ -160,7 +160,11 @@ public sealed class HandbookService(IDbContextFactory<AppDbContext> dbFactory, I
         var articles = articleIds.Count == 0
             ? []
             : await db.HandbuchArtikel.AsNoTracking()
-                .Where(a => articleIds.Contains(a.Id) && (includeHidden || a.IsVisible))
+                // the chapter counts too, exactly as GetArticleAsync counts it: a link offered here and refused
+                // there sends the reader to "not found" for a target the editor deliberately withdrew
+                .Where(a => articleIds.Contains(a.Id)
+                    && (includeHidden
+                        || (a.IsVisible && db.HandbuchKapitel.Any(c => c.Id == a.ChapterId && c.IsVisible))))
                 .Select(a => new { a.Id, a.Slug, a.Title })
                 .ToListAsync(cancellationToken);
         var byId = articles.ToDictionary(a => a.Id);

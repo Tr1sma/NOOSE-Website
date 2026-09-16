@@ -437,8 +437,13 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   36 Seiten je Aufruf läuft und Prerendering ihn verdoppelt. **Jeder Schreibpfad ruft `Evict()`** — sonst
   sieht ein Redakteur seine eigene Änderung zehn Minuten lang nicht;
   `An_edited_article_is_visible_to_the_help_button_at_once` hält das.
-- **Bestehenden Artikel umformulieren ⇒ `HandbookContent.Revision` hochzählen.** Ein neuer Artikel
-  braucht das nicht; er wird an seinem fehlenden Key erkannt.
+- **Jede Änderung an einer bestehenden Zeile ⇒ `HandbookContent.Revision` hochzählen** — Text, Titel,
+  Slug, Kurzbeschreibung, Diagramm- oder Nav-Schlüssel. Ein neuer Artikel braucht das nicht; er wird an
+  seinem fehlenden Key erkannt. **Reihenfolge und Kapitelzugehörigkeit sind davon ausgenommen**: die zieht
+  der Seeder auch ohne Bump nach, weil sie Struktur sind und nicht Text. Vorher standen sie hinter dem
+  Revisions-Guard, und ein mitten in ein Kapitel eingefügter Artikel bekam damit dieselbe
+  `Reihenfolge` wie der, den er verdrängte — die Sortierung zwischen den beiden war danach undefiniert.
+  Eine redaktionell angefasste Zeile (`IstAngepasst`) bleibt auch davon unberührt.
 - **Slugs im Erstbestand schon sauber schreiben** (Kleinbuchstaben, Bindestriche, keine Umlaute). Der
   Seeder schreibt sie roh, der Editor bereinigt — `Every_shipped_slug_is_already_url_clean` hält beide zusammen.
 - **Eine neue Seite braucht einen Artikel.** `Every_menu_entry_has_an_article` fordert je `NavEntry` einen
@@ -455,6 +460,10 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   „Fahndung" in „Fahndungsliste"), jeder Begriff **einmal je Block**.
   Wortgrenzen zählen **Buchstaben, Ziffern und kombinierende Zeichen** — ohne Letztere reißt ein zerlegtes
   „Akte&#x0300;" seinen Akzent aus der Blase heraus.
+  **Die Wortgrenze endet nicht am Textknoten.** `GlossaryHtml.Neighbour` reicht das Zeichen links und rechts
+  **über Inline-Tags hinweg** an `LongestAt` weiter; ein Block, ein `<br>` oder ein Bild beendet das Wort.
+  Ohne das leuchtete „Fahndung" in `Fahndung<b>sliste</b>` — was der Editor schreibt, sobald jemand eine
+  Silbe fettet —, also wieder eine **falsche** Erklärung mitten im Wort statt einer fehlenden.
   **Whitespace im Begriff ist tolerant** (`GlossaryMatcher.MatchLength`): der Editor schreibt für einen
   doppelten oder abschließenden Leerschritt ein `&nbsp;`, und ein strenger Vergleich verfehlte dann den
   langen Begriff und setzte die Blase auf das Wort *darin* — „Senior&nbsp;Special&nbsp;⟨Agent⟩", also eine
@@ -468,9 +477,10 @@ Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-
   fängt die Dublette ab, die sonst erst den ersten Start sprengt.
 - **Schreiben dürfen Führung und HRB** (`Permission.RequireHrbOrLeadershipWrite` — die Schreib-Variante
   des vorhandenen `RequireHrbOrLeadership`, das nur den Zugang zum Bewerbungswesen regelt).
-- **Handbuch und Glossar sind zwei Suchkategorien** (`Quick | SideIndexed | Assistant`, also **kein** `Heavy`:
-  der Artikeltext ist longtext und bleibt draußen — gefunden wird über Titel, Kurzbeschreibung und Kapitel,
-  so wie es auch das Suchfeld im Handbuch tut).
+- **Handbuch und Glossar sind zwei Suchkategorien** (`Quick | SideIndexed | Assistant`). **Kein `Heavy`** —
+  nicht weil `Quick` das verböte (`Document` und `Meeting` tragen beides), sondern weil der Artikeltext
+  longtext ist und draußen bleiben soll: gefunden wird über Titel, Kurzbeschreibung und Kapitel, so wie es
+  auch das Suchfeld im Handbuch tut.
 - **Der Slug ist der Schlüssel des Artikels im ganzen Suchpfad** — Treffer, Index-Eintrag und `ResolveIdsAsync`.
   `/handbuch/{Slug}` ist die Adresse, eine Id dort ergibt 404. Und die Zweitwelle entdoppelt ihre Kandidaten
   gegen die schon gefundenen `TargetId`s: mit zwei verschiedenen Schlüsseln kam **jeder** Artikel, den die
@@ -518,6 +528,10 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
   und sofort wieder überschrieben, der Schritt konnte nie abhaken. Dagegen steht jetzt ein **Schloss je Agent**
   (gestreift, statisch) um Lesen-Ändern-Schreiben **und** den Cache-Write. Im Testharnisch ist das unsichtbar:
   `SqliteTestContext` gibt jedem Context dieselbe offene Verbindung und serialisiert von selbst.
+- **Auch `GetAsync` füllt den Cache unter demselben Schloss**, mit Doppelprüfung darin. Ein Lesefehlschlag
+  holt den Blob sonst außerhalb des Schlosses, eine Mutation schreibt dazwischen, und der Leser legt seinen
+  Stand von **vor** der Mutation wieder obenauf — dieselbe verlorene Änderung wie oben, nur von der Leseseite
+  aus betreten. Der Schnellpfad (Cache-Treffer) läuft weiter ohne Schloss.
 
 ## Changelog pflegen (`/neuerungen`)
 

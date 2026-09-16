@@ -156,9 +156,11 @@ internal static class InvestigationChapter
                 <p>Die <strong>Asservatenkammer</strong> führt Buch über sichergestellte Gegenstände. Jede
                 Bewegung ist eine Buchung: <em>Einlagerung</em> oder <em>Herausnahme</em>, mit Menge, Datum
                 und dem Agenten, der sie vorgenommen hat.</p>
-                <p>Der Bestand ergibt sich aus den Buchungen, du kannst ihn nicht direkt setzen. Willst du
-                einen Posten auf null bringen, buchst du eine Herausnahme - und wenn der Bestand rechnerisch
-                negativ würde, gleichst du vorher mit einer Korrektur-Einlagerung aus.</p>
+                <p><strong>Einlagern darf jeder Agent, eine Herausnahme bucht nur die Führung.</strong> Was
+                hereinkommt, trägst du also selbst ein; was hinausgeht, lässt du buchen.</p>
+                <p>Der Bestand ergibt sich aus den Buchungen, er lässt sich nicht direkt setzen. Soll ein
+                Posten auf null, geschieht das über eine Herausnahme - und wenn der Bestand rechnerisch negativ
+                würde, gleicht eine Korrektur-Einlagerung vorher aus.</p>
                 <p>Jeder Gegenstand kann einem <strong>Besitzer</strong> zugeordnet werden - einer Person oder
                 einer Fraktion. Dort taucht er dann im Abschnitt <em>Asservate</em> auf.</p>
                 """,

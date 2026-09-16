@@ -73,23 +73,31 @@ public sealed class GlossaryMatcher
     }
 
     /// <summary>The longest phrase starting exactly at <paramref name="index"/>, or null.</summary>
+    /// <param name="before">Character preceding this text in the rendered flow, across inline tags.</param>
+    /// <param name="after">Character following this text in the rendered flow, across inline tags.</param>
     /// <remarks>
     /// Both ends must sit on a word boundary. German compounds are the reason: without it "Fahndung" lights up
     /// inside "Fahndungsliste" and "Agent" inside "Agententätigkeit". A term split across inline tags
     /// (<c>Ver&lt;b&gt;schluss&lt;/b&gt;sache</c>) is missed on purpose - matching across nodes would mean
     /// re-cutting the markup.
     /// <para>
+    /// The boundary is NOT the end of the text node, which is why the caller passes the neighbours in. A word can
+    /// continue in the next node (<c>Fahndung&lt;b&gt;sliste&lt;/b&gt;</c>, which the editor writes as soon as
+    /// somebody bolds a syllable), and judging the edge against the node alone put the bubble on "Fahndung" in the
+    /// middle of "Fahndungsliste" - a wrong explanation, not a missing one.
+    /// </para>
+    /// <para>
     /// Every candidate is measured rather than the first hit taken, because with flexible whitespace a longer
     /// phrase does not necessarily consume more characters.
     /// </para>
     /// </remarks>
-    public Match? LongestAt(string text, int index)
+    public Match? LongestAt(string text, int index, char? before = null, char? after = null)
     {
         if (string.IsNullOrEmpty(text) || index < 0 || index >= text.Length)
         {
             return null;
         }
-        if (index > 0 && IsWordCharacter(text[index - 1]))
+        if (index > 0 ? IsWordCharacter(text[index - 1]) : before is { } b && IsWordCharacter(b))
         {
             return null;
         }
@@ -107,7 +115,7 @@ public sealed class GlossaryMatcher
                 continue;
             }
             var end = index + length;
-            if (end < text.Length && IsWordCharacter(text[end]))
+            if (end < text.Length ? IsWordCharacter(text[end]) : after is { } a && IsWordCharacter(a))
             {
                 continue;
             }

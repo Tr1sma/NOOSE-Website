@@ -80,6 +80,19 @@ public sealed class HandbookTests
     private static readonly HandbookContent.SeededTerm[] OneTerm =
         [new("beg-a", "Codename", "Der Name, unter dem dich alle sehen.", Synonyms: "Deckname", ArticleKey: "art-a")];
 
+    /// <summary>The same chapter with one article pushed in FRONT of the existing one.</summary>
+    private static HandbookContent.SeededChapter[] ArticleInserted()
+        =>
+        [
+            new("kap-a", "erste-schritte", "Erste Schritte", "Wie du anfängst.", "Start",
+            [
+                new("art-neu", "profil", "Dein Profil", "Zuerst das Profil.",
+                    "<p>Trag deinen Codename ein.</p>"),
+                new("art-a", "anmelden", "Anmelden", "Wie du hereinkommst.",
+                    "<p>Die Anmeldung läuft über Discord.</p>"),
+            ]),
+        ];
+
     // --- the seeder -------------------------------------------------------
 
     [Fact]
@@ -609,5 +622,68 @@ public sealed class HandbookTests
             .ToList();
 
         Assert.Empty(missing);
+    }
+
+    // --- structure follows the shipped book -------------------------------
+
+    /// <summary>The defect this pins: two rows on the same sort order, with the order between them undefined.</summary>
+    /// <remarks>
+    /// Deliberately seeded at the SAME revision both times: a new article needs no bump, which is exactly the
+    /// documented case in which the collision arose.
+    /// </remarks>
+    [Fact]
+    public async Task An_article_inserted_in_the_middle_does_not_share_a_sort_order()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+
+        await SeedAsync(ctx, ArticleInserted(), OneTerm, 1);
+
+        await using var db = ctx.NewContext();
+        var rows = await db.HandbuchArtikel.OrderBy(a => a.SortOrder).ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(rows.Count, rows.Select(a => a.SortOrder).Distinct().Count());
+        Assert.Equal("art-neu", rows[0].SeedKey);
+        Assert.Equal("art-a", rows[1].SeedKey);
+    }
+
+    /// <summary>Position is structure, but a hand-sorted chapter is still an edit and stays put.</summary>
+    [Fact]
+    public async Task A_customised_article_keeps_the_place_an_editor_gave_it()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+        await using (var db = ctx.NewContext())
+        {
+            var row = await db.HandbuchArtikel.SingleAsync();
+            row.SortOrder = 999;
+            row.IsCustomised = true;
+            await db.SaveChangesAsync();
+        }
+
+        await SeedAsync(ctx, ArticleInserted(), OneTerm, 1);
+
+        await using var check = ctx.NewContext();
+        var kept = await check.HandbuchArtikel.SingleAsync(a => a.SeedKey == "art-a");
+        Assert.Equal(999, kept.SortOrder);
+    }
+
+    /// <summary>A "more on this" link the detail page then refuses is worse than no link.</summary>
+    [Fact]
+    public async Task A_term_offers_no_article_link_when_its_chapter_is_hidden()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneChapter(), OneTerm, 1);
+        await using (var db = ctx.NewContext())
+        {
+            var chapter = await db.HandbuchKapitel.SingleAsync();
+            chapter.IsVisible = false;
+            await db.SaveChangesAsync();
+        }
+
+        var terms = await NewService(ctx).GetGlossaryAsync();
+
+        var term = Assert.Single(terms);
+        Assert.Null(term.ArticleSlug);
     }
 }

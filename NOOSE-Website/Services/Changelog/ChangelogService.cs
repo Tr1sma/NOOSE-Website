@@ -72,11 +72,21 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
         }
 
         var ids = fresh.Select(r => r.Id).ToList();
-        var count = await db.Aenderungseintraege.AsNoTracking()
-            .CountAsync(e => ids.Contains(e.ReleaseId) && e.IsVisible, cancellationToken);
-        return count == 0
-            ? new ChangelogNewsFlash(0, null)
-            : new ChangelogNewsFlash(count, fresh[0].Version);
+        var carrying = await db.Aenderungseintraege.AsNoTracking()
+            .Where(e => ids.Contains(e.ReleaseId) && e.IsVisible)
+            .Select(e => e.ReleaseId)
+            .ToListAsync(cancellationToken);
+        if (carrying.Count == 0)
+        {
+            return new ChangelogNewsFlash(0, null);
+        }
+
+        // the newest release that actually carries a line, not simply the newest: the page hides a release
+        // whose entries are all withdrawn, so naming that one sent the reader looking for a version that is
+        // not on /neuerungen at all
+        var withEntries = carrying.ToHashSet(StringComparer.Ordinal);
+        var newest = fresh.FirstOrDefault(r => withEntries.Contains(r.Id));
+        return new ChangelogNewsFlash(carrying.Count, newest?.Version);
     }
 
     public async Task<List<ChangelogRelease>> GetReleasesAsync(CancellationToken cancellationToken = default)

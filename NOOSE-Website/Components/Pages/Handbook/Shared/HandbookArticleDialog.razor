@@ -6,9 +6,13 @@
         <MudStack Spacing="3">
             <MudStack Row="true" Spacing="2">
                 <MudSelect T="string" @bind-Value="_chapterId" Label="Kapitel" Variant="Variant.Outlined" Required="true">
+                    @* the hidden ones are offered on purpose - an article may be prepared in a chapter that is
+                       not live yet - but saying so keeps the article from vanishing without a word *@
                     @foreach (var c in Chapters)
                     {
-                        <MudSelectItem T="string" Value="@c.Id">@c.Title</MudSelectItem>
+                        <MudSelectItem T="string" Value="@c.Id">
+                            @(c.IsVisible ? c.Title : $"{c.Title} (ausgeblendet)")
+                        </MudSelectItem>
                     }
                 </MudSelect>
                 <MudNumericField T="int" @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"

@@ -256,6 +256,16 @@ public static class ChangelogContent
                 + "auf das Zahnrad im Menü, statt ins Leere zu führen.", "Bedienung"),
             Fix("2.1.26-rechtstexte", "Geteilte Links auf Datenschutz und Nutzungsbedingungen zeigen jetzt eine "
                 + "Vorschaukarte statt einer nackten Adresse.", "Öffentlich"),
+            Fix("2.1.27-glossar-wortmitte", "Eine Worterklärung erscheint nicht mehr mitten in einem längeren "
+                + "Wort, wenn ein Teil davon fett oder kursiv gesetzt ist.", "Handbuch"),
+            Fix("2.1.28-glossar-link", "Der „mehr dazu\"-Link eines Glossarbegriffs führt nicht mehr auf einen "
+                + "Artikel, dessen Kapitel ausgeblendet ist.", "Handbuch"),
+            Fix("2.1.29-handbuch-asservate", "Der Artikel zur Asservatenkammer sagt jetzt richtig, dass "
+                + "einlagern jeder darf und eine Herausnahme nur die Führung bucht.", "Handbuch"),
+            Fix("2.1.30-menue-zurueck", "Eine gerade geänderte Menü-Einstellung springt nicht mehr kurzzeitig "
+                + "auf den alten Stand zurück.", "Bedienung"),
+            Fix("2.1.31-neuerungen-fassung", "Die Hinweiskarte nennt nur noch eine Fassung, die auf dieser "
+                + "Seite auch zu finden ist.", "Bedienung"),
         ], "1.5"),
     ];
 }

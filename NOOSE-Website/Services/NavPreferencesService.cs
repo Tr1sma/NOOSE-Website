@@ -26,23 +26,41 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
         {
             return cached;
         }
-        NavPreferences prefs;
+
+        // The fill runs under the same lock as a mutation, not just the mutation itself. A miss reads the blob
+        // outside it, a mutation commits meanwhile, and the reader's cache write then puts the pre-mutation blob
+        // back for the rest of the cache window - the very overwrite the lock exists to prevent, entered from
+        // the read side. Re-checked inside, because the agent we queued behind has usually just filled it.
+        var writer = WriterFor(agentId);
+        await writer.WaitAsync(cancellationToken);
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            var json = await db.Users.AsNoTracking()
-                .Where(a => a.Id == agentId)
-                .Select(a => a.NavPreferencesJson)
-                .FirstOrDefaultAsync(cancellationToken);
-            prefs = Deserialize(json);
+            if (cache.TryGetValue(CacheKey(agentId), out NavPreferences? filled) && filled is not null)
+            {
+                return filled;
+            }
+            NavPreferences prefs;
+            try
+            {
+                await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+                var json = await db.Users.AsNoTracking()
+                    .Where(a => a.Id == agentId)
+                    .Select(a => a.NavPreferencesJson)
+                    .FirstOrDefaultAsync(cancellationToken);
+                prefs = Deserialize(json);
+            }
+            catch
+            {
+                /* best effort */
+                return new NavPreferences();
+            }
+            cache.Set(CacheKey(agentId), prefs, CacheDuration);
+            return prefs;
         }
-        catch
+        finally
         {
-            /* best effort */
-            return new NavPreferences();
+            writer.Release();
         }
-        cache.Set(CacheKey(agentId), prefs, CacheDuration);
-        return prefs;
     }
 
     public Task ToggleFavoriteAsync(string agentId, NavFavorite favorite, CancellationToken cancellationToken = default)

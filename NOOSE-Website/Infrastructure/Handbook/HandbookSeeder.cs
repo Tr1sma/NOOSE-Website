@@ -75,7 +75,20 @@ public static class HandbookSeeder
                 continue;
             }
 
-            if (row.IsCustomised || row.IsDeleted || row.SeedRevision >= revision)
+            if (row.IsCustomised || row.IsDeleted)
+            {
+                continue;
+            }
+
+            // structure ahead of the revision guard, same reason as the articles: a chapter inserted in the
+            // middle would otherwise share its sort order with the one it displaced
+            if (row.SortOrder != i)
+            {
+                row.SortOrder = i;
+                changed = true;
+            }
+
+            if (row.SeedRevision >= revision)
             {
                 continue;
             }
@@ -84,7 +97,6 @@ public static class HandbookSeeder
             row.Title = shipped.Title;
             row.Description = shipped.Description;
             row.IconName = shipped.Icon;
-            row.SortOrder = i;
             row.SeedRevision = revision;
             changed = true;
         }
@@ -147,12 +159,27 @@ public static class HandbookSeeder
                     continue;
                 }
 
-                if (row.IsCustomised || row.IsDeleted || row.SeedRevision >= revision)
+                if (row.IsCustomised || row.IsDeleted)
                 {
                     continue;
                 }
 
-                row.ChapterId = chapterRow.Id;
+                // Position and chapter follow the shipped book even without a revision bump, because they are
+                // structure rather than text: a new article inserted in the middle takes its neighbour's sort
+                // order, and leaving the neighbour behind left two rows on the same number with the order
+                // between them undefined. Only an untouched row is moved - an editor who re-sorted keeps theirs.
+                if (row.ChapterId != chapterRow.Id || row.SortOrder != sortOrder)
+                {
+                    row.ChapterId = chapterRow.Id;
+                    row.SortOrder = sortOrder;
+                    changed = true;
+                }
+
+                if (row.SeedRevision >= revision)
+                {
+                    continue;
+                }
+
                 row.Slug = shipped.Slug;
                 row.Title = shipped.Title;
                 row.Summary = shipped.Summary;

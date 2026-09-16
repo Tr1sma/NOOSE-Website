@@ -69,7 +69,12 @@ public enum SearchTraits
     /// <summary>The provider supplies Levenshtein candidates on top of the LIKE recall.</summary>
     Fuzzy = 2,
 
-    /// <summary>Offered in the Strg+K palette. Implies a route and forbids <see cref="Heavy"/>.</summary>
+    /// <summary>Offered in the Strg+K palette. Implies a route.</summary>
+    /// <remarks>
+    /// It does not exclude <see cref="Heavy"/>, and <c>Document</c> and <c>Meeting</c> carry both: the palette
+    /// query and the full search are separate paths, so a category can be cheap to offer by name and expensive
+    /// to scan by body. The claim that the two were mutually exclusive stood here for a while and was wrong.
+    /// </remarks>
     Quick = 4,
 
     /// <summary>Scans a longtext column. Runs in the second budget wave, so an expired budget costs this rather

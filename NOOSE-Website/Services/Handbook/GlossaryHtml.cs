@@ -52,7 +52,8 @@ public static class GlossaryHtml
             {
                 continue;
             }
-            var markup = Rewrite(node.Data, matcher, used);
+            // the neighbours across inline tags, because a word does not end where a text node does
+            var markup = Rewrite(node.Data, matcher, used, Neighbour(node, false), Neighbour(node, true));
             if (markup is null)
             {
                 continue;
@@ -74,7 +75,8 @@ public static class GlossaryHtml
     }
 
     /// <summary>Markup for one text node, or null when it holds no first occurrence.</summary>
-    private static string? Rewrite(string text, GlossaryMatcher matcher, HashSet<string> used)
+    private static string? Rewrite(
+        string text, GlossaryMatcher matcher, HashSet<string> used, char? before, char? after)
     {
         StringBuilder? sb = null;
         var copied = 0;
@@ -82,7 +84,7 @@ public static class GlossaryHtml
 
         while (i < text.Length)
         {
-            var match = matcher.LongestAt(text, i);
+            var match = matcher.LongestAt(text, i, before, after);
             if (match is null)
             {
                 i++;
@@ -142,4 +144,78 @@ public static class GlossaryHtml
     }
 
     private static bool Skip(INode node) => node.ParentElement?.Closest(SkipSelector) is not null;
+
+    /// <summary>Elements a word runs through without ending.</summary>
+    /// <remarks>
+    /// <c>a</c> and <c>code</c> are in here although the pass never annotates inside them: for the boundary test
+    /// the question is whether the word continues on screen, not whether that stretch may carry a bubble.
+    /// </remarks>
+    private static readonly HashSet<string> Inline = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "span", "b", "strong", "i", "em", "u", "s", "a", "code", "sub", "sup", "mark", "small",
+        "abbr", "ins", "del", "q", "cite", "var", "kbd", "samp", "time", "bdi", "bdo", "font",
+    };
+
+    /// <summary>The character next to this text in the rendered flow, or null where the word has to end.</summary>
+    /// <remarks>
+    /// Walks sideways and, while the parent is inline, upwards: <c>&lt;b&gt;Fahndung&lt;/b&gt;sliste</c> keeps the
+    /// "s" reachable from inside the bold run. A block, a <c>br</c> or an image ends the word and yields null;
+    /// an empty text node or an empty inline element is stepped over rather than treated as an ending.
+    /// </remarks>
+    private static char? Neighbour(IText node, bool forward)
+    {
+        INode? current = node;
+        while (current is not null)
+        {
+            var sibling = forward ? current.NextSibling : current.PreviousSibling;
+            if (sibling is null)
+            {
+                var parent = current.ParentElement;
+                current = parent is not null && Inline.Contains(parent.LocalName) ? parent : null;
+                continue;
+            }
+            if (sibling is IText text)
+            {
+                if (text.Data.Length > 0)
+                {
+                    return forward ? text.Data[0] : text.Data[^1];
+                }
+                current = sibling;
+                continue;
+            }
+            if (sibling is IElement element && Inline.Contains(element.LocalName))
+            {
+                if (Edge(element, forward) is { } inner)
+                {
+                    return inner;
+                }
+                current = sibling;
+                continue;
+            }
+            return null;
+        }
+        return null;
+    }
+
+    /// <summary>The first character this node contributes at its leading (or trailing) edge.</summary>
+    private static char? Edge(INode node, bool forward)
+    {
+        if (node is IText text)
+        {
+            return text.Data.Length > 0 ? (forward ? text.Data[0] : text.Data[^1]) : null;
+        }
+        if (node is not IElement element || !Inline.Contains(element.LocalName))
+        {
+            return null;
+        }
+        var children = element.ChildNodes;
+        for (var i = 0; i < children.Length; i++)
+        {
+            if (Edge(children[forward ? i : children.Length - 1 - i], forward) is { } c)
+            {
+                return c;
+            }
+        }
+        return null;
+    }
 }

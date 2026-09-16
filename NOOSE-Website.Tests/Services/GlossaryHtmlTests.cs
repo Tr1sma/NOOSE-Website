@@ -283,4 +283,52 @@ public sealed class GlossaryHtmlTests
         }
         return count;
     }
+
+    // --- the word does not end where the text node does ---------------------
+
+    /// <summary>The defect this pins: a bubble on "Fahndung" in the middle of "Fahndungsliste".</summary>
+    /// <remarks>
+    /// The editor writes exactly this as soon as somebody bolds a syllable, and judging the edge against the
+    /// text node alone let the match through - a wrong explanation, not a missing one.
+    /// </remarks>
+    [Fact]
+    public void A_word_continuing_in_an_inline_tag_is_not_marked()
+    {
+        var html = GlossaryHtml.Annotate("<p>Die Fahndung<b>sliste</b> ist lang.</p>", Standard);
+
+        Assert.DoesNotContain("class=\"glossar\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_word_beginning_in_an_inline_tag_is_not_marked()
+    {
+        var html = GlossaryHtml.Annotate("<p>Die <b>Sonder</b>fahndung läuft.</p>", Standard);
+
+        Assert.DoesNotContain("class=\"glossar\"", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>The neighbour test must not swallow a real hit: a space in the next node ends the word.</summary>
+    [Fact]
+    public void A_term_at_the_end_of_a_node_is_still_marked()
+    {
+        var html = GlossaryHtml.Annotate("<p>Die Fahndung<b> läuft</b>.</p>", Standard);
+
+        Assert.Contains("class=\"glossar\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_block_boundary_ends_the_word()
+    {
+        var html = GlossaryHtml.Annotate("<p>Die Fahndung</p><p>sliste</p>", Standard);
+
+        Assert.Contains("class=\"glossar\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_line_break_ends_the_word()
+    {
+        var html = GlossaryHtml.Annotate("<p>Die Fahndung<br>sliste</p>", Standard);
+
+        Assert.Contains("class=\"glossar\"", html, StringComparison.Ordinal);
+    }
 }
