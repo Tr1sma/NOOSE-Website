@@ -87,7 +87,7 @@
     private async Task AddAsync()
     {
         var exclusion = _members.Select(m => m.PersonId).ToList();
-        var input = await MemberDialog.ShowAsync(DialogService, User.IsLeadership(), Ranks, exclusion);
+        var input = await MemberDialog.ShowAsync(DialogService, User.IsLeadership(), Ranks, exclusion, User);
         if (input is null)
         {
             return;
@@ -98,8 +98,13 @@
         }
         try
         {
-            await FactionService.MemberAddAsync(FactionId, input, User);
-            Snackbar.Add("Mitglied hinzugefügt.", Severity.Success);
+            var removed = await FactionService.MemberAddAsync(FactionId, input, User);
+            Snackbar.Add(removed switch
+            {
+                0 => "Mitglied hinzugefügt.",
+                1 => "Mitglied hinzugefügt und aus einer weiteren Fraktion entfernt.",
+                _ => $"Mitglied hinzugefügt und aus {removed} weiteren Fraktionen entfernt.",
+            }, Severity.Success);
             await LoadAsync();
             await Changed.InvokeAsync();
         }
@@ -118,9 +123,12 @@
         }
         await LoadAsync();
         await Changed.InvokeAsync();
-        Snackbar.Add(
-            $"{result.Created} neu, {result.AddedExisting} zugeordnet, {result.AlreadyMembers} bereits Mitglied, {result.Removed} entfernt.",
-            Severity.Success);
+        var text = $"{result.Created} neu, {result.AddedExisting} zugeordnet, {result.AlreadyMembers} bereits Mitglied, {result.Removed} entfernt.";
+        if (result.RemovedFromOtherFactions > 0)
+        {
+            text += $" Aus anderen Fraktionen entfernt: {result.RemovedFromOtherFactions}.";
+        }
+        Snackbar.Add(text, Severity.Success);
     }
 
     private async Task EditAsync(FactionMember m)

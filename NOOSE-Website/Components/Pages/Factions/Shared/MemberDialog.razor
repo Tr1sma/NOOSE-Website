@@ -21,7 +21,7 @@
                 }
                 else
                 {
-                    <MudAutocomplete T="Person" Label="Person" @bind-Value="_person"
+                    <MudAutocomplete T="Person" Label="Person" Value="_person" ValueChanged="PersonSelectedAsync"
                                      SearchFunc="@SearchPeople" ToStringFunc="@(p => p?.Name ?? string.Empty)"
                                      Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                                      ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
@@ -35,6 +35,16 @@
                             </MudStack>
                         </ItemTemplate>
                     </MudAutocomplete>
+                    @if (_otherFactions.Count > 0)
+                    {
+                        <MudStack Spacing="1">
+                            <MudCheckBox T="bool" @bind-Value="_removeFromOther" Dense="true" Color="Color.Primary"
+                                         Label="Aus bisheriger Fraktion entfernen" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Derzeit Mitglied in: @string.Join(", ", _otherFactions.Select(f => f.Name))
+                            </MudText>
+                        </MudStack>
+                    }
                 }
             }
 
@@ -71,6 +81,9 @@
     [Parameter] public IReadOnlyList<string> Ranks { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> ExclusionPersonIds { get; set; } = Array.Empty<string>();
 
+    /// <summary>Signed-in agent; needed to resolve the selected person's other faction memberships.</summary>
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+
     // edit mode (person fixed): signalled by a set name
     [Parameter] public string? PersonNameExists { get; set; }
     [Parameter] public string? RankExists { get; set; }
@@ -83,6 +96,8 @@
     private string? _newName;
     private string? _rank;
     private bool _isLead;
+    private List<PersonAffiliation> _otherFactions = new();
+    private bool _removeFromOther;
 
     private bool CanSave => IsEdit || (_modeNew ? !string.IsNullOrWhiteSpace(_newName) : _person is not null);
 
@@ -101,11 +116,32 @@
         return hit.Where(p => !ExclusionPersonIds.Contains(p.Id));
     }
 
+    private async Task PersonSelectedAsync(Person? person)
+    {
+        _person = person;
+        _removeFromOther = false;
+        _otherFactions = new();
+        if (person is null || User is null)
+        {
+            return;
+        }
+        try
+        {
+            var affiliations = await PersonService.GetAffiliationsAsync(person.Id, ViewerScope.From(User));
+            _otherFactions = affiliations.Where(a => a.Type == nameof(Faction)).ToList();
+        }
+        catch (Exception)
+        {
+            /* best effort */
+        }
+    }
+
     private void Save()
     {
         string personId = string.Empty;
         string? newName = null;
         string? displayName = PersonNameExists;
+        var removeFromOther = false;
         if (!IsEdit)
         {
             if (_modeNew)
@@ -125,6 +161,7 @@
                 }
                 personId = _person.Id;
                 displayName = _person.Name;
+                removeFromOther = _removeFromOther;
             }
         }
         MudDialog.Close(DialogResult.Ok(new MemberInput
@@ -134,6 +171,7 @@
             PersonName = displayName,
             Rank = _rank,
             IsLead = _isLead,
+            RemoveFromOtherFactions = removeFromOther,
         }));
     }
 
@@ -141,13 +179,14 @@
 
     /// <summary>Shows the add-member dialog; returns the input or null if cancelled.</summary>
     public static async Task<MemberInput?> ShowAsync(IDialogService dialog, bool isLeadership,
-        IReadOnlyList<string> ranks, IReadOnlyList<string> exclusionPersonIds)
+        IReadOnlyList<string> ranks, IReadOnlyList<string> exclusionPersonIds, ClaimsPrincipal? user = null)
     {
         var parameters = new DialogParameters<MemberDialog>
         {
             { x => x.IsLeadership, isLeadership },
             { x => x.Ranks, ranks },
             { x => x.ExclusionPersonIds, exclusionPersonIds },
+            { x => x.User, user },
         };
         var reference = await dialog.ShowAsync<MemberDialog>("Mitglied hinzufügen", parameters);
         var result = await reference.Result;

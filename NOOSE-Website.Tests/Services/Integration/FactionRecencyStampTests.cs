@@ -126,6 +126,45 @@ public sealed class FactionRecencyStampTests
         Assert.Null((await ReloadAsync(ctx)).MembersRefreshedAt);
     }
 
+    [Fact]
+    public async Task MemberAddAsync_StampsOldFaction_WhenMemberLeaves()
+    {
+        using var ctx = new SqliteTestContext();
+        Seeded(ctx, db =>
+        {
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+        });
+        var svc = FactionSvc(ctx);
+
+        await svc.MemberAddAsync("f1",
+            new MemberInput { PersonId = "p1", RemoveFromOtherFactions = true }, Leader());
+
+        Assert.NotNull((await ReloadAsync(ctx, "f1")).MembersRefreshedAt);
+        Assert.NotNull((await ReloadAsync(ctx, "f2")).MembersRefreshedAt);
+    }
+
+    [Fact]
+    public async Task MembersBulkApplyAsync_StampsOldFaction_WhenMemberLeaves()
+    {
+        using var ctx = new SqliteTestContext();
+        Seeded(ctx, db =>
+        {
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+        });
+        var svc = FactionSvc(ctx);
+
+        await svc.MembersBulkApplyAsync("f1",
+            new[] { new MemberInput { PersonId = "p1", RemoveFromOtherFactions = true } },
+            Array.Empty<string>(), Leader());
+
+        Assert.NotNull((await ReloadAsync(ctx, "f1")).MembersRefreshedAt);
+        Assert.NotNull((await ReloadAsync(ctx, "f2")).MembersRefreshedAt);
+    }
+
     // ==================== stocks vs. master data ====================
 
     [Fact]

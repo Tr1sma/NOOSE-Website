@@ -56,25 +56,40 @@
                     <MudStack Spacing="1">
                         @foreach (var row in _rows)
                         {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="px-1">
-                                <MudChip T="string" Size="Size.Small" Color="@KindColor(row.Kind)" Variant="Variant.Filled"
-                                         Icon="@KindIcon(row.Kind)">@KindLabel(row.Kind)</MudChip>
-                                <MudText Typo="Typo.body2"><b>@row.Display</b></MudText>
-                                @if (row.Kind == RowKind.Ambiguous)
+                            var otherFactions = OtherFactions(row);
+                            <MudStack Spacing="0" Class="px-1 py-1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudChip T="string" Size="Size.Small" Color="@KindColor(row.Kind)" Variant="Variant.Filled"
+                                             Icon="@KindIcon(row.Kind)">@KindLabel(row.Kind)</MudChip>
+                                    <MudText Typo="Typo.body2"><b>@row.Display</b></MudText>
+                                    @if (row.Kind == RowKind.Ambiguous)
+                                    {
+                                        <MudSpacer />
+                                        <MudSelect T="string" Value="@AmbiguousValue(row)" ValueChanged="@(v => SetAmbiguous(row, v))"
+                                                   Label="Zuordnen" Dense="true" Variant="Variant.Outlined" Style="min-width:240px;">
+                                            @foreach (var c in row.Candidates)
+                                            {
+                                                <MudSelectItem Value="@c.Id">@c.Name (@c.CaseNumber)</MudSelectItem>
+                                            }
+                                            <MudSelectItem Value="@NewSentinel">➕ Neue Person anlegen</MudSelectItem>
+                                        </MudSelect>
+                                    }
+                                    else if (row.Kind == RowKind.AddExisting && row.Candidates.Count == 1)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.Candidates[0].CaseNumber</MudText>
+                                    }
+                                    @if (otherFactions.Count > 0)
+                                    {
+                                        <MudSpacer />
+                                        <MudCheckBox T="bool" @bind-Value="row.RemoveFromOthers" Dense="true" Color="Color.Error"
+                                                     Label="Alte Fraktion verlassen" />
+                                    }
+                                </MudStack>
+                                @if (otherFactions.Count > 0)
                                 {
-                                    <MudSpacer />
-                                    <MudSelect T="string" Value="@AmbiguousValue(row)" ValueChanged="@(v => SetAmbiguous(row, v))"
-                                               Label="Zuordnen" Dense="true" Variant="Variant.Outlined" Style="min-width:240px;">
-                                        @foreach (var c in row.Candidates)
-                                        {
-                                            <MudSelectItem Value="@c.Id">@c.Name (@c.CaseNumber)</MudSelectItem>
-                                        }
-                                        <MudSelectItem Value="@NewSentinel">➕ Neue Person anlegen</MudSelectItem>
-                                    </MudSelect>
-                                }
-                                else if (row.Kind == RowKind.AddExisting && row.Candidates.Count == 1)
-                                {
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.Candidates[0].CaseNumber</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="padding-left:44px;">
+                                        @($"Derzeit Mitglied in: {string.Join(", ", otherFactions.Select(f => f.Name))}")
+                                    </MudText>
                                 }
                             </MudStack>
                         }
@@ -152,6 +167,7 @@
     private bool _busy;
     private List<BulkRow> _rows = new();
     private List<OrphanRow> _orphans = new();
+    private Dictionary<string, List<PersonAffiliation>> _otherFactions = new();
 
     private int _countCreate;
     private int _countAdd;
@@ -168,6 +184,7 @@
         public List<Person> Candidates { get; set; } = new();
         public string? SelectedPersonId { get; set; }
         public bool CreateNewChosen { get; set; }
+        public bool RemoveFromOthers { get; set; }
     }
 
     private sealed class OrphanRow
@@ -260,6 +277,21 @@
                 .Select(m => new OrphanRow { Member = m })
                 .ToList();
 
+            var candidateIds = _rows
+                .Where(r => r.Kind is RowKind.AddExisting or RowKind.Ambiguous)
+                .SelectMany(r => r.Candidates)
+                .Select(p => p.Id)
+                .Distinct()
+                .ToList();
+            _otherFactions = new();
+            if (candidateIds.Count > 0)
+            {
+                var affiliations = await PersonService.GetAffiliationsManyAsync(candidateIds, ViewerScope.From(User));
+                _otherFactions = affiliations.ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value.Where(a => a.Type == nameof(Faction) && a.Id != FactionId).ToList());
+            }
+
             _countCreate = _rows.Count(r => r.Kind == RowKind.Create);
             _countAdd = _rows.Count(r => r.Kind == RowKind.AddExisting);
             _countAlready = _rows.Count(r => r.Kind == RowKind.AlreadyMember);
@@ -292,12 +324,20 @@
                     toAdd.Add(new MemberInput { NewPersonName = r.Display, Rank = _sharedRank, IsLead = false });
                     break;
                 case RowKind.AddExisting:
-                    toAdd.Add(new MemberInput { PersonId = r.SelectedPersonId!, Rank = _sharedRank, IsLead = false });
+                    toAdd.Add(new MemberInput
+                    {
+                        PersonId = r.SelectedPersonId!, Rank = _sharedRank, IsLead = false,
+                        RemoveFromOtherFactions = r.RemoveFromOthers,
+                    });
                     break;
                 case RowKind.Ambiguous:
                     toAdd.Add(r.CreateNewChosen
                         ? new MemberInput { NewPersonName = r.Display, Rank = _sharedRank, IsLead = false }
-                        : new MemberInput { PersonId = r.SelectedPersonId!, Rank = _sharedRank, IsLead = false });
+                        : new MemberInput
+                        {
+                            PersonId = r.SelectedPersonId!, Rank = _sharedRank, IsLead = false,
+                            RemoveFromOtherFactions = r.RemoveFromOthers,
+                        });
                     break;
             }
         }
@@ -308,7 +348,8 @@
         {
             var srv = await FactionService.MembersBulkApplyAsync(FactionId, toAdd, removeIds, User);
             var already = _countAlready + srv.AlreadyMembers;
-            MudDialog.Close(DialogResult.Ok(new BulkMemberResult(srv.Created, srv.AddedExisting, already, srv.Removed)));
+            MudDialog.Close(DialogResult.Ok(new BulkMemberResult(
+                srv.Created, srv.AddedExisting, already, srv.Removed, srv.RemovedFromOtherFactions)));
         }
         catch (Exception ex)
         {
@@ -332,6 +373,7 @@
 
     private void SetAmbiguous(BulkRow r, string value)
     {
+        r.RemoveFromOthers = false;
         if (value == NewSentinel)
         {
             r.CreateNewChosen = true;
@@ -342,6 +384,17 @@
             r.CreateNewChosen = false;
             r.SelectedPersonId = value;
         }
+    }
+
+    /// <summary>Visible other factions of the row's resolved person; empty for new or already-member rows.</summary>
+    private List<PersonAffiliation> OtherFactions(BulkRow r)
+    {
+        if (r.Kind is RowKind.Create or RowKind.AlreadyMember)
+        {
+            return new();
+        }
+        var personId = r.Kind == RowKind.Ambiguous && r.CreateNewChosen ? null : r.SelectedPersonId;
+        return personId is not null && _otherFactions.TryGetValue(personId, out var list) ? list : new();
     }
 
     private static Color KindColor(RowKind k) => k switch

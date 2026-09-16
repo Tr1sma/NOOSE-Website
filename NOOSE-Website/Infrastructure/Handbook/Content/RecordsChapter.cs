@@ -128,6 +128,10 @@ internal static class RecordsChapter
                 <p>Mitglieder werden mit ihrer Personenakte verknüpft, nicht als Namen eingetippt. Dadurch
                 sieht man von beiden Seiten dasselbe: die Person zeigt ihre Fraktion, die Fraktion ihre
                 Mitglieder.</p>
+                <p>Beim Hinzufügen lässt sich eine bestehende Person gleich <strong>aus ihrer bisherigen
+                Fraktion entfernen</strong> - praktisch beim Wechsel zwischen Gruppierungen. Ohne diese
+                Auswahl bleibt sie in beiden Fraktionen. Vor der Bestätigung zeigt die Liste, in welchen
+                Fraktionen die Person derzeit steht.</p>
                 <p>Vier dieser Bereiche haben eine <strong>eigene Aktualitäts-Ampel</strong>. Wer die
                 Mitgliederliste pflegt, setzt nur die Mitglieder-Ampel zurück - Stammdaten anzufassen zählt
                 nicht als „gepflegt“.</p>

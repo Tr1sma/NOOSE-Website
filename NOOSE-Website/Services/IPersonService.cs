@@ -39,6 +39,9 @@ public interface IPersonService
     /// <summary>Factions/person-groups the person currently belongs to (back-links); visibility-filtered.</summary>
     Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
+    /// <summary>Same as <see cref="GetAffiliationsAsync"/> for several people at once, grouped by person id; visibility-filtered.</summary>
+    Task<Dictionary<string, List<PersonAffiliation>>> GetAffiliationsManyAsync(IReadOnlyList<string> personIds, ViewerScope scope, CancellationToken cancellationToken = default);
+
     /// <summary>Former affiliations with join/leave dates, newest first; visibility-filtered, trashed parents hidden.</summary>
     Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 

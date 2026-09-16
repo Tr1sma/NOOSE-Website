@@ -708,6 +708,160 @@ public sealed class FactionServiceTests
             () => svc.MembersBulkApplyAsync("f1", new List<MemberInput>(), new List<string>(), ReadOnly()));
     }
 
+    [Fact]
+    public async Task MemberAddAsync_Throws_ForReadOnlyActor()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.People.Add(Seed.Person(id: "p1"));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.MemberAddAsync("f1", new MemberInput { PersonId = "p1" }, ReadOnly()));
+    }
+
+    // ==================== RemoveFromOtherFactions ====================
+
+    [Fact]
+    public async Task MemberAddAsync_EndsOtherFactionMemberships_WhenRequested()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.Factions.Add(Seed.Faction(id: "f3"));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "p1" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+            db.SaveChanges();
+        }
+        var threat = Substitute.For<IThreatScoreService>();
+        var svc = NewService(ctx, threat: threat);
+
+        var ended = await svc.MemberAddAsync("f3",
+            new MemberInput { PersonId = "p1", RemoveFromOtherFactions = true }, Leader());
+
+        Assert.Equal(2, ended);
+        using var check = ctx.NewContext();
+        Assert.True(await check.FactionMembers.AnyAsync(m => m.FactionId == "f3" && m.PersonId == "p1"));
+        Assert.False(await check.FactionMembers.AnyAsync(m => m.FactionId == "f1" && m.PersonId == "p1"));
+        Assert.False(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p1"));
+        // only the new membership is left
+        Assert.Equal(1, await check.FactionMembers.CountAsync(m => m.PersonId == "p1"));
+        await threat.Received().NewCalculateAsync("f1", Arg.Any<CancellationToken>());
+        await threat.Received().NewCalculateAsync("f2", Arg.Any<CancellationToken>());
+        await threat.Received().NewCalculateAsync("f3", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MemberAddAsync_KeepsOtherFactions_ByDefault()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "p1" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var ended = await svc.MemberAddAsync("f2", new MemberInput { PersonId = "p1" }, Leader());
+
+        Assert.Equal(0, ended);
+        using var check = ctx.NewContext();
+        Assert.True(await check.FactionMembers.AnyAsync(m => m.FactionId == "f1" && m.PersonId == "p1"));
+    }
+
+    [Fact]
+    public async Task MemberAddAsync_SkipsClassifiedFaction_NotInAudience()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2", configure: f => f.SecrecyLevel = DocumentClassification.Hrb));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var ended = await svc.MemberAddAsync("f1",
+            new MemberInput { PersonId = "p1", RemoveFromOtherFactions = true }, LowRank());
+
+        Assert.Equal(0, ended);
+        using var check = ctx.NewContext();
+        // the invisible membership stays; no hint in the result either
+        Assert.True(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p1"));
+    }
+
+    [Fact]
+    public async Task MemberAddAsync_EndsClassifiedFaction_ForItsAudience()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2", configure: f => f.SecrecyLevel = DocumentClassification.Hrb));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+        var hrb = ClaimsPrincipalBuilder.Agent("hrb").WithRank(Rank.JuniorAgent).AsHrb().Build();
+
+        var ended = await svc.MemberAddAsync("f1",
+            new MemberInput { PersonId = "p1", RemoveFromOtherFactions = true }, hrb);
+
+        Assert.Equal(1, ended);
+        using var check = ctx.NewContext();
+        Assert.False(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p1"));
+    }
+
+    [Fact]
+    public async Task MembersBulkApplyAsync_EndsOtherFactions_OnlyForRequestedRows()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.Factions.Add(Seed.Faction(id: "f2"));
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            db.People.Add(Seed.Person(id: "p2", name: "Erika"));
+            db.People.Add(Seed.Person(id: "p3", name: "Otto"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p1" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p2" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f2", PersonId = "p3" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "p3" }); // already a member
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.MembersBulkApplyAsync("f1",
+            new List<MemberInput>
+            {
+                new() { PersonId = "p1", RemoveFromOtherFactions = true },
+                new() { PersonId = "p2" },
+                new() { PersonId = "p3", RemoveFromOtherFactions = true }, // already member: flag ignored
+            },
+            new List<string>(), Leader());
+
+        Assert.Equal(2, result.AddedExisting);
+        Assert.Equal(1, result.AlreadyMembers);
+        Assert.Equal(1, result.RemovedFromOtherFactions);
+        using var check = ctx.NewContext();
+        Assert.False(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p1"));
+        Assert.True(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p2"));
+        Assert.True(await check.FactionMembers.AnyAsync(m => m.FactionId == "f2" && m.PersonId == "p3"));
+    }
+
     // ==================== MemberChangeAsync ====================
 
     [Fact]

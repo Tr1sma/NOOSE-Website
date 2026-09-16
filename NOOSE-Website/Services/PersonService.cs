@@ -300,13 +300,11 @@ public class PersonService(
         {
             return new();
         }
-        var isLeadership = scope.MayClassifiedRead;
         // soft-delete filter keeps only live parent records and active memberships
         var factions = await (
             from m in db.FactionMembers
             where m.PersonId == personId
-            join f in db.Factions on m.FactionId equals f.Id
-            where isLeadership || !f.IsClassified
+            join f in db.Factions.OnlyVisible(scope) on m.FactionId equals f.Id
             orderby f.Name
             select new PersonAffiliation(nameof(Faction), m.Id, f.Id, f.Name, f.CaseNumber, m.Rank, m.IsLead, m.CreatedAt, (DateTime?)null))
             .ToListAsync(cancellationToken);
@@ -314,13 +312,57 @@ public class PersonService(
         var groups = await (
             from m in db.PersonGroupMembers
             where m.PersonId == personId
-            join g in db.PersonGroups on m.PersonGroupId equals g.Id
-            where isLeadership || !g.IsClassified
+            join g in db.PersonGroups.OnlyVisible(scope) on m.PersonGroupId equals g.Id
             orderby g.Name
             select new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
         return await OnlyReleasedOrgsAsync(db, factions.Concat(groups).ToList(), scope, cancellationToken);
+    }
+
+    public async Task<Dictionary<string, List<PersonAffiliation>>> GetAffiliationsManyAsync(
+        IReadOnlyList<string> personIds, ViewerScope scope, CancellationToken cancellationToken = default)
+    {
+        var ids = personIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new();
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // same person gate as GetAffiliationsAsync, batched instead of per person
+        var personQuery = db.People.Where(p => ids.Contains(p.Id));
+        personQuery = scope.PartnerAgency is { } agency
+            ? personQuery.OnlyPartnerVisible(db, agency, scope.MeId)
+            : personQuery.OnlyVisible(scope);
+        var visibleIds = (await personQuery.Select(p => p.Id).ToListAsync(cancellationToken)).ToHashSet();
+        if (visibleIds.Count == 0)
+        {
+            return new();
+        }
+
+        // soft-delete filter keeps only live parent records and active memberships
+        var factions = await (
+            from m in db.FactionMembers
+            where visibleIds.Contains(m.PersonId)
+            join f in db.Factions.OnlyVisible(scope) on m.FactionId equals f.Id
+            orderby f.Name
+            select new { m.PersonId, Affiliation = new PersonAffiliation(nameof(Faction), m.Id, f.Id, f.Name, f.CaseNumber, m.Rank, m.IsLead, m.CreatedAt, (DateTime?)null) })
+            .ToListAsync(cancellationToken);
+
+        var groups = await (
+            from m in db.PersonGroupMembers
+            where visibleIds.Contains(m.PersonId)
+            join g in db.PersonGroups.OnlyVisible(scope) on m.PersonGroupId equals g.Id
+            orderby g.Name
+            select new { m.PersonId, Affiliation = new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, (DateTime?)null) })
+            .ToListAsync(cancellationToken);
+
+        var rows = factions.Concat(groups).ToList();
+        var released = await OnlyReleasedOrgsAsync(db, rows.Select(r => r.Affiliation).ToList(), scope, cancellationToken);
+        var allowed = released.Select(a => a.MemberId).ToHashSet();
+        return rows.Where(r => allowed.Contains(r.Affiliation.MemberId))
+            .GroupBy(r => r.PersonId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.Affiliation).ToList());
     }
 
     public async Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)

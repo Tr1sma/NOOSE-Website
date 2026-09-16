@@ -266,6 +266,8 @@ public static class ChangelogContent
                 + "auf den alten Stand zurück.", "Bedienung"),
             Fix("2.1.31-neuerungen-fassung", "Die Hinweiskarte nennt nur noch eine Fassung, die auf dieser "
                 + "Seite auch zu finden ist.", "Bedienung"),
+            Besser("2.1.32-fraktion-wechsel", "Beim Hinzufügen zu einer Fraktion lässt sich eine Person "
+                + "gleich aus ihrer bisherigen Fraktion entfernen.", "Fraktionen"),
         ], "1.5"),
     ];
 }

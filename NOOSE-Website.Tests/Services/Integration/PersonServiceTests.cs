@@ -43,6 +43,9 @@ public sealed class PersonServiceTests
 
     private static ViewerScope LeaderScope() => ViewerScope.From(Leader());
     private static ViewerScope MemberScope() => ViewerScope.From(Junior());
+    // TRU agent without leadership: may see TRU-classified records.
+    private static ViewerScope TruScope() => ViewerScope.From(
+        ClaimsPrincipalBuilder.Agent("tru").WithRank(Rank.JuniorAgent).AsTru().Build());
 
     private static PersonInput Input(string name = "Neu Person",
         Classification classification = Classification.Unknown,
@@ -624,6 +627,62 @@ public sealed class PersonServiceTests
         var (svc, _, _, _, _) = Build(ctx);
 
         Assert.Empty(await svc.GetAffiliationsAsync("p1", MemberScope()));
+    }
+
+    [Fact]
+    public async Task GetAffiliationsManyAsync_GroupsByPerson_AndHidesClassifiedFactions()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.People.Add(Seed.Person("p2"));
+            db.People.Add(Seed.Person("p3"));
+            db.Factions.Add(Seed.Faction("f1", "Ballas"));
+            db.Factions.Add(Seed.Faction("f2", "Vagos", f => f.IsClassified = true));
+            db.FactionMembers.Add(new FactionMember { PersonId = "p1", FactionId = "f1" });
+            db.FactionMembers.Add(new FactionMember { PersonId = "p1", FactionId = "f2" });
+            db.FactionMembers.Add(new FactionMember { PersonId = "p2", FactionId = "f1" });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _, _) = Build(ctx);
+
+        var many = await svc.GetAffiliationsManyAsync(new[] { "p1", "p2", "p3" }, MemberScope());
+
+        Assert.Equal(2, many.Count);
+        Assert.Equal("f1", Assert.Single(many["p1"]).Id);
+        Assert.Equal("f1", Assert.Single(many["p2"]).Id);
+        Assert.False(many.ContainsKey("p3"));
+    }
+
+    [Fact]
+    public async Task GetAffiliationsManyAsync_Empty_ForNoIds()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _) = Build(ctx);
+
+        Assert.Empty(await svc.GetAffiliationsManyAsync(Array.Empty<string>(), MemberScope()));
+    }
+
+    // ---------- classified orgs: display must match the write gate ----------
+
+    [Fact]
+    public async Task GetAffiliationsAsync_ShowsTruFaction_ToTruAgent_ButNotToPlainMember()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Factions.Add(Seed.Faction("f1", "Vagos", f => f.SecrecyLevel = DocumentClassification.Tru));
+            db.FactionMembers.Add(new FactionMember { PersonId = "p1", FactionId = "f1" });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _, _) = Build(ctx);
+
+        Assert.Single(await svc.GetAffiliationsAsync("p1", TruScope()));
+        Assert.Single((await svc.GetAffiliationsManyAsync(new[] { "p1" }, TruScope()))["p1"]);
+        Assert.Empty(await svc.GetAffiliationsAsync("p1", MemberScope()));
+        Assert.Empty(await svc.GetAffiliationsManyAsync(new[] { "p1" }, MemberScope()));
     }
 
     // ---------- GetFormerAffiliationsAsync ----------

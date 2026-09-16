@@ -364,8 +364,11 @@ public class FactionService(
             .ToList();
     }
 
-    public async Task MemberAddAsync(string factionId, MemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task<int> MemberAddAsync(string factionId, MemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        // fail the read-only roles before a membership moves, same as the bulk path
+        Permission.RequireWriteAccess(actor);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
@@ -378,6 +381,7 @@ public class FactionService(
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Fraktion.");
         }
 
+        var oldFactionIds = new List<string>();
         // Membership and colleague links in one transaction, so no intermediate state leaks.
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.FactionMembers.Add(new FactionMember
@@ -387,14 +391,27 @@ public class FactionService(
             Rank = input.Rank.TrimToNull(),
             IsLead = input.IsLead,
         });
+        if (input.RemoveFromOtherFactions)
+        {
+            oldFactionIds = await OtherFactionMembershipsEndAsync(db, personId, factionId, actor, cancellationToken);
+        }
         await db.SaveChangesAsync(cancellationToken);
         await FactionColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
         await FactionRecency.StampAsync(db, factionId, FactionRecencyFacet.Members, cancellationToken);
+        if (oldFactionIds.Count > 0)
+        {
+            await FactionRecency.StampAsync(db, oldFactionIds, FactionRecencyFacet.Members, cancellationToken);
+        }
         // Member count/lead affect the faction score; the new member brings its measure heat.
         await threat.NewCalculateAsync(factionId, cancellationToken);
+        foreach (var oldFactionId in oldFactionIds.Distinct())
+        {
+            await threat.NewCalculateAsync(oldFactionId, cancellationToken);
+        }
         // Membership/lead role affect the person score.
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
+        return oldFactionIds.Count;
     }
 
     /// <summary>Returns the person id: the existing one (checked) or a freshly created person record.</summary>
@@ -418,7 +435,7 @@ public class FactionService(
             : (await db.People.Where(p => requestedIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(cancellationToken)).ToHashSet();
 
         // Create new persons first, each on its own transaction, so the outer transaction stays short.
-        var resolved = new List<(string PersonId, string? Rank, bool IsLead, bool IsNew)>();
+        var resolved = new List<(string PersonId, string? Rank, bool IsLead, bool IsNew, bool RemoveFromOtherFactions)>();
         var seenNewNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var created = 0;
         foreach (var m in toAdd)
@@ -427,7 +444,7 @@ public class FactionService(
             {
                 if (existingIds.Contains(m.PersonId))
                 {
-                    resolved.Add((m.PersonId, m.Rank, m.IsLead, false));
+                    resolved.Add((m.PersonId, m.Rank, m.IsLead, false, m.RemoveFromOtherFactions));
                 }
             }
             else if (!string.IsNullOrWhiteSpace(m.NewPersonName))
@@ -438,7 +455,7 @@ public class FactionService(
                     continue;
                 }
                 var person = await personService.CreateAsync(new PersonInput { Name = name }, actor, cancellationToken);
-                resolved.Add((person.Id, m.Rank, m.IsLead, true));
+                resolved.Add((person.Id, m.Rank, m.IsLead, true, m.RemoveFromOtherFactions));
                 created++;
             }
         }
@@ -452,6 +469,7 @@ public class FactionService(
         var alreadyMembers = 0;
         var affected = new HashSet<string>();
         var seenPersonIds = new HashSet<string>();
+        var leaveOtherFactions = new List<string>();
 
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -474,6 +492,10 @@ public class FactionService(
                 IsLead = r.IsLead,
             });
             affected.Add(r.PersonId);
+            if (r.RemoveFromOtherFactions)
+            {
+                leaveOtherFactions.Add(r.PersonId);
+            }
             if (!r.IsNew)
             {
                 addedExisting++;
@@ -496,6 +518,12 @@ public class FactionService(
             }
         }
 
+        var oldFactionIds = new List<string>();
+        foreach (var pid in leaveOtherFactions)
+        {
+            oldFactionIds.AddRange(await OtherFactionMembershipsEndAsync(db, pid, factionId, actor, cancellationToken));
+        }
+
         var changed = affected.Count > 0;
         if (changed)
         {
@@ -510,15 +538,23 @@ public class FactionService(
         if (changed)
         {
             await FactionRecency.StampAsync(db, factionId, FactionRecencyFacet.Members, cancellationToken);
+            if (oldFactionIds.Count > 0)
+            {
+                await FactionRecency.StampAsync(db, oldFactionIds, FactionRecencyFacet.Members, cancellationToken);
+            }
             // One faction recompute reflects the final membership; per-person scores for everyone touched.
             await threat.NewCalculateAsync(factionId, cancellationToken);
+            foreach (var oldFactionId in oldFactionIds.Distinct())
+            {
+                await threat.NewCalculateAsync(oldFactionId, cancellationToken);
+            }
             foreach (var pid in affected)
             {
                 await threat.NewCalculatePersonScoreAsync(pid, cancellationToken);
             }
         }
 
-        return new BulkMemberResult(created, addedExisting, alreadyMembers, removed);
+        return new BulkMemberResult(created, addedExisting, alreadyMembers, removed, oldFactionIds.Count);
     }
 
     public async Task MemberChangeAsync(string memberId, string? rank, bool isLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -915,5 +951,29 @@ public class FactionService(
                 .ToListAsync(cancellationToken);
 
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.FactionColleague, should, cancellationToken);
+    }
+
+    /// <summary>Ends the person's active memberships in other factions; factions the actor may not see are left alone. Returns the ended faction ids.</summary>
+    private static async Task<List<string>> OtherFactionMembershipsEndAsync(
+        AppDbContext db, string personId, string keepFactionId, ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        var scope = DocumentViewerScope.From(actor);
+        var others = await db.FactionMembers
+            .Include(m => m.Faction)
+            .Where(m => m.PersonId == personId && m.FactionId != keepFactionId)
+            .ToListAsync(cancellationToken);
+
+        var endedFactionIds = new List<string>();
+        foreach (var membership in others)
+        {
+            if (membership.Faction is null || membership.Faction.IsDeleted || !scope.CanSee(membership.Faction.SecrecyLevel))
+            {
+                continue;
+            }
+            // interceptor rewrites Remove to soft-delete, so the old membership stays as history
+            db.FactionMembers.Remove(membership);
+            endedFactionIds.Add(membership.FactionId);
+        }
+        return endedFactionIds;
     }
 }

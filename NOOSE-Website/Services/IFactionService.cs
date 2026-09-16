@@ -27,7 +27,9 @@ public interface IFactionService
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
     Task<List<FactionMember>> GetMembersAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default);
-    Task MemberAddAsync(string factionId, MemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a membership; returns how many memberships in other factions were ended along with it.</summary>
+    Task<int> MemberAddAsync(string factionId, MemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Bulk-reconcile members in one operation: add existing/new persons (deduplicated) and remove the given memberships. Recomputes the faction score once.</summary>
     Task<BulkMemberResult> MembersBulkApplyAsync(string factionId, IReadOnlyList<MemberInput> toAdd, IReadOnlyList<string> memberIdsToRemove, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
