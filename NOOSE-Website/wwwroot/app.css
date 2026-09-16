@@ -266,36 +266,54 @@ html, body {
     margin-left: 2rem;
 }
 
-/* Toolbar-Symbole/Labels im Dunkeln sichtbar machen.
-   text-primary, nicht text-secondary: die Werkzeugleiste ist Bedienung, kein Beiwerk, und der gedämpfte
-   Ton ließ die Symbole und die Auswahlfelder grau in grau verschwimmen. */
-.ql-snow .ql-stroke {
-    stroke: var(--mud-palette-text-primary);
+/* Werkzeugleiste und Platzhalter auf die Schriftfarbe des Themes.
+   Quill ist für hellen Grund geschrieben: Symbole stehen auf #444, der Platzhalter sogar auf
+   rgba(0,0,0,.6) - also Schwarz auf Anthrazit.
+   Durchgehend !important, und das ist hier kein Holzhammer: richtext.js hängt quill.snow.css zur Laufzeit
+   in den Kopf (siehe dort das lazy geladene <link>), also NACH app.css. Bei gleicher Spezifität gewinnt
+   damit immer die Bibliothek, und ein Selektor-Wettrüsten gegen eine Fremddatei wäre die schlechtere Wette. */
+.ql-snow .ql-stroke,
+.ql-snow .ql-stroke-miter {
+    stroke: var(--mud-palette-text-primary) !important;
 }
 
-.ql-snow .ql-fill {
-    fill: var(--mud-palette-text-primary);
+.ql-snow .ql-fill,
+.ql-snow .ql-stroke.ql-fill {
+    fill: var(--mud-palette-text-primary) !important;
 }
 
 .ql-snow .ql-picker,
 .ql-snow .ql-picker-label,
 .ql-snow .ql-picker-item {
-    color: var(--mud-palette-text-primary);
+    color: var(--mud-palette-text-primary) !important;
 }
 
+/* Der Platzhalter stand auf der Hellgrund-Farbe und war auf dunklem Untergrund kaum zu lesen. */
+.ql-editor.ql-blank::before {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* Überfahren und aktiv: die Akzentfarbe der Behörde statt Quills festem #06c, das sonst nirgends vorkommt. */
 .ql-snow.ql-toolbar button:hover .ql-stroke,
+.ql-snow .ql-toolbar button:hover .ql-stroke,
 .ql-snow.ql-toolbar button.ql-active .ql-stroke,
-.ql-snow .ql-picker-label:hover .ql-stroke {
-    stroke: var(--mud-palette-primary);
+.ql-snow .ql-toolbar button.ql-active .ql-stroke,
+.ql-snow.ql-toolbar button:hover .ql-stroke-miter,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke-miter,
+.ql-snow.ql-toolbar .ql-picker-label:hover .ql-stroke,
+.ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-stroke {
+    stroke: var(--mud-palette-primary) !important;
 }
 
 .ql-snow.ql-toolbar button:hover .ql-fill,
-.ql-snow.ql-toolbar button.ql-active .ql-fill {
-    fill: var(--mud-palette-primary);
+.ql-snow .ql-toolbar button:hover .ql-fill,
+.ql-snow.ql-toolbar button.ql-active .ql-fill,
+.ql-snow .ql-toolbar button.ql-active .ql-fill,
+.ql-snow.ql-toolbar button:hover .ql-stroke.ql-fill,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke.ql-fill {
+    fill: var(--mud-palette-primary) !important;
 }
 
-/* Quill färbt Auswahlfeld und Listeneintrag beim Überfahren fest auf #06c - ein Blau, das in diesem Theme
-   nirgends sonst vorkommt. Dieselbe Selektorenkette wie dort, sonst gewinnt die Bibliothek. */
 .ql-snow.ql-toolbar .ql-picker-label:hover,
 .ql-snow .ql-toolbar .ql-picker-label:hover,
 .ql-snow.ql-toolbar .ql-picker-label.ql-active,
@@ -304,7 +322,7 @@ html, body {
 .ql-snow .ql-toolbar .ql-picker-item:hover,
 .ql-snow.ql-toolbar .ql-picker-item.ql-selected,
 .ql-snow .ql-toolbar .ql-picker-item.ql-selected {
-    color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary) !important;
 }
 
 .ql-snow .ql-picker-options {
