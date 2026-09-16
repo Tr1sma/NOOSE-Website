@@ -54,14 +54,86 @@ public sealed class RichTextHtmlInterceptorTests
         public void Delete(string fileNameSaved) => _dateien.Remove(fileNameSaved);
     }
 
-    private static (RichTextHtmlInterceptor Interceptor, InMemoryStorage Storage) Aufbau(Action<InMemoryStorage>? einstellen = null)
+    private static (RichTextHtmlInterceptor Interceptor, InMemoryStorage Storage) Aufbau(
+        Action<InMemoryStorage>? einstellen = null, SqliteTestContext? ctx = null)
     {
         var storage = new InMemoryStorage();
         einstellen?.Invoke(storage);
         var services = new ServiceCollection();
         services.AddSingleton<ITextImageStorageService>(storage);
+        // the sweep after the commit opens a context of its own; without a factory it quietly does nothing
+        if (ctx is not null)
+        {
+            services.AddSingleton<IDbContextFactory<AppDbContext>>(new TestDbContextFactory(ctx.Options));
+        }
         var provider = services.BuildServiceProvider();
         return (new RichTextHtmlInterceptor(provider.GetRequiredService<IServiceScopeFactory>()), storage);
+    }
+
+    /// <summary>A picture taken out of a text takes its row and its file with it.</summary>
+    [Fact]
+    public async Task An_image_removed_from_the_text_is_cleaned_up()
+    {
+        using var ctx = new SqliteTestContext();
+        var (interceptor, storage) = Aufbau(ctx: ctx);
+        await using (var db = MitKette(ctx, interceptor))
+        {
+            db.Documents.Add(new Document { Id = "d20", Title = "Lagebild", ContentHtml = DokumentHtml() });
+            await db.SaveChangesAsync();
+        }
+
+        await using var vorher = ctx.NewContext();
+        var datei = (await vorher.TextImages.SingleAsync()).FileNameSaved;
+
+        await using (var db = MitKette(ctx, interceptor))
+        {
+            var dokument = await db.Documents.SingleAsync();
+            dokument.ContentHtml = "<p>Lagebild ohne Bild.</p>";
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = ctx.NewContext();
+        Assert.Empty(await check.TextImages.IgnoreQueryFilters().ToListAsync());
+        Assert.DoesNotContain(datei, storage.Dateien.Keys);
+    }
+
+    /// <summary>A comment files its picture under the record it hangs on, not under itself.</summary>
+    /// <remarks>
+    /// <c>CommentPanel</c> hands the carrier's own EntityType/EntityId to the store, so a picture pasted into a
+    /// comment on a document is filed as "Document". A clean-up that removed everything the document's own column
+    /// does not mention would delete exactly those - the text referencing them lives in another row entirely.
+    /// </remarks>
+    [Fact]
+    public async Task A_picture_belonging_to_a_comment_on_the_same_record_survives()
+    {
+        using var ctx = new SqliteTestContext();
+        var (interceptor, _) = Aufbau(ctx: ctx);
+        await using (var db = MitKette(ctx, interceptor))
+        {
+            db.Documents.Add(new Document { Id = "d21", Title = "Lagebild", ContentHtml = DokumentHtml() });
+            // the comment's own picture, filed under the document exactly as the paste path files it
+            db.TextImages.Add(new TextImage
+            {
+                Id = "bild-aus-kommentar",
+                EntityType = nameof(Document),
+                EntityId = "d21",
+                FileNameSaved = "kommentar.png",
+                ContentType = "image/png",
+                SizeBytes = 1,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = MitKette(ctx, interceptor))
+        {
+            var dokument = await db.Documents.SingleAsync();
+            dokument.ContentHtml = "<p>Der Text steht jetzt ohne Bild da.</p>";
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = ctx.NewContext();
+        var uebrig = await check.TextImages.IgnoreQueryFilters().Select(b => b.Id).ToListAsync();
+        Assert.Contains("bild-aus-kommentar", uebrig);
     }
 
     private static AppDbContext MitKette(SqliteTestContext ctx, RichTextHtmlInterceptor interceptor)

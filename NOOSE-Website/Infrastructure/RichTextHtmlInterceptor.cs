@@ -85,8 +85,15 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
         }
     }
 
-    /// <summary>What a finished save leaves to clean up: the column's final html, per carrier.</summary>
-    private sealed record Sweep(string EntityType, string EntityId, string Html);
+    /// <summary>What a finished save leaves to clean up: the column before and after, per carrier.</summary>
+    /// <remarks>
+    /// Both halves, not just the new one. A TextImage row names the record whose visibility governs it, and a
+    /// comment hands that record's own type and id to the store (<c>CommentPanel</c> passes EntityType/EntityId
+    /// straight through) - so a picture pasted into a comment on a document is filed under "Document". Sweeping
+    /// everything the document's own column does not mention would have deleted exactly those, file included.
+    /// Only what this column held before and no longer holds is this column's to remove.
+    /// </remarks>
+    private sealed record Sweep(string EntityType, string EntityId, string Before, string After);
 
     // Handed from SavingChanges to SavedChanges. Keyed on the context because this interceptor is a singleton
     // and every operation brings its own short-lived one; the table drops the entry with the context.
@@ -118,11 +125,19 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
             await using var db = await factory.CreateDbContextAsync(cancellationToken);
             foreach (var sweep in sweeps)
             {
-                var rows = await db.TextImages.AsNoTracking()
-                    .Where(t => t.EntityType == sweep.EntityType && t.EntityId == sweep.EntityId)
+                var gegangen = Referenced(sweep.Before)
+                    .Where(id => !sweep.After.Contains(id, StringComparison.Ordinal))
+                    .ToList();
+                if (gegangen.Count == 0)
+                {
+                    continue;
+                }
+                // type and id still bound the query: an id out of one record's text must never reach another's row
+                var verwaist = await db.TextImages.IgnoreQueryFilters().AsNoTracking()
+                    .Where(t => t.EntityType == sweep.EntityType && t.EntityId == sweep.EntityId
+                        && gegangen.Contains(t.Id))
                     .Select(t => new { t.Id, t.FileNameSaved })
                     .ToListAsync(cancellationToken);
-                var verwaist = rows.Where(r => !sweep.Html.Contains(r.Id, StringComparison.Ordinal)).ToList();
                 if (verwaist.Count == 0)
                 {
                     continue;
@@ -218,11 +233,13 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
             // CleanWithAnchors, not Clean: the ids RichTextAnchors has just written are dropped by the ordinary
             // pass, which is exactly what keeps a pasted anchor out of every other rich-text field
             var sauber = HtmlCleanup.CleanWithAnchors(replaced);
-            if (traegtBilder)
+            // an image swapped out or deleted leaves its row and its file behind; the sweep after the commit
+            // removes what this column pointed at before and no longer does. Added rows have no before, so
+            // nothing of theirs can have gone missing.
+            if (traegtBilder && entry.State == EntityState.Modified
+                && entry.Property(field).OriginalValue is string vorher && vorher.Length > 0)
             {
-                // an image swapped out or deleted leaves its row and its file behind; the sweep after the commit
-                // removes what the saved text no longer points at
-                Pending.GetOrCreateValue(ctx).Add(new Sweep(type.Name, entityId, sauber));
+                Pending.GetOrCreateValue(ctx).Add(new Sweep(type.Name, entityId, vorher, sauber));
             }
             if (ReferenceEquals(stored, html) && ReferenceEquals(replaced, stored))
             {
@@ -284,7 +301,16 @@ public sealed partial class RichTextHtmlInterceptor(IServiceScopeFactory scopes)
         return $"/dateien/textbilder/{row.Id}";
     }
 
+    /// <summary>Ids of the stored pictures this html points at, by their delivery url.</summary>
+    /// <remarks>By url only. The token form <c>@{TextImage:Id}</c> belongs to the plain-text fields, and a row
+    /// reached that way is not this column's to account for even when it is filed under the same record.</remarks>
+    private static List<string> Referenced(string html)
+        => [.. StoredPattern().Matches(html).Select(m => m.Groups["id"].Value).Distinct(StringComparer.Ordinal)];
+
     // a base64 image inside src, single quotes included because hand-written html uses them
     [GeneratedRegex("""\ssrc\s*=\s*["']data:(?<type>image/[^;"']+);base64,(?<data>[^"']+)["']""", RegexOptions.IgnoreCase)]
     private static partial Regex ImagePattern();
+
+    [GeneratedRegex("/dateien/textbilder/(?<id>[0-9a-fA-F-]{36})")]
+    private static partial Regex StoredPattern();
 }

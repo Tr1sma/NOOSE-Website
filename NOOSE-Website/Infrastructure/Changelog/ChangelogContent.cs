@@ -268,8 +268,8 @@ public static class ChangelogContent
                 + "Seite auch zu finden ist.", "Bedienung"),
             Besser("2.1.32-fraktion-wechsel", "Beim Hinzufügen zu einer Fraktion lässt sich eine Person "
                 + "gleich aus ihrer bisherigen Fraktion entfernen.", "Fraktionen"),
-            Fix("2.1.33-word-einfuegen", "Aus Word eingefügte Tabellen und Absätze bleiben vollständig "
-                + "erhalten.", "Bedienung"),
+            Fix("2.1.33-word-einfuegen", "Beim Einfügen aus Word geht kein Inhalt mehr verloren - vorher "
+                + "verschwanden ganze Absätze und Rasterblöcke.", "Bedienung"),
             Fix("2.1.34-word-listen", "Eine nummerierte Liste aus Word bleibt nummeriert und behält ihre "
                 + "Einrückung.", "Bedienung"),
             Fix("2.1.35-inhaltsverzeichnis", "Das eingefügte Inhaltsverzeichnis führt jetzt auch in Presse, "

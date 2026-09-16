@@ -29,9 +29,14 @@ das Falsche im Normalbetrieb) → **P2** (Randfall, Last, stiller Teilausfall) �
 
 ## Stand der Behebung
 
-**Behoben: 35 von 36.** `dotnet build NOOSE-Website.slnx` grün (0 Fehler, keine neuen Warnungen).
-**Der Testlauf steht noch aus** — er wurde nach den letzten Änderungen abgebrochen und ist nicht nachgeholt.
-Keine Migration nötig.
+**Behoben: 35 von 36.** `dotnet build NOOSE-Website.slnx` grün (0 Fehler; die Produktions-Warnung
+`CS8604` ist weg). `dotnet test` → **7558 Tests, 0 Fehlschläge**. **Keine Migration nötig.**
+
+**Was der Testlauf nicht abdeckt:** `richtext.js`, `app.css` und die `.razor`-Änderungen — dieses Projekt
+hat kein bUnit, und JS/CSS laufen in keinem Test. Konkret ungetestet und nur gelesen: Word-Einfügen (2, 8),
+Auswahl-Blase (6), Trennlinie (7), Druckfarbe (4), Listen-Nummerierung (9), Suchleiste (18), die
+Handbuch-Rail (5), die Hinweiskarte (21) und der Entwurfs-Rundlauf (17, 29). **Das sind die Punkte, die
+einen Blick im Browser brauchen.**
 
 | # | Was geändert wurde |
 |---|---|
@@ -45,7 +50,7 @@ Keine Migration nötig.
 | **8** | Word-Listen werten `level(\d+)` als `ql-indent-N` aus, und das Marker-Zeichen entscheidet zwischen `<ol>` und `<ul>`. |
 | **9** | Die `counter-reset`/`counter-increment`-Mechanik aus `quill.snow.css` ist nach `.dokument-html` gespiegelt (Ebene 1–8, dezimal/alphabetisch/römisch). |
 | **10** | Ein gestreiftes Schloss je Agent umschließt Prüfung, Modellaufruf und Abbuchung. |
-| **11** | Der Interceptor merkt sich den gespeicherten Stand und räumt **nach** dem Commit auf einem eigenen Kontext die nicht mehr referenzierten Bilder weg — Zeile und Datei. Ein fehlgeschlagener Speichervorgang verwirft die Notiz (`SaveChangesFailed`), damit nie gegen einen veralteten Stand aufgeräumt wird. |
+| **11** | Der Interceptor merkt sich den Spaltenwert **vorher und nachher** und entfernt **nach** dem Commit, auf einem eigenen Kontext, genau die Bilder, die diese Spalte vorher nannte und jetzt nicht mehr — Zeile und Datei. Ein fehlgeschlagener Speichervorgang verwirft die Notiz (`SaveChangesFailed`). Zwei neue Tests halten das fest, einer davon der Grund für den Vorher-Vergleich: ein Kommentar legt sein Bild unter der **Trägerakte** ab (`CommentPanel` reicht deren Typ/Id durch), ein Aufräumen „alles, was der Dokumenttext nicht nennt" hätte genau diese Bilder gelöscht. |
 | **12** | `HtmlCleanup.Clean` wirft Überschriften-`id`s weg; nur die neue `CleanWithAnchors` behält sie, und die ruft ausschließlich der Interceptor — direkt nachdem `RichTextAnchors` sie geschrieben hat. `id` ist auch aus dem `Profile` für den Browser-Reiniger raus. |
 | **13** | Der Typ-Check sitzt jetzt in `DesiredCompromises` und deckt damit Anlegen, Bearbeiten und Nachtragen ab. |
 | **14** | `OnParametersSet` liest `?suche` und `?begriff` bei jeder Navigation neu, mit Guard gegen Wiederholung. |
