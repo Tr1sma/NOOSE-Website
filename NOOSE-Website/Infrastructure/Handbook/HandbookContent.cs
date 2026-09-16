@@ -23,7 +23,7 @@ namespace NOOSE_Website.Infrastructure.Handbook;
 public static class HandbookContent
 {
     /// <summary>Revision of the shipped text. Raise it after rewording an existing article, chapter or term.</summary>
-    public const int Revision = 8;
+    public const int Revision = 9;
 
     public sealed record SeededStep(string Icon, string Title, string Text);
 
@@ -55,7 +55,7 @@ public static class HandbookContent
         string? ExplanationHtml = null,
         string? ArticleKey = null);
 
-    /// <summary>The seven chapters in reading order; the rail follows this list.</summary>
+    /// <summary>The chapters in reading order; the rail follows this list.</summary>
     public static readonly IReadOnlyList<SeededChapter> Chapters =
     [
         GettingStartedChapter.Chapter,
@@ -65,6 +65,8 @@ public static class HandbookContent
         DutyChapter.Chapter,
         PersonnelChapter.Chapter,
         ToolsChapter.Chapter,
+        DutyRegulationChapter.Chapter,
+        EquipmentChapter.Chapter,
     ];
 
     /// <summary>The glossary, alphabetical on the page rather than here.</summary>

@@ -655,7 +655,7 @@ public class AgentManagementServiceTests
     public async Task TruSet_HrbSet_ToggleFlags()
     {
         using var f = Make();
-        Persist(f.Ctx, NewAgent("t", AgentStatus.Active));
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SpecialAgent));
 
         await f.Svc.TruSetAsync("t", true, Admin());
         await f.Svc.HrbSetAsync("t", true, Admin());
@@ -663,6 +663,142 @@ public class AgentManagementServiceTests
         var a = Reload(f, "t");
         Assert.True(a.IsTRU);
         Assert.True(a.IsHRB);
+    }
+
+    // ---- departments follow the rank (service regulation 2.4.1) ----
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(Rank.JuniorAgent)]
+    public async Task TruSetAsync_BelowSpecialAgent_Throws(Rank? rank)
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: rank));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.TruSetAsync("t", true, Admin()));
+        Assert.False(Reload(f, "t").IsTRU);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(Rank.JuniorAgent)]
+    public async Task HrbSetAsync_BelowSpecialAgent_Throws(Rank? rank)
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: rank));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.HrbSetAsync("t", true, Admin()));
+        Assert.False(Reload(f, "t").IsHRB);
+    }
+
+    /// <summary>A legacy flag below the threshold has to stay removable, or the account is stuck with it.</summary>
+    [Fact]
+    public async Task HrbSetAsync_ClearingIsAllowedBelowTheThreshold()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.JuniorAgent, cfg: a => a.IsHRB = true));
+
+        await f.Svc.HrbSetAsync("t", false, Admin());
+
+        Assert.False(Reload(f, "t").IsHRB);
+    }
+
+    [Fact]
+    public async Task TruSetAsync_OnlyReaderDenied()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SpecialAgent));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => f.Svc.TruSetAsync("t", true, OnlyReader()));
+    }
+
+    [Fact]
+    public async Task HrbSetAsync_OnlyReaderDenied()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SpecialAgent));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => f.Svc.HrbSetAsync("t", true, OnlyReader()));
+    }
+
+    [Fact]
+    public async Task ReleaseAsync_JuniorAgentWithDepartment_Throws()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Pending));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.ReleaseAsync("t", Rank.JuniorAgent, isTRU: false, isHRB: true, Admin()));
+        Assert.Equal(AgentStatus.Pending, Reload(f, "t").Status);
+    }
+
+    [Fact]
+    public async Task ReleaseAsync_SpecialAgentWithDepartment_Succeeds()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Pending));
+
+        await f.Svc.ReleaseAsync("t", Rank.SpecialAgent, isTRU: true, isHRB: true, Admin());
+
+        var a = Reload(f, "t");
+        Assert.True(a.IsTRU);
+        Assert.True(a.IsHRB);
+    }
+
+    /// <summary>A demotion has to take the departments with it; otherwise the flag keeps opening every HRB gate.</summary>
+    [Fact]
+    public async Task RankChangeAsync_DemotionBelowThreshold_DropsDepartments()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SeniorSpecialAgent,
+            cfg: a => { a.IsTRU = true; a.IsHRB = true; }));
+
+        await f.Svc.RankChangeAsync("t", Rank.JuniorAgent, Admin());
+
+        var a = Reload(f, "t");
+        Assert.Equal(Rank.JuniorAgent, a.Rank);
+        Assert.False(a.IsTRU);
+        Assert.False(a.IsHRB);
+    }
+
+    [Fact]
+    public async Task RankChangeAsync_StayingAboveThreshold_KeepsDepartments()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SeniorSpecialAgent,
+            cfg: a => { a.IsTRU = true; a.IsHRB = true; }));
+
+        await f.Svc.RankChangeAsync("t", Rank.SpecialAgent, Admin());
+
+        var a = Reload(f, "t");
+        Assert.True(a.IsTRU);
+        Assert.True(a.IsHRB);
+    }
+
+    [Fact]
+    public async Task PromotionDecideAsync_DemotionBelowThreshold_DropsDepartments()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("t", AgentStatus.Active, rank: Rank.SpecialAgent,
+            cfg: a => a.IsHRB = true));
+        using (var db = f.Ctx.NewContext())
+        {
+            db.AgentPromotionRequests.Add(new NOOSE_Website.Data.Entities.Personnel.AgentPromotionRequest
+            {
+                Id = "req-down", AgentId = "t", TargetRank = Rank.JuniorAgent, Status = PromotionStatus.Requested,
+            });
+            db.SaveChanges();
+        }
+
+        await f.Svc.PromotionDecideAsync("req-down", approved: true, note: null, Admin());
+
+        var a = Reload(f, "t");
+        Assert.Equal(Rank.JuniorAgent, a.Rank);
+        Assert.False(a.IsHRB);
     }
 
     [Fact]

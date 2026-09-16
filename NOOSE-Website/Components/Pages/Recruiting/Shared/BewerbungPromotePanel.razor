@@ -11,15 +11,19 @@
             Zugang beginnt. Nur die Führung kann diese Aktion ausführen.
         </MudText>
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-            <MudSelect T="Rank" @bind-Value="_rank" Label="Dienstgrad" Variant="Variant.Outlined" Margin="Margin.Dense"
-                       Style="min-width:220px;">
+            <MudSelect T="Rank" Value="_rank" ValueChanged="RankChanged" Label="Dienstgrad" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="min-width:220px;">
                 @foreach (var r in Ranks)
                 {
                     <MudSelectItem T="Rank" Value="@r">@RankDisplay.Name(r)</MudSelectItem>
                 }
             </MudSelect>
-            <MudCheckBox T="bool" @bind-Value="_tru" Label="TRU" />
-            <MudCheckBox T="bool" @bind-Value="_hrb" Label="HRB" />
+            <MudTooltip Text="@DepartmentHint" Disabled="DepartmentsOpen">
+                <MudCheckBox T="bool" @bind-Value="_tru" Label="TRU" Disabled="@(!DepartmentsOpen)" />
+            </MudTooltip>
+            <MudTooltip Text="@DepartmentHint" Disabled="DepartmentsOpen">
+                <MudCheckBox T="bool" @bind-Value="_hrb" Label="HRB" Disabled="@(!DepartmentsOpen)" />
+            </MudTooltip>
             <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.MilitaryTech"
                        OnClick="PromoteAsync" Disabled="_busy">Hochstufen</MudButton>
         </MudStack>
@@ -37,6 +41,22 @@
     private bool _tru;
     private bool _hrb;
     private bool _busy;
+
+    /// <summary>Mirrors DepartmentRules.MayHold; ticking a box the service refuses fails only on save.</summary>
+    private bool DepartmentsOpen => DepartmentRules.MayHold(_rank);
+
+    private const string DepartmentHint =
+        "TRU und HRB sind laut Dienstverordnung erst ab dem Dienstgrad Special Agent möglich.";
+
+    private void RankChanged(Rank rank)
+    {
+        _rank = rank;
+        if (!DepartmentsOpen)
+        {
+            _tru = false;
+            _hrb = false;
+        }
+    }
 
     private async Task PromoteAsync()
     {

@@ -535,6 +535,39 @@ public sealed class HandbookTests
         Assert.All(written, w => Assert.Contains("<p>", w.ContentHtml!, StringComparison.Ordinal));
     }
 
+    /// <summary>The service-regulation chapters are mostly lookup tables; a stripped table empties them silently.</summary>
+    /// <remarks>
+    /// They are the only tables in the shipped book, so nothing else would notice if the sanitizer's allowlist
+    /// lost an entry. Asserted per article rather than globally: a table that survives somewhere else is no proof.
+    /// </remarks>
+    [Fact]
+    public async Task The_shipped_tables_survive_the_filter()
+    {
+        var expected = HandbookContent.Chapters
+            .SelectMany(c => c.Articles)
+            .Where(a => a.ContentHtml.Contains("<table>", StringComparison.Ordinal))
+            .Select(a => a.Key)
+            .ToList();
+        Assert.NotEmpty(expected);
+
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, HandbookContent.Chapters, HandbookContent.Terms, HandbookContent.Revision);
+
+        await using var check = ctx.NewContext();
+        var written = await check.HandbuchArtikel
+            .Where(a => expected.Contains(a.SeedKey!))
+            .Select(a => new { a.SeedKey, a.ContentHtml })
+            .ToListAsync();
+
+        Assert.Equal(expected.Count, written.Count);
+        Assert.All(written, w =>
+        {
+            Assert.Contains("<table>", w.ContentHtml!, StringComparison.Ordinal);
+            Assert.Contains("<th>", w.ContentHtml!, StringComparison.Ordinal);
+            Assert.Contains("<td>", w.ContentHtml!, StringComparison.Ordinal);
+        });
+    }
+
     /// <summary>The term itself is uniquely indexed, so a duplicate would break the very first start.</summary>
     [Fact]
     public void Every_shipped_term_is_written_only_once()

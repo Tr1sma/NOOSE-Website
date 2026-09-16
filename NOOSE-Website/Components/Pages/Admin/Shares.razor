@@ -214,10 +214,16 @@ else
                     </MudSelect>
                 </MudTd>
                 <MudTd DataLabel="TRU">
-                    <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Tru" Color="Color.Primary" />
+                    <MudTooltip Text="@DepartmentHint" Disabled="Selection(context.Id).DepartmentsOpen">
+                        <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Tru" Color="Color.Primary"
+                                     Disabled="@(!Selection(context.Id).DepartmentsOpen)" />
+                    </MudTooltip>
                 </MudTd>
                 <MudTd DataLabel="HRB">
-                    <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Hrb" Color="Color.Info" />
+                    <MudTooltip Text="@DepartmentHint" Disabled="Selection(context.Id).DepartmentsOpen">
+                        <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Hrb" Color="Color.Info"
+                                     Disabled="@(!Selection(context.Id).DepartmentsOpen)" />
+                    </MudTooltip>
                 </MudTd>
                 <MudTd DataLabel="Partner">
                     <MudSelect T="PartnerAgency?" @bind-Value="Selection(context.Id).Partner" Dense="true" Margin="Margin.Dense"
@@ -521,9 +527,31 @@ else
     private ClaimsPrincipal _user = default!;
     private readonly Dictionary<string, SelectionState> _selection = new();
 
+    private const string DepartmentHint =
+        "TRU und HRB sind laut Dienstverordnung erst ab dem Dienstgrad Special Agent möglich.";
+
     private sealed class SelectionState
     {
-        public Rank Degree { get; set; } = Rank.JuniorAgent;
+        private Rank _degree = Rank.JuniorAgent;
+
+        /// <summary>Picking a rank below the threshold drops the departments with it, so the release cannot fail on save.</summary>
+        public Rank Degree
+        {
+            get => _degree;
+            set
+            {
+                _degree = value;
+                if (!DepartmentRules.MayHold(_degree))
+                {
+                    Tru = false;
+                    Hrb = false;
+                }
+            }
+        }
+
+        /// <summary>Mirrors DepartmentRules.MayHold for the two checkboxes.</summary>
+        public bool DepartmentsOpen => DepartmentRules.MayHold(_degree);
+
         public bool Tru { get; set; }
         public bool Hrb { get; set; }
         // non-null = release as partner

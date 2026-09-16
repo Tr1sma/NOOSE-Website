@@ -102,28 +102,45 @@ internal static class GettingStartedChapter
                 Protokoll, in Auswahllisten.</p>
                 <p>Dein <strong>Klarname</strong> ist etwas anderes. Ihn sieht nur die Führung. Das ist keine
                 Kleinigkeit, sondern der Grund, warum die ganze Seite mit Codenamen arbeitet.</p>
+                <p>Daneben steht deine <strong>Dienstnummer</strong> - eine römische Zahl von I bis XXV. Sie ist
+                die interne Kennung, vor allem im Funk, und jede ist nur einmal vergeben. Ändern lässt sie die
+                Führung; unterhalb davon stellst du einen Änderungswunsch.</p>
                 """,
                 RoleplayHtml:
                 """
                 <p>Nach außen ist die NOOSE anonym. Auf den öffentlichen Seiten erscheint kein Agent mit Namen -
                 die einzige Ausnahme sind Führungskräfte, die einzeln und von Hand für das öffentliche
                 Organigramm freigegeben wurden.</p>
+                <p>Die Dienstverordnung ist an dieser Stelle streng: Überbehördlich und bei öffentlichem
+                Auftreten wird ausschließlich mit zuvor <strong>intern dokumentierten</strong> Codenamen
+                gearbeitet (§6). Ein spontan erfundener Deckname erfüllt das nicht.</p>
                 """,
                 NavKey: "profil"),
 
             new Article("art-rechte", "wer-darf-was", "Wer darf was",
                 "Dienstgrad, Kennzeichen und warum beides zusammen zählt.",
                 """
-                <p>Deine Rechte ergeben sich aus <strong>zwei unabhängigen Dingen</strong>. Erstens dein
+                <p>Deine Rechte ergeben sich aus <strong>zwei Dingen</strong>. Erstens dein
                 <strong>Dienstgrad</strong> - von Junior Agent bis Director. Zweitens deine
-                <strong>Kennzeichen</strong>: Admin, TRU, HRB. Ein Kennzeichen hängt nicht am Dienstgrad; ein
-                Junior Agent kann HRB sein.</p>
+                <strong>Kennzeichen</strong>: Admin, TRU, HRB.</p>
+                <p>Ein Kennzeichen ist <strong>technisch</strong> nichts anderes als ein eigenes Feld am Konto;
+                es entsteht nicht aus deinem Dienstgrad. Die Dienstverordnung zieht trotzdem eine Schwelle:
+                <strong>TRU und HRB gibt es erst ab Special Agent</strong> (§2.4.1). Die Seite hält sich daran -
+                darunter lässt sich das Kennzeichen gar nicht erst setzen.</p>
                 <p>Ab <strong>Supervisory Special Agent</strong> zählst du zur <strong>Führung</strong>. Das
                 ist die Schwelle, ab der Verschlusssachen, Klarnamen und die meisten Entscheidungen sichtbar
-                werden.</p>
+                werden. Das Kennzeichen <strong>Admin</strong> überspringt jede Rangprüfung - ein Admin gilt
+                überall als Führung, unabhängig von seinem Dienstgrad.</p>
                 <p>Es gibt zusätzlich Konten, die <strong>alles lesen, aber nichts schreiben</strong> dürfen -
                 die Aufsicht. Und Partnerkonten von LSPD, DoJ und LSMD, die nur einzeln freigegebene Akten
                 sehen.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>Die Schwelle für TRU und HRB ist keine Erfindung dieser Seite, sondern §2.4.1 der
+                Dienstverordnung: Der Beitritt zu beiden Einheiten setzt den Dienstgrad Special Agent und die
+                jeweilige Ausbildung voraus. Warum das so ist und was die Einheiten tun, steht im Kapitel
+                <em>Dienstvorschrift</em>.</p>
                 """,
                 DiagramKey: "rechte-matrix"),
 

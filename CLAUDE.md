@@ -129,7 +129,7 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **Interface-first:** jeder DI-Service ist `I<Name>Service` + `<Name>Service`, `AddScoped`. Implementierungen nutzen **Primary Constructors**. Jede public-async-Methode hat ein trailing `CancellationToken cancellationToken = default`.
 - **Live-Updates per Singleton-Broadcaster/Dispatcher:** scoped Service schreibt die Row, ruft dann den Singleton (`NotificationBroadcaster`, `TaskforceChatBroadcaster`, `SharesBroadcaster`, `AcknowledgmentBroadcaster`, `WatchlistDispatcher`) zum Push an verbundene Circuits.
 - **Authorization wird IM Service-Layer durchgesetzt**, nicht nur in der UI: statische Guards `Permission.Require*` (werfen `UnauthorizedAccessException`), Sichtbarkeit zentral in statischem `Visibility`/`*Visibility`/`RecordsReference`. Write-Methoden nehmen `ClaimsPrincipal actor` und rufen den Guard als erste Anweisung.
-- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `AgentSelection`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`, `Public/PublicModules`, `Public/PublicVisibility`, `Public/PublicRoutes`. Geteilte Logik dorthin extrahieren statt kopieren.
+- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `AgentSelection`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`, `DepartmentRules`, `Public/PublicModules`, `Public/PublicVisibility`, `Public/PublicRoutes`. Geteilte Logik dorthin extrahieren statt kopieren.
 - **Wer in eine Agenten-Auswahlliste darf, entscheidet ausschließlich `Services/AgentSelection.cs`.**
   `db.Users.OnlySelectable()` = `Active && !IsTeamLead && PartnerAgency == null` für **jeden** Picker,
   Dropdown, Roster und Roster-Fan-out (also überall, wo Empfänger *aus dem Gesamtbestand* gewählt werden);
@@ -177,6 +177,15 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
   - `Authorization/AgentPrincipalExtensions.cs` — `ClaimsPrincipal`-Extensions (`IsAdmin`, `IsLeadership`, `IsOnlyReader`, `MayWrite`, `MayRealNameSee`, `MayHighestClassification`, …) für UI/Policies/Read-Gates.
   - `Services/Permission.cs` — statische `Require*`-Guards für Service-Writes.
 - **Führung (Leadership)** = Rang ≥ `SupervisorySpecialAgent(4)` **oder** Admin. **`HöchsteEinstufung`** ≥ `SeniorSpecialAgent(3)`, **`BeförderungEntscheiden`** ≥ `DeputyDirector(5)`.
+- **TRU und HRB gibt es erst ab `Rank.SpecialAgent`** — Dienstverordnung §2.4.1, zentral in
+  `Services/DepartmentRules.cs` (`MinimumRank`/`MayHold`/`RequireMayHold`). Die Regel betrifft den **Ziel**-Agenten,
+  nicht den Handelnden, und gehört deshalb *nicht* in `Permission`. Drei Dinge hängen zusammen: der Guard in
+  `AgentManagementService` (`TruSetAsync`/`HrbSetAsync`/`ReleaseAsync`/`PromoteApplicantToAgentAsync`), das
+  **Fallenlassen** der Kennzeichen bei einer Herabstufung (`DropDepartmentsBelowThreshold`, gerufen von
+  `RankChangeAsync` und `PromotionDecideAsync` — sonst behält ein degradierter Agent sein HRB-Tor) und die drei
+  UI-Stellen, die dasselbe Prädikat lesen müssen (`Admin/Agents.razor`, `Admin/Shares.razor`,
+  `Recruiting/Shared/BewerbungPromotePanel.razor`). **Entfernen bleibt auf jedem Rang erlaubt**, sonst säße ein
+  Altbestand fest.
 - **Admin = Boolean-Flag** (`Agent.IsAdmin` / Claim `noose:admin`), **nicht** der Rang und **nicht** die geseedete Identity-Rolle „Admin" (die ist ungenutzt). Admin short-circuited jedes `RankRequirement`.
 - **Nur-Lese-Aufsicht (`OnlyReader`)** = `IsTeamLead && !IsAdmin` (abgeleitet, kein Flag): liest alles (inkl. VS), schreibt **nichts** (vom `ReadOnlyBarrierInterceptor` hart vetoed), sieht **nie** Klarnamen. `IsTeamLead` allein gewährt sonst keine Rechte; TeamLeads sind RP-weit unsichtbar.
   - **`IsTeamLead` entfernt den Account aus jeder Auswahlliste** (`AgentSelection`), auch mit `IsAdmin` obendrauf. Deshalb zeigt die **Einsichtsliste eines VS-Dokuments die Aufsicht nicht**, obwohl `DocumentViewerScope.CanSee` ihr den Lesezugriff weiterhin gewährt — die Liste ist absichtlich unvollständig, sonst würde sie die Existenz der Aufsicht verraten. Nicht „reparieren".
@@ -190,7 +199,7 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 - **Account-Flow:** Discord-Login → `Agent` mit `Status=Pending` → Freigabe durch Führung/Admin (`AgentManagementService.ReleaseAsync`) setzt `Active` + Rang + Flags. Bootstrap-Admins via `Bootstrap:AdminDiscordId(s)`.
 - **Zwei VS-Achsen:** `Classification` (Einstufung Person/Fraktion: `ReviewCase`/Prüffall → `SuspicionCase`/Verdachtsfall → `SecuredStateThreatening`/Gesichert staatsgefährdend) **und** `DocumentClassification` (Bibliotheks-VS-Stufe: `None`/`Leadership`/`Tru`/`Hrb`). VS-Sichtbarkeit wird **server-seitig** über `DocumentViewerScope.CanSee` durchgesetzt, nicht über die `Classified`-Policy (reserviert/ungenutzt).
 - **Ausbildungsmodule: Abhaken ist nicht Verwalten.** `TrainingModuleService.MarkCompletedAsync`/`UnmarkCompletedAsync`
-  tragen `Permission.RequireHrbOrLeadershipWrite` (HRB darf, rangunabhängig); `CreateAsync`/`UpdateAsync`/`DeleteAsync`
+  tragen `Permission.RequireHrbOrLeadershipWrite` (HRB darf ohne Führungsrang); `CreateAsync`/`UpdateAsync`/`DeleteAsync`
   bleiben auf `RequireLeadership` — `DeleteAsync` nimmt die Haken **aller** Agenten mit. Das UI-Gate ist **kein**
   `AuthorizeView`, sondern das private `ModulesPanel._mayTick`, gelesen an **zwei** Stellen (Checkbox-`ReadOnly` und
   `ToggleAsync`); nur die Checkbox zu sperren lässt den SignalR-Pfad offen. Das Prädikat muss den Guard spiegeln
@@ -413,7 +422,7 @@ die Formen und setzt das Buch zusammen, der Text steht **eine Datei je Kapitel**
 (plus `GlossaryContent.cs`). Der Seeder schreibt ihn beim Start ein und fasst **nie** an, was jemand
 redaktionell bearbeitet hat (`IstAngepasst`). Dieselbe Konfliktregel wie beim Changelog.
 
-Bestand: 7 Kapitel, 81 Artikel, 143 Glossarbegriffe, 14 Schaubilder, 37 Schritt-Karten.
+Bestand: 9 Kapitel, 97 Artikel, 169 Glossarbegriffe, 15 Schaubilder, 40 Schritt-Karten.
 
 - **Ton:** direkte Anrede, kurze Sätze, Klicknamen kursiv. Ein Fachwort beim ersten Auftreten erklären —
   genau dort greift später auch die Erklär-Blase aus dem Glossar.
@@ -574,7 +583,7 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
 | **Aktenzeichen** | Menschenlesbare ID, z. B. `NOOSE-P-2026-0001` |
 | **Wartungsmodus** | In `MainLayout.razor` erzwungen (keine Middleware); Admins behalten Zugriff |
 | **Klarname / Codename** | Realname (führungs-/nicht-OnlyReader-only) vs. Dienst-Codename |
-| **TRU / HRB** | Tactical Response Unit / Human Resources Branch — rangunabhängige Flags + VS-Stufen |
+| **TRU / HRB** | Tactical Response Unit / Human Resource Branch — Flags neben dem Dienstgrad (laut DVO erst ab Special Agent) + VS-Stufen |
 
 ## Weiterführende Docs
 

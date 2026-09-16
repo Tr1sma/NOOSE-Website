@@ -135,12 +135,16 @@ else
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="TRU">
-                <MudSwitch T="bool" Value="context.IsTRU" ValueChanged="@(v => TruSet(context, v))" Color="Color.Primary"
-                           Disabled="@(context.PartnerAgency != null)" />
+                <MudTooltip Text="@DepartmentHint" Disabled="@(context.PartnerAgency != null || DepartmentOpen(context))">
+                    <MudSwitch T="bool" Value="context.IsTRU" ValueChanged="@(v => TruSet(context, v))" Color="Color.Primary"
+                               Disabled="@(context.PartnerAgency != null || (!DepartmentOpen(context) && !context.IsTRU))" />
+                </MudTooltip>
             </MudTd>
             <MudTd DataLabel="HRB">
-                <MudSwitch T="bool" Value="context.IsHRB" ValueChanged="@(v => HrbSet(context, v))" Color="Color.Info"
-                           Disabled="@(context.PartnerAgency != null)" />
+                <MudTooltip Text="@DepartmentHint" Disabled="@(context.PartnerAgency != null || DepartmentOpen(context))">
+                    <MudSwitch T="bool" Value="context.IsHRB" ValueChanged="@(v => HrbSet(context, v))" Color="Color.Info"
+                               Disabled="@(context.PartnerAgency != null || (!DepartmentOpen(context) && !context.IsHRB))" />
+                </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Teamleitung">
                 <MudSwitch T="bool" Value="context.IsTeamLead" ValueChanged="@(v => TeamLeadSet(context, v))" Color="Color.Tertiary"
@@ -376,6 +380,12 @@ else
         }
         await LoadAsync();
     }
+
+    /// <summary>Mirrors DepartmentRules.MayHold; a switch the service then refuses is a dialog that fails on save.</summary>
+    private static bool DepartmentOpen(Agent agent) => DepartmentRules.MayHold(agent.Rank);
+
+    private const string DepartmentHint =
+        "TRU und HRB sind laut Dienstverordnung erst ab dem Dienstgrad Special Agent möglich.";
 
     private async Task TruSet(Agent agent, bool value)
     {

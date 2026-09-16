@@ -58,6 +58,15 @@ internal static class InvestigationChapter
                 <p>Verknüpfe sie mit dem Vorgang, zu dem sie gehört. Eine Operation, die an keinem Vorgang
                 hängt, ist hinterher nicht mehr auffindbar.</p>
                 """,
+                RoleplayHtml:
+                """
+                <p>Eine Operation ist nicht immer freiwillig. Nimmst du an einer Einsatzlage einer
+                <strong>anderen Behörde</strong> teil, verlangt §4.6.2 der Dienstverordnung unverzüglich einen
+                Einsatzbericht - und genau das ist dieser Eintrag. Ausgenommen sind nur die Behördenleitung und
+                die Führungsebene ab Supervisory Special Agent.</p>
+                <p>Die Vorschrift dazu, wann du eine fremde Einsatzlage überhaupt anfahren darfst, steht unter
+                <em>Dienstvorschrift → Zusammenarbeit mit anderen Behörden</em>.</p>
+                """,
                 NavKey: "operationen",
                 Steps:
                 [
@@ -84,6 +93,15 @@ internal static class InvestigationChapter
                 überbehördliche Taskforce ist die Form, in der mit LSPD, DoJ oder LSMD zusammengearbeitet
                 wird; Partnerkonten können dort mitlesen und schreiben, aber die Agentenliste bleibt
                 intern.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>In einer Taskforce gilt die Rangordnung nicht. Nach §3.6 der Dienstverordnung ist die
+                ernannte <strong>Einsatz- oder Gesamtleitung</strong> weisungsbefugt - unabhängig vom regulären
+                Dienstgrad der Beteiligten und für die Dauer der Maßnahme. Ein Special Agent mit der
+                Einsatzleitung kann also einem Deputy Director Anweisungen geben.</p>
+                <p>Die Seite bildet das nicht ab; sie kennt nur Dienstgrade und Zuteilungen. Halte deshalb in
+                der Beschreibung der Taskforce fest, wer die Leitung hat.</p>
                 """,
                 NavKey: "taskforces"),
 
@@ -164,6 +182,16 @@ internal static class InvestigationChapter
                 <p>Jeder Gegenstand kann einem <strong>Besitzer</strong> zugeordnet werden - einer Person oder
                 einer Fraktion. Dort taucht er dann im Abschnitt <em>Asservate</em> auf.</p>
                 """,
+                RoleplayHtml:
+                """
+                <p>Der Eintrag hier ist eine <strong>Dienstpflicht</strong>, keine Fleißarbeit. Nach §3.5 der
+                Dienstverordnung sind sichergestellte Waffen, waffenähnliche Gegenstände und sonstige Asservate
+                unverzüglich und auf schnellstem sicherem Weg der Asservatenkammer zuzuführen -
+                <strong>Zwischenlagerungen sind unzulässig</strong>. Und jedes Asservat ist umgehend hier
+                einzutragen.</p>
+                <p>„Umgehend“ heißt: noch im Dienst, nicht am nächsten Tag. Was nicht eingetragen ist, gilt im
+                Zweifel als nicht abgegeben.</p>
+                """,
                 NavKey: "asservatenkammer"),
 
             new Article("art-graph", "beziehungsgraph", "Beziehungsgraph",
@@ -224,6 +252,9 @@ internal static class InvestigationChapter
                 dein Dienstgrad).</p>
                 <p>Jedes Dokument trägt eine <strong>VS-Stufe</strong>. Sie entscheidet allein darüber, wer es
                 sieht - Verknüpfungen und Suche richten sich danach.</p>
+                <p>Hier liegt auch die <strong>Dienstverordnung</strong> selbst. Das Kapitel
+                <em>Dienstvorschrift</em> in diesem Handbuch ist nur ihre Kurzfassung - im Zweifel gilt das
+                Dokument.</p>
                 """,
                 NavKey: "dokumente"),
         ]);

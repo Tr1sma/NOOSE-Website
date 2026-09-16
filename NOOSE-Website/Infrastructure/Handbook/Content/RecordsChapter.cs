@@ -107,14 +107,21 @@ internal static class RecordsChapter
                 <ul>
                 <li><strong>Offen</strong> - alle internen Agenten.</li>
                 <li><strong>Führung</strong> - erst ab Supervisory Special Agent.</li>
-                <li><strong>TRU</strong> - nur Konten mit dem Kennzeichen TRU.</li>
-                <li><strong>HRB</strong> - nur Konten mit dem Kennzeichen HRB.</li>
+                <li><strong>TRU</strong> - Konten mit dem Kennzeichen TRU, dazu die Führung.</li>
+                <li><strong>HRB</strong> - Konten mit dem Kennzeichen HRB, dazu die Führung.</li>
                 </ul>
+                <p>Die beiden Fach-Stufen schließen die Führung also <strong>nicht</strong> aus: wer ohnehin
+                Verschlusssachen lesen darf, sieht auch TRU- und HRB-Material. Sie grenzen nach unten ab, nicht
+                nach oben.</p>
                 <p>Die Stufe wirkt <strong>überall</strong>, nicht nur auf der Akte selbst: ein VS-Dokument
                 erscheint auch in der Suche nicht, taucht in keiner Liste auf und wird von NOOSEI nicht
                 erwähnt. Für dich sieht es so aus, als gäbe es das Dokument nicht - und das ist Absicht.</p>
                 <p>Stufe hoch heißt nicht „sicherer“. Was niemand findet, hilft auch niemandem. Stufe eine
                 Sache nur ein, wenn es einen Grund gibt, den du benennen kannst.</p>
+                <p>Verwechsle diese vier Stufen nicht mit den <strong>Sicherheitsfreigaben</strong> der
+                Dienstverordnung - Confidential, Secret, Top Secret und das Special Access Program. Das ist eine
+                zweite, rein nach Dienstgrad gestaffelte Leiter; wie beide zusammenhängen, steht unter
+                <em>Dienstvorschrift → Sicherheitsfreigaben</em>.</p>
                 """,
                 DiagramKey: "vs-stufen"),
 

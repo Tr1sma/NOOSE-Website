@@ -325,6 +325,13 @@ public static class ChangelogContent
                 + "geschriebenen Text zu ersetzen.", "Bedienung"),
             Besser("2.1.61-werkzeugleiste", "Die Knöpfe des Texteditors und der Hinweis im leeren Feld sind "
                 + "wieder gut lesbar.", "Bedienung"),
+            Neu("2.1.62-dienstvorschrift", "Das Handbuch hat zwei neue Kapitel: die Dienstverordnung in "
+                + "Kurzform und die Listen zu Ausrüstung, Funk, Fahrzeugen und Einrichtungen.", "Handbuch"),
+            Besser("2.1.63-freigaben-erklaert", "Das Handbuch erklärt jetzt, wie die Sicherheitsfreigaben der "
+                + "Dienstverordnung und die Verschlusssachen-Stufen der Seite zusammenhängen.", "Handbuch"),
+            Fix("2.1.64-kennzeichen-rang", "TRU und HRB lassen sich nur noch ab dem Dienstgrad Special Agent "
+                + "vergeben, wie es die Dienstverordnung vorsieht. Wird jemand darunter herabgestuft, "
+                + "verliert er die Zugehörigkeit automatisch.", "Personal"),
         ], "1.5"),
     ];
 }

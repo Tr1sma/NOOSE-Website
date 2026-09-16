@@ -19,6 +19,11 @@ internal static class PersonnelChapter
                 dazu kam - das Ausscheiden.</p>
                 <p>Die Personalakte ist etwas anderes als die Personenakte. Die Personenakte beschreibt jemanden,
                 über den wir ermitteln; die Personalakte beschreibt einen von uns.</p>
+                <p>Der Abschnitt <em>Vermerke</em> ist dabei mehr als ein Notizzettel: Hier werden
+                <strong>Belobigungen</strong> festgehalten - und die <strong>Disziplinarmaßnahmen</strong> nach
+                §3.7 der Dienstverordnung. Ein Verweis nach Stufe 1 ist genau das: ein neutraler oder negativer
+                Vermerk in dieser Akte. Welche Stufe ab welchem Dienstgrad verhängt werden darf, steht unter
+                <em>Dienstvorschrift → Sanktionsstufen</em>.</p>
                 <p>Sie ist der Führung vorbehalten. Deinen eigenen Stand siehst du in deinem Profil.</p>
                 """,
                 NavKey: "personal"),
@@ -33,6 +38,13 @@ internal static class PersonnelChapter
                 Schwelle als „Führung“ - wer befördert, verändert dauerhaft die Rechte eines Kontos.</p>
                 <p>Mit der Entscheidung wird der Dienstgrad gesetzt und im Verlauf festgehalten. Der Betroffene
                 wird einmal abgemeldet und muss sich neu anmelden, damit die neuen Rechte greifen.</p>
+                <p>Die Seite prüft <strong>nicht</strong>, ob der Zielgrad der nächsthöhere ist - sie lässt auch
+                einen Sprung oder eine Herabstufung zu. Das ist Absicht: nach §2.4.4 darf die Behördenleitung
+                jeden Agenten in jeden Dienstgrad setzen.</p>
+                <p>Was die Dienstverordnung für den regulären Weg verlangt - Ausbildungen, Aktivität,
+                Zugehörigkeit zu TRU oder HRB, eine abgeschlossene Infiltration - steht unter
+                <em>Dienstvorschrift → Beförderungskriterien</em>. Diese Voraussetzungen prüft ein Mensch, nicht
+                die Seite; die Begründung des Antrags ist der Ort, an dem sie belegt werden.</p>
                 """,
                 DiagramKey: "befoerderung"),
 
@@ -42,11 +54,17 @@ internal static class PersonnelChapter
                 <p>In der Personalakte steht eine Liste von <strong>Ausbildungsmodulen</strong> - Schulungen,
                 Unterweisungen, Nachweise, die jeder Agent durchlaufen soll. Jedes Modul wird einzeln
                 abgehakt, mit Datum und dem Namen dessen, der es abgenommen hat.</p>
-                <p>Abhaken dürfen die <strong>Führung</strong> und das <strong>HRB</strong>. Das HRB-Kennzeichen
-                hängt nicht am Dienstgrad - ein Junior Agent mit diesem Kennzeichen darf es also auch. Wer ein
-                Modul irrtümlich abgehakt hat, kann den Haken wieder entfernen; der Vorgang steht im Protokoll.</p>
+                <p>Abhaken dürfen die <strong>Führung</strong> und das <strong>HRB</strong>. Das Kennzeichen HRB
+                setzt keinen Führungsrang voraus - ein Special Agent mit diesem Kennzeichen darf es also auch.
+                Wer ein Modul irrtümlich abgehakt hat, kann den Haken wieder entfernen; der Vorgang steht im
+                Protokoll.</p>
                 <p>Die <strong>Liste der Module</strong> selbst ist etwas anderes: sie anzulegen, zu ändern oder
                 zu löschen bleibt der Führung vorbehalten. Ein gelöschtes Modul nimmt die Haken aller Agenten mit.</p>
+                <p>Die Liste wird <strong>leer ausgeliefert</strong>. Welche Module es gibt, entscheidet die
+                Führung - die Dienstverordnung nennt in §2.3 Grundeinweisung, Tarnausbildung, „(Erweiterte)
+                Verhörmethoden“, die Drohnenausbildung sowie die Ausbildungen für TRU und HRB. Was davon
+                Voraussetzung für welche Beförderung ist, steht unter
+                <em>Dienstvorschrift → Aus- und Fortbildungen</em>.</p>
                 <p>Für den Agenten selbst ist die Liste vor allem eine Orientierung: sie sagt, was von ihm
                 erwartet wird, bevor ihn jemand danach fragt.</p>
                 """),
@@ -58,8 +76,12 @@ internal static class PersonnelChapter
                 Konto steht auf <strong>ausstehend</strong> und sieht nichts, bis jemand es freigibt und dabei
                 Dienstgrad und Kennzeichen setzt.</p>
                 <p>Hier werden auch die <strong>Kennzeichen</strong> vergeben: Admin, TRU, HRB und die
-                Nur-Lese-Aufsicht. Sie sind vom Dienstgrad unabhängig - ein Junior Agent kann HRB sein, ein
-                Deputy Director muss es nicht.</p>
+                Nur-Lese-Aufsicht. Sie sind keine Dienstgrade - ein Deputy Director muss kein HRB sein, und ein
+                Special Agent kann es sein.</p>
+                <p>Für <strong>TRU und HRB</strong> gilt dabei eine Schwelle aus der Dienstverordnung: sie
+                werden erst ab dem Dienstgrad <strong>Special Agent</strong> vergeben (§2.4.1). Bei einem Junior
+                Agent sind die beiden Schalter deshalb gesperrt. Wird jemand unter diese Schwelle herabgestuft,
+                nimmt die Seite ihm die Kennzeichen ab und schreibt das ins Protokoll.</p>
                 <p>Jede Änderung an Dienstgrad, Kennzeichen oder Status meldet den Betroffenen einmal ab. Das
                 ist kein Fehler: die Rechte stecken in seiner Anmeldung, und sie werden erst beim nächsten
                 Anmelden neu ausgestellt.</p>
@@ -174,6 +196,12 @@ internal static class PersonnelChapter
                 Fahrzeuge, einen Einsatz. Du stellst ihn selbst; die Führung entscheidet.</p>
                 <p>Jeder Agent hat ein <strong>Monatsbudget</strong>. Ein genehmigter Antrag reserviert davon,
                 die Auszahlung bucht es ab. Deinen Stand siehst du auf derselben Seite.</p>
+                <p>Was die Fraktionskasse in der Regel übernimmt, legt §8.0 der Dienstverordnung fest - vom
+                Jailbreak-Handy über Dienstwaffen bis zu den chemischen Produkten, jeweils mit Höchstmengen. Die
+                vollständige Liste steht unter
+                <em>Ausrüstung &amp; Einrichtungen → Erstattungsfähige Dienstmittel</em>. Für laufende
+                Infiltrationen und große Einsätze kann die Führungsebene darüber hinausgehen; das ist dann im
+                Einzelfall zu dokumentieren.</p>
                 <p>Begründe den Antrag so, dass er ohne Rückfrage entschieden werden kann. Ein Antrag ohne
                 Zweck bleibt liegen.</p>
                 """,

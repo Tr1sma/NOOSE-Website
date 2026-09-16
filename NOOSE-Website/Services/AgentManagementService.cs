@@ -99,6 +99,7 @@ public class AgentManagementService(
         // takes whatever it is sent, so the check has to sit here, where every path through it passes.
         Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
+        RequireDepartmentsFitRank(rank, isTRU, isHRB);
 
         var agent = await GetOrThrow(agentId);
         var altRank = agent.Rank;
@@ -164,6 +165,7 @@ public class AgentManagementService(
     {
         Permission.RequireWriteAccess(actor);
         Permission.RequireLeadership(actor);
+        RequireDepartmentsFitRank(rank, isTRU, isHRB);
 
         var agent = await GetOrThrow(applicantUserId);
         // a partner applies without ever leaving status Active, so it arrives here as an Active account with an
@@ -477,16 +479,18 @@ public class AgentManagementService(
     public async Task RankChangeAsync(string agentId, Rank rank, ClaimsPrincipal actor)
     {
         Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
 
         var agent = await GetOrThrow(agentId);
         var alt = agent.Rank;
         agent.Rank = rank;
+        var lost = DropDepartmentsBelowThreshold(agent);
 
         if (alt != rank)
         {
             HistoryEntryAdd(agent.Id, alt, rank, actor, "Rangänderung");
         }
-        Audit(agent, AuditAction.Modified, actor, $"Dienstgrad {alt?.ToString() ?? "—"} → {rank}");
+        Audit(agent, AuditAction.Modified, actor, $"Dienstgrad {alt?.ToString() ?? "—"} → {rank}{lost}");
         await Save(agent, newStamp: true);
     }
 
@@ -594,8 +598,10 @@ public class AgentManagementService(
             {
                 HistoryEntryAdd(agent.Id, alt, request.TargetRank, actor, "Beförderung");
             }
+            // a request may also lower the rank; the departments cannot survive below their own threshold
+            var lost = DropDepartmentsBelowThreshold(agent);
             Audit(agent, AuditAction.Modified, actor,
-                $"Beförderung genehmigt: {alt?.ToString() ?? "—"} → {request.TargetRank}");
+                $"Beförderung genehmigt: {alt?.ToString() ?? "—"} → {request.TargetRank}{lost}");
             await Save(agent, newStamp: true);
         }
         else
@@ -607,11 +613,47 @@ public class AgentManagementService(
         }
     }
 
+    /// <summary>Reject a release that would hand out a department the rank may not carry.</summary>
+    private static void RequireDepartmentsFitRank(Rank rank, bool isTRU, bool isHRB)
+    {
+        if (isTRU)
+        {
+            DepartmentRules.RequireMayHold(rank, "Die Tactical Response Unit");
+        }
+        if (isHRB)
+        {
+            DepartmentRules.RequireMayHold(rank, "Die Human Resource Branch");
+        }
+    }
+
+    /// <summary>Strip TRU and HRB once a rank change puts the agent below the threshold; returns an audit suffix.</summary>
+    /// <remarks>
+    /// Without this a demotion leaves a Junior Agent carrying HRB - a state the guards refuse to create but would
+    /// happily keep, and the flag still opens every HRB gate.
+    /// </remarks>
+    private static string DropDepartmentsBelowThreshold(Agent agent)
+    {
+        if (DepartmentRules.MayHold(agent.Rank) || !(agent.IsTRU || agent.IsHRB))
+        {
+            return string.Empty;
+        }
+
+        var lost = new List<string>(2);
+        if (agent.IsTRU) { agent.IsTRU = false; lost.Add("TRU"); }
+        if (agent.IsHRB) { agent.IsHRB = false; lost.Add("HRB"); }
+        return $"; {string.Join(" und ", lost)} entfernt (Dienstgrad unter {RankDisplay.DefaultName(DepartmentRules.MinimumRank)})";
+    }
+
     public async Task TruSetAsync(string agentId, bool isTRU, ClaimsPrincipal actor)
     {
         Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
 
         var agent = await GetOrThrow(agentId);
+        if (isTRU)
+        {
+            DepartmentRules.RequireMayHold(agent.Rank, "Die Tactical Response Unit");
+        }
         agent.IsTRU = isTRU;
 
         Audit(agent, AuditAction.Modified, actor, isTRU ? "TRU-Flag gesetzt" : "TRU-Flag entfernt");
@@ -621,8 +663,13 @@ public class AgentManagementService(
     public async Task HrbSetAsync(string agentId, bool isHRB, ClaimsPrincipal actor)
     {
         Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
 
         var agent = await GetOrThrow(agentId);
+        if (isHRB)
+        {
+            DepartmentRules.RequireMayHold(agent.Rank, "Die Human Resource Branch");
+        }
         agent.IsHRB = isHRB;
 
         Audit(agent, AuditAction.Modified, actor, isHRB ? "HRB-Flag gesetzt" : "HRB-Flag entfernt");
