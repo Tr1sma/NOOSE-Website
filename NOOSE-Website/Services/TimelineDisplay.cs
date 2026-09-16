@@ -31,6 +31,8 @@ public static class TimelineDisplay
             AuditAction.Modified => "geändert",
             AuditAction.Deleted => deleted,
             AuditAction.Restored => "wiederhergestellt",
+            AuditAction.Archived => "archiviert",
+            AuditAction.Unarchived => "aus dem Archiv geholt",
             _ => action.ToString(),
         };
 

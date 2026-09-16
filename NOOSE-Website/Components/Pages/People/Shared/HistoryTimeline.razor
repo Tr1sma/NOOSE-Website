@@ -61,6 +61,8 @@ else
             AuditAction.Modified => "geändert",
             AuditAction.Deleted => "gelöscht",
             AuditAction.Restored => "wiederhergestellt",
+            AuditAction.Archived => "archiviert",
+            AuditAction.Unarchived => "aus dem Archiv geholt",
             _ => log.Action.ToString(),
         };
         return $"{type} {action}";
@@ -72,6 +74,8 @@ else
         AuditAction.Modified => Color.Info,
         AuditAction.Deleted => Color.Error,
         AuditAction.Restored => Color.Warning,
+        AuditAction.Archived => Color.Default,
+        AuditAction.Unarchived => Color.Default,
         _ => Color.Default,
     };
 }
