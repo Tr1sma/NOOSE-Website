@@ -22,6 +22,12 @@ public interface ITaskforceService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Files the record away: out of listings, pickers and the default search, still fully readable.</summary>
+    Task ArchiveAsync(string id, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings the record back into the active stock.</summary>
+    Task UnarchiveAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     /// <summary>Set approval status, leadership only.</summary>
     Task ApprovalSetAsync(string id, TaskforceStatus @new, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

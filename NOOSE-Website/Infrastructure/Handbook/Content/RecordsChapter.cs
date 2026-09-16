@@ -27,13 +27,6 @@ internal static class RecordsChapter
                 <p>Lege lieber <strong>eine</strong> Akte gut an als drei halbe. Wenn du unsicher bist, ob es
                 die Person schon gibt, such zuerst - die Suche findet auch ähnlich klingende Schreibweisen.</p>
                 """,
-                RoleplayHtml:
-                """
-                <p>Der <strong>Lebensstatus</strong> kennt drei Werte: lebend, tot und flüchtig. „Tot“ ist im
-                Spiel kein Endzustand - nach etwa 20 Minuten steht die Person wieder auf, und die Akte bleibt
-                bestehen. Trag den Tod trotzdem ein: für die Zeit dazwischen ist er die Wahrheit, und der
-                Verlauf der Akte soll ihn kennen.</p>
-                """,
                 DiagramKey: "personenakte",
                 NavKey: "personen",
                 Steps:
@@ -72,12 +65,6 @@ internal static class RecordsChapter
                 <p>Das Aktenzeichen vergibt das System selbst und es ändert sich nie. Genau deshalb ist es das
                 Richtige, wenn du im Funk, in einem Bericht oder gegenüber einer Partnerbehörde eine bestimmte
                 Akte benennen willst: Namen sind mehrdeutig, Aktenzeichen nicht.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Im Schriftverkehr mit Gericht, LSPD oder Bürgern nennst du immer das Aktenzeichen. Es ist
-                die einzige Angabe, die du ohne Bedenken herausgeben kannst - sie verrät für sich genommen
-                nichts über den Inhalt.</p>
                 """),
 
             new Article("art-einstufung", "einstufung", "Einstufungen",
@@ -167,11 +154,6 @@ internal static class RecordsChapter
                 <p>Die Akte funktioniert wie die einer Personengruppe: Mitglieder werden mit ihrer
                 Personenakte verknüpft, alles andere - Einstufung, Verknüpfungen, Kommentare - ist dasselbe
                 wie überall.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Eine Partei ist nicht schon deshalb ein Fall, weil sie eine Partei ist. Eine Einstufung
-                braucht denselben Anlass wie überall sonst - und wird hier besonders genau hingesehen.</p>
                 """,
                 NavKey: "parteien"),
 

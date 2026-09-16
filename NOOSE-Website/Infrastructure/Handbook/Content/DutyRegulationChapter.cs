@@ -27,12 +27,6 @@ internal static class DutyRegulationChapter
                 vollen Text wiederfindest.</p>
                 <p>Widersprechen sich Kurzfassung und Dienstverordnung, <strong>gilt die
                 Dienstverordnung</strong>. Melde den Widerspruch, statt dich auf das Handbuch zu berufen.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Fehlende Passagen sind laut Vorwort „mit Sinn und Verstand zu Ende zu führen“. Das ist kein
-                Freibrief, sondern die Aufforderung, im Zweifel nachzufragen - für unbekannte Einrichtungen und
-                Abläufe macht §9.9 die Rückfrage bei der Führungsebene ausdrücklich zur Pflicht.</p>
                 """),
 
             new Article("art-dvo-freigaben", "sicherheitsfreigaben", "Sicherheitsfreigaben",
@@ -63,14 +57,6 @@ internal static class DutyRegulationChapter
                 <em>TRU</em> und <em>HRB</em> sind das Fachprinzip in Reinform. Für das <em>Special Access
                 Program</em> gibt es auf der Seite absichtlich keine Entsprechung - solche Vorgänge gehören
                 nicht in eine Akte, die jemand versehentlich öffnet.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Zwei Stellen der Dienstverordnung lassen sich schwer zusammenbringen: §3.3 erklärt
-                <em>alle</em> Informationen, an die du nur durch deine Stellung gelangst, pauschal zur
-                Geheimhaltungsstufe 5 „Top Secret“ - §1.1 beschreibt Confidential zugleich als Grundstufe für
-                interne Informationen. Bis das geklärt ist, gilt nach außen die strengere Lesart: nichts
-                verlässt die Behörde ohne Freigabe.</p>
                 """,
                 DiagramKey: "sicherheitsfreigaben"),
 
@@ -260,12 +246,6 @@ internal static class DutyRegulationChapter
                 erfolgt <strong>ausschließlich nach interner Genehmigung</strong> und unter strenger
                 Risikoabwägung. Eine abgeschlossene Infiltration ist zugleich Voraussetzung für die Beförderung
                 zum Senior Special Agent.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Der Unterschied zwischen Undercover und Infiltration ist Dauer und Tiefe. Wer sich einmal
-                unerkannt umhört, ist undercover. Wer sich in eine Struktur hineinarbeitet und dort eine Rolle
-                einnimmt, infiltriert - und braucht dafür vorher eine Genehmigung.</p>
                 """),
 
             new Article("art-dvo-zusammenarbeit", "behoerdliche-zusammenarbeit",

@@ -58,15 +58,6 @@ internal static class InvestigationChapter
                 <p>Verknüpfe sie mit dem Vorgang, zu dem sie gehört. Eine Operation, die an keinem Vorgang
                 hängt, ist hinterher nicht mehr auffindbar.</p>
                 """,
-                RoleplayHtml:
-                """
-                <p>Eine Operation ist nicht immer freiwillig. Nimmst du an einer Einsatzlage einer
-                <strong>anderen Behörde</strong> teil, verlangt §4.6.2 der Dienstverordnung unverzüglich einen
-                Einsatzbericht - und genau das ist dieser Eintrag. Ausgenommen sind nur die Behördenleitung und
-                die Führungsebene ab Supervisory Special Agent.</p>
-                <p>Die Vorschrift dazu, wann du eine fremde Einsatzlage überhaupt anfahren darfst, steht unter
-                <em>Dienstvorschrift → Zusammenarbeit mit anderen Behörden</em>.</p>
-                """,
                 NavKey: "operationen",
                 Steps:
                 [
@@ -94,15 +85,6 @@ internal static class InvestigationChapter
                 wird; Partnerkonten können dort mitlesen und schreiben, aber die Agentenliste bleibt
                 intern.</p>
                 """,
-                RoleplayHtml:
-                """
-                <p>In einer Taskforce gilt die Rangordnung nicht. Nach §3.6 der Dienstverordnung ist die
-                ernannte <strong>Einsatz- oder Gesamtleitung</strong> weisungsbefugt - unabhängig vom regulären
-                Dienstgrad der Beteiligten und für die Dauer der Maßnahme. Ein Special Agent mit der
-                Einsatzleitung kann also einem Deputy Director Anweisungen geben.</p>
-                <p>Die Seite bildet das nicht ab; sie kennt nur Dienstgrade und Zuteilungen. Halte deshalb in
-                der Beschreibung der Taskforce fest, wer die Leitung hat.</p>
-                """,
                 NavKey: "taskforces"),
 
             new Article("art-observationen", "observationen", "Observationen",
@@ -129,14 +111,6 @@ internal static class InvestigationChapter
                 entscheidet mit darüber, wie schwer die Person im Bedrohungs-Score wiegt.</p>
                 <p>Ein Dok kann eingestuft werden wie jedes andere Dokument. Denk daran, dass ein eingestuftes
                 Dok für alle anderen <em>nicht existiert</em> - auch nicht als Lücke.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Die <strong>Amnestie-Spritze</strong> löscht die Erinnerung der Person an alles, was mit
-                der NOOSE zu tun hatte. Sie ist der Regelweg, um jemanden gehen zu lassen, ohne dass die
-                Behörde auffliegt. Für die Akte ändert das nichts: wir wissen weiter alles, die Person nicht
-                mehr. Halte im Dok fest, worauf sich die Spritze bezog - sonst weiß später niemand, was die
-                Person noch wissen darf.</p>
                 """),
 
             new Article("art-informanten", "informanten", "Informanten",
@@ -181,16 +155,6 @@ internal static class InvestigationChapter
                 würde, gleicht eine Korrektur-Einlagerung vorher aus.</p>
                 <p>Jeder Gegenstand kann einem <strong>Besitzer</strong> zugeordnet werden - einer Person oder
                 einer Fraktion. Dort taucht er dann im Abschnitt <em>Asservate</em> auf.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Der Eintrag hier ist eine <strong>Dienstpflicht</strong>, keine Fleißarbeit. Nach §3.5 der
-                Dienstverordnung sind sichergestellte Waffen, waffenähnliche Gegenstände und sonstige Asservate
-                unverzüglich und auf schnellstem sicherem Weg der Asservatenkammer zuzuführen -
-                <strong>Zwischenlagerungen sind unzulässig</strong>. Und jedes Asservat ist umgehend hier
-                einzutragen.</p>
-                <p>„Umgehend“ heißt: noch im Dienst, nicht am nächsten Tag. Was nicht eingetragen ist, gilt im
-                Zweifel als nicht abgegeben.</p>
                 """,
                 NavKey: "asservatenkammer"),
 

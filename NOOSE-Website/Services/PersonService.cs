@@ -241,6 +241,31 @@ public class PersonService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task ArchiveAsync(string id, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+        => await SetArchivedAsync(id, true, reason, actor, cancellationToken);
+
+    public async Task UnarchiveAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+        => await SetArchivedAsync(id, false, null, actor, cancellationToken);
+
+    private async Task SetArchivedAsync(string id, bool archived, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        // a stock decision, not a rank decision
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await RecordArchive.SetArchivedAsync<Person>(db, id, archived, reason, actor, cancellationToken))
+        {
+            return;
+        }
+        // ExecuteUpdate bypasses the audit interceptor, so the row is written by hand
+        var note = archived && !string.IsNullOrWhiteSpace(reason)
+            ? ManualAudit.Change("Archivgrund", null, reason.Trim())
+            : null;
+        db.AuditLogs.Add(ManualAudit.Row(nameof(Person), id,
+            archived ? AuditAction.Archived : AuditAction.Unarchived, actor, note));
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(@new, actor);

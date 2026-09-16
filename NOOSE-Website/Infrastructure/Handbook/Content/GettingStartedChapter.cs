@@ -24,11 +24,6 @@ internal static class GettingStartedChapter
                 abgemeldet. Melde dich einfach neu an - das ist so gewollt, damit deine neuen Rechte auch
                 wirklich greifen.</p>
                 """,
-                RoleplayHtml:
-                """
-                <p>Dein Konto gehört deinem Discord-Konto, nicht deinem Namen. Wer die Behörde verlässt und
-                später zurückkehrt, kommt mit demselben Konto wieder - die Personalakte ist dann noch da.</p>
-                """,
                 Steps:
                 [
                     new Step("Login", "Mit Discord anmelden",
@@ -106,15 +101,6 @@ internal static class GettingStartedChapter
                 die interne Kennung, vor allem im Funk, und jede ist nur einmal vergeben. Ändern lässt sie die
                 Führung; unterhalb davon stellst du einen Änderungswunsch.</p>
                 """,
-                RoleplayHtml:
-                """
-                <p>Nach außen ist die NOOSE anonym. Auf den öffentlichen Seiten erscheint kein Agent mit Namen -
-                die einzige Ausnahme sind Führungskräfte, die einzeln und von Hand für das öffentliche
-                Organigramm freigegeben wurden.</p>
-                <p>Die Dienstverordnung ist an dieser Stelle streng: Überbehördlich und bei öffentlichem
-                Auftreten wird ausschließlich mit zuvor <strong>intern dokumentierten</strong> Codenamen
-                gearbeitet (§6). Ein spontan erfundener Deckname erfüllt das nicht.</p>
-                """,
                 NavKey: "profil"),
 
             new Article("art-rechte", "wer-darf-was", "Wer darf was",
@@ -134,13 +120,6 @@ internal static class GettingStartedChapter
                 <p>Es gibt zusätzlich Konten, die <strong>alles lesen, aber nichts schreiben</strong> dürfen -
                 die Aufsicht. Und Partnerkonten von LSPD, DoJ und LSMD, die nur einzeln freigegebene Akten
                 sehen.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Die Schwelle für TRU und HRB ist keine Erfindung dieser Seite, sondern §2.4.1 der
-                Dienstverordnung: Der Beitritt zu beiden Einheiten setzt den Dienstgrad Special Agent und die
-                jeweilige Ausbildung voraus. Warum das so ist und was die Einheiten tun, steht im Kapitel
-                <em>Dienstvorschrift</em>.</p>
                 """,
                 DiagramKey: "rechte-matrix"),
 

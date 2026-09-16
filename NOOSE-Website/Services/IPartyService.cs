@@ -20,6 +20,12 @@ public interface IPartyService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Files the record away: out of listings, pickers and the default search, still fully readable.</summary>
+    Task ArchiveAsync(string id, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings the record back into the active stock.</summary>
+    Task UnarchiveAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     /// <summary>Set classification. "Secured state-threatening" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);

@@ -217,12 +217,6 @@ internal static class PersonnelChapter
                 Nachvollziehbarkeit von Monaten Arbeit weg.</p>
                 <p>Kommt jemand zurück, meldet er sich mit demselben Discord-Konto an und findet seine
                 Personalakte vor.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Eine <strong>Sperrung</strong> ist etwas anderes als eine Kündigung: sie ist vorläufig und
-                sagt nichts über das Dienstverhältnis. Sie wird gesetzt, wenn ein Verdacht im Raum steht, der
-                geklärt werden muss - und sie wird wieder aufgehoben.</p>
                 """),
         ]);
 }

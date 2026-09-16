@@ -22,12 +22,6 @@ internal static class WantedChapter
                 in die Akte - sie trägt genau die Felder, die jemand hineingeschrieben hat.</p>
                 <p>Deshalb musst du beim Veröffentlichen zweimal denken, aber danach nie mehr Angst haben:
                 Änderst du später die Akte, ändert sich die Ausschreibung nicht von selbst.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p>Die NOOSE tritt nach außen als Behörde auf, nicht als Person. Auf keiner öffentlichen Seite
-                steht der Name eines Agenten - Absender ist immer „NOOSE“. Die einzige Ausnahme sind
-                Führungskräfte, die für das öffentliche Organigramm einzeln freigegeben wurden.</p>
                 """),
 
             new Article("art-fahndung-anlegen", "fahndung-ausschreiben", "Eine Fahndung ausschreiben",
@@ -99,13 +93,6 @@ internal static class WantedChapter
                 <em>Rückfrage</em> und schreibst ihm direkt - er bekommt sie in seinem Bürgerkonto.</p>
                 <p>Übernimm einen Hinweis, bevor du daran arbeitest. Dann sieht jeder, dass er nicht liegen
                 bleibt, und ihr schreibt dem Bürger nicht zu zweit.</p>
-                """,
-                RoleplayHtml:
-                """
-                <p><strong>Die Anonymitätszusage ist bindend.</strong> Wenn ein Hinweisgeber sie in Anspruch
-                nimmt, erscheint sein Name nirgends - nicht in der Akte, nicht auf dem Zeitstrahl, nicht in der
-                Chronik. Versuch nicht, ihn über Umwege zu ermitteln. Diese Zusage ist der Grund, warum
-                überhaupt jemand meldet.</p>
                 """,
                 DiagramKey: "hinweis-weg",
                 NavKey: "buergerhinweise",
