@@ -332,6 +332,9 @@ public static class ChangelogContent
             Fix("2.1.64-kennzeichen-rang", "TRU und HRB lassen sich nur noch ab dem Dienstgrad Special Agent "
                 + "vergeben, wie es die Dienstverordnung vorsieht. Wird jemand darunter herabgestuft, "
                 + "verliert er die Zugehörigkeit automatisch.", "Personal"),
+            Neu("2.1.65-archiv", "Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen und "
+                + "Taskforces lassen sich archivieren: sie verschwinden aus Listen und Suche, bleiben aber "
+                + "lesbar und sind mit einem Klick wieder da.", "Akten"),
         ], "1.5"),
     ];
 }

@@ -259,8 +259,36 @@ internal static class RecordsChapter
                 an einer Stelle, nach Art gruppiert. Ein Klick auf <em>Wiederherstellen</em> holt eine Akte
                 zurück, als wäre nichts gewesen.</p>
                 <p>Deshalb ist Löschen kein Drama - aber auch keine Lösung für „ich will das nicht mehr
-                sehen“. Dafür gibt es Status und Filter.</p>
+                sehen“. Dafür gibt es das <strong>Archiv</strong>.</p>
                 """,
                 NavKey: "papierkorb"),
+
+            new Article("art-archiv", "akten-archivieren", "Akten archivieren",
+                "Erledigtes aus dem Weg räumen, ohne es zu löschen.",
+                """
+                <p>Eine Akte, die niemand mehr braucht, muss nicht gelöscht werden. Du kannst sie
+                <strong>archivieren</strong>: sie verschwindet aus den Listen, aus den Auswahlfeldern und aus
+                der normalen Suche - bleibt aber vollständig erhalten und lesbar.</p>
+                <p>Den Knopf <em>Archivieren</em> findest du auf der Akte selbst, neben <em>Löschen</em>. Du
+                kannst einen Grund angeben; er steht danach oben auf der Akte und im Nachweis. Zurückholen darf
+                sie jeder, der schreiben darf - ein Klick auf <em>Zurückholen</em> in dem Hinweisband.</p>
+                <p><strong>Archiv ist nicht Papierkorb.</strong> Im Papierkorb liegt Gelöschtes, das nur die
+                Führung zurückholt. Das Archiv ist der ruhende Bestand: die Akte ist da, sie steht nur nicht
+                mehr im Weg. Verknüpfungen, Erwähnungen und der Beziehungsgraph zeigen sie weiterhin an - im
+                Graph blass, damit man sieht, woran man ist.</p>
+                <p>Willst du eine archivierte Akte sehen, stell in der Liste den Filter <em>Archiv</em> auf
+                <em>Mit Archiv</em> oder <em>Nur Archiv</em>; in der Suche gibt es den Schalter
+                <em>Archiv einschließen</em>. Eine archivierte Akte bleibt bearbeitbar, zählt aber nicht mehr
+                in Statistik und Aktualitäts-Ampel mit.</p>
+                """,
+                Steps:
+                [
+                    new Step("Archive", "Archivieren",
+                        "Auf der Akte, neben Löschen. Der Grund ist freiwillig, hilft aber dem Nächsten."),
+                    new Step("FilterList", "Wiederfinden",
+                        "In der Liste den Filter Archiv umstellen, oder in der Suche den Schalter setzen."),
+                    new Step("Unarchive", "Zurückholen",
+                        "Ein Klick im Hinweisband oben auf der Akte. Sie steht sofort wieder in allen Listen."),
+                ]),
         ]);
 }
