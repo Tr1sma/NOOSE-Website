@@ -68,7 +68,7 @@ public sealed class LinkSearchProvider(IDbContextFactory<AppDbContext> dbFactory
             .Concat(raw.Select(v => (v.TargetType, v.TargetId)))
             .Distinct().ToList();
         var parents = await SearchParentResolver.ResolveVisibleAsync(db, refs, query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         var hits = new List<SearchHit>();
         foreach (var v in raw)
@@ -135,7 +135,7 @@ internal static class SearchChildResolver
         }
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(r => (r.EntityType, r.EntityId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         HashSet<string>? released = null;
         if (query.Scope.PartnerAgency is { } agency)

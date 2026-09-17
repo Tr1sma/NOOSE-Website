@@ -27,7 +27,8 @@ public class ThroughputStatisticsService(
             var start = scope.StartUtc(now);
             var buckets = StatisticsBuckets.Starts(scope, now);
 
-            var newPeople = await db.People.OnlyActive()
+            // a past bucket must not shrink when an old record is archived today
+            var newPeople = await db.People
                 .Where(p => (scope.IncludeClassified || !p.IsClassified) && p.CreatedAt >= start)
                 .Select(p => p.CreatedAt)
                 .ToListAsync(cancellationToken);
@@ -54,7 +55,8 @@ public class ThroughputStatisticsService(
             var start = scope.StartUtc(DateTime.UtcNow);
 
             // only completed cases have a cycle time at all
-            var spans = await db.Cases.OnlyActive()
+            // a past bucket must not shrink when an old record is archived today
+            var spans = await db.Cases
                 .Where(c => (scope.IncludeClassified || !c.IsClassified)
                     && c.CompletedAt != null && c.CompletedAt >= start)
                 .Select(c => new { c.CreatedAt, Completed = c.CompletedAt!.Value })
@@ -91,11 +93,12 @@ public class ThroughputStatisticsService(
             var start = scope.StartUtc(now);
             var buckets = StatisticsBuckets.Starts(scope, now);
 
-            var opened = await db.Cases.OnlyActive()
+            // a past bucket must not shrink when an old record is archived today
+            var opened = await db.Cases
                 .Where(c => (scope.IncludeClassified || !c.IsClassified) && c.CreatedAt >= start)
                 .Select(c => c.CreatedAt)
                 .ToListAsync(cancellationToken);
-            var closed = await db.Cases.OnlyActive()
+            var closed = await db.Cases
                 .Where(c => (scope.IncludeClassified || !c.IsClassified)
                     && c.CompletedAt != null && c.CompletedAt >= start)
                 .Select(c => c.CompletedAt!.Value)

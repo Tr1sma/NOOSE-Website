@@ -114,4 +114,45 @@ public sealed class ArchiveWritePathTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => Build(ctx).ArchiveAsync("p1", null, actor));
     }
+
+    [Fact]
+    public async Task An_agent_cannot_archive_a_record_they_may_not_see()
+    {
+        using var ctx = await OnePersonAsync();
+        await using (var db = ctx.NewContext())
+        {
+            var person = await db.People.SingleAsync(p => p.Id == "p1");
+            person.IsClassified = true;
+            await db.SaveChangesAsync();
+        }
+
+        // hiding a record from everyone must not be reachable for someone who cannot open it
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => Build(ctx).ArchiveAsync("p1", null, Junior()));
+
+        await using (var db = ctx.NewContext())
+        {
+            Assert.False((await db.People.SingleAsync(p => p.Id == "p1")).IsArchived);
+        }
+    }
+
+    [Fact]
+    public async Task Leadership_may_archive_a_classified_record()
+    {
+        using var ctx = await OnePersonAsync();
+        await using (var db = ctx.NewContext())
+        {
+            var person = await db.People.SingleAsync(p => p.Id == "p1");
+            person.IsClassified = true;
+            await db.SaveChangesAsync();
+        }
+
+        var lead = ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).Build();
+        await Build(ctx).ArchiveAsync("p1", null, lead);
+
+        await using (var db = ctx.NewContext())
+        {
+            Assert.True((await db.People.SingleAsync(p => p.Id == "p1")).IsArchived);
+        }
+    }
 }

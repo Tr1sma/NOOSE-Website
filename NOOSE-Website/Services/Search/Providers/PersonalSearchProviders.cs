@@ -158,7 +158,7 @@ public sealed class WatchlistEntrySearchProvider(IDbContextFactory<AppDbContext>
 
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(w => (w.EntityType, w.EntityId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         var hits = new List<SearchHit>();
         foreach (var w in raw)

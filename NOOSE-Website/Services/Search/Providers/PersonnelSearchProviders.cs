@@ -220,7 +220,7 @@ public sealed class ObservationSearchProvider(IDbContextFactory<AppDbContext> db
 
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(o => (nameof(Person), o.PersonId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         HashSet<string>? released = null;
         if (query.Scope.PartnerAgency is { } agency)
@@ -286,7 +286,7 @@ public sealed class TaskforceMessageSearchProvider(IDbContextFactory<AppDbContex
 
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(m => (nameof(Taskforce), m.TaskforceId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         var hits = new List<SearchHit>();
         foreach (var m in raw)

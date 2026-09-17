@@ -185,8 +185,9 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
 
         if (tokenReason.Count > 0)
         {
-            // candidate names, also dropping the first name symmetrically
-            var otherNames = await db.People.Where(p => p.Id != entityId)
+            // candidate names, also dropping the first name symmetrically;
+            // a filed-away record is not offered as a new link
+            var otherNames = await db.People.OnlyActive().Where(p => p.Id != entityId)
                 .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken);
             foreach (var p in otherNames)
             {

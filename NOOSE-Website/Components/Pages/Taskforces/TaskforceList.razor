@@ -129,7 +129,8 @@ else
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
                 IsArchived = t.IsArchived,
-                Level = settings.AgingDisabled || t.AgingDisabled || t.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                Level = RecencyAssessment.For(settings.AgingDisabled, t.AgingDisabled, t.IsArchived,
+                    settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;

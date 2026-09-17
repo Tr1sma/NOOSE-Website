@@ -47,7 +47,8 @@ public static class SearchParentResolver
     /// <param name="tagIds">When non-empty, a parent must also carry one of these tags to be resolved.</param>
     public static async Task<IReadOnlyDictionary<(string Type, string Id), ParentView>> ResolveVisibleAsync(
         AppDbContext db, IReadOnlyCollection<(string Type, string Id)> refs, SearchViewer viewer,
-        IReadOnlyCollection<string>? tagIds = null, CancellationToken cancellationToken = default)
+        IReadOnlyCollection<string>? tagIds = null, CancellationToken cancellationToken = default,
+        bool includeArchived = false)
     {
         var map = new Dictionary<(string, string), ParentView>();
         if (refs.Count == 0)
@@ -70,6 +71,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.People.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.People.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(p => personIds.Contains(p.Id))
                          .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -81,6 +83,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.Factions.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(f => factionIds.Contains(f.Id))
                          .Select(f => new { f.Id, f.Name, f.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -92,6 +95,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.PersonGroups.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.PersonGroups.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(g => groupIds.Contains(g.Id))
                          .Select(g => new { g.Id, g.Name, g.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -103,6 +107,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.Parties.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.Parties.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(p => partyIds.Contains(p.Id))
                          .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -114,6 +119,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.Operations.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.Operations.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(o => operationIds.Contains(o.Id))
                          .Select(o => new { o.Id, o.Title, o.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -125,6 +131,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.Cases.OnlyVisible(scope);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(v => caseIds.Contains(v.Id))
                          .Select(v => new { v.Id, v.Title, v.CaseNumber }).ToListAsync(cancellationToken))
             {
@@ -138,6 +145,7 @@ public static class SearchParentResolver
             var q = scope.PartnerAgency is { } agency
                 ? db.Taskforces.OnlyPartnerVisible(db, agency, scope.MeId)
                 : db.Taskforces.OnlyVisible(db, scope.MayAllTaskforces, scope.MeId);
+            q = includeArchived ? q : q.OnlyActive();
             foreach (var x in await q.Where(t => taskforceIds.Contains(t.Id))
                          .Select(t => new { t.Id, t.Name, t.CaseNumber }).ToListAsync(cancellationToken))
             {

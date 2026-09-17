@@ -109,7 +109,8 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Where(d => (isLeadership || !d.Person!.IsClassified) && d.Timestamp >= cutoffDate)
             .Select(d => d.Timestamp)
             .ToListAsync(cancellationToken);
-        var newEntryTimestamps = await db.People.OnlyActive()
+        // a past bucket must not shrink when an old record is archived today
+        var newEntryTimestamps = await db.People
             .Where(p => (isLeadership || !p.IsClassified) && p.CreatedAt >= cutoffDate)
             .Select(p => p.CreatedAt)
             .ToListAsync(cancellationToken);

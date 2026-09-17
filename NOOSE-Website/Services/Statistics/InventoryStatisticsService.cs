@@ -57,7 +57,7 @@ public class InventoryStatisticsService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var counts = (await db.People
+        var counts = (await db.People.OnlyActive()
                 .Where(p => scope.IncludeClassified || !p.IsClassified)
                 .GroupBy(p => p.Classification)
                 .Select(g => new { Value = g.Key, Count = g.Count() })
@@ -76,11 +76,11 @@ public class InventoryStatisticsService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var personScores = await db.People
+        var personScores = await db.People.OnlyActive()
             .Where(p => scope.IncludeClassified || !p.IsClassified)
             .Select(p => p.ThreatScore)
             .ToListAsync(cancellationToken);
-        var factionScores = await db.Factions
+        var factionScores = await db.Factions.OnlyActive()
             .Where(f => scope.IncludeClassified || !f.IsClassified)
             .Select(f => f.ThreatScore)
             .ToListAsync(cancellationToken);
@@ -100,7 +100,7 @@ public class InventoryStatisticsService(
 
         var now = DateTime.UtcNow;
         // the effective status depends on the respawn window, which only C# can evaluate
-        var raw = await db.People
+        var raw = await db.People.OnlyActive()
             .Where(p => scope.IncludeClassified || !p.IsClassified)
             .Select(p => new { p.LifeStatus, p.DeadUntil })
             .ToListAsync(cancellationToken);
@@ -166,11 +166,11 @@ public class InventoryStatisticsService(
         // reference date is modified-at falling back to created-at, the same rule the recency light uses
         var sources = new (string Type, string Label, string Href, Func<Task<List<DateTime>>> Load)[]
         {
-            ("Person", "Personen", "/personen", () => db.People
+            ("Person", "Personen", "/personen", () => db.People.OnlyActive()
                 .Where(p => scope.IncludeClassified || !p.IsClassified)
                 .Select(p => p.ModifiedAt ?? p.CreatedAt).ToListAsync(cancellationToken)),
             // factions age by their four facet stamps (members/stocks/activities/docs), oldest wins
-            ("Faction", "Fraktionen", "/fraktionen", async () => (await db.Factions
+            ("Faction", "Fraktionen", "/fraktionen", async () => (await db.Factions.OnlyActive()
                     .Where(f => scope.IncludeClassified || !f.IsClassified)
                     .Select(f => new
                     {

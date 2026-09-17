@@ -28,6 +28,16 @@ public static class RecencyAssessment
         }
         return alterDays >= warningDays ? RecencyLevel.Warning : RecencyLevel.Fresh;
     }
+
+    /// <summary>Reasons a record never ages: it is exempt, or it was filed away.</summary>
+    public static bool NeverAges(bool recordExempt, bool isArchived) => recordExempt || isArchived;
+
+    /// <summary>Level for one record, including every reason it never ages.</summary>
+    public static RecencyLevel For(bool typeExempt, bool recordExempt, bool isArchived,
+        int warningDays, int staleDays, DateTime referenceDate, DateTime now)
+        => typeExempt || NeverAges(recordExempt, isArchived)
+            ? RecencyLevel.Fresh
+            : Level(warningDays, staleDays, referenceDate, now);
 }
 
 /// <summary>Display labels.</summary>

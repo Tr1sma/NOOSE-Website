@@ -32,9 +32,6 @@ public static class RecordArchive
             _ => query,
         };
 
-    /// <summary>In-memory twin for rows already materialised.</summary>
-    public static bool IsActive(IArchivable record) => !record.IsArchived;
-
     /// <summary>Moves one record in or out of the archive; false when it already was in that state.</summary>
     /// <remarks>
     /// ExecuteUpdate on purpose: a tracked save would stamp GeaendertAm through the audit interceptor, and a record

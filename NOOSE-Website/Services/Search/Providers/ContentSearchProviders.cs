@@ -77,7 +77,7 @@ public sealed class SourceSearchProvider(IDbContextFactory<AppDbContext> dbFacto
 
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(r => (r.EntityType, r.EntityId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         var myTaskforces = await SourceVisibility.MyTaskforceIdsAsync(db, query.Scope, cancellationToken);
         HashSet<string>? released = null;
@@ -161,7 +161,7 @@ public sealed class CommentSearchProvider(IDbContextFactory<AppDbContext> dbFact
 
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
             raw.Select(r => (r.EntityType, r.EntityId)).Distinct().ToList(), query.Viewer,
-            query.HasTags ? query.TagIds : null, cancellationToken);
+            query.HasTags ? query.TagIds : null, cancellationToken, query.IncludeArchived);
 
         HashSet<string>? released = null;
         if (query.Scope.PartnerAgency is { } agency)

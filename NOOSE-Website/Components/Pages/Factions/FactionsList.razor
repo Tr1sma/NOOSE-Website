@@ -217,7 +217,8 @@ else
                 OldestFacet = FactionRecency.Oldest(f),
                 // state factions and exempt records never go stale
                 IsArchived = f.IsArchived,
-                Level = settings.AgingDisabled || f.IsStateFaction || f.AgingDisabled || f.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                Level = RecencyAssessment.For(settings.AgingDisabled, f.IsStateFaction || f.AgingDisabled, f.IsArchived,
+                    settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;

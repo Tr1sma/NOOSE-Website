@@ -196,6 +196,11 @@ public class TaskforceService(
         Permission.RequireWriteAccess(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // filing a record away hides it from everyone, so the actor must be able to see it first
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), id, ViewerScope.From(actor), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
         if (!await RecordArchive.SetArchivedAsync<Taskforce>(db, id, archived, reason, actor, cancellationToken))
         {
             return;

@@ -51,7 +51,7 @@
 
         <MudStack Spacing="1">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <RecencyIndicator Level="@(Taskforce.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                <RecencyIndicator Level="@(RecencyAssessment.NeverAges(Taskforce.AgingDisabled, Taskforce.IsArchived) ? RecencyLevel.Fresh : (RecencyLevel?)null)"
                                   RecordsType="@nameof(Taskforce)" ReferenceDateUtc="@(Taskforce.ModifiedAt ?? Taskforce.CreatedAt)" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     Zuletzt aktualisiert: @((Taskforce.ModifiedAt ?? Taskforce.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))

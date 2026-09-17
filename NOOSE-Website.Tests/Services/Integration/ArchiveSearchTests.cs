@@ -78,4 +78,29 @@ public sealed class ArchiveSearchTests
         Assert.Contains(hits, h => h.TargetId == "aktiv");
         Assert.DoesNotContain(hits, h => h.TargetId == "archiv");
     }
+
+    [Fact]
+    public async Task A_comment_on_an_archived_record_follows_the_facet()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("archiv", "Meier Archiv", p => p.IsArchived = true));
+            db.Comments.Add(new NOOSE_Website.Data.Entities.Common.Comment
+            {
+                Id = "k1", EntityType = nameof(Person), EntityId = "archiv",
+                Text = "Waffenlager im Hinterhof", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            });
+            db.SaveChanges();
+        }
+
+        // a comment hit carries the id of the record it hangs on, not its own
+        var hidden = await Svc(ctx).SearchAsync(Query("Waffenlager"), Leader());
+        Assert.DoesNotContain(hidden.Groups.SelectMany(g => g.Hit),
+            h => h.Category == nameof(NOOSE_Website.Data.Entities.Common.Comment));
+
+        var shown = await Svc(ctx).SearchAsync(Query("Waffenlager", includeArchived: true), Leader());
+        Assert.Contains(shown.Groups.SelectMany(g => g.Hit),
+            h => h.Category == nameof(NOOSE_Website.Data.Entities.Common.Comment) && h.TargetId == "archiv");
+    }
 }

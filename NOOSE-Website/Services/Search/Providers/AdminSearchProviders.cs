@@ -47,7 +47,7 @@ public sealed class RequestSearchProvider(IDbContextFactory<AppDbContext> dbFact
 
         // the inbox arm reaches every request, so the target it names must still pass the target's own gate
         var parents = await SearchParentResolver.ResolveVisibleAsync(db,
-            raw.Select(a => (a.TargetType, a.TargetId)).Distinct().ToList(), query.Viewer, null, cancellationToken);
+            raw.Select(a => (a.TargetType, a.TargetId)).Distinct().ToList(), query.Viewer, null, cancellationToken, query.IncludeArchived);
 
         var hits = new List<SearchHit>();
         foreach (var a in raw)

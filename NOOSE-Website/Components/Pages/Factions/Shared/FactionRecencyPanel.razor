@@ -56,7 +56,7 @@
         // one settings read for all five lights
         var settings = await Recency.GetSettingsAsync(nameof(Faction));
         var now = DateTime.UtcNow;
-        var forced = ForcedFresh || settings.AgingDisabled;
+        var forced = ForcedFresh || settings.AgingDisabled || Faction.IsArchived;
         _levels = _stamps.ToDictionary(s => s.Facet, s => forced
             ? RecencyLevel.Fresh
             : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, s.RefreshedUtc, now));

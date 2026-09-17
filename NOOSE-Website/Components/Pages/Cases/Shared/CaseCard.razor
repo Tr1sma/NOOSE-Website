@@ -64,7 +64,7 @@
         </MudText>
         <MudStack Spacing="1">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <RecencyIndicator Level="@(Case.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                <RecencyIndicator Level="@(RecencyAssessment.NeverAges(Case.AgingDisabled, Case.IsArchived) ? RecencyLevel.Fresh : (RecencyLevel?)null)"
                                   RecordsType="@nameof(Case)" ReferenceDateUtc="@(Case.ModifiedAt ?? Case.CreatedAt)" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     Zuletzt aktualisiert: @((Case.ModifiedAt ?? Case.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
