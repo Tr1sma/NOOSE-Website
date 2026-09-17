@@ -37,6 +37,29 @@ else
         </MudAlert>
     }
 
+    @if (_person.IsArchived)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <div>
+                    <MudText Typo="Typo.body2">
+                        Archiviert am @(_person.ArchivedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—") —
+                        erscheint nicht in Listen, Auswahllisten und der Standardsuche.
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(_person.ArchiveReason))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Grund: @_person.ArchiveReason</MudText>
+                    }
+                </div>
+                <MudSpacer />
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="archiv">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Unarchive"
+                               OnClick="UnarchiveAsync">Zurückholen</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </MudAlert>
+    }
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
         <CompromisedBadge EntityType="@nameof(Person)" EntityId="@_person.Id" />
@@ -56,6 +79,13 @@ else
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/personen/{_person.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="ablegen">
+            @if (!_person.IsArchived)
+            {
+                <MudButton Color="Color.Default" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Archive"
+                           OnClick="ArchiveAsync">Archivieren</MudButton>
+            }
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.Leadership">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
@@ -352,6 +382,41 @@ else
         await LoadAsync();
         _historyKey = Guid.NewGuid();
         StateHasChanged();
+    }
+
+    private async Task ArchiveAsync()
+    {
+        if (_person is null)
+        {
+            return;
+        }
+        // archiving does not touch a running public notice, so say so instead of blocking
+        var warning = _publicBanner is { Status: PublicWantedStatus.Veroeffentlicht }
+            ? " Achtung: Diese Akte ist öffentlich ausgeschrieben. Die Ausschreibung läuft weiter."
+            : string.Empty;
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Akte archivieren?",
+            "Diese Akte verschwindet aus Listen, Auswahllisten und der Standardsuche. Verknüpfungen, "
+            + "Erwähnungen und der Graph bleiben unverändert; zurückholen kann sie jeder mit Schreibrecht."
+            + warning,
+            confirmText: "Archivieren", label: "Grund (optional)");
+        if (reason is null)
+        {
+            return;
+        }
+        await PersonService.ArchiveAsync(_person.Id, reason, _user);
+        Snackbar.Add("Akte archiviert.", Severity.Success);
+        await NewLoadAsync();
+    }
+
+    private async Task UnarchiveAsync()
+    {
+        if (_person is null)
+        {
+            return;
+        }
+        await PersonService.UnarchiveAsync(_person.Id, _user);
+        Snackbar.Add("Wieder im aktiven Bestand.", Severity.Success);
+        await NewLoadAsync();
     }
 
     private async Task DeleteAsync()

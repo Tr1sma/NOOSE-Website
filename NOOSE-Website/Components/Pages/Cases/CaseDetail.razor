@@ -21,6 +21,39 @@ else if (_case is null)
 }
 else
 {
+    @if (_case.IsArchived)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <div>
+                    <MudText Typo="Typo.body2">
+                        Archiviert am @(_case.ArchivedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—") —
+                        erscheint nicht in Listen, Auswahllisten und der Standardsuche.
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(_case.ArchiveReason))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Grund: @_case.ArchiveReason</MudText>
+                    }
+                </div>
+                <MudSpacer />
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="archiv">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Unarchive"
+                               OnClick="UnarchiveAsync">Zurückholen</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </MudAlert>
+    }
+
+    @if (_case.Status == CaseStatus.Archived && !_case.IsArchived)
+    {
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="vorschlag">
+            <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true" Class="mb-2">
+                Dieser Vorgang ist als archiviert gekennzeichnet, steht aber noch im aktiven Bestand.
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ArchiveAsync">Jetzt archivieren</MudButton>
+            </MudAlert>
+        </AuthorizeView>
+    }
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
         <MudSpacer />
@@ -39,6 +72,13 @@ else
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/vorgaenge/{_case.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="ablegen">
+            @if (!_case.IsArchived)
+            {
+                <MudButton Color="Color.Default" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Archive"
+                           OnClick="ArchiveAsync">Archivieren</MudButton>
+            }
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.Leadership">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
@@ -266,6 +306,36 @@ else
             return;
         }
         await CaseService.ClassificationSetAsync(_case.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private async Task ArchiveAsync()
+    {
+        if (_case is null)
+        {
+            return;
+        }
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Vorgang archivieren?",
+            "Dieser Vorgang verschwindet aus Listen, Auswahllisten und der Standardsuche. Verknüpfungen, "
+            + "Erwähnungen und der Graph bleiben unverändert; zurückholen kann sie jeder mit Schreibrecht.",
+            confirmText: "Archivieren", label: "Grund (optional)");
+        if (reason is null)
+        {
+            return;
+        }
+        await CaseService.ArchiveAsync(_case.Id, reason, _user);
+        Snackbar.Add("Vorgang archiviert.", Severity.Success);
+        await NewLoadAsync();
+    }
+
+    private async Task UnarchiveAsync()
+    {
+        if (_case is null)
+        {
+            return;
+        }
+        await CaseService.UnarchiveAsync(_case.Id, _user);
+        Snackbar.Add("Wieder im aktiven Bestand.", Severity.Success);
         await NewLoadAsync();
     }
 

@@ -21,6 +21,29 @@ else if (_party is null)
 }
 else
 {
+    @if (_party.IsArchived)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <div>
+                    <MudText Typo="Typo.body2">
+                        Archiviert am @(_party.ArchivedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—") —
+                        erscheint nicht in Listen, Auswahllisten und der Standardsuche.
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(_party.ArchiveReason))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Grund: @_party.ArchiveReason</MudText>
+                    }
+                </div>
+                <MudSpacer />
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="archiv">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Unarchive"
+                               OnClick="UnarchiveAsync">Zurückholen</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </MudAlert>
+    }
+
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/parteien" aria-label="Zurück" />
         <MudSpacer />
@@ -39,6 +62,13 @@ else
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/parteien/{_party.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="ablegen">
+            @if (!_party.IsArchived)
+            {
+                <MudButton Color="Color.Default" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Archive"
+                           OnClick="ArchiveAsync">Archivieren</MudButton>
+            }
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.Leadership">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
@@ -296,6 +326,36 @@ else
             return;
         }
         await PartyService.ClassificationSetAsync(_party.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private async Task ArchiveAsync()
+    {
+        if (_party is null)
+        {
+            return;
+        }
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Partei archivieren?",
+            "Diese Partei verschwindet aus Listen, Auswahllisten und der Standardsuche. Verknüpfungen, "
+            + "Erwähnungen und der Graph bleiben unverändert; zurückholen kann sie jeder mit Schreibrecht.",
+            confirmText: "Archivieren", label: "Grund (optional)");
+        if (reason is null)
+        {
+            return;
+        }
+        await PartyService.ArchiveAsync(_party.Id, reason, _user);
+        Snackbar.Add("Partei archiviert.", Severity.Success);
+        await NewLoadAsync();
+    }
+
+    private async Task UnarchiveAsync()
+    {
+        if (_party is null)
+        {
+            return;
+        }
+        await PartyService.UnarchiveAsync(_party.Id, _user);
+        Snackbar.Add("Wieder im aktiven Bestand.", Severity.Success);
         await NewLoadAsync();
     }
 
