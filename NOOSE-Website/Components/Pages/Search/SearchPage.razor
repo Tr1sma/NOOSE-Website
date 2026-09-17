@@ -41,6 +41,9 @@
             <MudTooltip Text="Nimmt alle Nebenfelder dazu (Steckbrief, Telefon, Fahrzeuge, Orte, Waffen) – toleranter, aber langsamer.">
                 <MudCheckBox T="bool" @bind-Value="_maxMode" Label="Deep-Scan" Dense="true" Color="Color.Secondary" />
             </MudTooltip>
+            <MudTooltip Text="Nimmt archivierte Akten mit auf. Standardmäßig bleiben sie außen vor.">
+                <MudCheckBox T="bool" @bind-Value="_includeArchived" Label="Archiv einschließen" Dense="true" Color="Color.Default" />
+            </MudTooltip>
             @if (_tags.Count > 0)
             {
                 <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_tagSelection" Label="Tags" Dense="true"
@@ -141,6 +144,11 @@ else
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ZoomIn"
                                OnClick="@(async () => { _maxMode = true; await SearchAsync(); })">Deep-Scan</MudButton>
                 }
+                @if (!_includeArchived)
+                {
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Inventory2"
+                               OnClick="@(async () => { _includeArchived = true; await SearchAsync(); })">Archiv einschließen</MudButton>
+                }
             </Actions>
         </EmptyState>
     }
@@ -191,6 +199,7 @@ else
     private string _text = string.Empty;
     private bool _fuzzy;
     private bool _maxMode;
+    private bool _includeArchived;
     private string? _facet;
     private IReadOnlyCollection<string> _tagSelection = new HashSet<string>();
     private string _saveName = string.Empty;
@@ -267,6 +276,7 @@ else
         TagIds = _tagSelection.ToList(),
         Fuzzy = _fuzzy,
         MaxMode = _maxMode,
+        IncludeArchived = _includeArchived,
         // Categories stays empty: the page never pre-filters, so nothing can be hidden from the reader
     };
 
@@ -401,6 +411,7 @@ else
         _tagSelection = new HashSet<string>(k.TagIds ?? new());
         _fuzzy = k.Fuzzy;
         _maxMode = k.MaxMode;
+        _includeArchived = k.IncludeArchived;
 
         // rows saved with the old checkbox filter carry Categories as a PRE-filter. Deliberately not honoured:
         // it hid categories from the reader. A single saved category survives as the result facet.

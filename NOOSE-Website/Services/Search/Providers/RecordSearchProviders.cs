@@ -80,6 +80,8 @@ public sealed class PersonSearchProvider(IDbContextFactory<AppDbContext> dbFacto
         var q = scope.PartnerAgency is { } agency
             ? db.People.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.People.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;
@@ -191,6 +193,8 @@ public sealed class FactionSearchProvider(IDbContextFactory<AppDbContext> dbFact
         var q = scope.PartnerAgency is { } agency
             ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Factions.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;
@@ -276,6 +280,8 @@ public sealed class PersonGroupSearchProvider(IDbContextFactory<AppDbContext> db
         var q = scope.PartnerAgency is { } agency
             ? db.PersonGroups.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.PersonGroups.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;
@@ -357,6 +363,8 @@ public sealed class PartySearchProvider(IDbContextFactory<AppDbContext> dbFactor
         var q = scope.PartnerAgency is { } agency
             ? db.Parties.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Parties.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;
@@ -442,6 +450,8 @@ public sealed class OperationSearchProvider(IDbContextFactory<AppDbContext> dbFa
         var q = scope.PartnerAgency is { } agency
             ? db.Operations.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Operations.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;
@@ -526,6 +536,8 @@ public sealed class CaseSearchProvider(IDbContextFactory<AppDbContext> dbFactory
         var q = scope.PartnerAgency is { } agency
             ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Cases.OnlyVisible(scope);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;

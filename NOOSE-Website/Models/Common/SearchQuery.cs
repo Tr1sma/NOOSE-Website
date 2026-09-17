@@ -27,6 +27,9 @@ public sealed record SearchQuery
     /// <summary>Deep scan: also match a record's side fields.</summary>
     public bool Deep { get; init; }
 
+    /// <summary>Include archived records in every provider that knows the archive.</summary>
+    public bool IncludeArchived { get; init; }
+
     /// <summary>Categories the caller restricted the search to. Empty = every provider the viewer may use.</summary>
     /// <remarks>The search page never fills this — there a category is a filter on the result, not on the query.
     /// The assistant does, and so does the "load the rest" retry after an expired budget.</remarks>
@@ -53,6 +56,7 @@ public sealed record SearchQuery
             TagIds = criteria.TagIds ?? [],
             Fuzzy = criteria.Fuzzy,
             Deep = criteria.MaxMode,
+            IncludeArchived = criteria.IncludeArchived,
             OnlyCategories = criteria.Categories ?? [],
             Viewer = viewer,
             PerCategory = options.PerCategory,

@@ -79,6 +79,8 @@ public sealed class TaskforceSearchProvider(IDbContextFactory<AppDbContext> dbFa
         var q = scope.PartnerAgency is { } agency
             ? db.Taskforces.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Taskforces.OnlyVisible(db, scope.MayAllTaskforces, scope.MeId);
+        // one line for both waves: SearchAsync, ResolveIdsAsync, QuickAsync and the fuzzy pass come through here
+        q = query.IncludeArchived ? q : q.OnlyActive();
         if (query.HasTags)
         {
             var tagIds = query.TagIds;

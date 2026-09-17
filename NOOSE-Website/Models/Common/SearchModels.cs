@@ -23,6 +23,9 @@ public class SearchCriteria
 
     /// <summary>Also searches all side fields, forces docs/sources/comments, and extends fuzzy to content fields.</summary>
     public bool MaxMode { get; set; }
+
+    /// <summary>Includes archived records. Off by default: the archive is out of the way, not gone.</summary>
+    public bool IncludeArchived { get; set; }
 }
 
 /// <summary>A single search hit. Category is the CLR type of the source; TargetType null means category is the target type.</summary>
