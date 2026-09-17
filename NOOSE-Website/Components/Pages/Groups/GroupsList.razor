@@ -39,6 +39,12 @@ else
                     <MudSelectItem T="GroupsKind?" Value="@((GroupsKind?)a)">@GroupsKindDisplay.Name(a)</MudSelectItem>
                 }
             </MudSelect>
+            <MudSelect T="ArchiveFilter" Value="_archive" ValueChanged="ArchiveSelectedAsync" Label="Archiv" Dense="true"
+                       Variant="Variant.Outlined" Style="max-width:170px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Active">Aktiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Including">Mit Archiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Only">Nur Archiv</MudSelectItem>
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -56,6 +62,10 @@ else
                         }
                         @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
                         <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                        @if (context.Item.IsArchived)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-2">Archiviert</MudChip>
+                        }
                     </MudStack>
                 </CellTemplate>
             </TemplateColumn>
@@ -111,16 +121,20 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private ArchiveFilter _archive = ArchiveFilter.Active;
     private string _search = string.Empty;
     private GroupsKind? _kindFilter;
     private List<GroupRow> _rows = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    // the archive filter is server-side, so switching it reloads rather than filtering in place
+    private async Task LoadAsync()
     {
         var user = (await AuthStateTask).User;
         var isPartner = user.IsPartner();
         var mayClassifiedRead = user.MayClassifiedRead();
-        var groups = await GroupService.GetListAsync(ViewerScope.From(user));
+        var groups = await GroupService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(PersonGroup));
         var now = DateTime.UtcNow;
         _rows = groups.Select(g =>
@@ -140,7 +154,8 @@ else
                 SecrecyLevel = g.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = settings.AgingDisabled || g.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                IsArchived = g.IsArchived,
+                Level = settings.AgingDisabled || g.AgingDisabled || g.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -163,6 +178,13 @@ else
 
     private void Open(GroupRow z) => Nav.NavigateTo($"/personengruppen/{z.Id}");
 
+    private async Task ArchiveSelectedAsync(ArchiveFilter value)
+    {
+        _archive = value;
+        _load = true;
+        await LoadAsync();
+    }
+
     private sealed class GroupRow
     {
         public string Id { get; set; } = string.Empty;
@@ -177,5 +199,6 @@ else
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }
+        public bool IsArchived { get; set; }
     }
 }

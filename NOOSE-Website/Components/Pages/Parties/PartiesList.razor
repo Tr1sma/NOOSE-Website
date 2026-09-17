@@ -31,6 +31,13 @@ else
         <ToolBarContent>
             <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="ArchiveFilter" Value="_archive" ValueChanged="ArchiveSelectedAsync" Label="Archiv" Dense="true"
+                       Variant="Variant.Outlined" Style="max-width:170px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Active">Aktiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Including">Mit Archiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Only">Nur Archiv</MudSelectItem>
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -48,6 +55,10 @@ else
                         }
                         @* real link: enables middle/ctrl-click and keyboard access *@
                         <MudLink Href="@($"/parteien/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                        @if (context.Item.IsArchived)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-2">Archiviert</MudChip>
+                        }
                     </MudStack>
                 </CellTemplate>
             </TemplateColumn>
@@ -98,15 +109,19 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private ArchiveFilter _archive = ArchiveFilter.Active;
     private string _search = string.Empty;
     private List<PartyRow> _rows = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    // the archive filter is server-side, so switching it reloads rather than filtering in place
+    private async Task LoadAsync()
     {
         var user = (await AuthStateTask).User;
         var mayClassifiedRead = user.MayClassifiedRead();
         var isPartner = user.IsPartner();
-        var parties = await PartyService.GetListAsync(ViewerScope.From(user));
+        var parties = await PartyService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Party));
         var now = DateTime.UtcNow;
         _rows = parties.Select(p =>
@@ -126,7 +141,8 @@ else
                 SecrecyLevel = p.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = settings.AgingDisabled || p.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                IsArchived = p.IsArchived,
+                Level = settings.AgingDisabled || p.AgingDisabled || p.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -145,6 +161,13 @@ else
 
     private void Open(PartyRow z) => Nav.NavigateTo($"/parteien/{z.Id}");
 
+    private async Task ArchiveSelectedAsync(ArchiveFilter value)
+    {
+        _archive = value;
+        _load = true;
+        await LoadAsync();
+    }
+
     private sealed class PartyRow
     {
         public string Id { get; set; } = string.Empty;
@@ -158,5 +181,6 @@ else
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }
+        public bool IsArchived { get; set; }
     }
 }

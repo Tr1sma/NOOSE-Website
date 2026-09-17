@@ -40,6 +40,12 @@ else
                     <MudSelectItem T="TaskforceStatus?" Value="@s">@TaskforceStatusDisplay.Name(s)</MudSelectItem>
                 }
             </MudSelect>
+            <MudSelect T="ArchiveFilter" Value="_archive" ValueChanged="ArchiveSelectedAsync" Label="Archiv" Dense="true"
+                       Variant="Variant.Outlined" Style="max-width:170px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Active">Aktiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Including">Mit Archiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Only">Nur Archiv</MudSelectItem>
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -47,6 +53,10 @@ else
                 <CellTemplate>
                     @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
                     <MudLink Href="@($"/taskforces/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    @if (context.Item.IsArchived)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-2">Archiviert</MudChip>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Scope" Title="Geltungsbereich" />
@@ -89,15 +99,19 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private ArchiveFilter _archive = ArchiveFilter.Active;
     private string _search = string.Empty;
     private TaskforceStatus? _statusFilter;
     private List<TaskforceRow> _rows = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    // the archive filter is server-side, so switching it reloads rather than filtering in place
+    private async Task LoadAsync()
     {
         var user = (await AuthStateTask).User;
         // Only assigned taskforces; leadership sees all
-        var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId(),
+        var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId(), _archive,
             partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         var settings = await Recency.GetSettingsAsync(nameof(Taskforce));
         var now = DateTime.UtcNow;
@@ -114,7 +128,8 @@ else
                 IsClassified = t.IsClassified,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = settings.AgingDisabled || t.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                IsArchived = t.IsArchived,
+                Level = settings.AgingDisabled || t.AgingDisabled || t.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -143,6 +158,13 @@ else
 
     private void Open(TaskforceRow z) => Nav.NavigateTo($"/taskforces/{z.Id}");
 
+    private async Task ArchiveSelectedAsync(ArchiveFilter value)
+    {
+        _archive = value;
+        _load = true;
+        await LoadAsync();
+    }
+
     private sealed class TaskforceRow
     {
         public string Id { get; set; } = string.Empty;
@@ -154,5 +176,6 @@ else
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }
+        public bool IsArchived { get; set; }
     }
 }

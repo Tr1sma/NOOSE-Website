@@ -49,6 +49,12 @@ else
                     <MudSelectItem T="RecencyLevel?" Value="@e">@RecencyLevelDisplay.Name(e)</MudSelectItem>
                 }
             </MudSelect>
+            <MudSelect T="ArchiveFilter" Value="_archive" ValueChanged="ArchiveSelectedAsync" Label="Archiv" Dense="true"
+                       Variant="Variant.Outlined" Style="max-width:170px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Active">Aktiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Including">Mit Archiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Only">Nur Archiv</MudSelectItem>
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -56,6 +62,10 @@ else
                 <CellTemplate>
                     @* Real link: middle/ctrl-click opens record in new tab; keyboard/screenreader-reachable. *@
                     <MudLink Href="@($"/personen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    @if (context.Item.IsArchived)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-2">Archiviert</MudChip>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Aliases" Title="Aliase" />
@@ -143,9 +153,11 @@ else
     private string _search = string.Empty;
     private Classification? _classification;
     private RecencyLevel? _recency;
+    private ArchiveFilter _archive = ArchiveFilter.Active;
     private List<PersonRow> _rows = new();
 
-    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _classification is not null || _recency is not null;
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _classification is not null || _recency is not null
+        || _archive != ArchiveFilter.Active;
 
     protected override async Task OnInitializedAsync()
     {
@@ -153,9 +165,16 @@ else
         _search = QueryState.Read(Nav, "q") ?? string.Empty;
         _classification = QueryState.ReadEnum<Classification>(Nav, "einstufung");
         _recency = QueryState.ReadEnum<RecencyLevel>(Nav, "aktualitaet");
+        _archive = QueryState.ReadEnum<ArchiveFilter>(Nav, "archiv") ?? ArchiveFilter.Active;
 
+        await LoadAsync();
+    }
+
+    // the archive filter is server-side, so switching it reloads rather than filtering in place
+    private async Task LoadAsync()
+    {
         var user = (await AuthStateTask).User;
-        var people = await PersonService.GetListAsync(ViewerScope.From(user));
+        var people = await PersonService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Person));
         var now = DateTime.UtcNow;
         _rows = people.Select(p =>
@@ -178,7 +197,10 @@ else
                 SecrecyLevel = p.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = settings.AgingDisabled || p.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                IsArchived = p.IsArchived,
+                Level = settings.AgingDisabled || p.AgingDisabled || p.IsArchived
+                    ? RecencyLevel.Fresh
+                    : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -222,18 +244,34 @@ else
         return PersistFiltersAsync();
     }
 
-    private Task ResetFiltersAsync()
+    private async Task ArchiveSelectedAsync(ArchiveFilter value)
+    {
+        _archive = value;
+        await PersistFiltersAsync();
+        _load = true;
+        await LoadAsync();
+    }
+
+    private async Task ResetFiltersAsync()
     {
         _search = string.Empty;
         _classification = null;
         _recency = null;
-        return PersistFiltersAsync();
+        var reload = _archive != ArchiveFilter.Active;
+        _archive = ArchiveFilter.Active;
+        await PersistFiltersAsync();
+        if (reload)
+        {
+            _load = true;
+            await LoadAsync();
+        }
     }
 
     private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav,
         ("q", _search),
         ("einstufung", _classification?.ToString()),
-        ("aktualitaet", _recency?.ToString()));
+        ("aktualitaet", _recency?.ToString()),
+        ("archiv", _archive == ArchiveFilter.Active ? null : _archive.ToString()));
 
     private void Open(PersonRow z) => Nav.NavigateTo($"/personen/{z.Id}");
 
@@ -273,5 +311,6 @@ else
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }
+        public bool IsArchived { get; set; }
     }
 }

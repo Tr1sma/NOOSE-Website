@@ -46,6 +46,12 @@ else
                     <MudSelectItem T="RecencyLevel?" Value="@e">@RecencyLevelDisplay.Name(e)</MudSelectItem>
                 }
             </MudSelect>
+            <MudSelect T="ArchiveFilter" Value="_archive" ValueChanged="ArchiveSelectedAsync" Label="Archiv" Dense="true"
+                       Variant="Variant.Outlined" Style="max-width:170px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Active">Aktiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Including">Mit Archiv</MudSelectItem>
+                <MudSelectItem T="ArchiveFilter" Value="ArchiveFilter.Only">Nur Archiv</MudSelectItem>
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -63,6 +69,10 @@ else
                         }
                         @* real link: middle/ctrl-click and keyboard/screen-reader access *@
                         <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                        @if (context.Item.IsArchived)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-2">Archiviert</MudChip>
+                        }
                     </MudStack>
                 </CellTemplate>
             </TemplateColumn>
@@ -156,9 +166,11 @@ else
     private string _search = string.Empty;
     private Classification? _classification;
     private RecencyLevel? _recency;
+    private ArchiveFilter _archive = ArchiveFilter.Active;
     private List<FactionRow> _rows = new();
 
-    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _classification is not null || _recency is not null;
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _classification is not null || _recency is not null
+        || _archive != ArchiveFilter.Active;
 
     protected override async Task OnInitializedAsync()
     {
@@ -166,11 +178,18 @@ else
         _search = QueryState.Read(Nav, "q") ?? string.Empty;
         _classification = QueryState.ReadEnum<Classification>(Nav, "einstufung");
         _recency = QueryState.ReadEnum<RecencyLevel>(Nav, "aktualitaet");
+        _archive = QueryState.ReadEnum<ArchiveFilter>(Nav, "archiv") ?? ArchiveFilter.Active;
 
+        await LoadAsync();
+    }
+
+    // the archive filter is server-side, so switching it reloads rather than filtering in place
+    private async Task LoadAsync()
+    {
         var user = (await AuthStateTask).User;
         var mayClassifiedRead = user.MayClassifiedRead();
         var isPartner = user.IsPartner();
-        var factions = await FactionService.GetListAsync(ViewerScope.From(user));
+        var factions = await FactionService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Faction));
         var now = DateTime.UtcNow;
         _rows = factions.Select(f =>
@@ -197,7 +216,8 @@ else
                 Refreshed = referenceUtc.ToLocalTime(),
                 OldestFacet = FactionRecency.Oldest(f),
                 // state factions and exempt records never go stale
-                Level = settings.AgingDisabled || f.IsStateFaction || f.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
+                IsArchived = f.IsArchived,
+                Level = settings.AgingDisabled || f.IsStateFaction || f.AgingDisabled || f.IsArchived ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -241,18 +261,34 @@ else
         return PersistFiltersAsync();
     }
 
-    private Task ResetFiltersAsync()
+    private async Task ArchiveSelectedAsync(ArchiveFilter value)
+    {
+        _archive = value;
+        await PersistFiltersAsync();
+        _load = true;
+        await LoadAsync();
+    }
+
+    private async Task ResetFiltersAsync()
     {
         _search = string.Empty;
         _classification = null;
         _recency = null;
-        return PersistFiltersAsync();
+        var reload = _archive != ArchiveFilter.Active;
+        _archive = ArchiveFilter.Active;
+        await PersistFiltersAsync();
+        if (reload)
+        {
+            _load = true;
+            await LoadAsync();
+        }
     }
 
     private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav,
         ("q", _search),
         ("einstufung", _classification?.ToString()),
-        ("aktualitaet", _recency?.ToString()));
+        ("aktualitaet", _recency?.ToString()),
+        ("archiv", _archive == ArchiveFilter.Active ? null : _archive.ToString()));
 
     private void Open(FactionRow z) => Nav.NavigateTo($"/fraktionen/{z.Id}");
 
@@ -283,5 +319,6 @@ else
         public DateTime Refreshed { get; set; }
         public FactionRecencyFacet OldestFacet { get; set; }
         public RecencyLevel Level { get; set; }
+        public bool IsArchived { get; set; }
     }
 }
