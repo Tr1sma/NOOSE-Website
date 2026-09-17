@@ -335,6 +335,9 @@ public static class ChangelogContent
             Neu("2.1.65-archiv", "Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen und "
                 + "Taskforces lassen sich archivieren: sie verschwinden aus Listen und Suche, bleiben aber "
                 + "lesbar und sind mit einem Klick wieder da.", "Akten"),
+            Neu("2.1.66-score-verlauf", "Neben der Gefährdung steht jetzt eine kleine Verlaufskurve – in den "
+                + "Listen der Personen und Fraktionen, im Lagezentrum und bei den beobachteten Akten. Du "
+                + "siehst damit auf einen Blick, ob ein Wert steigt, fällt oder sich nicht bewegt.", "Akten"),
         ], "1.5"),
     ];
 }

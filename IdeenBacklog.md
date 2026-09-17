@@ -67,6 +67,15 @@ zuletzt die Architektur-Grenze.
 
 **Aufwand:** klein | **Jury-Schnitt:** 8.3 | **Blickwinkel:** Vorhandene Infrastruktur als Hebel
 
+> **Umgesetzt am 17.09.2026.** Verdrahtet in allen vier genannten Ansichten - `PeopleList`, `FactionsList`,
+> `HazardList` (Lagezentrum) und `MyBeobachteten`; je Seite **eine** gebuendelte Abfrage
+> (`GetSparklinesAsync`), nicht eine je Zeile. Die Beschriftung kommt aus
+> `Services/Threat/ThreatTrendText.cs` und nennt Anfang, Ende und Differenz statt eines Richtungsworts -
+> eine Kurve, die steigt und wieder faellt, endet dort, wo sie begann. Zwei Schranken: eine Staatsfraktion
+> traegt keinen Score und darum auch keine Kurve, und in den beobachteten Akten bekommt nur eine Zeile eine
+> Kurve, die der Betrachter auch oeffnen darf. `ScoreTrendWiringTests` haelt die Verdrahtung fest - beide
+> Teile lagen vorher gebaut und ungenutzt herum, ohne dass etwas rot war.
+
 **Was es tut.** Jede Personen-, Fraktions- und Watchlist-Zeile bekommt eine kleine Verlaufskurve des Bedrohungs-Scores neben der Zahl, damit man sofort sieht: steigt, fällt oder liegt still.
 
 **Warum.** Der aktuelle Score sagt nichts über die Richtung. Heute muss man jede Akte einzeln öffnen, um den Verlauf zu sehen. Sowohl die Komponente als auch die dafür gebaute Sammel-Abfrage existieren und werden von keiner einzigen Stelle benutzt – die Arbeit ist zu 90 Prozent schon getan.

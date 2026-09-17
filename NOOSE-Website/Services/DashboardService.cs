@@ -228,7 +228,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             .ToListAsync(cancellationToken);
 
         return rows.Select(f => new DashboardFactionHazard(
-            f.Name, f.CaseNumber, $"/fraktionen/{f.Id}", HazardLevelLogic.From(f.ThreatScore))).ToList();
+            f.Id, f.Name, f.CaseNumber, $"/fraktionen/{f.Id}", HazardLevelLogic.From(f.ThreatScore))).ToList();
     }
 
     public async Task<List<DashboardFactionHazard>> GetPeopleByHazardAsync(bool isLeadership,
@@ -246,7 +246,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             .ToListAsync(cancellationToken);
 
         return rows.Select(p => new DashboardFactionHazard(
-            p.Name, p.CaseNumber, $"/personen/{p.Id}", HazardLevelLogic.From(p.ThreatScore))).ToList();
+            p.Id, p.Name, p.CaseNumber, $"/personen/{p.Id}", HazardLevelLogic.From(p.ThreatScore))).ToList();
     }
 
     public async Task<DashboardDistributions> GetDistributionsAsync(bool isLeadership, string? meId, CancellationToken cancellationToken = default)

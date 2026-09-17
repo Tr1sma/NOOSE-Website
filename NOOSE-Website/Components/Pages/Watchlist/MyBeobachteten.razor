@@ -1,5 +1,6 @@
 @page "/watchlist"
 @inject IWatchlistService WatchlistService
+@inject IThreatTrendService Trends
 @inject ISnackbar Snackbar
 
 <PageTitle>Beobachtete Akten · NOOSE</PageTitle>
@@ -40,6 +41,12 @@ else
                             @TypeName(a.Type) · folgt seit @a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")
                         </MudText>
                     </div>
+                    @if (TrendOf(a) is { Count: >= 2 } trend)
+                    {
+                        <MudTooltip Text="@ThreatTrendText.Hint(trend)">
+                            <ThreatSparkline Values="trend" Width="56" />
+                        </MudTooltip>
+                    }
                     <MudTooltip Text="Nicht mehr folgen">
                         <MudIconButton Icon="@Icons.Material.Filled.Star" Color="Color.Warning"
                                        aria-label="Nicht mehr folgen" Disabled="_busy"
@@ -57,6 +64,7 @@ else
     private bool _load = true;
     private bool _busy;
     private List<FollowedRecord> _records = new();
+    private IReadOnlyDictionary<string, IReadOnlyList<int>> _trends = new Dictionary<string, IReadOnlyList<int>>();
     private ClaimsPrincipal _user = default!;
 
     protected override async Task OnInitializedAsync()
@@ -69,8 +77,40 @@ else
     {
         _load = true;
         _records = await WatchlistService.GetFollowedResolvedAsync(_user);
+        _trends = await LoadTrendsAsync();
         _load = false;
     }
+
+    /// <remarks>
+    /// Scored records only, and only those the viewer may open: a curve on an entry that renders as plain text
+    /// would report the threat trend of a file whose access was withdrawn.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<int>>> LoadTrendsAsync()
+    {
+        var map = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
+        foreach (var type in new[] { nameof(Person), nameof(Faction) })
+        {
+            var ids = _records
+                .Where(r => r.Accessible && r.Type == type)
+                .Select(r => r.Id)
+                .ToList();
+            if (ids.Count == 0)
+            {
+                continue;
+            }
+            foreach (var pair in await Trends.GetSparklinesAsync(type, ids))
+            {
+                map[Key(type, pair.Key)] = pair.Value;
+            }
+        }
+        return map;
+    }
+
+    // type and id together: the watchlist mixes record types in one list
+    private static string Key(string type, string id) => $"{type}:{id}";
+
+    private IReadOnlyList<int> TrendOf(FollowedRecord record)
+        => _trends.TryGetValue(Key(record.Type, record.Id), out var trend) ? trend : [];
 
     private async Task UnfollowAsync(FollowedRecord a)
     {

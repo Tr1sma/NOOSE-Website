@@ -1,6 +1,7 @@
 @page "/personen"
 @inject IPersonService PersonService
 @inject IRecencyService Recency
+@inject IThreatTrendService Trends
 @inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -83,11 +84,16 @@ else
                 <CellTemplate>
                     @if (context.Item.ThreatScore is { } gscore)
                     {
-                        <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.ThreatConfidence is { } gk ? $" · Konfidenz {gk} %" : ""))">
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(context.Item.Hazard)">
-                                @HazardLevelLogic.Name(context.Item.Hazard)
-                            </MudChip>
-                        </MudTooltip>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.ThreatConfidence is { } gk ? $" · Konfidenz {gk} %" : ""))">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(context.Item.Hazard)">
+                                    @HazardLevelLogic.Name(context.Item.Hazard)
+                                </MudChip>
+                            </MudTooltip>
+                            <MudTooltip Text="@ThreatTrendText.Hint(context.Item.Trend)">
+                                <ThreatSparkline Values="context.Item.Trend" />
+                            </MudTooltip>
+                        </MudStack>
                     }
                     else
                     {
@@ -176,6 +182,8 @@ else
         var user = (await AuthStateTask).User;
         var people = await PersonService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Person));
+        // one bundled query for the whole page, not one per row
+        var trends = await Trends.GetSparklinesAsync(nameof(Person), people.Select(p => p.Id).ToList());
         var now = DateTime.UtcNow;
         _rows = people.Select(p =>
         {
@@ -193,6 +201,7 @@ else
                 ThreatScore = p.ThreatScore,
                 ThreatConfidence = p.ThreatConfidence,
                 Hazard = HazardLevelLogic.From(p.ThreatScore),
+                Trend = trends.TryGetValue(p.Id, out var trend) ? trend : [],
                 IsClassified = p.IsClassified,
                 SecrecyLevel = p.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
@@ -305,6 +314,7 @@ else
         public int? ThreatScore { get; set; }
         public int? ThreatConfidence { get; set; }
         public HazardLevel Hazard { get; set; }
+        public IReadOnlyList<int> Trend { get; set; } = [];
         public bool IsClassified { get; set; }
         public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }

@@ -2,6 +2,7 @@
 @using NOOSE_Website.Models.Dashboard
 @using NOOSE_Website.Models.Timeline
 @inject IDashboardService Dashboard
+@inject IThreatTrendService Trends
 @inject IGlobalChronikService Chronik
 @inject IFollowupService FollowupService
 @inject NavigationManager Nav
@@ -104,7 +105,7 @@ else if (_distributions is { } v)
         <MudItem xs="12" md="6" Class="d-flex">
             <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
                 <MudText Typo="Typo.h6" Class="mb-2">Fraktionen nach Gefährdung</MudText>
-                <HazardList Items="_factionsHazard" EmptyText="Noch keine Fraktionen erfasst." />
+                <HazardList Items="_factionsHazard" Trends="_factionTrends" EmptyText="Noch keine Fraktionen erfasst." />
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -113,7 +114,7 @@ else if (_distributions is { } v)
         <MudItem xs="12" md="6" Class="d-flex">
             <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
                 <MudText Typo="Typo.h6" Class="mb-2">Personen nach Gefährdung</MudText>
-                <HazardList Items="_peopleHazard" EmptyText="Noch keine bewerteten Personen." />
+                <HazardList Items="_peopleHazard" Trends="_peopleTrends" EmptyText="Noch keine bewerteten Personen." />
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="6" Class="d-flex">
@@ -271,6 +272,8 @@ else if (_distributions is { } v)
     private List<DashboardStaleRecord> _updateNeed = new();
     private List<DashboardFactionHazard> _factionsHazard = new();
     private List<DashboardFactionHazard> _peopleHazard = new();
+    private IReadOnlyDictionary<string, IReadOnlyList<int>> _factionTrends = new Dictionary<string, IReadOnlyList<int>>();
+    private IReadOnlyDictionary<string, IReadOnlyList<int>> _peopleTrends = new Dictionary<string, IReadOnlyList<int>>();
 
     // Colour order must match the segment order in DashboardService
     private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };
@@ -301,6 +304,9 @@ else if (_distributions is { } v)
         _updateNeed = await Dashboard.GetUpdateNeedAsync(_isLeadership, meId);
         _factionsHazard = await Dashboard.GetFactionsByHazardAsync(_isLeadership);
         _peopleHazard = await Dashboard.GetPeopleByHazardAsync(_isLeadership);
+        // the tiles are already filtered for this viewer, so the curves follow their ids
+        _factionTrends = await Trends.GetSparklinesAsync(nameof(Faction), _factionsHazard.Select(f => f.Id).ToList());
+        _peopleTrends = await Trends.GetSparklinesAsync(nameof(Person), _peopleHazard.Select(p => p.Id).ToList());
         _load = false;
     }
 

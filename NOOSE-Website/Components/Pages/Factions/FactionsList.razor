@@ -1,6 +1,7 @@
 @page "/fraktionen"
 @inject IFactionService FactionService
 @inject IRecencyService Recency
+@inject IThreatTrendService Trends
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -87,11 +88,16 @@ else
                 <CellTemplate>
                     @if (context.Item.ThreatScore is { } gscore)
                     {
-                        <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.ThreatConfidence is { } gk ? $" · Konfidenz {gk} %" : ""))">
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(context.Item.Hazard)">
-                                @HazardLevelLogic.Name(context.Item.Hazard)
-                            </MudChip>
-                        </MudTooltip>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.ThreatConfidence is { } gk ? $" · Konfidenz {gk} %" : ""))">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(context.Item.Hazard)">
+                                    @HazardLevelLogic.Name(context.Item.Hazard)
+                                </MudChip>
+                            </MudTooltip>
+                            <MudTooltip Text="@ThreatTrendText.Hint(context.Item.Trend)">
+                                <ThreatSparkline Values="context.Item.Trend" />
+                            </MudTooltip>
+                        </MudStack>
                     }
                     else
                     {
@@ -191,6 +197,8 @@ else
         var isPartner = user.IsPartner();
         var factions = await FactionService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Faction));
+        // one bundled query for the whole page, not one per row
+        var trends = await Trends.GetSparklinesAsync(nameof(Faction), factions.Select(f => f.Id).ToList());
         var now = DateTime.UtcNow;
         _rows = factions.Select(f =>
         {
@@ -210,6 +218,8 @@ else
                 ThreatScore = f.IsStateFaction ? null : f.ThreatScore,
                 ThreatConfidence = f.ThreatConfidence,
                 Hazard = HazardLevelLogic.From(f.ThreatScore),
+                // follows the score: a state faction carries neither
+                Trend = f.IsStateFaction || !trends.TryGetValue(f.Id, out var trend) ? [] : trend,
                 IsClassified = f.IsClassified,
                 SecrecyLevel = f.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
@@ -314,6 +324,7 @@ else
         public int? ThreatScore { get; set; }
         public int? ThreatConfidence { get; set; }
         public HazardLevel Hazard { get; set; }
+        public IReadOnlyList<int> Trend { get; set; } = [];
         public bool IsClassified { get; set; }
         public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }

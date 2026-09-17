@@ -185,6 +185,11 @@ internal static class InvestigationChapter
                 75.</p>
                 <p>Aus dem Score wird die <strong>Gefährdungsstufe</strong>: bis 24 niedrig, bis 49 mittel,
                 bis 74 hoch, ab 75 kritisch.</p>
+                <p>Neben der Stufe steht in den Listen, im Lagezentrum und bei deinen beobachteten Akten eine
+                kleine <strong>Verlaufskurve</strong> der letzten Bewertungen. Sie beantwortet, was die nackte
+                Zahl offenlässt: bewegt sich der Wert - und wohin? Fahre mit der Maus darüber, dann nennt sie
+                dir Anfang, Ende und die Differenz. Wurde ein Score erst einmal berechnet, gibt es noch keinen
+                Verlauf; dann steht dort ein Strich.</p>
                 <p>Zwei Dinge solltest du wissen. Erstens: Eine niedrige Konfidenz heißt nicht „ungefährlich“,
                 sondern „wir wissen zu wenig“. Zweitens: Der Score misst, was <em>dokumentiert</em> ist. Eine
                 gefährliche Fraktion mit leerer Akte hat eine niedrige Zahl - das ist ein Befund über uns,

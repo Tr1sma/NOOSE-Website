@@ -34,7 +34,9 @@ public record DashboardStaleRecord(
     DateTime ReferenceUtc);
 
 /// <summary>A faction with its hazard level; classification/trash-filtered, sorted by hazard desc.</summary>
+/// <param name="Id">Record id, so a caller can ask for the score history of exactly these rows.</param>
 public record DashboardFactionHazard(
+    string Id,
     string Name,
     string CaseNumber,
     string Href,

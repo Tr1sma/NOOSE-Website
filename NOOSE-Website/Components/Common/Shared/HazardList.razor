@@ -22,7 +22,12 @@ else
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@item.CaseNumber</MudText>
                             </div>
                         </MudStack>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(item.Level)</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudTooltip Text="@ThreatTrendText.Hint(TrendOf(item))">
+                                <ThreatSparkline Values="TrendOf(item)" Width="48" />
+                            </MudTooltip>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(item.Level)</MudText>
+                        </MudStack>
                     </MudStack>
                 </MudListItem>
             }
@@ -33,6 +38,13 @@ else
 @code {
     [Parameter] public IReadOnlyList<DashboardFactionHazard> Items { get; set; } = [];
     [Parameter] public string EmptyText { get; set; } = "Noch keine Einträge.";
+
+    /// <summary>Score history per record id; an id without an entry simply shows no curve.</summary>
+    [Parameter] public IReadOnlyDictionary<string, IReadOnlyList<int>> Trends { get; set; }
+        = new Dictionary<string, IReadOnlyList<int>>();
+
+    private IReadOnlyList<int> TrendOf(DashboardFactionHazard item)
+        => Trends.TryGetValue(item.Id, out var trend) ? trend : [];
 
     private static string Dot(HazardLevel level)
         => $"display:inline-block;width:12px;height:12px;border-radius:50%;background:{ChartPalette.ForHazard(level)};flex:none;";
