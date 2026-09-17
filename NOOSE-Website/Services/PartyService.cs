@@ -21,11 +21,13 @@ public class PartyService(
 {
     private static string MentionScope(Party p) => MentionNotify.Scope(p.Description, p.Targets, p.Remarks);
 
-    public async Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<Party>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // include members so the list count matches the detail view
         return await VisibleParties(db, scope)
+            .Apply(filter)
             .Include(p => p.Members).ThenInclude(m => m.Person)
             .Include(p => p.Photos)
             .AsSplitQuery()
@@ -59,7 +61,8 @@ public class PartyService(
     public async Task<List<Party>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Parties.Where(p => isLeadership || !p.IsClassified);
+        // a picker must not offer a record that was filed away
+        var query = db.Parties.OnlyActive().Where(p => isLeadership || !p.IsClassified);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

@@ -17,10 +17,12 @@ public class CaseService(
 {
     private static string MentionScope(Case v) => MentionNotify.Scope(v.Description, v.Summary, v.ClosingNote);
 
-    public async Task<List<Case>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<Case>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await VisibleCases(db, scope)
+            .Apply(filter)
             .OrderByDescending(v => v.ModifiedAt ?? v.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -55,7 +57,8 @@ public class CaseService(
         var isTru = scope.IsTru;
         var isHrb = scope.IsHrb;
         // surface a restricted case only when the viewer's secrecy scope covers its level (TRU/HRB audience or leadership)
-        var query = db.Cases.Where(v =>
+        // a picker must not offer a record that was filed away
+        var query = db.Cases.OnlyActive().Where(v =>
             !v.IsClassified
             || mayClassified
             || (v.IsTRUClassified && isTru)

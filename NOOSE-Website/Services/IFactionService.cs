@@ -10,7 +10,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Faction records: list/detail, CRUD, classification, members, agents, history.</summary>
 public interface IFactionService
 {
-    Task<List<Faction>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<Faction>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<Faction?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Faction>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Faction>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);

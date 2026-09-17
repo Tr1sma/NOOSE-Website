@@ -21,10 +21,12 @@ public class PersonService(
     ICaseNumberService caseNumber, IThreatScoreService threat, INotificationService notifications,
     IPublicWantedService publicWanted) : IPersonService
 {
-    public async Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await VisiblePeople(db, scope)
+            .Apply(filter)
             .Include(p => p.Aliases)
             .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -62,7 +64,8 @@ public class PersonService(
     public async Task<List<Person>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.People.Where(p => isLeadership || !p.IsClassified);
+        // a picker must not offer a record that was filed away
+        var query = db.People.OnlyActive().Where(p => isLeadership || !p.IsClassified);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

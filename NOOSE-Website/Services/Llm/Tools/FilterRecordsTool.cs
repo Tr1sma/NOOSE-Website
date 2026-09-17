@@ -12,7 +12,7 @@ namespace NOOSE_Website.Services.Llm.Tools;
 /// <summary>Answers "which ones" and "how many" — the questions free-text search cannot.</summary>
 /// <remarks>
 /// Fans out over the per-type list services instead of querying EF directly. All six carry the identical
-/// <c>GetListAsync(ViewerScope, ct)</c> signature, so the visibility filtering is inherited from the canonical
+/// <c>GetListAsync(ViewerScope, ArchiveFilter, ct)</c> signature, so the visibility filtering is inherited from the canonical
 /// read path rather than rewritten here, where it could be got wrong. It is also what the list pages do.
 /// </remarks>
 public sealed class FilterRecordsTool(
@@ -171,27 +171,27 @@ public sealed class FilterRecordsTool(
     private async Task<List<Row>?> LoadAsync(
         string clr, ViewerScope scope, ClaimsPrincipal actor, CancellationToken cancellationToken) => clr switch
     {
-        nameof(Data.Entities.People.Person) => (await people.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.People.Person) => (await people.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(p => new Row(p.Id, p.Name, p.CaseNumber, p.Classification, p.SecrecyLevel, p.ThreatScore,
                 p.ModifiedAt, p.CreatedAt, Wanted(p), p.EffectiveLifeStatus, p.IsWanted))
             .ToList(),
-        nameof(Data.Entities.Factions.Faction) => (await factions.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Factions.Faction) => (await factions.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(f => new Row(f.Id, f.Name, f.CaseNumber, f.Classification, f.SecrecyLevel, f.ThreatScore,
                 f.ModifiedAt, f.CreatedAt))
             .ToList(),
-        nameof(Data.Entities.Groups.PersonGroup) => (await groups.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Groups.PersonGroup) => (await groups.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(g => new Row(g.Id, g.Name, g.CaseNumber, g.Classification, g.SecrecyLevel, null,
                 g.ModifiedAt, g.CreatedAt))
             .ToList(),
-        nameof(Data.Entities.Parties.Party) => (await parties.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Parties.Party) => (await parties.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(p => new Row(p.Id, p.Name, p.CaseNumber, p.Classification, p.SecrecyLevel, null,
                 p.ModifiedAt, p.CreatedAt))
             .ToList(),
-        nameof(Data.Entities.Cases.Case) => (await cases.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Cases.Case) => (await cases.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(c => new Row(c.Id, c.Title, c.CaseNumber, c.Classification, c.SecrecyLevel, null,
                 c.ModifiedAt, c.CreatedAt, "Status: " + CaseStatusDisplay.Name(c.Status)))
             .ToList(),
-        nameof(Data.Entities.Operations.Operation) => (await operations.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Operations.Operation) => (await operations.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(o => new Row(o.Id, o.Title, o.CaseNumber, o.Classification, o.SecrecyLevel, null,
                 o.ModifiedAt, o.CreatedAt, "Status: " + OperationStatusDisplay.Name(o.Status)))
             .ToList(),
@@ -204,7 +204,7 @@ public sealed class FilterRecordsTool(
             .ToList(),
 
         nameof(Data.Entities.Taskforces.Taskforce) => (await taskforces.GetListAsync(
-                scope.MayAllTaskforces, scope.MeId, cancellationToken, scope.PartnerAgency))
+                scope.MayAllTaskforces, scope.MeId, cancellationToken: cancellationToken, partnerAgency: scope.PartnerAgency))
             .Select(t => new Row(t.Id, t.Name, t.CaseNumber, null,
                 t.IsClassified ? DocumentClassification.Leadership : DocumentClassification.None, null,
                 t.ModifiedAt, t.CreatedAt, "Umfang: " + TaskforceScopeDisplay.Name(t.Scope),
@@ -270,7 +270,7 @@ public sealed class FilterRecordsTool(
                 string.IsNullOrWhiteSpace(b.AssignedAgentName) ? null : "Zuständig: " + b.AssignedAgentName,
                 Status: BewerbungStatusDisplay.Name(b.Status)))
             .ToList(),
-        nameof(Data.Entities.Activities.AgentActivity) => (await activities.GetListAsync(scope, cancellationToken))
+        nameof(Data.Entities.Activities.AgentActivity) => (await activities.GetListAsync(scope, cancellationToken: cancellationToken))
             .Select(a => new Row(a.Id, a.Title, string.Empty, null, DocumentClassification.None, null,
                 null, a.CreatedAt,
                 $"Datum: {a.ActivityDate:dd.MM.yyyy}"

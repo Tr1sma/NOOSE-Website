@@ -18,10 +18,12 @@ public class OperationService(
 {
     private static string MentionScope(Operation o) => MentionNotify.Scope(o.Expiry, o.Result, o.Remarks);
 
-    public async Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<Operation>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await VisibleOperations(db, scope)
+            .Apply(filter)
             .OrderByDescending(o => o.ModifiedAt ?? o.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -49,7 +51,8 @@ public class OperationService(
     public async Task<List<Operation>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Operations.Where(o => isLeadership || !o.IsClassified);
+        // a picker must not offer a record that was filed away
+        var query = db.Operations.OnlyActive().Where(o => isLeadership || !o.IsClassified);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

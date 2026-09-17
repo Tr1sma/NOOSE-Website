@@ -10,7 +10,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Case records: list/detail (classified-filtered), CRUD, trash, rank-gated classification, involved agents (with case lead), and history.</summary>
 public interface ICaseService
 {
-    Task<List<Case>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<Case>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<Case?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Case>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Case>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);

@@ -10,7 +10,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Business logic for party records: list/detail, CRUD, classification, members, assigned agents, history.</summary>
 public interface IPartyService
 {
-    Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<Party>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<Party?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Party>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Party>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);

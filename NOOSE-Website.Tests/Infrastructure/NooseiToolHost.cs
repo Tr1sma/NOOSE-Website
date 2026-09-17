@@ -222,7 +222,7 @@ public static class NooseiToolHost
     private static IPersonService QuietPeople()
     {
         var people = Substitute.For<IPersonService>();
-        people.GetListAsync(Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+        people.GetListAsync(Arg.Any<ViewerScope>(), Arg.Any<ArchiveFilter>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<Person>()));
         return people;
     }

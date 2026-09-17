@@ -21,11 +21,13 @@ public class FactionService(
 {
     private static string MentionScope(Faction f) => MentionNotify.Scope(f.Description, f.Targets, f.Estate);
 
-    public async Task<List<Faction>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<Faction>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Include members+person so the list member count matches the detail view.
         return await VisibleFactions(db, scope)
+            .Apply(filter)
             .Include(f => f.Members).ThenInclude(m => m.Person)
             .Include(f => f.Photos)
             .OrderByDescending(f => f.ModifiedAt ?? f.CreatedAt)
@@ -63,7 +65,8 @@ public class FactionService(
     public async Task<List<Faction>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Factions.Where(f => isLeadership || !f.IsClassified);
+        // a picker must not offer a record that was filed away
+        var query = db.Factions.OnlyActive().Where(f => isLeadership || !f.IsClassified);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

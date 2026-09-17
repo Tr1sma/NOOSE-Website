@@ -21,11 +21,13 @@ public class PersonGroupService(
 {
     private static string MentionScope(PersonGroup g) => MentionNotify.Scope(g.Description, g.Targets);
 
-    public async Task<List<PersonGroup>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<PersonGroup>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // include members so the list count matches the detail view
         return await VisiblePersonGroups(db, scope)
+            .Apply(filter)
             .Include(g => g.Members).ThenInclude(m => m.Person)
             .Include(g => g.Photos)
             .AsSplitQuery()
@@ -59,7 +61,8 @@ public class PersonGroupService(
     public async Task<List<PersonGroup>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
+        // a picker must not offer a record that was filed away
+        var query = db.PersonGroups.OnlyActive().Where(g => isLeadership || !g.IsClassified);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

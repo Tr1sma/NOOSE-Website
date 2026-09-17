@@ -17,13 +17,15 @@ public class TaskforceService(
 {
     private static string MentionScope(Taskforce t) => MentionNotify.Scope(t.Purpose, t.Remarks);
 
-    public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
+    public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var query = partnerAgency is { } agency
             ? db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
             : db.Taskforces.OnlyVisible(db, mayAll, meId);
         return await query
+            .Apply(filter)
             .OrderByDescending(t => t.ModifiedAt ?? t.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -67,6 +69,9 @@ public class TaskforceService(
         var query = partnerAgency is { } agency
             ? db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
             : db.Taskforces.OnlyVisible(db, mayAll, meId);
+
+        // a picker must not offer a record that was filed away
+        query = query.OnlyActive();
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

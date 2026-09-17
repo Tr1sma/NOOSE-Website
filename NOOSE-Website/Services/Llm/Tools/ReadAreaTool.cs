@@ -436,7 +436,7 @@ public sealed class ReadAreaTool(
     {
         // same rule and threshold as the /fahndung page, via the shared helper and the scope-filtered list
         var threshold = (await settings.GetAsync(ct)).WantedBoardMinHazard;
-        var board = (await people.GetListAsync(scope, ct))
+        var board = (await people.GetListAsync(scope, cancellationToken: ct))
             .Where(p => WantedBoard.IsOnBoard(p, threshold))
             .OrderByDescending(p => p.IsWanted)
             .ThenByDescending(p => p.ThreatScore ?? -1)

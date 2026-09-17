@@ -10,7 +10,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Business logic for person-group records: list/detail, CRUD, classification, members, assigned agents, progress, history.</summary>
 public interface IPersonGroupService
 {
-    Task<List<PersonGroup>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<PersonGroup>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<PersonGroup?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<PersonGroup>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<PersonGroup>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);

@@ -10,7 +10,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Operations/mission reports: list/detail, CRUD, classification, involved agents and history.</summary>
 public interface IOperationService
 {
-    Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<Operation>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<Operation?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Operation>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Operation>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);

@@ -9,7 +9,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Business logic for person records: list/detail, CRUD with profile children, classification, photos, history.</summary>
 public interface IPersonService
 {
-    Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<List<Person>> GetListAsync(ViewerScope scope, ArchiveFilter filter = ArchiveFilter.Active,
+        CancellationToken cancellationToken = default);
     Task<Person?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Person>> GetTrashAsync(CancellationToken cancellationToken = default);
 
