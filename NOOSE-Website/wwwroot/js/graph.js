@@ -82,7 +82,7 @@ function baueTooltip(k) {
     div.className = 'noose-graph-tip';
     const typ = document.createElement('div');
     typ.style.cssText = 'font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9BA8B8;';
-    typ.textContent = k.type + (k.isClassified ? ' · Verschlusssache' : '');
+    typ.textContent = k.type + (k.isClassified ? ' · Verschlusssache' : '') + (k.isArchived ? ' · Archiviert' : '');
     const name = document.createElement('div');
     name.style.cssText = 'font-weight:600;color:#E6EDF3;margin-top:2px;';
     name.textContent = k.designation;
@@ -148,6 +148,12 @@ function mapKnoten(k, maxWert) {
         node.brokenImage = undefined;
     } else {
         node.shape = 'dot';
+    }
+    // an archived record stays in the picture, just quiet
+    if (k.isArchived) {
+        node.opacity = 0.45;
+        node.shapeProperties = Object.assign({}, node.shapeProperties, { borderDashes: [4, 4] });
+        node.font = Object.assign({ size: 14, face: 'Inter, Segoe UI, sans-serif' }, node.font, { color: '#7D8590' });
     }
     return node;
 }

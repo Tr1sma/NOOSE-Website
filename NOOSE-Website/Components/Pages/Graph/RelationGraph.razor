@@ -391,7 +391,7 @@
         try
         {
             // Bump ?v= when graph.js changes
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=13");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=14");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();

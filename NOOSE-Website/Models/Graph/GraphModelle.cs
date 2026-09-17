@@ -28,7 +28,8 @@ public record GraphNode(
     double Betweenness = 0,
     int CommunityId = 0,
     bool IsKeyFigure = false,
-    bool IsFocus = false);
+    bool IsFocus = false,
+    bool IsArchived = false);
 
 /// <summary>Undirected graph edge between two nodes.</summary>
 public record GraphEdge(

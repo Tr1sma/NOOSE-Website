@@ -288,7 +288,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (personIds.Count > 0)
         {
             var rows = await db.People.Where(p => personIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification, p.CreatedAt, p.ThreatScore })
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification, p.CreatedAt, p.ThreatScore, p.IsArchived })
                 .ToListAsync(cancellationToken);
             foreach (var x in rows)
             {
@@ -297,7 +297,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
                     continue;
                 }
                 result[$"{nameof(Person)}:{x.Id}"] = Mk(nameof(Person), x.Id, x.Name, x.CaseNumber, $"/personen/{x.Id}", (int)x.Classification, x.IsClassified)
-                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore };
+                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore, IsArchived = x.IsArchived };
             }
 
             var visiblePers = rows.Where(r => isLeadership || !r.IsClassified).Select(r => r.Id).ToList();
@@ -323,14 +323,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (factionIds.Count > 0)
         {
             foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
-                .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified, f.Classification, f.CreatedAt, f.ThreatScore }).ToListAsync(cancellationToken))
+                .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified, f.Classification, f.CreatedAt, f.ThreatScore, f.IsArchived }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
                 result[$"{nameof(Faction)}:{x.Id}"] = Mk(nameof(Faction), x.Id, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}", (int)x.Classification, x.IsClassified)
-                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore };
+                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore, IsArchived = x.IsArchived };
             }
         }
 
@@ -339,13 +339,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (groupsIds.Count > 0)
         {
             foreach (var x in await db.PersonGroups.Where(g => groupsIds.Contains(g.Id))
-                .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified, g.Classification }).ToListAsync(cancellationToken))
+                .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified, g.Classification, g.IsArchived }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(PersonGroup)}:{x.Id}"] = Mk(nameof(PersonGroup), x.Id, x.Name, x.CaseNumber, $"/personengruppen/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(PersonGroup)}:{x.Id}"] = Mk(nameof(PersonGroup), x.Id, x.Name, x.CaseNumber, $"/personengruppen/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { IsArchived = x.IsArchived };
             }
         }
 
@@ -354,13 +355,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (partyIds.Count > 0)
         {
             foreach (var x in await db.Parties.Where(p => partyIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification }).ToListAsync(cancellationToken))
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification, p.IsArchived }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Party)}:{x.Id}"] = Mk(nameof(Party), x.Id, x.Name, x.CaseNumber, $"/parteien/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(Party)}:{x.Id}"] = Mk(nameof(Party), x.Id, x.Name, x.CaseNumber, $"/parteien/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { IsArchived = x.IsArchived };
             }
         }
 
@@ -369,13 +371,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (operationIds.Count > 0)
         {
             foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
-                .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified, o.Classification }).ToListAsync(cancellationToken))
+                .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified, o.Classification, o.IsArchived }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Operation)}:{x.Id}"] = Mk(nameof(Operation), x.Id, x.Title, x.CaseNumber, $"/operationen/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(Operation)}:{x.Id}"] = Mk(nameof(Operation), x.Id, x.Title, x.CaseNumber, $"/operationen/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { IsArchived = x.IsArchived };
             }
         }
 
@@ -384,13 +387,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (caseIds.Count > 0)
         {
             foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
-                .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified, v.Classification }).ToListAsync(cancellationToken))
+                .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified, v.Classification, v.IsArchived }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Case)}:{x.Id}"] = Mk(nameof(Case), x.Id, x.Title, x.CaseNumber, $"/vorgaenge/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(Case)}:{x.Id}"] = Mk(nameof(Case), x.Id, x.Title, x.CaseNumber, $"/vorgaenge/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { IsArchived = x.IsArchived };
             }
         }
 
@@ -400,9 +404,10 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         {
             var visible = await TaskforceVisibility.VisibleIdsAsync(db, taskforceIds, isLeadership, meId, cancellationToken);
             foreach (var x in await db.Taskforces.Where(t => visible.Contains(t.Id))
-                .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified }).ToListAsync(cancellationToken))
+                .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified, t.IsArchived }).ToListAsync(cancellationToken))
             {
-                result[$"{nameof(Taskforce)}:{x.Id}"] = Mk(nameof(Taskforce), x.Id, x.Name, x.CaseNumber, $"/taskforces/{x.Id}", 0, x.IsClassified);
+                result[$"{nameof(Taskforce)}:{x.Id}"] = Mk(nameof(Taskforce), x.Id, x.Name, x.CaseNumber, $"/taskforces/{x.Id}", 0, x.IsClassified)
+                    with { IsArchived = x.IsArchived };
             }
         }
 
