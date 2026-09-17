@@ -84,10 +84,20 @@ else
     /// <remarks>
     /// Scored records only, and only those the viewer may open: a curve on an entry that renders as plain text
     /// would report the threat trend of a file whose access was withdrawn.
+    /// <para>
+    /// Partners are left out wholesale. Following is gated on the full visibility check, but the flag read back
+    /// here weighs the classification only - a release that was revoked afterwards still passes it. The lists
+    /// have no such gap, because their rows come out of a partner-scoped query in the first place.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyDictionary<string, IReadOnlyList<int>>> LoadTrendsAsync()
     {
         var map = new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal);
+        if (_user.IsPartner())
+        {
+            return map;
+        }
+
         foreach (var type in new[] { nameof(Person), nameof(Faction) })
         {
             var ids = _records

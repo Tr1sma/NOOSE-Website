@@ -141,6 +141,24 @@ public sealed class ThreatTrendServiceTests
     }
 
     [Fact]
+    public async Task GetSparklinesAsync_KeepsTheNewestPointsInChronologicalOrder()
+    {
+        using var ctx = new SqliteTestContext();
+        var now = DateTime.UtcNow;
+        for (var i = 0; i < 10; i++)
+        {
+            await AddSnapshotAsync(ctx, nameof(Faction), "f1", i, now.AddDays(i - 10));
+        }
+        var svc = new ThreatTrendService(ctx.Factory);
+
+        var map = await svc.GetSparklinesAsync(nameof(Faction), new[] { "f1" }, points: 4);
+
+        // the caption under the curve reads the first value as "where it started" and the last as "now",
+        // so trimming from the wrong end would describe ancient history as the current trend
+        Assert.Equal(new[] { 6, 7, 8, 9 }, map["f1"]);
+    }
+
+    [Fact]
     public async Task GetFactionRaceAsync_RanksByScore_AndHidesClassifiedFromNonLeadership()
     {
         using var ctx = new SqliteTestContext();

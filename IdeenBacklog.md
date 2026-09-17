@@ -67,14 +67,27 @@ zuletzt die Architektur-Grenze.
 
 **Aufwand:** klein | **Jury-Schnitt:** 8.3 | **Blickwinkel:** Vorhandene Infrastruktur als Hebel
 
-> **Umgesetzt am 17.09.2026.** Verdrahtet in allen vier genannten Ansichten - `PeopleList`, `FactionsList`,
-> `HazardList` (Lagezentrum) und `MyBeobachteten`; je Seite **eine** gebuendelte Abfrage
+> **Umgesetzt am 17.09.2026.** Verdrahtet in allen vier genannten Ansichten – `PeopleList`, `FactionsList`,
+> `HazardList` (Lagezentrum) und `MyBeobachteten`; je Seite **eine** gebündelte Abfrage
 > (`GetSparklinesAsync`), nicht eine je Zeile. Die Beschriftung kommt aus
-> `Services/Threat/ThreatTrendText.cs` und nennt Anfang, Ende und Differenz statt eines Richtungsworts -
-> eine Kurve, die steigt und wieder faellt, endet dort, wo sie begann. Zwei Schranken: eine Staatsfraktion
-> traegt keinen Score und darum auch keine Kurve, und in den beobachteten Akten bekommt nur eine Zeile eine
-> Kurve, die der Betrachter auch oeffnen darf. `ScoreTrendWiringTests` haelt die Verdrahtung fest - beide
-> Teile lagen vorher gebaut und ungenutzt herum, ohne dass etwas rot war.
+> `Services/Threat/ThreatTrendText.cs` und nennt Anfang, Ende und Differenz statt eines Richtungsworts –
+> eine Kurve, die steigt und wieder fällt, endet dort, wo sie begann.
+>
+> Drei Schranken: eine Staatsfraktion trägt keinen Score und darum auch keine Kurve; in den beobachteten
+> Akten bekommt nur eine Zeile eine Kurve, die der Betrachter auch öffnen darf; und **Partner bleiben dort
+> ganz außen vor**, weil das zurückgelesene Zugänglichkeits-Kennzeichen nur die Einstufung wiegt und eine
+> nachträglich entzogene Freigabe nicht bemerkt (die Listen haben diese Lücke nicht — ihre Zeilen kommen
+> aus einer partner-gefilterten Abfrage).
+>
+> `ScoreTrendWiringTests` hält die Verdrahtung fest — beide Teile lagen vorher gebaut und ungenutzt herum,
+> ohne dass etwas rot war.
+>
+> **Bekannte Kante, bewusst nicht geändert:** `GetSparklinesAsync` liest die *ganze* Verlaufshistorie der
+> angefragten Akten und behält davon acht Punkte je Akte. Weil der tägliche Lauf nur bei echter Änderung
+> eine Zeile schreibt, der Score aber täglich abklingt, wächst die Historie einer aktiven Akte um etwa eine
+> Zeile pro Tag — bei 200 Personen und einem Jahr also rund 73.000 gelesene Zeilen für 1.600 gezeigte.
+> Ein Zeitfenster würde das deckeln, aber eine Akte, die sich lange nicht bewegt hat, verlöre damit ihre
+> (flache, korrekte) Kurve. Genau die Abwägung gehört entschieden, bevor jemand sie still trifft.
 
 **Was es tut.** Jede Personen-, Fraktions- und Watchlist-Zeile bekommt eine kleine Verlaufskurve des Bedrohungs-Scores neben der Zahl, damit man sofort sieht: steigt, fällt oder liegt still.
 
