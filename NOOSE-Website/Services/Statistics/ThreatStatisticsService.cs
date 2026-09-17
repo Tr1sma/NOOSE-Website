@@ -26,11 +26,11 @@ public class ThreatStatisticsService(
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
             // scores are small ints; pulling only the column keeps this cheap even at scale
-            var personScores = await db.People
+            var personScores = await db.People.OnlyActive()
                 .Where(p => (scope.IncludeClassified || !p.IsClassified) && p.ThreatScore != null && p.ThreatScore > 0)
                 .Select(p => p.ThreatScore!.Value)
                 .ToListAsync(cancellationToken);
-            var factionScores = await db.Factions
+            var factionScores = await db.Factions.OnlyActive()
                 .Where(f => (scope.IncludeClassified || !f.IsClassified) && f.ThreatScore != null && f.ThreatScore > 0)
                 .Select(f => f.ThreatScore!.Value)
                 .ToListAsync(cancellationToken);
@@ -98,7 +98,7 @@ public class ThreatStatisticsService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var raw = entityType == nameof(Data.Entities.People.Person)
-            ? await db.People
+            ? await db.People.OnlyActive()
                 .Where(p => (scope.IncludeClassified || !p.IsClassified)
                     && p.ThreatScore != null && p.ThreatScore > 0 && p.ThreatDetailJson != null)
                 .OrderByDescending(p => p.ThreatScore)
@@ -106,7 +106,7 @@ public class ThreatStatisticsService(
                 .Take(topN)
                 .Select(p => new { p.Name, Json = p.ThreatDetailJson! })
                 .ToListAsync(cancellationToken)
-            : await db.Factions
+            : await db.Factions.OnlyActive()
                 .Where(f => (scope.IncludeClassified || !f.IsClassified)
                     && f.ThreatScore != null && f.ThreatScore > 0 && f.ThreatDetailJson != null)
                 .OrderByDescending(f => f.ThreatScore)
@@ -139,12 +139,12 @@ public class ThreatStatisticsService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var people = await db.People
+        var people = await db.People.OnlyActive()
             .Where(p => (scope.IncludeClassified || !p.IsClassified)
                 && p.ThreatScore != null && p.ThreatScore > 0 && p.ThreatConfidence != null)
             .Select(p => new { p.Id, p.Name, Score = p.ThreatScore!.Value, Confidence = p.ThreatConfidence!.Value })
             .ToListAsync(cancellationToken);
-        var factions = await db.Factions
+        var factions = await db.Factions.OnlyActive()
             .Where(f => (scope.IncludeClassified || !f.IsClassified)
                 && f.ThreatScore != null && f.ThreatScore > 0 && f.ThreatConfidence != null)
             .Select(f => new { f.Id, f.Name, Score = f.ThreatScore!.Value, Confidence = f.ThreatConfidence!.Value })
@@ -169,11 +169,11 @@ public class ThreatStatisticsService(
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
             // two bounded queries rather than a UNION: Pomelo would have to reconcile two tables here
-            var scores = await db.People
+            var scores = await db.People.OnlyActive()
                 .Where(p => (scope.IncludeClassified || !p.IsClassified) && p.ThreatScore != null && p.ThreatScore > 0)
                 .Select(p => new { Score = p.ThreatScore!.Value, p.ThreatConfidence })
                 .ToListAsync(cancellationToken);
-            scores.AddRange(await db.Factions
+            scores.AddRange(await db.Factions.OnlyActive()
                 .Where(f => (scope.IncludeClassified || !f.IsClassified) && f.ThreatScore != null && f.ThreatScore > 0)
                 .Select(f => new { Score = f.ThreatScore!.Value, f.ThreatConfidence })
                 .ToListAsync(cancellationToken));
@@ -196,9 +196,9 @@ public class ThreatStatisticsService(
     private static async Task<List<string>> VisibleIdsAsync(AppDbContext db, StatisticsScope scope,
         string entityType, CancellationToken cancellationToken)
         => entityType == nameof(Data.Entities.People.Person)
-            ? await db.People.Where(p => scope.IncludeClassified || !p.IsClassified)
+            ? await db.People.OnlyActive().Where(p => scope.IncludeClassified || !p.IsClassified)
                 .Select(p => p.Id).ToListAsync(cancellationToken)
-            : await db.Factions.Where(f => scope.IncludeClassified || !f.IsClassified)
+            : await db.Factions.OnlyActive().Where(f => scope.IncludeClassified || !f.IsClassified)
                 .Select(f => f.Id).ToListAsync(cancellationToken);
 
     private ThreatScoreDetail? Parse(string json)

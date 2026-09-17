@@ -356,7 +356,8 @@ public class ThreatScoreService(
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = await db.Factions.Select(f => f.Id).ToListAsync(cancellationToken); // soft-delete active
+        // an archived record does not decay; the last value stays on the file
+        var ids = await db.Factions.OnlyActive().Select(f => f.Id).ToListAsync(cancellationToken); // soft-delete active
         foreach (var id in ids)
         {
             await CalculateFactionAsync(db, id, config, cancellationToken);
@@ -375,7 +376,8 @@ public class ThreatScoreService(
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = await db.People.Select(p => p.Id).ToListAsync(cancellationToken); // soft-delete active
+        // an archived record does not decay; the last value stays on the file
+        var ids = await db.People.OnlyActive().Select(p => p.Id).ToListAsync(cancellationToken); // soft-delete active
         foreach (var id in ids)
         {
             await CalculatePersonAsync(db, id, config, cancellationToken);
@@ -388,7 +390,7 @@ public class ThreatScoreService(
         Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
-        var ids = await db.Factions.Select(f => f.Id).ToListAsync(cancellationToken);
+        var ids = await db.Factions.OnlyActive().Select(f => f.Id).ToListAsync(cancellationToken);
         var results = new List<ThreatScoreResult>(ids.Count);
         foreach (var id in ids)
         {
@@ -413,7 +415,7 @@ public class ThreatScoreService(
         Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
-        var ids = await db.People.Select(p => p.Id).ToListAsync(cancellationToken);
+        var ids = await db.People.OnlyActive().Select(p => p.Id).ToListAsync(cancellationToken);
         var results = new List<ThreatScoreResult>(ids.Count);
         foreach (var id in ids)
         {

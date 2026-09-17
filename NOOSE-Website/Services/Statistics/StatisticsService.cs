@@ -24,7 +24,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
         var metrics = await dashboard.GetMetricsAsync(isLeadership, meId, cancellationToken);
 
         // 1) by classification
-        var personClassification = (await db.People
+        var personClassification = (await db.People.OnlyActive()
                 .Where(p => isLeadership || !p.IsClassified)
                 .GroupBy(p => p.Classification)
                 .Select(g => new { Value = g.Key, Count = g.Count() })
@@ -36,10 +36,10 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
 
         // 2) by hazard
         var peopleByHazard = await HazardDistributionAsync(
-            db.People.Where(p => isLeadership || !p.IsClassified).Select(p => p.ThreatScore), cancellationToken);
+            db.People.OnlyActive().Where(p => isLeadership || !p.IsClassified).Select(p => p.ThreatScore), cancellationToken);
 
         // 3) by life status
-        var lifeRaw = await db.People
+        var lifeRaw = await db.People.OnlyActive()
             .Where(p => isLeadership || !p.IsClassified)
             .Select(p => new { p.LifeStatus, p.DeadUntil })
             .ToListAsync(cancellationToken);
@@ -52,7 +52,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
 
         // 4) factions hazard
         var factionsByHazard = await HazardDistributionAsync(
-            db.Factions.Where(f => isLeadership || !f.IsClassified).Select(f => f.ThreatScore), cancellationToken);
+            db.Factions.OnlyActive().Where(f => isLeadership || !f.IsClassified).Select(f => f.ThreatScore), cancellationToken);
 
         // 5) measure outcomes
         var outcomeCount = (await db.PersonDocs
@@ -66,7 +66,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .ToList();
 
         // 6) cases by status
-        var statusCount = (await db.Cases
+        var statusCount = (await db.Cases.OnlyActive()
                 .Where(v => isLeadership || !v.IsClassified)
                 .GroupBy(v => v.Status)
                 .Select(g => new { Value = g.Key, Count = g.Count() })
@@ -77,7 +77,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .ToList();
 
         // 7) top threats
-        var topPeopleRaw = await db.People
+        var topPeopleRaw = await db.People.OnlyActive()
             .Where(p => (isLeadership || !p.IsClassified) && p.ThreatScore != null && p.ThreatScore > 0)
             .OrderByDescending(p => p.ThreatScore)
             .ThenBy(p => p.Name)
@@ -89,7 +89,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
                 p.ThreatScore ?? 0, HazardLevelLogic.From(p.ThreatScore)))
             .ToList();
 
-        var topFactionsRaw = await db.Factions
+        var topFactionsRaw = await db.Factions.OnlyActive()
             .Where(f => (isLeadership || !f.IsClassified) && f.ThreatScore != null && f.ThreatScore > 0)
             .OrderByDescending(f => f.ThreatScore)
             .ThenBy(f => f.Name)
@@ -109,7 +109,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Where(d => (isLeadership || !d.Person!.IsClassified) && d.Timestamp >= cutoffDate)
             .Select(d => d.Timestamp)
             .ToListAsync(cancellationToken);
-        var newEntryTimestamps = await db.People
+        var newEntryTimestamps = await db.People.OnlyActive()
             .Where(p => (isLeadership || !p.IsClassified) && p.CreatedAt >= cutoffDate)
             .Select(p => p.CreatedAt)
             .ToListAsync(cancellationToken);

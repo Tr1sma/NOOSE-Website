@@ -112,7 +112,7 @@ public class NetworkStatisticsService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var factions = await db.Factions
+        var factions = await db.Factions.OnlyActive()
             .Where(f => scope.IncludeClassified || !f.IsClassified)
             .Select(f => new
             {
