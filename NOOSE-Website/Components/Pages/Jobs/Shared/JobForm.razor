@@ -1,5 +1,6 @@
 @* Shared create/edit form for a job. *@
 @inject IAgentManagementService AgentService
+@inject IAbsenceService AbsenceService
 
 <MudGrid>
     <MudItem xs="12">
@@ -24,7 +25,9 @@
         </MudSelect>
     </MudItem>
     <MudItem xs="12" md="4">
-        <MudDatePicker @bind-Date="Input.DueDate" Label="Fälligkeit (optional)" Variant="Variant.Outlined"
+        @* the sign-offs are read for the due date, so moving it has to move them too *@
+        <MudDatePicker @bind-Date="Input.DueDate" @bind-Date:after="ReloadAbsencesAsync"
+                       Label="Fälligkeit (optional)" Variant="Variant.Outlined"
                        Clearable="true" Editable="true" DateFormat="dd.MM.yyyy" />
     </MudItem>
 
@@ -43,9 +46,20 @@
                        HelperText="Zugewiesene Agenten erhalten eine Benachrichtigung.">
                 @foreach (var a in _agents)
                 {
-                    <MudSelectItem T="string" Value="@a.Id">@a.Codename (@RankDisplay.Name(a.Rank))</MudSelectItem>
+                    <MudSelectItem T="string" Value="@a.Id">
+                        @a.Codename (@RankDisplay.Name(a.Rank))
+                        @if (AbsenceHint.For(_absent, a.Id, _reference) is { Length: > 0 } hint)
+                        {
+                            <span class="mud-text-secondary"> · @hint</span>
+                        }
+                    </MudSelectItem>
                 }
             </MudSelect>
+            @* a hint you lose by closing the dropdown is a hint nobody read *@
+            @if (SelectedAbsenceNote() is { Length: > 0 } note)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-1">@note</MudAlert>
+            }
         </MudItem>
     }
 
@@ -66,7 +80,11 @@
     [Parameter] public IReadOnlyCollection<string> AgentIds { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<IReadOnlyCollection<string>> AgentIdsChanged { get; set; }
 
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private List<Agent> _agents = new();
+    private IReadOnlyDictionary<string, DateOnly> _absent = new Dictionary<string, DateOnly>();
+    private DateOnly _reference = DateOnly.FromDateTime(DateTime.Now);
 
     protected override async Task OnInitializedAsync()
     {
@@ -74,8 +92,35 @@
         {
             // Active agents without the TeamLead marker, sorted by codename.
             _agents = await AgentService.GetSelectableAsync();
+            await ReloadAbsencesAsync();
         }
     }
+
+    /// <summary>Reads the sign-offs for the due date, or for today while none is set.</summary>
+    private async Task ReloadAbsencesAsync()
+    {
+        if (!ShowAssignment)
+        {
+            return;
+        }
+        _reference = Input.DueDate is { } due
+            ? DateOnly.FromDateTime(due)
+            : DateOnly.FromDateTime(DateTime.Now);
+        try
+        {
+            var user = (await AuthStateTask).User;
+            _absent = await AbsenceService.GetAbsentOnAsync(_reference, user);
+        }
+        catch (Exception)
+        {
+            // a hint is never worth the form; without it the picker simply says nothing
+            _absent = new Dictionary<string, DateOnly>();
+        }
+    }
+
+    private string SelectedAbsenceNote()
+        => AbsenceHint.Selected(_absent,
+            _agents.Where(a => AgentIds.Contains(a.Id)).Select(a => (a.Id, a.Codename)), _reference);
 
     private async Task OnAgentsChanged(IReadOnlyCollection<string> values)
     {

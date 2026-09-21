@@ -342,6 +342,10 @@ public static class ChangelogContent
                 + "Partnerbehörden und die Frequenzen der Fraktionen an einer Stelle. Tippst du eine "
                 + "aufgeschnappte Frequenz in die Suche, bekommst du heraus, zu wem sie gehört; Komma und "
                 + "Punkt sind dabei gleichwertig.", "Ermittlung"),
+            Neu("2.1.68-abwesenheit", "Wer abgemeldet ist, steht jetzt mit dem Hinweis „abgemeldet bis …“ in "
+                + "den Auswahllisten für Aufgaben, Termine und Wiedervorlagen – und zwar für den Tag, den du "
+                + "im Formular eingetragen hast. Wählen kannst du ihn trotzdem; du weißt es nur vorher.",
+                "Dienstbetrieb"),
         ], "1.5"),
     ];
 }

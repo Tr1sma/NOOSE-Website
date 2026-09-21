@@ -1,9 +1,11 @@
 @inject IAgentManagementService AgentService
+@inject IAbsenceService AbsenceService
 
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:380px;">
-            <MudDatePicker @bind-Date="_due" Label="Fällig am" Editable="true"
+            @* the sign-offs are read for the due date, so moving it has to move them too *@
+            <MudDatePicker @bind-Date="_due" @bind-Date:after="ReloadAbsencesAsync" Label="Fällig am" Editable="true"
                            Variant="Variant.Outlined" DateFormat="dd.MM.yyyy"
                            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Event" />
 
@@ -25,9 +27,18 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">(@a.RealName)</MudText>
                         }
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@RankDisplay.Name(a.Rank)</MudText>
+                        @if (AbsenceHint.For(_absent, a.Id, _reference) is { Length: > 0 } hint)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @hint</MudText>
+                        }
                     </MudStack>
                 </ItemTemplate>
             </MudAutocomplete>
+            @* a hint you lose by picking the entry is a hint nobody acted on *@
+            @if (SelectedAbsenceNote() is { Length: > 0 } note)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">@note</MudAlert>
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -46,15 +57,20 @@
     /// <summary>Whether the viewer may see real names.</summary>
     [Parameter] public bool MayRealName { get; set; }
 
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private DateTime? _due;
     private string _note = string.Empty;
     private Agent? _agent;
     private List<Agent> _all = new();
+    private IReadOnlyDictionary<string, DateOnly> _absent = new Dictionary<string, DateOnly>();
+    private DateOnly _reference = DateOnly.FromDateTime(DateTime.Now);
 
     protected override async Task OnInitializedAsync()
     {
         _due = (DueAt ?? DateTime.UtcNow.AddDays(1)).ToLocalTime().Date;
         _note = Note ?? string.Empty;
+        await ReloadAbsencesAsync();
 
         // TeamLeads and partners are never selectable
         _all = await AgentService.GetSelectableAsync();
@@ -67,6 +83,29 @@
                 ?? await AgentService.FindAsync(ResponsibleAgentId);
         }
     }
+
+    /// <summary>Reads the sign-offs for the due date, which is always set in this dialog.</summary>
+    private async Task ReloadAbsencesAsync()
+    {
+        _reference = _due is { } due
+            ? DateOnly.FromDateTime(due)
+            : DateOnly.FromDateTime(DateTime.Now);
+        try
+        {
+            var user = (await AuthStateTask).User;
+            _absent = await AbsenceService.GetAbsentOnAsync(_reference, user);
+        }
+        catch (Exception)
+        {
+            // a hint is never worth the dialog; without it the picker simply says nothing
+            _absent = new Dictionary<string, DateOnly>();
+        }
+    }
+
+    private string SelectedAbsenceNote()
+        => _agent is null
+            ? string.Empty
+            : AbsenceHint.Selected(_absent, [(_agent.Id, _agent.Codename)], _reference);
 
     private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
     {

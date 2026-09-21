@@ -88,6 +88,25 @@ public class AbsenceService(
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<string, DateOnly>> GetAbsentOnAsync(DateOnly day, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // who is away is in-house business; the pickers a partner reaches never carry a target date anyway
+        Permission.RequireInternalAgent(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Absences.AsNoTracking()
+            .RosterVisible(db)
+            .Covering(day)
+            .Select(a => new { a.AgentId, a.ToDate })
+            .ToListAsync(cancellationToken);
+
+        // two sign-offs may overlap; the later end is the one a picker should name
+        return rows
+            .GroupBy(r => r.AgentId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Max(r => r.ToDate), StringComparer.Ordinal);
+    }
+
     public async Task<List<Absence>> GetTrashAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

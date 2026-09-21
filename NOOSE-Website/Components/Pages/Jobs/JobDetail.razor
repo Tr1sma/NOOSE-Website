@@ -141,7 +141,9 @@ else
                     </MudStack>
                 </MudTabPanel>
                 <MudTabPanel Text="Beteiligte" Icon="@Icons.Material.Filled.ManageAccounts">
-                    <JobAgentsPanel JobId="@_job.Id" User="_user" CanManage="_canEdit" Changed="AssignmentsRefreshAsync" />
+                    @* the due date is a plain wall-clock day, stored as the picker wrote it *@
+                    <JobAgentsPanel JobId="@_job.Id" User="_user" CanManage="_canEdit" Changed="AssignmentsRefreshAsync"
+                                    DueDay="@(_job.DueDate is { } due ? DateOnly.FromDateTime(due) : null)" />
                 </MudTabPanel>
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
                     <JobContentPanel JobId="@_job.Id" User="_user" />

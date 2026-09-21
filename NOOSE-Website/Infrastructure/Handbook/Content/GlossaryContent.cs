@@ -317,7 +317,8 @@ internal static class GlossaryContent
             "Das Ergebnis einer Besprechung. Zwei Stunden nach dem Ende für jeden internen Agenten lesbar.",
             ArticleKey: "art-besprechungen"),
         new("beg-abmeldung", "Abmeldung",
-            "Eine angekündigte Abwesenheit. Wer abgemeldet ist, erscheint in Auswahllisten als abwesend.",
+            "Eine angekündigte Abwesenheit. Beim Zuweisen einer Aufgabe, eines Termins oder einer "
+            + "Wiedervorlage steht sie als Hinweis neben dem Namen.",
             ArticleKey: "art-abmeldungen"),
         new("beg-brett", "Schwarzes Brett",
             "Der Ort für behördliche Ankündigungen, teils mit Pflicht zur Kenntnisnahme.",

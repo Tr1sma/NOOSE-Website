@@ -118,7 +118,10 @@ else
                     }
                 </MudTabPanel>
                 <MudTabPanel Text="Teilnehmer" Icon="@Icons.Material.Filled.ManageAccounts">
-                    <AppointmentParticipantPanel AppointmentId="@_appointment.Id" User="_user" CanManage="_canEdit" Changed="ParticipantRefreshAsync" />
+                    @* Start is stored UTC, so the day has to come from the local rendering of it *@
+                    <AppointmentParticipantPanel AppointmentId="@_appointment.Id" User="_user" CanManage="_canEdit"
+                                                 Changed="ParticipantRefreshAsync"
+                                                 StartDay="@DateOnly.FromDateTime(_appointment.Start.ToLocalTime())" />
                 </MudTabPanel>
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
                     <AppointmentContentPanel AppointmentId="@_appointment.Id" User="_user" />

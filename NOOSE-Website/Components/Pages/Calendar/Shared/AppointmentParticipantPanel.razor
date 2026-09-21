@@ -54,6 +54,9 @@
     /// <summary>Raised after any participant change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
+    /// <summary>Day the appointment starts, so the picker can say who is signed off for it.</summary>
+    [Parameter] public DateOnly? StartDay { get; set; }
+
     private bool _load = true;
     private List<AppointmentAssignment> _participant = new();
 
@@ -69,7 +72,8 @@
     private async Task AssignAsync()
     {
         var exclusion = _participant.Select(z => z.AgentId).ToList();
-        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false,
+            referenceDay: StartDay);
         if (choice is null)
         {
             return;

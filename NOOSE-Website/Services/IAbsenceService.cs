@@ -15,6 +15,16 @@ public interface IAbsenceService
     Task<Absence?> GetDetailAsync(string id, ClaimsPrincipal viewer, AbsenceViewScope requested,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Roster members signed off on a day, each with the day their absence ends.</summary>
+    /// <remarks>
+    /// For the agent pickers, so a task is not quietly hung on somebody who is away for a fortnight. It carries
+    /// the end day and nothing else: the roster tier of <see cref="AbsenceVisibility"/> grants colleagues the row,
+    /// never the reason. Overlapping sign-offs collapse to the one that ends last, which is the date a picker
+    /// should show.
+    /// </remarks>
+    Task<IReadOnlyDictionary<string, DateOnly>> GetAbsentOnAsync(DateOnly day, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     Task<List<Absence>> GetTrashAsync(CancellationToken cancellationToken = default);
 
     Task<Absence> CreateAsync(AbsenceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

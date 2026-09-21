@@ -54,6 +54,9 @@
     /// <summary>Raised after any assignment change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
+    /// <summary>Due day of the job, so the picker can say who is signed off for it.</summary>
+    [Parameter] public DateOnly? DueDay { get; set; }
+
     private bool _load = true;
     private List<JobAssignment> _agents = new();
 
@@ -69,7 +72,10 @@
     private async Task AssignAsync()
     {
         var exclusion = _agents.Select(a => a.AgentId).ToList();
-        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
+        // same fallback as the create form: without a due date the question is simply "around right now?"
+        var day = DueDay ?? DateOnly.FromDateTime(DateTime.Now);
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false,
+            referenceDay: day);
         if (choice is null)
         {
             return;

@@ -62,9 +62,13 @@ internal static class DutyChapter
                 <p>Eine <strong>Abmeldung</strong> meldet, dass du für eine Zeit nicht verfügbar bist -
                 Urlaub, Prüfungen, Krankheit, was auch immer. Du gibst Zeitraum, Kategorie und optional einen
                 Grund an.</p>
-                <p>Das ist keine Formalität. Wer abgemeldet ist, erscheint in Auswahllisten als abwesend, wird
-                bei der Verteilung von Aufgaben übergangen und taucht in der Anwesenheitsliste von
-                Besprechungen entsprechend auf.</p>
+                <p>Das ist keine Formalität. Wer abgemeldet ist, trägt beim Zuweisen einer <em>Aufgabe</em>,
+                eines <em>Termins</em> oder einer <em>Wiedervorlage</em> den Zusatz <em>abgemeldet bis …</em> -
+                im Anlegen-Formular ebenso wie später im Abschnitt <em>Beteiligte</em> beziehungsweise
+                <em>Teilnehmer</em>. Gefragt wird nach dem Tag, um den es geht: der Fälligkeit, dem Beginn. Steht
+                dort noch kein Datum, gilt der heutige Tag. Wählbar bleibst du trotzdem - die Seite warnt, sie
+                entscheidet nicht. In der Anwesenheitsliste von Besprechungen taucht die Abmeldung ebenfalls
+                auf.</p>
                 <p>Melde dich lieber zu oft ab als zu selten. Eine Abmeldung kostet nichts; ein Agent, auf den
                 eine Woche lang gewartet wird, kostet die Dienststelle Zeit.</p>
                 """,

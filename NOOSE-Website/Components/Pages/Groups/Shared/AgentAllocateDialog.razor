@@ -1,4 +1,5 @@
 @inject IAgentManagementService AgentService
+@inject IAbsenceService AbsenceService
 
 <MudDialog>
     <DialogContent>
@@ -19,9 +20,18 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">(@a.RealName)</MudText>
                         }
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@(a.PartnerAgency is { } ag ? PartnerRankDisplay.Full(ag, a.PartnerRank) : RankDisplay.Name(a.Rank))</MudText>
+                        @if (ReferenceDay is { } day && AbsenceHint.For(_absent, a.Id, day) is { Length: > 0 } hint)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @hint</MudText>
+                        }
                     </MudStack>
                 </ItemTemplate>
             </MudAutocomplete>
+            @* a hint you lose by picking the entry is a hint nobody acted on *@
+            @if (SelectedAbsenceNote() is { Length: > 0 } note)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">@note</MudAlert>
+            }
 
             @if (MayInvestigationLeadSet)
             {
@@ -50,16 +60,46 @@
     /// <summary>Label for the lead checkbox, module-dependent.</summary>
     [Parameter] public string LeadLabel { get; set; } = "Als Ermittlungsleiter zuteilen";
 
+    /// <summary>Day the allocation is about; set only where the record has one.</summary>
+    /// <remarks>
+    /// Seven of the nine panels that open this dialog allocate to a file, not to a date - a faction, a party, a
+    /// taskforce. Only a task and an appointment happen on a day, and only there does "signed off" mean anything.
+    /// Left null the dialog behaves exactly as before and asks nothing.
+    /// </remarks>
+    [Parameter] public DateOnly? ReferenceDay { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private Agent? _agent;
     private bool _asInvestigationLead;
     private List<Agent> _all = new();
+    private IReadOnlyDictionary<string, DateOnly> _absent = new Dictionary<string, DateOnly>();
 
     protected override async Task OnInitializedAsync()
     {
         // Also exclude already-allocated agents
         var selectable = await AgentService.GetSelectableAsync();
         _all = selectable.Where(a => !ExclusionAgentIds.Contains(a.Id)).ToList();
+
+        if (ReferenceDay is { } day)
+        {
+            try
+            {
+                var user = (await AuthStateTask).User;
+                _absent = await AbsenceService.GetAbsentOnAsync(day, user);
+            }
+            catch (Exception)
+            {
+                // a hint is never worth the dialog; without it the picker simply says nothing
+                _absent = new Dictionary<string, DateOnly>();
+            }
+        }
     }
+
+    private string SelectedAbsenceNote()
+        => ReferenceDay is { } day && _agent is not null
+            ? AbsenceHint.Selected(_absent, [(_agent.Id, _agent.Codename)], day)
+            : string.Empty;
 
     private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
     {
@@ -86,13 +126,14 @@
 
     /// <summary>Shows the dialog; returns the choice or null on cancel.</summary>
     public static async Task<Choice?> ShowAsync(IDialogService dialog, IReadOnlyList<string> exclusionAgentIds,
-        bool mayRealName, bool mayInvestigationLeadSet, string? leadLabel = null)
+        bool mayRealName, bool mayInvestigationLeadSet, string? leadLabel = null, DateOnly? referenceDay = null)
     {
         var parameters = new DialogParameters<AgentAllocateDialog>
         {
             { x => x.ExclusionAgentIds, exclusionAgentIds },
             { x => x.MayRealName, mayRealName },
             { x => x.MayInvestigationLeadSet, mayInvestigationLeadSet },
+            { x => x.ReferenceDay, referenceDay },
         };
         if (leadLabel is not null)
         {

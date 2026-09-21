@@ -633,4 +633,111 @@ public class AbsenceServiceTests
         using var db = ctx.NewContext();
         Assert.Null(db.Absences.Single(a => a.Id == abs.Id).AcknowledgedAt);
     }
+
+    // ---------- GetAbsentOnAsync (the agent pickers) ----------
+
+    [Fact]
+    public async Task GetAbsentOnAsync_CountsBothBoundsAsAbsent()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today.AddDays(2), today.AddDays(4));
+
+        Assert.True((await svc.GetAbsentOnAsync(today.AddDays(2), Owner("me"))).ContainsKey("a1"));
+        Assert.True((await svc.GetAbsentOnAsync(today.AddDays(3), Owner("me"))).ContainsKey("a1"));
+        Assert.True((await svc.GetAbsentOnAsync(today.AddDays(4), Owner("me"))).ContainsKey("a1"));
+    }
+
+    [Fact]
+    public async Task GetAbsentOnAsync_LeavesOutTheDaysOnEitherSide()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today.AddDays(2), today.AddDays(4));
+
+        Assert.Empty(await svc.GetAbsentOnAsync(today.AddDays(1), Owner("me")));
+        Assert.Empty(await svc.GetAbsentOnAsync(today.AddDays(5), Owner("me")));
+    }
+
+    [Fact]
+    public async Task GetAbsentOnAsync_ReportsTheEndDay()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today, today.AddDays(9));
+
+        var absent = await svc.GetAbsentOnAsync(today, Owner("me"));
+
+        Assert.Equal(today.AddDays(9), absent["a1"]);
+    }
+
+    [Fact]
+    public async Task GetAbsentOnAsync_TakesTheLaterEndWhenTwoSignOffsOverlap()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today, today.AddDays(3));
+        SeedAbsence(ctx, "a1", today.AddDays(1), today.AddDays(9));
+
+        var absent = await svc.GetAbsentOnAsync(today.AddDays(2), Owner("me"));
+
+        // the picker names one date, and the honest one is the day the agent is actually back
+        Assert.Equal(today.AddDays(9), Assert.Single(absent).Value);
+    }
+
+    [Fact]
+    public async Task GetAbsentOnAsync_SkipsAnyoneWhoIsNotInThePickerAnyway()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated));
+            db.SaveChanges();
+        }
+        SeedAbsence(ctx, "tl", today, today.AddDays(2));
+        SeedAbsence(ctx, "partner", today, today.AddDays(2));
+        SeedAbsence(ctx, "gone", today, today.AddDays(2));
+        SeedAbsence(ctx, "a1", today, today.AddDays(2));
+
+        var absent = await svc.GetAbsentOnAsync(today, Owner("me"));
+
+        // the hint follows AgentSelection: a name that can never be picked needs no note either
+        Assert.Equal("a1", Assert.Single(absent).Key);
+    }
+
+    [Fact]
+    public async Task GetAbsentOnAsync_RefusesAPartner()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today, today.AddDays(2));
+        var partner = ClaimsPrincipalBuilder.Agent("p").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetAbsentOnAsync(today, partner));
+    }
+
+    [Fact]
+    public async Task TheRosterQueryStaysBlindToAbsences()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+        var today = Today;
+        SeedAbsence(ctx, "a1", today, today.AddDays(5));
+
+        Assert.True((await svc.GetAbsentOnAsync(today, Owner("me"))).ContainsKey("a1"));
+
+        // the roster every picker is built from knows nothing of sign-offs, which is the layer the
+        // "warn, never exclude" promise can be pinned at - the rendering above it has no test at all
+        using var db = ctx.NewContext();
+        Assert.Contains(db.Users.OnlySelectable().ToList(), u => u.Id == "a1");
+    }
 }
