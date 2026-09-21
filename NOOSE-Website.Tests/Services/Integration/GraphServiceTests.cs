@@ -12,7 +12,7 @@ namespace NOOSE_Website.Tests.Services.Integration;
 public sealed class GraphServiceTests
 {
     // MaxNode in the service (private const).
-    private const int MaxNode = 750;
+    private const int MaxNode = 1500;
 
     private static GraphService NewService(SqliteTestContext ctx) => new(ctx.Factory);
 
