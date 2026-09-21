@@ -1,0 +1,113 @@
+@* Create/edit one radio channel. The classified switch only appears where the guard would also allow it. *@
+@using NOOSE_Website.Data.Entities.Taskforces
+@using NOOSE_Website.Models.Radio
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2">
+                <MudTextField @bind-Value="_input.Frequency" Label="Frequenz" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Frequenz ist erforderlich"
+                              Placeholder="z. B. 411.7" Style="max-width:200px;" />
+                <MudTextField @bind-Value="_input.Label" Label="Bezeichnung" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Bezeichnung ist erforderlich"
+                              Placeholder="z. B. TRU Einsatzkanal" />
+            </MudStack>
+
+            <MudSelect T="RadioScope" @bind-Value="_input.Scope" Label="Bereich" Variant="Variant.Outlined">
+                @foreach (var scope in RadioScopeDisplay.All)
+                {
+                    <MudSelectItem T="RadioScope" Value="@scope">@RadioScopeDisplay.Name(scope)</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_input.Scope == RadioScope.Partner)
+            {
+                <MudSelect T="PartnerAgency?" @bind-Value="_input.Agency" Label="Partnerbehörde" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var agency in PartnerAgencyDisplay.All)
+                    {
+                        <MudSelectItem T="PartnerAgency?" Value="@agency">@PartnerAgencyDisplay.LongName(agency)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else if (_input.Scope == RadioScope.Noose)
+            {
+                <MudSelect T="string" @bind-Value="_input.TaskforceId" Label="Taskforce (optional)" Variant="Variant.Outlined" Clearable="true"
+                           HelperText="Ein gebundener Kanal ist nur für die Zugeteilten sichtbar.">
+                    @foreach (var taskforce in Taskforces)
+                    {
+                        <MudSelectItem T="string" Value="@taskforce.Id">@taskforce.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <MudTextField @bind-Value="_input.Note" Label="Bemerkung (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. nur im Einsatz, sonst Ausweichkanal" />
+
+            @if (MayClassify)
+            {
+                <MudSwitch T="bool" @bind-Value="_input.IsClassified" Color="Color.Warning"
+                           Label="Verschlusssache – nur die Führung sieht diesen Kanal" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_input.Frequency) || string.IsNullOrWhiteSpace(_input.Label))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public RadioChannelInput? Preset { get; set; }
+
+    /// <summary>Taskforces the editor may see; the picker must not name one they could not open.</summary>
+    [Parameter] public IReadOnlyList<Taskforce> Taskforces { get; set; } = [];
+
+    /// <summary>Mirrors the service guard, so the switch never offers what saving would refuse.</summary>
+    [Parameter] public bool MayClassify { get; set; }
+
+    private RadioChannelInput _input = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is not null)
+        {
+            _input = new RadioChannelInput
+            {
+                Frequency = Preset.Frequency,
+                Label = Preset.Label,
+                Scope = Preset.Scope,
+                Agency = Preset.Agency,
+                TaskforceId = Preset.TaskforceId,
+                Note = Preset.Note,
+                IsClassified = Preset.IsClassified,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save() => MudDialog.Close(DialogResult.Ok(_input));
+
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
+    public static async Task<RadioChannelInput?> ShowAsync(
+        IDialogService dialog, string title, IReadOnlyList<Taskforce> taskforces, bool mayClassify,
+        RadioChannelInput? preset = null)
+    {
+        var parameters = new DialogParameters<RadioChannelDialog>
+        {
+            { x => x.Preset, preset },
+            { x => x.Taskforces, taskforces },
+            { x => x.MayClassify, mayClassify },
+        };
+        var reference = await dialog.ShowAsync<RadioChannelDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: RadioChannelInput e } ? e : null;
+    }
+}

@@ -26,6 +26,7 @@ public static class AuditEntityDisplay
         "Appointment" => "Termin",
         "Document" => "Dokument",
         "Law" => "Gesetz",
+        "RadioChannel" => "Funkkanal",
         "Announcement" => "Ankündigung",
         "Agent" => "Agent",
         "Meeting" => "Besprechung",
@@ -87,6 +88,8 @@ public static class AuditEntityDisplay
         "Appointment" => $"/kalender/{id}",
         "Document" => $"/dokumente/{id}",
         "Law" => $"/gesetze/{id}",
+        // a channel has no detail page; the plan opens on it
+        "RadioChannel" => $"/funk?kanal={id}",
         "Agent" => $"/personal/{id}",
         "Meeting" => $"/besprechungen/{id}",
         // absences have no detail page; the audit viewer is admin-only, so point at the overview

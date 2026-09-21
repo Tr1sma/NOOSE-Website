@@ -58,9 +58,15 @@ public sealed class MentionServiceTests
         Assert.DoesNotContain(candidates, c => c.Type == "GlossaryTerm");
     }
 
-    /// <summary>Every category the palette offers today is mentionable; the filter must not remove any of them.</summary>
+    /// <summary>A palette category that cannot carry a mention has to be one of the known exceptions.</summary>
+    /// <remarks>
+    /// The mention token is <c>@{Typ:GUID}</c> and only resolves for a type in <see cref="LinkService.KnownTypes"/>.
+    /// Offering any other category in the @-picker would write a token the parser never matches again, and the
+    /// reader would see it raw. The filter in <c>CandidatesAsync</c> is what keeps them out; this list is what
+    /// keeps a new category from joining them unnoticed.
+    /// </remarks>
     [Fact]
-    public void EveryQuickCategoryExceptTheHandbookIsMentionable()
+    public void EveryQuickCategoryIsMentionableOrADeliberateException()
     {
         var notMentionable = NOOSE_Website.Services.Search.SearchCatalog.Categories
             .Where(c => c.Has(NOOSE_Website.Services.Search.SearchTraits.Quick))
@@ -69,8 +75,9 @@ public sealed class MentionServiceTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        // exactly the two the handbook added, and the filter in CandidatesAsync is what keeps them out
-        Assert.Equal(["GlossaryTerm", "HandbookArticle"], notMentionable);
+        // handbook article and glossary term are addressed by slug and by id-in-a-query, never as a record;
+        // a radio channel has no record page at all - the plan opens on it
+        Assert.Equal(["GlossaryTerm", "HandbookArticle", "RadioChannel"], notMentionable);
     }
 
     /// <summary>A known type is not enough: the id still has to be one the parser accepts.</summary>

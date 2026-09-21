@@ -1,0 +1,317 @@
+@* Radio plan: own channels, partner channels and the faction frequencies read live from their records. *@
+@page "/funk"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IRadioService RadioService
+@inject ITaskforceService TaskforceService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Funkplan · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.SettingsInputAntenna" Title="Funkplan"
+            Subtitle="Wer auf welchem Kanal funkt – und zu wem eine aufgeschnappte Frequenz gehört.">
+    <Actions>
+        @if (_mayWrite)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="NewAsync">Neuer Kanal</MudButton>
+        }
+    </Actions>
+</PageHeader>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTextField T="string" Value="_search" ValueChanged="SearchChangedAsync" Immediate="true"
+                  Placeholder="Frequenz oder Bezeichnung suchen – „411,7“ findet auch „411.7“…"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Clearable="true" Class="mb-4" />
+
+    @* filtered once per render: every block below and the empty state must agree on what the filter left *@
+    var blocks = RadioScopeDisplay.All.Select(s => (Scope: s, Rows: ChannelsOf(s))).ToList();
+    var factions = FilteredFactions();
+    var anything = blocks.Any(b => b.Rows.Count > 0) || factions.Count > 0;
+
+    @if (!anything)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.SettingsInputAntenna"
+                    Title="@(HasFilter ? "Keine Frequenz passt zu dieser Suche." : "Noch kein Funkplan.")"
+                    Text="@(HasFilter
+                              ? "Prüfe die Schreibweise – Komma und Punkt sind gleichwertig."
+                              : "Lege den ersten Kanal an; die Frequenzen der Fraktionen erscheinen hier von selbst.")" />
+    }
+    else
+    {
+        @foreach (var block in blocks)
+        {
+            var scope = block.Scope;
+            var rows = block.Rows;
+            if (rows.Count == 0)
+            {
+                continue;
+            }
+            <MudText Typo="Typo.h6" Class="mb-2">@RadioScopeDisplay.Heading(scope)</MudText>
+            <MudTable Items="rows" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="2"
+                      T="RadioChannelRow" Class="mb-6">
+                <HeaderContent>
+                    <MudTh>Frequenz</MudTh>
+                    <MudTh>Bezeichnung</MudTh>
+                    <MudTh>Zuordnung</MudTh>
+                    <MudTh>Bemerkung</MudTh>
+                    @if (_mayWrite)
+                    {
+                        <MudTh Style="text-align:right;">Aktion</MudTh>
+                    }
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Frequenz" Style="@RowStyle(context.Id)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-family:var(--mud-typography-monospace,monospace);">
+                                <b>@context.Frequency</b>
+                            </MudText>
+                            @if (context.IsClassified)
+                            {
+                                <MudTooltip Text="Verschlusssache – nur die Führung sieht diesen Kanal">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Bezeichnung" Style="@RowStyle(context.Id)">@context.Label</MudTd>
+                    <MudTd DataLabel="Zuordnung" Style="@RowStyle(context.Id)">
+                        @if (context.TaskforceId is not null)
+                        {
+                            <MudLink Href="@($"/taskforces/{context.TaskforceId}")">@(context.TaskforceName ?? "Taskforce")</MudLink>
+                        }
+                        else if (context.Agency is { } agency)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">
+                                @PartnerAgencyDisplay.Name(agency)
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Bemerkung" Style="@RowStyle(context.Id)">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Note ?? "—")</MudText>
+                    </MudTd>
+                    @if (_mayWrite)
+                    {
+                        <MudTd DataLabel="Aktion" Style="@($"text-align:right;{RowStyle(context.Id)}")">
+                            @if (RadioVisibility.MayEdit(_user, context.IsClassified))
+                            {
+                                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                   aria-label="Kanal bearbeiten" OnClick="@(() => EditAsync(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   aria-label="Kanal löschen" OnClick="@(() => DeleteAsync(context))" />
+                                </MudStack>
+                            }
+                        </MudTd>
+                    }
+                </RowTemplate>
+            </MudTable>
+        }
+
+        @if (factions.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2">Fraktionen</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                Direkt aus den Fraktionsakten gelesen. Geändert wird die Frequenz dort, nicht hier.
+            </MudText>
+            <MudTable Items="factions" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="2"
+                      T="RadioFactionRow" Class="mb-6">
+                <HeaderContent>
+                    <MudTh>Frequenz</MudTh>
+                    <MudTh>Fraktion</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Frequenz">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.body1" Style="font-family:var(--mud-typography-monospace,monospace);">
+                                <b>@context.Frequency</b>
+                            </MudText>
+                            @if (context.IsClassified)
+                            {
+                                <MudTooltip Text="Verschlusssache">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Fraktion">
+                        <MudLink Href="@($"/fraktionen/{context.FactionId}")">@context.Name</MudLink>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _busy;
+    private ClaimsPrincipal _user = default!;
+    private bool _mayWrite;
+
+    private IReadOnlyList<RadioChannelRow> _channels = [];
+    private IReadOnlyList<RadioFactionRow> _factions = [];
+    private List<Taskforce> _taskforces = [];
+    private string? _search;
+
+    /// <summary>Row a search hit or an audit line pointed at; it is marked, never filtered to.</summary>
+    private string? _highlight;
+
+    private bool _filterRead;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayWrite = _user.MayWrite();
+        await LoadAsync();
+    }
+
+    /// <remarks>
+    /// The highlight is read here rather than in <c>OnInitializedAsync</c>. A search hit and an audit line both
+    /// land on this one route, and Blazor recycles the component instance across such a navigation - read once
+    /// and the second hit would leave the first row marked. The plan itself does not depend on the query and is
+    /// loaded once. The filter is read once on purpose: it is written back with <c>replaceState</c>, which never
+    /// reaches <c>NavigationManager.Uri</c>, so re-reading it would overwrite what the agent just typed.
+    /// </remarks>
+    protected override void OnParametersSet()
+    {
+        _highlight = QueryState.Read(Nav, "kanal");
+        if (_filterRead)
+        {
+            return;
+        }
+        _filterRead = true;
+        _search = QueryState.Read(Nav, "q");
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            var plan = await RadioService.GetPlanAsync(_user);
+            _channels = plan.Channels;
+            _factions = plan.Factions;
+            if (_mayWrite)
+            {
+                // the picker must offer only taskforces this editor may see, the same set the gate reads
+                _taskforces = await TaskforceService.GetListAsync(_user.MayAllTaskforcesSee(), _user.GetAgentId());
+            }
+        }
+        finally
+        {
+            // without this a failed reload leaves the page on the progress bar for good
+            _load = false;
+        }
+    }
+
+    private async Task SearchChangedAsync(string? value)
+    {
+        _search = value;
+        await QueryState.WriteAsync(JS, Nav, ("q", value));
+    }
+
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_search);
+
+    private string RowStyle(string id)
+        => id == _highlight ? "background:var(--mud-palette-action-default-hover);" : string.Empty;
+
+    // one predicate for both lists: blocks and empty state can never disagree
+    private List<RadioChannelRow> ChannelsOf(RadioScope scope)
+        => _channels.Where(c => c.Scope == scope && RadioFilter.Matches(c, _search)).ToList();
+
+    private List<RadioFactionRow> FilteredFactions()
+        => _factions.Where(f => RadioFilter.Matches(f, _search)).ToList();
+
+    private async Task NewAsync()
+    {
+        var input = await RadioChannelDialog.ShowAsync(
+            DialogService, "Neuer Funkkanal", _taskforces, RadioVisibility.MayEdit(_user, true));
+        if (input is null)
+        {
+            return;
+        }
+        await GuardedAsync(async () =>
+        {
+            await RadioService.CreateAsync(input, _user);
+            Snackbar.Add("Funkkanal angelegt.", Severity.Success);
+        });
+    }
+
+    private async Task EditAsync(RadioChannelRow row)
+    {
+        var preset = new RadioChannelInput
+        {
+            Frequency = row.Frequency,
+            Label = row.Label,
+            Scope = row.Scope,
+            Agency = row.Agency,
+            TaskforceId = row.TaskforceId,
+            Note = row.Note,
+            IsClassified = row.IsClassified,
+        };
+        var input = await RadioChannelDialog.ShowAsync(
+            DialogService, "Funkkanal bearbeiten", _taskforces, RadioVisibility.MayEdit(_user, true), preset);
+        if (input is null)
+        {
+            return;
+        }
+        await GuardedAsync(async () =>
+        {
+            await RadioService.RefreshAsync(row.Id, input, _user);
+            Snackbar.Add("Funkkanal gespeichert.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteAsync(RadioChannelRow row)
+    {
+        var confirmed = await ConfirmDialog.ShowAsync(DialogService, "Funkkanal löschen?",
+            $"„{row.Frequency} · {row.Label}“ wandert in den Papierkorb.");
+        if (!confirmed)
+        {
+            return;
+        }
+        await GuardedAsync(async () =>
+        {
+            await RadioService.DeleteAsync(row.Id, _user);
+            Snackbar.Add("Funkkanal gelöscht.", Severity.Info);
+        });
+    }
+
+    /// <summary>Runs a write and reloads; a refused write must reach the user, not the circuit.</summary>
+    private async Task GuardedAsync(Func<Task> write)
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await write();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

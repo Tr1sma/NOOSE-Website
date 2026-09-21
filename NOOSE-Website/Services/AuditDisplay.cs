@@ -3,6 +3,7 @@ using System.Text.Json;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Radio;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -85,6 +86,8 @@ public static class AuditDisplay
         ["Result"] = "Ergebnis", ["Remarks"] = "Bemerkungen",
         ["Rank"] = "Rang", ["Role"] = "Rolle", ["IsLead"] = "Leitung",
         ["Text"] = "Text", ["Note"] = "Notiz", ["Reason"] = "Grund", ["Url"] = "Link",
+        ["Frequency"] = "Frequenz", ["Scope"] = "Bereich", ["Agency"] = "Partnerbehörde",
+        ["TaskforceId"] = "Taskforce",
         ["Outcome"] = "Maßnahme-Ausgang", ["TruthSerum"] = "Wahrheitsserum",
         ["MemoryDeleted"] = "Gedächtnisverlust", ["ReceivedInformation"] = "Erhaltene Informationen",
         ["Timestamp"] = "Zeitpunkt", ["OrgType"] = "Verknüpfte Org (Typ)",
@@ -194,6 +197,9 @@ public static class AuditDisplay
         "Category" => CategoryName(n, entityType),
         "Herkunft" or "Origin" => MeetingAbsenceOriginDisplay.Name((MeetingAbsenceOrigin)n),
         // a ticket status and its closing reason would otherwise stand in the protocol as bare numbers
+        // Scope is a RadioChannel block here and a Taskforce Geltungsbereich elsewhere, so it must be qualified
+        "Bereich" or "Scope" when entityType == nameof(RadioChannel) => RadioScopeDisplay.Name((RadioScope)n),
+        "Partnerbehoerde" or "Agency" => PartnerAgencyDisplay.Name((PartnerAgency)n),
         "Status" when entityType == nameof(Ticket) => TicketStatusDisplay.Name((TicketStatus)n),
         "ClosingReason" when entityType == nameof(Ticket)
             => TicketAbschlussgrundDisplay.Name((TicketAbschlussgrund)n),

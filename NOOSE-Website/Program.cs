@@ -340,6 +340,7 @@ builder.Services.AddScoped<INavPreferencesService, NavPreferencesService>();
 builder.Services.AddScoped<INavLabelService, NavLabelService>();
 builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
 builder.Services.AddScoped<ILawService, LawService>();
+builder.Services.AddScoped<IRadioService, RadioService>();
 builder.Services.AddScoped<NOOSE_Website.Services.Changelog.IChangelogService,
     NOOSE_Website.Services.Changelog.ChangelogService>();
 builder.Services.AddScoped<NOOSE_Website.Services.Handbook.IHandbookService,

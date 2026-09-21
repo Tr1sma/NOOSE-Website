@@ -143,6 +143,7 @@ public static class PublicVisibility
             ["Taskforce"] = Operational,
             ["TaskforceAgent"] = Assignment,
             ["TaskforceMessage"] = "Interner Einheiten-Chat; nach außen nie.",
+            ["RadioChannel"] = "Funkfrequenzen der Behörde und ihrer Partner; wer sie kennt, hört mit.",
             ["Observation"] = Operational,
             ["AgentAbduction"] = Operational,
             ["AbductionCompromise"] = Operational,

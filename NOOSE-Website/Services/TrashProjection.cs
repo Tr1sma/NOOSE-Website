@@ -16,6 +16,7 @@ using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Radio;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
@@ -40,6 +41,10 @@ public static class TrashProjection
     public static TrashItem Party(Party x) => new("parteien", x.Id, x.CaseNumber, x.Name, null, x.DeletedAt);
 
     public static TrashItem Taskforce(Taskforce x) => new("taskforces", x.Id, x.CaseNumber, x.Name, null, x.DeletedAt);
+
+    // a channel carries no Aktenzeichen, and the trash column is headed as one - frequency and label are the title
+    public static TrashItem RadioChannel(RadioChannel x)
+        => new("funk", x.Id, null, $"{x.Frequency} · {x.Label}", null, x.DeletedAt);
 
     public static TrashItem Case(Case x) => new("vorgaenge", x.Id, x.CaseNumber, x.Title, null, x.DeletedAt);
 

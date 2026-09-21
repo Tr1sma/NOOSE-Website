@@ -16,6 +16,7 @@ using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Radio;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
@@ -272,6 +273,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<HandbookArticle> HandbuchArtikel => Set<HandbookArticle>();
     public DbSet<HandbookStep> HandbuchSchritte => Set<HandbookStep>();
     public DbSet<GlossaryTerm> HandbuchBegriffe => Set<GlossaryTerm>();
+    public DbSet<RadioChannel> Funkkanaele => Set<RadioChannel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1469,6 +1471,20 @@ public class AppDbContext : IdentityDbContext<Agent>
 
             b.HasMany(t => t.Agents).WithOne(a => a.Taskforce!)
                 .HasForeignKey(a => a.TaskforceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RadioChannel>(b =>
+        {
+            b.Property(c => c.Frequency).HasMaxLength(32).IsRequired();
+            b.Property(c => c.Label).HasMaxLength(200).IsRequired();
+            b.Property(c => c.Note).HasMaxLength(500);
+            b.Property(c => c.TaskforceId).HasMaxLength(64);
+            // the reverse lookup asks for exactly this
+            b.HasIndex(c => c.Frequency);
+            b.HasIndex(c => c.Scope);
+            b.HasIndex(c => c.TaskforceId);
+            // a bound taskforce must be deleted through its own path, not through this row
+            b.HasOne<Taskforce>().WithMany().HasForeignKey(c => c.TaskforceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<TaskforceAgent>(b =>

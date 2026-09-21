@@ -28,6 +28,7 @@ using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Radio;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Taskforces;
 
@@ -396,6 +397,12 @@ public static class SearchCatalog
             Icons.Material.Filled.Abc, SearchHitShape.Record,
             SearchTraits.Quick | SearchTraits.SideIndexed | SearchTraits.Assistant,
             "/handbuch?begriff={0}"),
+        // no SideIndexed: the phonetic index would cost a backfill version bump for a table of dozens of rows
+        // whose whole content is a number and a short label. Like a glossary term it has no page of its own.
+        new(nameof(RadioChannel), "Funkkanal", "Funkkanäle", SearchGroup.Content,
+            Icons.Material.Filled.SettingsInputAntenna, SearchHitShape.Record,
+            SearchTraits.Quick | SearchTraits.Assistant,
+            "/funk?kanal={0}"),
     ];
 
     /// <summary>Entities deliberately left out of the search, each with the reason.</summary>

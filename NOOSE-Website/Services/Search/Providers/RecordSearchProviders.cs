@@ -115,7 +115,10 @@ public sealed class PersonSearchProvider(IDbContextFactory<AppDbContext> dbFacto
     }
 }
 
-/// <summary>Faction records: name, kind, targets; in deep mode estate, radio, darkchat and issuing times.</summary>
+/// <summary>Faction records: name, kind, targets, radio; in deep mode estate, darkchat and issuing times.</summary>
+/// <remarks>The radio frequency sits in the ordinary recall rather than behind the deep scan: it is the one field
+/// here that somebody overhears and types in verbatim, and a lookup that only works with a checkbox nobody knows
+/// about is a lookup that does not work.</remarks>
 public sealed class FactionSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
 {
     public string Category => nameof(Faction);
@@ -131,14 +134,18 @@ public sealed class FactionSearchProvider(IDbContextFactory<AppDbContext> dbFact
         if (query.HasText)
         {
             var s = query.Text;
+            // both spellings of the query: this column is written by hand and never normalised, so the stored
+            // value may carry either mark - normalising only the query would miss half the combinations
+            var frequency = RadioFrequency.Normalize(s);
+            var frequencyComma = RadioFrequency.Comma(s);
             var deep = query.Deep;
             q = q.Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s)
                 || (f.Kind != null && f.Kind.Contains(s))
                 || (f.Description != null && f.Description.Contains(s))
                 || (f.Targets != null && f.Targets.Contains(s))
+                || (f.Radio != null && (f.Radio.Contains(frequency) || f.Radio.Contains(frequencyComma)))
                 || (deep && (
                        (f.Estate != null && f.Estate.Contains(s))
-                    || (f.Radio != null && f.Radio.Contains(s))
                     || (f.Darkchat != null && f.Darkchat.Contains(s))
                     || (f.IssuingTimes != null && f.IssuingTimes.Contains(s)))));
         }
@@ -173,7 +180,11 @@ public sealed class FactionSearchProvider(IDbContextFactory<AppDbContext> dbFact
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var s = query.Text;
-        var hits = await Visible(db, query).Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s))
+        var frequency = RadioFrequency.Normalize(s);
+        var frequencyComma = RadioFrequency.Comma(s);
+        var hits = await Visible(db, query)
+            .Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s)
+                || (f.Radio != null && (f.Radio.Contains(frequency) || f.Radio.Contains(frequencyComma))))
             .OrderBy(f => f.Name).Take(max)
             .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber))
             .ToListAsync(cancellationToken);

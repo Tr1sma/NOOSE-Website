@@ -71,6 +71,8 @@ public static class NavCatalog
             Description: "Zentrale Ablage aller behördlichen Dokumente"),
         new NavEntry("gesetze", "/gesetze", Icons.Material.Filled.Gavel, "Gesetzbuch", NavSection.Wissen, NavArea.Ermittlung,
             Description: "Paragrafen und Rechtsgrundlagen zum Nachschlagen"),
+        new NavEntry("funk", "/funk", Icons.Material.Filled.SettingsInputAntenna, "Funkplan", NavSection.Wissen, NavArea.Ermittlung,
+            Description: "Wer auf welchem Kanal funkt, und zu wem eine aufgeschnappte Frequenz gehört"),
         new NavEntry("handbuch", "/handbuch", Icons.Material.Filled.MenuBook, "Handbuch", NavSection.Wissen, NavArea.Ermittlung,
             Description: "Anleitungen und Glossar: wie die Seite und die Abläufe funktionieren"),
         new NavEntry("neuerungen", "/neuerungen", Icons.Material.Filled.NewReleases, "Neuerungen", NavSection.Wissen, NavArea.Ermittlung,

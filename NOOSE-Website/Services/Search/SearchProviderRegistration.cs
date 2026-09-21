@@ -44,6 +44,7 @@ public static class SearchProviderRegistration
         services.AddScoped<ISearchProvider, LibraryFileSearchProvider>();
         services.AddScoped<ISearchProvider, HandbookArticleSearchProvider>();
         services.AddScoped<ISearchProvider, GlossaryTermSearchProvider>();
+        services.AddScoped<ISearchProvider, RadioChannelSearchProvider>();
 
         // Personal und Dienst
         services.AddScoped<ISearchProvider, AgentSearchProvider>();

@@ -226,5 +226,46 @@ internal static class InvestigationChapter
                 Dokument.</p>
                 """,
                 NavKey: "dokumente"),
+
+            new Article("art-funkplan", "funkplan", "Funkplan",
+                "Wer auf welchem Kanal funkt - und zu wem eine aufgeschnappte Frequenz gehört.",
+                """
+                <p>Der <strong>Funkplan</strong> beantwortet zwei Fragen. Von oben nach unten gelesen: auf
+                welchem Kanal erreiche ich wen. Rückwärts gelesen: wem gehört die Frequenz, die ich eben
+                aufgeschnappt habe.</p>
+                <p>Er zeigt vier Blöcke - <em>Eigene Kanäle</em>, <em>Partnerbehörden</em>, <em>Sonstige</em>
+                und die <em>Fraktionen</em>. Die ersten drei pflegst du hier über <em>Neuer Kanal</em>. Die
+                Fraktionsfrequenzen stehen <strong>nicht</strong> hier, sondern werden direkt aus den
+                Fraktionsakten gelesen: geändert wird eine Fraktionsfrequenz im Feld <em>Funk</em> der
+                jeweiligen Akte, und der Funkplan zieht das sofort nach. So gibt es je Frequenz nur eine
+                Stelle, an der sie steht.</p>
+                <p>Das Suchfeld oben durchsucht alle Blöcke gleichzeitig. <strong>Komma und Punkt sind
+                gleichwertig</strong> - wer <em>411,7</em> tippt, findet <em>411.7</em>. Dasselbe gilt für die
+                große Suche und für Strg+K: eine eingetippte Frequenz führt dich zum Kanal oder zur
+                Fraktionsakte, ohne dass du den Deep-Scan einschalten musst.</p>
+                <p>Zwei Kanäle siehst du unter Umständen nicht. Ein Kanal, der an eine <strong>Taskforce</strong>
+                gebunden ist, erscheint nur bei den ihr zugeteilten Agenten - so, wie die Taskforce selbst.
+                Und ein Kanal mit dem Schloss-Zeichen ist <strong>Verschlusssache</strong>: den sieht und
+                ändert nur die Führung.</p>
+                """,
+                RoleplayHtml:
+                """
+                <p>Ein Kanal im Plan heißt nicht, dass er frei ist. Wer auf einer fremden Frequenz mithört,
+                tut das im Spiel auf eigenes Risiko - und wer dort sendet, gibt sich zu erkennen.</p>
+                <p>Eine Frequenz, die du im Einsatz aufschnappst, gehört in die Akte, bevor du sie hier
+                einträgst: der Funkplan ist ein Verzeichnis, kein Ermittlungsergebnis.</p>
+                """,
+                NavKey: "funk",
+                Steps:
+                [
+                    new Step("Search", "Frequenz eintippen",
+                        "Tippe die Zahl ins Suchfeld - mit Komma oder Punkt, beides findet dasselbe."),
+                    new Step("Add", "Kanal anlegen",
+                        "Über Neuer Kanal: Frequenz, Bezeichnung und Bereich. Alles Weitere ist optional."),
+                    new Step("Groups2", "Taskforce binden",
+                        "Wählst du eine Taskforce, sehen den Kanal nur deren Agenten."),
+                    new Step("Lock", "Verschlusssache setzen",
+                        "Nur die Führung kann den Haken setzen - und nur sie sieht den Kanal danach."),
+                ]),
         ]);
 }

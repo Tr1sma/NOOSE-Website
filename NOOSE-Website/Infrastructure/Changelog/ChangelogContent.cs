@@ -338,6 +338,10 @@ public static class ChangelogContent
             Neu("2.1.66-score-verlauf", "Neben der Gefährdung steht jetzt eine kleine Verlaufskurve – in den "
                 + "Listen der Personen und Fraktionen, im Lagezentrum und bei den beobachteten Akten. Du "
                 + "siehst damit auf einen Blick, ob ein Wert steigt, fällt oder sich nicht bewegt.", "Akten"),
+            Neu("2.1.67-funkplan", "Es gibt einen Funkplan: wer auf welchem Kanal funkt – eigene Kanäle, "
+                + "Partnerbehörden und die Frequenzen der Fraktionen an einer Stelle. Tippst du eine "
+                + "aufgeschnappte Frequenz in die Suche, bekommst du heraus, zu wem sie gehört; Komma und "
+                + "Punkt sind dabei gleichwertig.", "Ermittlung"),
         ], "1.5"),
     ];
 }

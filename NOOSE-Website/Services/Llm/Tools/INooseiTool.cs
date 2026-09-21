@@ -303,6 +303,9 @@ public static class NooseiRecordTypes
             ["SavedSearch"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
             ["GraphCanvasLayout"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
             ["LlmRequestLog"] = "NOOSEI-Kosten- und Betriebsmeta hinter der KI-Eigner-Achse",
+            // searchable, but not openable: the hit already carries everything the row holds
+            ["RadioChannel"] = "die Trefferzeile ist schon der ganze Kanal — Frequenz und Bezeichnung; "
+                + "ein Aktenaufruf hätte nichts hinzuzufügen",
         };
 
     /// <summary>The enum values offered where a type must be openable as a record.</summary>

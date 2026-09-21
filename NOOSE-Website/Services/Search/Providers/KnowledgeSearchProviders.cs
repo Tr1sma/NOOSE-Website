@@ -4,6 +4,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Handbook;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.Radio;
 using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services.Search.Providers;
@@ -340,4 +341,64 @@ public sealed class GlossaryTermSearchProvider(IDbContextFactory<AppDbContext> d
 
     private static IQueryable<GlossaryTerm> Visible(AppDbContext db)
         => db.HandbuchBegriffe.Where(t => t.IsVisible);
+}
+
+/// <summary>Radio channels: the reverse lookup for a frequency somebody overheard.</summary>
+/// <remarks>
+/// The search text is normalised before it is matched against the frequency, because a German keyboard types
+/// "411,7" where the plan stores "411.7" — without that the one query this category exists for finds nothing.
+/// The label is matched unnormalised, so a comma inside a name still works.
+/// <para>Visibility is <see cref="RadioVisibility.OnlyVisible"/>, the same expression the plan page reads.</para>
+/// </remarks>
+public sealed class RadioChannelSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
+{
+    public string Category => nameof(RadioChannel);
+
+    public PartnerAccess Partner => PartnerAccess.Never;
+
+    public bool AppliesTo(SearchViewer viewer) => !viewer.IsPartner;
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var q = Visible(db, query);
+        if (query.HasText)
+        {
+            var s = query.Text;
+            var frequency = RadioFrequency.Normalize(s);
+            q = q.Where(c => c.Frequency.Contains(frequency) || c.Label.Contains(s)
+                || (c.Note != null && c.Note.Contains(s)));
+        }
+        return await Ordered(q).Take(query.PerCategory).Select(Hit).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await Visible(db, query).Where(c => ids.Contains(c.Id)).Take(take)
+            .Select(Hit).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<QuickHit>> QuickAsync(
+        SearchQuery query, int max, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var s = query.Text;
+        var frequency = RadioFrequency.Normalize(s);
+        return await Ordered(Visible(db, query).Where(c => c.Frequency.Contains(frequency) || c.Label.Contains(s)))
+            .Take(max)
+            .Select(c => new QuickHit(nameof(RadioChannel), c.Id, c.Frequency + " · " + c.Label, string.Empty))
+            .ToListAsync(cancellationToken);
+    }
+
+    // the frequency is the answer to the question this category is asked, so it leads the row
+    private static System.Linq.Expressions.Expression<Func<RadioChannel, SearchHit>> Hit =>
+        c => new SearchHit(nameof(RadioChannel), c.Id, c.Frequency, c.Label, string.Empty);
+
+    private static IQueryable<RadioChannel> Ordered(IQueryable<RadioChannel> query)
+        => query.OrderBy(c => c.Scope).ThenBy(c => c.Frequency);
+
+    private static IQueryable<RadioChannel> Visible(AppDbContext db, SearchQuery query)
+        => db.Funkkanaele.OnlyVisible(db, query.Scope);
 }
