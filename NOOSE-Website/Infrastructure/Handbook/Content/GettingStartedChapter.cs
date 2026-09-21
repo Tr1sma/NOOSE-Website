@@ -140,5 +140,32 @@ internal static class GettingStartedChapter
                 Das landet direkt bei denen, die die Seite pflegen.</p>
                 """,
                 NavKey: "handbuch"),
+
+            new Article("art-kurzbefehle", "tastenkuerzel", "Tastenkürzel",
+                "Vier Tasten, die dir den Weg durch Menü und Maus sparen.",
+                """
+                <p>Neben <strong>Strg+K</strong>, dem Schnellzugriff, gibt es vier Tasten. Sie greifen überall -
+                aber nur, solange du <em>nicht</em> gerade in ein Feld schreibst. Wer einen Namen tippt, tippt
+                einen Namen; kein Kürzel fährt dazwischen.</p>
+                <ul>
+                <li><strong>?</strong> - zeigt diese Liste, jederzeit und mit den Sprungzielen, die du
+                tatsächlich sehen darfst.</li>
+                <li><strong>g</strong> und dann ein Buchstabe - springt in einen Bereich:
+                <em>p</em> Personen, <em>f</em> Fraktionen, <em>v</em> Vorgänge, <em>o</em> Operationen,
+                <em>a</em> Aufgaben, <em>k</em> Kalender, <em>t</em> Taskforces, <em>s</em> Suche,
+                <em>b</em> Brett, <em>h</em> Handbuch, <em>w</em> Beobachtete, <em>d</em> Lagezentrum. Nach dem
+                <em>g</em> hast du gut eine Sekunde für den zweiten Buchstaben.</li>
+                <li><strong>n</strong> - legt an, was auf die Liste gehört, auf der du stehst. Auf
+                <em>Personen</em> eine Personenakte, auf <em>Vorgänge</em> einen Vorgang.</li>
+                <li><strong>e</strong> - öffnet die Akte, die du gerade offen hast, im Bearbeiten-Modus:
+                Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen, Taskforces, Entführungen und
+                V-Personen. Bei Besprechungen, Aufgaben, Terminen, Ankündigungen, Aktivitäten und Dokumenten
+                passiert nichts - dort entscheidet nicht dein Schreibrecht allein, ob du bearbeiten darfst,
+                und die Taste würde dich auf eine Absage schicken.</li>
+                </ul>
+                <p>Es gibt bewusst <strong>kein</strong> Kürzel fürs Folgen. Alle vier hier führen dich nur
+                irgendwohin; keines ändert etwas an einer Akte. Ein verrutschter Finger soll nichts
+                anrichten.</p>
+                """),
         ]);
 }

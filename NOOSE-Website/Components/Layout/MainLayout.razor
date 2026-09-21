@@ -172,10 +172,11 @@
         </MudContainer>
     </MudMainContent>
 
-    @* Command palette (Ctrl+K), only for signed-in agents. *@
+    @* Command palette (Ctrl+K) and the keyboard shortcuts, only for signed-in agents. *@
     <AuthorizeView>
         <Authorized Context="cp">
             <CommandPalette @ref="_palette" />
+            <KeyboardShortcuts />
             <RecentsTracker />
         </Authorized>
     </AuthorizeView>

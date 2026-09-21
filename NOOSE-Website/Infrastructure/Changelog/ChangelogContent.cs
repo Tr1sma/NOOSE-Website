@@ -346,6 +346,10 @@ public static class ChangelogContent
                 + "den Auswahllisten für Aufgaben, Termine und Wiedervorlagen – und zwar für den Tag, den du "
                 + "im Formular eingetragen hast. Wählen kannst du ihn trotzdem; du weißt es nur vorher.",
                 "Dienstbetrieb"),
+            Neu("2.1.69-kurzbefehle", "Es gibt Tastenkürzel: „?“ zeigt sie alle, „g“ und ein "
+                + "Buchstabe springen in einen Bereich, „n“ legt auf einer Liste einen neuen Eintrag an "
+                + "und „e“ öffnet die Akte zum Bearbeiten. Solange du in ein Feld schreibst, passiert "
+                + "nichts davon.", "Bedienung"),
         ], "1.5"),
     ];
 }

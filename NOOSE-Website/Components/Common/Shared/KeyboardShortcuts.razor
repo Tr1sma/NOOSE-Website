@@ -1,0 +1,185 @@
+@* Keyboard shortcuts next to Ctrl+K. The browser recognises the keys, this component decides what they mean. *@
+@using NOOSE_Website.Navigation
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject IAuthorizationService Authorization
+@implements IAsyncDisposable
+
+<MudDialog @bind-Visible="_open" Options="_options">
+    <TitleContent>
+        <MudText Typo="Typo.subtitle1">
+            <MudIcon Icon="@Icons.Material.Filled.Keyboard" Size="Size.Small" Class="mr-1" />Tastenkürzel
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+            <tbody>
+                <tr>
+                    <td style="width:9rem;"><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Strg</MudChip> <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">K</MudChip></td>
+                    <td>Schnellzugriff: Akte suchen oder Befehl wählen</td>
+                </tr>
+                <tr>
+                    <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">?</MudChip></td>
+                    <td>Diese Übersicht</td>
+                </tr>
+                <tr>
+                    <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">n</MudChip></td>
+                    <td>
+                        Auf einer Liste: neuen Eintrag anlegen
+                        @if (ShortcutRoutes.NewLabelFor(CurrentPath) is { } what)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">hier: @what</MudText>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">e</MudChip></td>
+                    <td>Auf einer Akte: bearbeiten</td>
+                </tr>
+                @* the row disappears entirely rather than standing there empty for a viewer with no targets *@
+                @if (ShortcutRoutes.Areas.Any(a => _allowedAreas.Contains(a.Value)))
+                {
+                    <tr>
+                        <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">g</MudChip> dann …</td>
+                        <td>
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                                @foreach (var (letter, key) in ShortcutRoutes.Areas)
+                                {
+                                    @if (_allowedAreas.Contains(key) && NavCatalog.ByKey(key) is { } entry)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@entry.Icon">
+                                            @letter · @entry.Label
+                                        </MudChip>
+                                    }
+                                }
+                            </MudStack>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
+            Kürzel greifen nur, solange du nicht gerade in ein Feld schreibst.
+        </MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _open;
+    private ClaimsPrincipal? _user;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<KeyboardShortcuts>? _ref;
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+
+    /// <summary>Nav keys this viewer may jump to; the same gate the command palette applies.</summary>
+    private HashSet<string> _allowedAreas = new(StringComparer.Ordinal);
+
+    private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _user = user;
+
+        // No partner branch on purpose. The twelve letters name internal areas, and a partner reaches none of
+        // them; the section policies below already answer no for every one, so the set stays empty and the "g"
+        // row disappears from the overview. Offering a partner-shaped set here would mean a second key space
+        // and a second release gate - the very copy that goes stale.
+        foreach (var section in NavSectionPolicy.InternalSections)
+        {
+            if (!(await Authorization.AuthorizeAsync(user, NavSectionPolicy.For(section))).Succeeded)
+            {
+                continue;
+            }
+            foreach (var entry in NavCatalog.Section(section))
+            {
+                _allowedAreas.Add(entry.Key);
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=4");
+            _ref = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("registerShortcuts", _ref);
+        }
+    }
+
+    /// <summary>A single key that needs no second one.</summary>
+    [JSInvokable]
+    public async Task Press(string key)
+    {
+        switch (key)
+        {
+            case "?":
+                _open = true;
+                break;
+            case "n":
+                Create();
+                break;
+            case "e":
+                Edit();
+                break;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The letter after "g".</summary>
+    [JSInvokable]
+    public async Task Chord(string letter)
+    {
+        if (letter.Length == 1
+            && ShortcutRoutes.AreaKeyFor(letter[0]) is { } key
+            && _allowedAreas.Contains(key)
+            && NavCatalog.ByKey(key) is { } entry)
+        {
+            Nav.NavigateTo(entry.Route);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Create()
+    {
+        // creating is barred for read-only supervision and demo accounts, same as in the palette
+        if (_user?.MayWrite() != true)
+        {
+            return;
+        }
+        if (ShortcutRoutes.NewRouteFor(CurrentPath) is { } route)
+        {
+            Nav.NavigateTo(route);
+        }
+    }
+
+    private void Edit()
+    {
+        if (_user?.MayWrite() != true)
+        {
+            return;
+        }
+        if (ShortcutRoutes.EditRouteFor(CurrentPath) is { } route)
+        {
+            Nav.NavigateTo(route);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("unregisterShortcuts");
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (ObjectDisposedException) { /* ignore */ }
+        _ref?.Dispose();
+    }
+}

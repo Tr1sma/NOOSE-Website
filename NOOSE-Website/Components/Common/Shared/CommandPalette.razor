@@ -133,7 +133,7 @@
     {
         if (firstRender)
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=3");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=4");
             _ref = DotNetObjectReference.Create(this);
             await _module.InvokeVoidAsync("registerCommandPalette", _ref);
         }
