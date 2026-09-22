@@ -34,6 +34,8 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
     public async Task<Comment> CreateAsync(string entityType, string entityId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        // the quick capture writes from the header, far from the panel that hides itself
+        Permission.RequireWriteAccess(actor);
         text = (text ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(text))
         {

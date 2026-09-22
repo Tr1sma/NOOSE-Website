@@ -195,6 +195,9 @@ internal static class RecordsChapter
                 mitten im Text.</p>
                 <p>Ein Bild kannst du direkt mit <strong>Strg+V</strong> einfügen. Es wird an der Trägerakte
                 abgelegt, nicht bei dir - wer die Akte nicht sehen darf, sieht auch das Bild nicht.</p>
+                <p>Du musst die Akte dafür nicht einmal öffnen: Der <strong>Plus-Knopf</strong> oben in der
+                Kopfzeile nimmt unter <em>Vermerk</em> denselben Text entgegen, hängt ihn an die Akte, die du
+                dort auswählst - und lässt dich auf der Seite stehen, auf der du gerade arbeitest.</p>
                 """),
 
             new Article("art-stichworte", "stichworte-und-zusatzfelder", "Stichworte und Zusatzfelder",

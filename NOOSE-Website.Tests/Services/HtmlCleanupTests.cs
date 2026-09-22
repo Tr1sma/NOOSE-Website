@@ -562,4 +562,101 @@ public class HtmlCleanupTests
         Assert.NotNull(HtmlCleanup.Clean("<script>x</script>"));
         Assert.NotNull(HtmlCleanup.Clean("plain"));
     }
+
+    // ---- FromPlain: typed text in, paragraphs out ----
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData(" \t \r\n  ")]
+    public void FromPlain_NullEmptyOrWhitespace_ReturnsEmptyString(string? input)
+    {
+        Assert.Equal(string.Empty, HtmlCleanup.FromPlain(input));
+    }
+
+    [Fact]
+    public void FromPlain_Null_NeverReturnsNull()
+    {
+        Assert.NotNull(HtmlCleanup.FromPlain(null));
+    }
+
+    [Fact]
+    public void FromPlain_SingleLine_IsExactlyOneParagraph()
+    {
+        Assert.Equal("<p>Hallo Welt</p>", HtmlCleanup.FromPlain("Hallo Welt"));
+    }
+
+    [Fact]
+    public void FromPlain_SingleLine_IsTrimmed()
+    {
+        Assert.Equal("<p>Hallo Welt</p>", HtmlCleanup.FromPlain("  Hallo Welt  "));
+    }
+
+    [Fact]
+    public void FromPlain_SeveralLines_AreSeveralParagraphs()
+    {
+        Assert.Equal("<p>eins</p><p>zwei</p><p>drei</p>", HtmlCleanup.FromPlain("eins\nzwei\ndrei"));
+    }
+
+    [Fact]
+    public void FromPlain_BlankLinesBetween_ProduceNoEmptyParagraph()
+    {
+        // an empty <p> is a visible gap in the record; two paragraphs already read as a break
+        Assert.Equal("<p>eins</p><p>zwei</p>", HtmlCleanup.FromPlain("eins\n\n\nzwei"));
+        Assert.Equal("<p>eins</p><p>zwei</p>", HtmlCleanup.FromPlain("eins\n   \nzwei"));
+    }
+
+    [Fact]
+    public void FromPlain_LeadingAndTrailingNewlines_AreDropped()
+    {
+        Assert.Equal("<p>eins</p>", HtmlCleanup.FromPlain("\n\neins\n\n"));
+    }
+
+    [Fact]
+    public void FromPlain_CrlfAndLf_AreTreatedAlike()
+    {
+        // a browser textarea sends CRLF, seeded and generated text arrives with LF
+        Assert.Equal(HtmlCleanup.FromPlain("eins\nzwei"), HtmlCleanup.FromPlain("eins\r\nzwei"));
+        Assert.Equal("<p>eins</p><p>zwei</p>", HtmlCleanup.FromPlain("eins\r\nzwei"));
+    }
+
+    [Fact]
+    public void FromPlain_HtmlSpecialCharacters_AreEncoded()
+    {
+        // without encoding a typed angle bracket pair reaches the sanitizer as a tag and is deleted:
+        // the text would lose a character it should never lose
+        Assert.Equal("<p>&lt;b&gt;</p>", HtmlCleanup.FromPlain("<b>"));
+        Assert.Equal("<p>a &amp; b</p>", HtmlCleanup.FromPlain("a & b"));
+        Assert.Equal("<p>3 &lt; 5</p>", HtmlCleanup.FromPlain("3 < 5"));
+    }
+
+    [Fact]
+    public void FromPlain_Umlauts_ArePassedThroughVerbatim()
+    {
+        // German is the whole content language here; a numeric entity would be a needless detour
+        Assert.Equal("<p>Prüffall geöffnet, Maß größer</p>", HtmlCleanup.FromPlain("Prüffall geöffnet, Maß größer"));
+    }
+
+    [Fact]
+    public void FromPlain_MentionToken_SurvivesUntouched()
+    {
+        // braces and the at sign are not encoded; the renderer resolves the token later
+        const string token = "@{Person:11111111-1111-1111-1111-111111111111}";
+
+        Assert.Equal($"<p>Siehe {token}</p>", HtmlCleanup.FromPlain($"Siehe {token}"));
+    }
+
+    [Fact]
+    public void FromPlain_Result_SurvivesCleanUnchanged()
+    {
+        // the output is stored through the sanitizer, so this round trip has to be lossless
+        var html = HtmlCleanup.FromPlain("Beobachtung am Hafen\n\nZwei Fahrzeuge, <b> getippt, a & b");
+
+        Assert.Equal(html, HtmlCleanup.Clean(html));
+    }
 }

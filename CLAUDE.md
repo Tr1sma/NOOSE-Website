@@ -564,6 +564,13 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
   Start nach dem Deploy auf die neueste Fassung ohne Stempel.
 - **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` der Fassung ist
   das, womit die Login-Hinweiskarte vergleicht; ohne Interceptor meldet sie still und dauerhaft nichts.
+- **Eine Zeile in eine andere Fassung verschieben:** ihr neuer `Key` muss zur neuen Fassung passen
+  (`Every_shipped_version_and_key_uses_sequential_two_digit_updates` fordert das), und genau deshalb darf
+  man ihn nicht einfach umschreiben: der Seeder fände die alte Zeile nicht wieder, ließe sie in der alten
+  Fassung stehen und schriebe eine zweite daneben. Die Zeile nennt deshalb ihren alten Schlüssel selbst
+  (fünftes Argument von `Neu`/`Besser`/`Fix`, `SeededEntry.LegacyKey`) — dann zieht der Seeder dieselbe
+  Zeile um. `LegacyVersion` an der Fassung kann das nicht: es schreibt nur den Präfix aller Schlüssel
+  einer Fassung um, und eine umziehende Zeile bekommt eine neue laufende Nummer.
 
 ## Domänen-Glossar
 

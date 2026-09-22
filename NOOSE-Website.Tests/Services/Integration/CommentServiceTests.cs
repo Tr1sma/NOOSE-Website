@@ -31,6 +31,10 @@ public sealed class CommentServiceTests
     private static ClaimsPrincipal Partner()
         => ClaimsPrincipalBuilder.Agent("partner1").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build();
 
+    // Read-only supervision: IsOnlyReader is derived from IsTeamLead && !IsAdmin, so no admin flag here.
+    private static ClaimsPrincipal OnlyReader()
+        => ClaimsPrincipalBuilder.Agent("aufsicht").WithRank(Rank.Director).WithCodename("Auge").AsTeamLead().Build();
+
     private static Comment MakeComment(string entityType, string entityId, string text,
         DateTime createdAt, string? createdById = null)
         => new()
@@ -248,6 +252,26 @@ public sealed class CommentServiceTests
 
         using var check = ctx.NewContext();
         Assert.False(await check.Comments.AnyAsync(c => c.EntityId == "p10"));
+    }
+
+    [Fact]
+    public async Task CreateAsync_Throws_ForReadOnlySupervision()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p11"));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        // this measures the guard, not the barrier: SqliteTestContext attaches no interceptors at all,
+        // so a write that only the ReadOnlyBarrierInterceptor stopped would go through here
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.CreateAsync("Person", "p11", "Vermerk aus der Kopfzeile", OnlyReader()));
+
+        using var check = ctx.NewContext();
+        Assert.False(await check.Comments.AnyAsync(c => c.EntityId == "p11"));
     }
 
     // ---------- DeleteAsync ----------

@@ -81,6 +81,38 @@ public static partial class HtmlCleanup
         return Whitespace().Replace(text, " ").Trim();
     }
 
+    /// <summary>Plain text to paragraphs: one <c>&lt;p&gt;</c> per line, escaped.</summary>
+    /// <remarks>
+    /// The counterpart of <see cref="PlainText"/>, for the few places that take typed text into a field the rest
+    /// of the house fills with a WYSIWYG editor - the quick-capture activity is the first. Encoding matters more
+    /// than the markup: without it a typed angle bracket would reach the sanitizer as a tag and be dropped, so
+    /// the text would lose a character it was never meant to lose.
+    /// </remarks>
+    public static string FromPlain(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+        // blank lines carry no meaning here; two paragraphs already read as a break
+        var lines = text.ReplaceLineEndings("\n").Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0);
+        return string.Concat(lines.Select(l => $"<p>{Escape(l)}</p>"));
+    }
+
+    /// <summary>The three characters that must not reach the parser as markup, and nothing else.</summary>
+    /// <remarks>
+    /// Deliberately not <c>WebUtility.HtmlEncode</c>: that turns every character above 159 into a numeric
+    /// entity, so a German sentence would be stored as <c>Pr&amp;#252;ffall</c> - unreadable in the column and in
+    /// the audit log, and no longer its own output, because the sanitizer decodes the entity straight back.
+    /// Inside a text node these three are the whole job; quotes only matter in an attribute.
+    /// </remarks>
+    private static string Escape(string text)
+        => text.Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+
     [GeneratedRegex("<[^>]+>")]
     private static partial Regex TagStrip();
 

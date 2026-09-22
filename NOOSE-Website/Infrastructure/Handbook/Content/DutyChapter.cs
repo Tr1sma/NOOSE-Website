@@ -95,8 +95,9 @@ internal static class DutyChapter
                 führst: Streife gefahren, Vernehmung geführt, Akte aufgearbeitet. Datum, Art, ein paar
                 Sätze.</p>
                 <p>Diese Einträge sind <strong>für alle sichtbar</strong>. Sie sind das, woran die Dienststelle
-                ablesen kann, wer woran gearbeitet hat - und sie sind die Grundlage der Bestenliste.</p>
-                <p>Schreib sie zeitnah. Eine Woche später weiß niemand mehr, was am Dienstag war.</p>
+                ablesen kann, wer woran gearbeitet hat.</p>
+                <p>Schreib sie zeitnah. Eine Woche später weiß niemand mehr, was am Dienstag war. Für den
+                schnellen Eintrag zwischendurch gibt es den Plus-Knopf in der Kopfzeile.</p>
                 """,
                 NavKey: "aktivitaeten"),
 
@@ -104,8 +105,9 @@ internal static class DutyChapter
                 "Das Ranking - und was es wirklich misst.",
                 """
                 <p>Die <strong>Bestenliste</strong> stellt die Agenten nach dokumentierter Ermittlungsarbeit
-                gegenüber: angelegte Akten, geführte Doks, erledigte Aufgaben, eingetragene Aktivitäten - über
-                Woche, Monat oder insgesamt.</p>
+                gegenüber. Gezählt werden sechs Dinge: angelegte Akten, geführte Doks, gesetzte Verknüpfungen,
+                vergebene Einstufungen, protokollierte Observationen und abgeschlossene Vorgänge - über Woche,
+                Monat oder insgesamt. Aufgaben und Dienst-Aktivitäten zählen ausdrücklich <em>nicht</em>.</p>
                 <p>Sie misst <strong>Dokumentation</strong>, nicht Verdienst. Wer viel tut und nichts
                 aufschreibt, steht unten; das ist kein Fehler der Liste, sondern ihre Aussage.</p>
                 <p>Die Führungsränge stehen in einer eigenen Wertung. Sonst würde die Liste ausschließlich

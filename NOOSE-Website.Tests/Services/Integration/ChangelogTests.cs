@@ -128,6 +128,59 @@ public sealed class ChangelogTests
     }
 
     [Fact]
+    public async Task A_line_moved_into_another_release_keeps_its_row()
+    {
+        using var ctx = new SqliteTestContext();
+        ChangelogContent.SeededRelease[] before =
+        [
+            new("2.1.00", new DateTime(2026, 9, 14), "Vorher",
+            [
+                new("2.1.00-alt", ChangelogKind.Neu, "Bleibt hier.", "Akten"),
+                new("2.1.01-funkplan", ChangelogKind.Neu, "Es gibt einen Funkplan.", "Ermittlung"),
+            ]),
+        ];
+        await SeedAsync(ctx, before, 1, "1.0.100");
+
+        string movedId;
+        await using (var first = ctx.NewContext())
+        {
+            movedId = (await first.Aenderungseintraege.SingleAsync(e => e.SeedKey == "2.1.01-funkplan")).Id;
+        }
+
+        // the line is re-cut into its own release: new version, new number, same line
+        ChangelogContent.SeededRelease[] after =
+        [
+            new("2.1.00", new DateTime(2026, 9, 14), "Vorher",
+                [new("2.1.00-alt", ChangelogKind.Neu, "Bleibt hier.", "Akten")]),
+            new("2.2.00", new DateTime(2026, 9, 22), "Nachher",
+            [
+                new("2.2.00-funkplan", ChangelogKind.Neu, "Es gibt einen Funkplan.", "Ermittlung",
+                    "2.1.01-funkplan"),
+                new("2.2.01-neu", ChangelogKind.Neu, "Nie zuvor ausgeliefert.", "Bedienung"),
+            ]),
+        ];
+        // the raised revision is what lets the update branch write the new order onto the moved row
+        await SeedAsync(ctx, after, 2, "1.0.200");
+
+        await using var check = ctx.NewContext();
+        var neu = await check.Aenderungsfassungen.SingleAsync(r => r.Version == "2.2.00");
+        var moved = await check.Aenderungseintraege.SingleAsync(e => e.SeedKey == "2.2.00-funkplan");
+
+        // the same row, moved - not a copy beside an orphan nobody sees any more
+        Assert.Equal(movedId, moved.Id);
+        Assert.Equal(neu.Id, moved.ReleaseId);
+        Assert.Equal(3, await check.Aenderungseintraege.IgnoreQueryFilters().CountAsync());
+        Assert.False(await check.Aenderungseintraege.IgnoreQueryFilters()
+            .AnyAsync(e => e.SeedKey == "2.1.01-funkplan"));
+
+        // and it arrives in front of the line that was never shipped before: a row that kept the number
+        // of its old release would sort above everything in the new one
+        var fresh = await check.Aenderungseintraege.SingleAsync(e => e.SeedKey == "2.2.01-neu");
+        Assert.True(moved.SortOrder < fresh.SortOrder,
+            $"Die umgezogene Zeile steht auf {moved.SortOrder}, die neue auf {fresh.SortOrder} — die alte Reihenfolge ist mitgewandert.");
+    }
+
+    [Fact]
     public async Task An_untouched_line_follows_a_new_revision()
     {
         using var ctx = new SqliteTestContext();
@@ -382,6 +435,19 @@ public sealed class ChangelogTests
         var keys = ChangelogContent.Releases.SelectMany(r => r.Entries).Select(e => e.Key).ToList();
 
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Every_shipped_legacy_key_names_a_line_that_is_gone()
+    {
+        var keys = ChangelogContent.Releases.SelectMany(r => r.Entries).Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        var legacy = ChangelogContent.Releases.SelectMany(r => r.Entries)
+            .Where(e => e.LegacyKey is not null).Select(e => e.LegacyKey!).ToList();
+
+        // a legacy key that is still a current key somewhere would make the seeder rename a live line onto
+        // another live line - the unique index then rejects the whole seed pass on the first start
+        Assert.DoesNotContain(legacy, keys.Contains);
+        Assert.Equal(legacy.Count, legacy.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

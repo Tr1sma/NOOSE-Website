@@ -86,7 +86,7 @@ public static class ChangelogSeeder
         var byKey = rows.ToDictionary(e => e.SeedKey!, StringComparer.Ordinal);
         var changed = false;
 
-        foreach (var release in releases.Where(r => r.LegacyVersion is not null))
+        foreach (var release in releases)
         {
             if (!releaseIdByVersion.TryGetValue(release.Version, out var releaseId))
             {
@@ -95,13 +95,8 @@ public static class ChangelogSeeder
 
             foreach (var shipped in release.Entries)
             {
-                var suffixStart = shipped.Key.IndexOf('-');
-                if (suffixStart < 0)
-                {
-                    continue;
-                }
-                var legacyKey = release.LegacyVersion + shipped.Key[suffixStart..];
-                if (byKey.ContainsKey(shipped.Key) || !byKey.TryGetValue(legacyKey, out var row))
+                if (byKey.ContainsKey(shipped.Key) || LegacyKeyOf(release, shipped) is not { } legacyKey
+                    || !byKey.TryGetValue(legacyKey, out var row))
                 {
                     continue;
                 }
@@ -118,6 +113,28 @@ public static class ChangelogSeeder
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    /// <summary>The key a shipped line was written under before, or null if it never had another one.</summary>
+    /// <remarks>
+    /// Two shapes, because two things can change. A whole release renumbered keeps its suffixes, so one
+    /// <c>LegacyVersion</c> rewrites every key in it. A single line moved into a different release cannot be
+    /// derived that way - its number changes with its new neighbours - so it names its old key itself.
+    /// Without the second shape the move would orphan the row and write a second one beside it.
+    /// </remarks>
+    private static string? LegacyKeyOf(
+        ChangelogContent.SeededRelease release, ChangelogContent.SeededEntry entry)
+    {
+        if (entry.LegacyKey is not null)
+        {
+            return entry.LegacyKey;
+        }
+        if (release.LegacyVersion is null)
+        {
+            return null;
+        }
+        var suffixStart = entry.Key.IndexOf('-');
+        return suffixStart < 0 ? null : release.LegacyVersion + entry.Key[suffixStart..];
     }
 
     private static async Task SeedReleasesAsync(

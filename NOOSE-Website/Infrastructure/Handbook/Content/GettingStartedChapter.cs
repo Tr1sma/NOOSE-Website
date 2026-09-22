@@ -167,5 +167,41 @@ internal static class GettingStartedChapter
                 irgendwohin; keines ändert etwas an einer Akte. Ein verrutschter Finger soll nichts
                 anrichten.</p>
                 """),
+
+            new Article("art-plus-knopf", "schnell-erfassen", "Schnell erfassen",
+                "Der Plus-Knopf in der Kopfzeile - und was er außer neuen Akten noch kann.",
+                """
+                <p>Oben in der Kopfzeile sitzt ein <strong>Plus-Knopf</strong>. Er öffnet die
+                <em>Schnellerfassung</em>, und die hat drei Reiter: <em>Neue Akte</em>, <em>Vermerk</em> und
+                <em>Aktivität</em>.</p>
+                <p>Unter <em>Neue Akte</em> wählst du den Aktentyp, tippst die Bezeichnung, fertig. Danach
+                stehst du auf der neuen Akte und füllst sie in Ruhe aus.</p>
+                <p>Unter <em>Vermerk</em> hängst du einen Kommentar an eine Akte, ohne sie zu öffnen. Erst
+                suchst du die Akte und wählst sie aus, dann tippst du den Text. Diese Reihenfolge ist so
+                gewollt: Jemanden mit dem <strong>@</strong> dazuziehen und ein Bild mit
+                <strong>Strg+V</strong> einfügen geht genau wie im Abschnitt <em>Kommentare</em> der Akte -
+                und dafür muss vorher feststehen, an welcher Akte du gerade schreibst.</p>
+                <p>Erreichbar sind darüber Personen, Fraktionen, Personengruppen, Parteien, Vorgänge,
+                Operationen, Taskforces, Aufgaben und Besprechungen. Was du nicht sehen darfst, findest du
+                auch hier nicht.</p>
+                <p>Eine Kante, über die du sonst stolperst: Hast du ein <strong>Bild eingefügt</strong>,
+                lässt sich die Akte nicht mehr wechseln. Das Bild hängt in dem Moment schon an ihr.</p>
+                <p>Unter <em>Aktivität</em> hältst du eine <strong>Dienst-Aktivität</strong> fest - einen
+                kurzen Eintrag über deinen eigenen Dienst: Titel, Art, ein paar Sätze. Die Zeit steht schon
+                auf jetzt, und du kannst eine Fraktion oder eine Personengruppe verknüpfen. Wer mehr Felder
+                braucht, eine Vorlage oder formatierten Text, nimmt den Link
+                <em>Ausführlich erfassen</em>.</p>
+                <p>Vermerk und Aktivität nehmen dich <strong>nie von der Seite</strong>, auf der du gerade
+                arbeitest. Genau dafür sind die beiden Reiter da.</p>
+                """,
+                Steps:
+                [
+                    new Step("Add", "Plus-Knopf öffnen",
+                        "Der Knopf sitzt oben in der Kopfzeile und ist von jeder Seite aus erreichbar."),
+                    new Step("Search", "Erst die Akte wählen",
+                        "Im Reiter „Vermerk“ suchst du die Akte und wählst sie aus, bevor du tippst."),
+                    new Step("Save", "Speichern und weiterarbeiten",
+                        "Ein Hinweis nennt die Akte, an der dein Eintrag steht - und du bleibst, wo du warst."),
+                ]),
         ]);
 }

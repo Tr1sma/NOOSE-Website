@@ -21,22 +21,30 @@ namespace NOOSE_Website.Infrastructure.Changelog;
 public static class ChangelogContent
 {
     /// <summary>Revision of the shipped text. Raise it after rewording an existing line.</summary>
-    public const int Revision = 1;
+    /// <remarks>
+    /// Raised to 2 when six lines moved into release 2.2.00. The move itself is carried by their
+    /// <c>LegacyKey</c>, but that pass rewrites only the key and the release - the sort order stays behind,
+    /// and a line that kept its number from a release of seventy would sit above every line of a release of
+    /// six. Only the revision opens the update branch that writes the order with them.
+    /// </remarks>
+    public const int Revision = 2;
 
     /// <param name="Key">Stable handle; renaming one orphans the old row and creates a second.</param>
-    public sealed record SeededEntry(string Key, ChangelogKind Kind, string Title, string? Area);
+    /// <param name="LegacyKey">The key this line shipped under before it moved into another release.</param>
+    public sealed record SeededEntry(
+        string Key, ChangelogKind Kind, string Title, string? Area, string? LegacyKey = null);
 
     public sealed record SeededRelease(
         string Version, DateTime Date, string Title, SeededEntry[] Entries, string? LegacyVersion = null);
 
-    private static SeededEntry Neu(string key, string title, string area)
-        => new(key, ChangelogKind.Neu, title, area);
+    private static SeededEntry Neu(string key, string title, string area, string? legacyKey = null)
+        => new(key, ChangelogKind.Neu, title, area, legacyKey);
 
-    private static SeededEntry Besser(string key, string title, string area)
-        => new(key, ChangelogKind.Verbessert, title, area);
+    private static SeededEntry Besser(string key, string title, string area, string? legacyKey = null)
+        => new(key, ChangelogKind.Verbessert, title, area, legacyKey);
 
-    private static SeededEntry Fix(string key, string title, string area)
-        => new(key, ChangelogKind.Behoben, title, area);
+    private static SeededEntry Fix(string key, string title, string area, string? legacyKey = null)
+        => new(key, ChangelogKind.Behoben, title, area, legacyKey);
 
     public static readonly IReadOnlyList<SeededRelease> Releases =
     [
@@ -332,24 +340,33 @@ public static class ChangelogContent
             Fix("2.1.64-kennzeichen-rang", "TRU und HRB lassen sich nur noch ab dem Dienstgrad Special Agent "
                 + "vergeben, wie es die Dienstverordnung vorsieht. Wird jemand darunter herabgestuft, "
                 + "verliert er die Zugehörigkeit automatisch.", "Personal"),
-            Neu("2.1.65-archiv", "Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen und "
+        ], "1.5"),
+
+        new("2.2.00", new DateTime(2026, 9, 22), "Archiv, Funkplan und kurze Wege",
+        [
+            Neu("2.2.00-archiv", "Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen und "
                 + "Taskforces lassen sich archivieren: sie verschwinden aus Listen und Suche, bleiben aber "
-                + "lesbar und sind mit einem Klick wieder da.", "Akten"),
-            Neu("2.1.66-score-verlauf", "Neben der Gefährdung steht jetzt eine kleine Verlaufskurve – in den "
+                + "lesbar und sind mit einem Klick wieder da.", "Akten", "2.1.65-archiv"),
+            Neu("2.2.01-score-verlauf", "Neben der Gefährdung steht jetzt eine kleine Verlaufskurve – in den "
                 + "Listen der Personen und Fraktionen, im Lagezentrum und bei den beobachteten Akten. Du "
-                + "siehst damit auf einen Blick, ob ein Wert steigt, fällt oder sich nicht bewegt.", "Akten"),
-            Neu("2.1.67-funkplan", "Es gibt einen Funkplan: wer auf welchem Kanal funkt – eigene Kanäle, "
+                + "siehst damit auf einen Blick, ob ein Wert steigt, fällt oder sich nicht bewegt.",
+                "Akten", "2.1.66-score-verlauf"),
+            Neu("2.2.02-funkplan", "Es gibt einen Funkplan: wer auf welchem Kanal funkt – eigene Kanäle, "
                 + "Partnerbehörden und die Frequenzen der Fraktionen an einer Stelle. Tippst du eine "
                 + "aufgeschnappte Frequenz in die Suche, bekommst du heraus, zu wem sie gehört; Komma und "
-                + "Punkt sind dabei gleichwertig.", "Ermittlung"),
-            Neu("2.1.68-abwesenheit", "Wer abgemeldet ist, steht jetzt mit dem Hinweis „abgemeldet bis …“ in "
+                + "Punkt sind dabei gleichwertig.", "Ermittlung", "2.1.67-funkplan"),
+            Neu("2.2.03-abwesenheit", "Wer abgemeldet ist, steht jetzt mit dem Hinweis „abgemeldet bis …“ in "
                 + "den Auswahllisten für Aufgaben, Termine und Wiedervorlagen – und zwar für den Tag, den du "
                 + "im Formular eingetragen hast. Wählen kannst du ihn trotzdem; du weißt es nur vorher.",
-                "Dienstbetrieb"),
-            Neu("2.1.69-kurzbefehle", "Es gibt Tastenkürzel: „?“ zeigt sie alle, „g“ und ein "
+                "Dienstbetrieb", "2.1.68-abwesenheit"),
+            Neu("2.2.04-kurzbefehle", "Es gibt Tastenkürzel: „?“ zeigt sie alle, „g“ und ein "
                 + "Buchstabe springen in einen Bereich, „n“ legt auf einer Liste einen neuen Eintrag an "
                 + "und „e“ öffnet die Akte zum Bearbeiten. Solange du in ein Feld schreibst, passiert "
-                + "nichts davon.", "Bedienung"),
-        ], "1.5"),
+                + "nichts davon.", "Bedienung", "2.1.69-kurzbefehle"),
+            Neu("2.2.05-schnellerfassung", "Der Plus-Knopf oben in der Kopfzeile kann mehr als neue Akten "
+                + "anlegen: Du hängst darüber auch einen Vermerk an eine gesuchte Akte oder hältst eine "
+                + "Dienst-Aktivität fest – und bleibst dabei auf der Seite, auf der du gerade arbeitest.",
+                "Bedienung", "2.1.70-schnellerfassung"),
+        ]),
     ];
 }
