@@ -19,6 +19,15 @@ public class AuditRedactionTests
     }
 
     [Fact]
+    public void A_personal_text_snippet_keeps_its_wording_out_of_the_protocol()
+    {
+        // the panel that offers them says "Sie gehören dir allein", and /nachweis is read by every internal
+        // agent - without this the sentence and the name the agent gave it would be house-wide reading
+        Assert.True(AuditRedaction.Hides(nameof(TextSnippet), nameof(TextSnippet.Text)));
+        Assert.True(AuditRedaction.Hides(nameof(TextSnippet), nameof(TextSnippet.Name)));
+    }
+
+    [Fact]
     public void Everything_else_stays_visible()
     {
         // a note on a file is supposed to show its before and after; CommentServiceTests holds that line

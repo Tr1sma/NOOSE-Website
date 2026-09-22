@@ -300,6 +300,9 @@ public static class SearchCatalog
             Icons.Material.Filled.Star, SearchHitShape.Personal,
             SearchTraits.Personal | SearchTraits.ContentChild | SearchTraits.Assistant,
             null, null),
+        new(nameof(TextSnippet), "Textbaustein", "Textbausteine", SearchGroup.Personal,
+            Icons.Material.Filled.TextSnippet, SearchHitShape.Personal,
+            SearchTraits.Personal | SearchTraits.Assistant, null),
 
         new(nameof(Bewerbung), "Bewerbung", "Bewerbungen", SearchGroup.Records,
             Icons.Material.Filled.HowToReg, SearchHitShape.Record,

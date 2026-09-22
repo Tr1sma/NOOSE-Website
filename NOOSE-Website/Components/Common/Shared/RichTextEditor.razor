@@ -4,6 +4,8 @@
 @using NOOSE_Website.Authorization
 @using NOOSE_Website.Models.Llm
 @inject IJSRuntime JS
+@inject ITextSnippetService Snippets
+@inject IPlaceholderService Placeholders
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 @inject ITextAssistService TextAssist
@@ -168,12 +170,13 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=19");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=20");
             _ref = DotNetObjectReference.Create(this);
             // the editor types a caption line; the stored row carries figure/figcaption
             Value = RichTextFigure.ToEditor(Value);
             await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight,
-                AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope, HtmlCleanup.Profile);
+                AiEnabled, MentionsEnabled, await LabelsAsync(Value), Compact, DraftScope, HtmlCleanup.Profile,
+                await SnippetsAsync());
             _ready = true;
             Analyze(Value);
         }
@@ -209,6 +212,50 @@ else if (_lastCost is { } cost)
     [JSInvokable]
     public Task<string> OnTocRequested(List<TocEntry> entries)
         => Task.FromResult(RichTextAnchors.BuildToc(entries ?? []));
+
+    /// <summary>Name and preview of the agent's own snippets; the menu filters on them client-side.</summary>
+    /// <remarks>
+    /// Handed over once at start, like the sanitizer lists: the slash menu is deliberately a client-side table,
+    /// and a round trip per keystroke would put the network on the typing path. Only picking one asks .NET.
+    /// </remarks>
+    private async Task<List<SnippetEntry>> SnippetsAsync()
+    {
+        if (Compact || _user is null)
+        {
+            return [];
+        }
+        try
+        {
+            var mine = await Snippets.GetMineAsync(_user);
+            return mine.Select(s => new SnippetEntry(s.Id, s.Name, SnippetTrigger.Preview(s.Text))).ToList();
+        }
+        catch (Exception)
+        {
+            // the editor is worth more than the convenience
+            return [];
+        }
+    }
+
+    /// <summary>The picked snippet, placeholders resolved and turned into paragraphs.</summary>
+    [JSInvokable]
+    public async Task<string> OnSnippetRequested(string id)
+    {
+        if (_user is null || string.IsNullOrWhiteSpace(id))
+        {
+            return string.Empty;
+        }
+        var snippet = (await Snippets.GetMineAsync(_user)).FirstOrDefault(s => s.Id == id);
+        if (snippet is null)
+        {
+            return string.Empty;
+        }
+        // no record context here: this editor never learns which record it sits on, so {{Name}} stays raw
+        var text = await Placeholders.ApplyPlainAsync(snippet.Text, null, null, _user);
+        return HtmlCleanup.FromPlain(text);
+    }
+
+    /// <param name="Vorschau">German on purpose: the JS side reads this field by name.</param>
+    public sealed record SnippetEntry(string Id, string Name, string Vorschau);
 
     /// <summary>Opens the picture format dialog after a click on an image; JS reports the current values.</summary>
     [JSInvokable]
@@ -321,7 +368,7 @@ else if (_lastCost is { } cost)
         }
         try
         {
-            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=19");
+            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=20");
             await module.InvokeVoidAsync("entwurfVerwerfenNachSchluessel", agentId + ":" + draftKey);
         }
         catch (JSDisconnectedException)

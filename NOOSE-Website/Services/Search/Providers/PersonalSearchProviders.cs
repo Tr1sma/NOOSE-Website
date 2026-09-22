@@ -185,3 +185,47 @@ public sealed class WatchlistEntrySearchProvider(IDbContextFactory<AppDbContext>
         return hits;
     }
 }
+
+/// <summary>The viewer's own text snippets, by name and by the phrase itself.</summary>
+/// <remarks>
+/// Unlike the saved search's stored criteria, the text IS a match field: it is what the agent typed, and it is the
+/// only way back to a snippet whose name they have forgotten. The preview is clipped after the query rather than
+/// inside it, so the row stays a plain projection no provider has to translate.
+/// </remarks>
+public sealed class TextSnippetSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
+{
+    /// <summary>Longest preview a result row carries.</summary>
+    private const int PreviewLength = 160;
+
+    public string Category => nameof(TextSnippet);
+
+    public PartnerAccess Partner => PartnerAccess.Never;
+
+    public bool AppliesTo(SearchViewer viewer) => viewer.MeId is { Length: > 0 };
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var meId = query.Scope.MeId;
+        // the owner is part of every query, never a check afterwards
+        var q = db.Textbausteine.Where(t => t.AgentId == meId);
+        if (query.HasText)
+        {
+            var s = query.Text;
+            q = q.Where(t => t.Name.Contains(s) || t.Text.Contains(s));
+        }
+        var rows = await q.OrderBy(t => t.Sorting).ThenBy(t => t.Name).Take(query.PerCategory)
+            .Select(t => new { t.Id, t.Name, t.Text })
+            .ToListAsync(cancellationToken);
+        // the snippets are managed as a section of the own profile, so that is where a hit leads
+        return rows
+            .Select(t => new SearchHit(nameof(TextSnippet), t.Id, t.Name, Preview(t.Text), string.Empty)
+            {
+                Href = "/profil",
+            })
+            .ToList();
+    }
+
+    private static string Preview(string text)
+        => text.Length <= PreviewLength ? text : text[..PreviewLength] + "…";
+}

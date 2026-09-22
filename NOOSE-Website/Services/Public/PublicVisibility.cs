@@ -234,6 +234,7 @@ public static class PublicVisibility
             ["CaseNumberCounter"] = "Zählerstand der Aktenzeichen; verrät die Zahl der Akten.",
             ["SavedSearch"] = "Gespeicherte Suche eines Agenten; nach außen nie.",
             ["GraphCanvasLayout"] = "Persönliche Graph-Ansicht; nach außen nie.",
+            ["TextSnippet"] = "Persönlicher Textbaustein eines Agenten; nach außen nie.",
             ["SearchPhoneticKey"] = SearchInternal,
             ["SearchStemToken"] = SearchInternal,
 

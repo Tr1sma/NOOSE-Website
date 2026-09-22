@@ -2,6 +2,8 @@
 @using System.Text.RegularExpressions
 @inject IMentionService MentionService
 @inject ITextImageService TextImages
+@inject ITextSnippetService Snippets
+@inject IPlaceholderService Placeholders
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -21,6 +23,12 @@
 {
     @* no ActiveIndex: MudTextField only offers a blanket preventDefault, so arrow keys stay with the caret *@
     <MentionPicker Candidates="_candidates" OnPick="InsertAsync" Class="mt-1" />
+}
+
+@if (_snippetOpen)
+{
+    @* the same list component: a second one would be these thirty lines again under another name *@
+    <MentionPicker Candidates="_snippetCandidates" OnPick="InsertSnippetAsync" Class="mt-1" />
 }
 
 @if (_references.Count > 0)
@@ -112,6 +120,10 @@
 
     private static readonly Regex ActiveQuery = new(@"@([^\s@{}]*)$", RegexOptions.Compiled);
 
+    private List<TextSnippet>? _snippets;
+    private List<MentionHit> _snippetCandidates = new();
+    private bool _snippetOpen;
+
     protected override async Task OnParametersSetAsync()
     {
         if (_text != (Text ?? string.Empty))
@@ -126,6 +138,7 @@
         _text = @new ?? string.Empty;
         await TextChanged.InvokeAsync(_text);
         await PickerRefreshAsync();
+        await SnippetRefreshAsync();
         await ReferencesRefreshAsync();
     }
 
@@ -154,6 +167,50 @@
         _pickerOpen = false;
         _candidates = new();
     }
+
+    private void CloseSnippets()
+    {
+        _snippetOpen = false;
+        _snippetCandidates = new();
+    }
+
+    private async Task SnippetRefreshAsync()
+    {
+        if (SnippetTrigger.Query(_text) is not { Length: > 0 } query || AuthStateTask is null)
+        {
+            CloseSnippets();
+            return;
+        }
+
+        // loaded once per field: a handful of rows that only ever change in the profile, and a query per
+        // keystroke would put the database on the typing path
+        _snippets ??= await Snippets.GetMineAsync((await AuthStateTask).User);
+        _snippetCandidates = _snippets
+            .Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(8)
+            .Select(s => new MentionHit(nameof(TextSnippet), s.Id, s.Name, SnippetTrigger.Preview(s.Text)))
+            .ToList();
+        _snippetOpen = _snippetCandidates.Count > 0;
+    }
+
+    private async Task InsertSnippetAsync(MentionHit hit)
+    {
+        var snippet = _snippets?.FirstOrDefault(s => s.Id == hit.Id);
+        if (snippet is null || AuthStateTask is null)
+        {
+            CloseSnippets();
+            return;
+        }
+
+        // placeholders resolve against the record this field already names for the picture paste
+        var body = await Placeholders.ApplyPlainAsync(
+            snippet.Text, ImageOwnerType, ImageOwnerId, (await AuthStateTask).User);
+        _text = SnippetTrigger.Insert(_text, body, MaxLength);
+        CloseSnippets();
+        await TextChanged.InvokeAsync(_text);
+        await ReferencesRefreshAsync();
+    }
+
 
     private async Task InsertAsync(MentionHit k)
     {
@@ -204,14 +261,16 @@
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Escape" && _pickerOpen)
+        if (e.Key == "Escape" && (_pickerOpen || _snippetOpen))
         {
             ClosePicker();
+            CloseSnippets();
             return;
         }
         if (e.Key == "Enter" && e.CtrlKey)
         {
             ClosePicker();
+            CloseSnippets();
             await OnSubmit.InvokeAsync();
         }
     }

@@ -419,4 +419,159 @@ public sealed class PlaceholderServiceTests
 
         Assert.Equal("[]", result);
     }
+
+    // ---- ApplyPlainAsync: the plain-text path ------------------------------
+
+    private const string PlainTokens =
+        "{{Name}}|{{Aktenzeichen}}|{{Datum}}|{{Uhrzeit}}|{{Agent}}|{{Dienstgrad}}";
+
+    [Fact]
+    public async Task ApplyPlainAsync_KeepsUmlautsAndMarkupCharacters_WhereTheHtmlPathEncodesThem()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Müller & <Söhne>"));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var plain = await svc.ApplyPlainAsync("{{Name}}", nameof(Person), "p1", Leader());
+        var html = await svc.ApplyAsync("{{Name}}", nameof(Person), "p1", Leader());
+
+        // a comment field shows what it is handed, so an encoded umlaut would arrive as the entity itself
+        Assert.Equal("Müller & <Söhne>", plain);
+        // the same value on the HTML path, encoded — the two paths must not be interchangeable
+        Assert.NotEqual(plain, html);
+        Assert.DoesNotContain("ü", html);
+        Assert.DoesNotContain("<S", html);
+        Assert.Contains("&amp;", html);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_NoRecordContext_ReplacesActorTokens_ButLeavesRecordTokensRaw()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+        var actor = ClaimsPrincipalBuilder.Agent("me").WithRank(Rank.Director).WithCodename("Ghost").Build();
+
+        var plain = await svc.ApplyPlainAsync(PlainTokens, null, null, actor);
+        var html = await svc.ApplyAsync(PlainTokens, null, null, actor);
+
+        // nothing answered for the record tokens, so they stay standing: the agent sees that something is missing
+        Assert.StartsWith("{{Name}}|{{Aktenzeichen}}|", plain);
+        Assert.Contains(DateTime.Now.ToString("dd.MM.yyyy"), plain);
+        Assert.EndsWith("|Ghost|Director", plain);
+        // the HTML path blanks them instead, which reads as "nothing belonged here"
+        Assert.StartsWith("||", html);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_EntityTypeWithoutId_LeavesRecordTokensRaw()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Nicht Aufgeloest"));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        // the record branch is skipped entirely, which is still "no record answered"
+        var result = await svc.ApplyPlainAsync("[{{Name}}]", nameof(Person), null, Leader());
+
+        Assert.Equal("[{{Name}}]", result);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_VisibleRecord_ResolvesNameAndCaseNumber()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Tony Prince", p => p.CaseNumber = "NOOSE-P-2026-0042"));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.ApplyPlainAsync("{{Name}} :: {{Aktenzeichen}}", nameof(Person), "p1", Regular());
+
+        Assert.Equal("Tony Prince :: NOOSE-P-2026-0042", result);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_ClassifiedPerson_NonLeadership_LeavesTokensRaw_AndRevealsNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Geheimer Name", p =>
+            {
+                p.IsClassified = true;
+                p.CaseNumber = "NOOSE-P-2026-0099";
+            }));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.ApplyPlainAsync("[{{Name}}] [{{Aktenzeichen}}]", nameof(Person), "p1", Regular());
+
+        // not visible is handled like no record at all, and nothing about it may reach the field
+        Assert.Equal("[{{Name}}] [{{Aktenzeichen}}]", result);
+        Assert.DoesNotContain("Geheimer Name", result);
+        Assert.DoesNotContain("NOOSE-P-2026-0099", result);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_ClassifiedPerson_Leadership_ResolvesName()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Geheimer Name", p => p.IsClassified = true));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.ApplyPlainAsync("[{{Name}}]", nameof(Person), "p1", Leader());
+
+        Assert.Equal("[Geheimer Name]", result);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_CarrierTypeItCannotResolve_LeavesTheTokensRaw()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        // a comment hangs on plenty of types this service never learned - a meeting, an appointment, an
+        // evidence item. Visibility answers "visible" for them, so only the resolver can say "I do not know
+        // this one"; blanking the tokens there would be the silent hole the plain path exists to avoid.
+        var result = await svc.ApplyPlainAsync("zu {{Name}} ({{Aktenzeichen}})", "RadioChannel", "irgendeine-id", Leader());
+
+        Assert.Equal("zu {{Name}} ({{Aktenzeichen}})", result);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_CarrierTypeItCannotResolve_StillBlanksTheTokens()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        // the HTML path is unchanged by that: a template renders what it can and leaves no token behind
+        var result = await svc.ApplyAsync("zu {{Name}} ({{Aktenzeichen}})", "RadioChannel", "irgendeine-id", Leader());
+
+        Assert.Equal("zu  ()", result);
+    }
+
+    [Fact]
+    public async Task ApplyPlainAsync_UnknownToken_IsLeftUnchanged()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = NewService(ctx);
+
+        var result = await svc.ApplyPlainAsync("a {{Foobar}} b", null, null, Leader());
+
+        Assert.Equal("a {{Foobar}} b", result);
+    }
 }

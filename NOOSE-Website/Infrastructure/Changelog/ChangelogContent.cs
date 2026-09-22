@@ -367,6 +367,9 @@ public static class ChangelogContent
                 + "anlegen: Du hängst darüber auch einen Vermerk an eine gesuchte Akte oder hältst eine "
                 + "Dienst-Aktivität fest – und bleibst dabei auf der Seite, auf der du gerade arbeitest.",
                 "Bedienung", "2.1.70-schnellerfassung"),
+            Neu("2.2.06-textbausteine", "Du kannst dir eigene Textbausteine anlegen: Sätze, die du immer "
+                + "wieder schreibst, holst du mit einem Schrägstrich in jedes Textfeld. Platzhalter wie "
+                + "Name, Aktenzeichen und Datum füllen sich dabei von selbst.", "Bedienung"),
         ]),
     ];
 }

@@ -1,3 +1,4 @@
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Public;
 
 namespace NOOSE_Website.Infrastructure.Audit;
@@ -21,6 +22,11 @@ public static class AuditRedaction
         $"{nameof(TicketNachricht)}.{nameof(TicketNachricht.Text)}",
         // the closing remark names what the desk thought of a concern, and /nachweis is read house-wide
         $"{nameof(Ticket)}.{nameof(Ticket.ClosingNote)}",
+        // a snippet is one agent's private phrasing, and the panel that offers it says so in as many words:
+        // "Sie gehören dir allein." Without this the protocol would hand the sentence - and the name the
+        // agent gave it - to every internal reader, which is the opposite of the promise.
+        $"{nameof(TextSnippet)}.{nameof(TextSnippet.Text)}",
+        $"{nameof(TextSnippet)}.{nameof(TextSnippet.Name)}",
         // a file name the citizen chose is their content, exactly like the message it hangs on
         $"{nameof(TicketNachricht)}.{nameof(TicketNachricht.AttachmentOriginalName)}",
     };

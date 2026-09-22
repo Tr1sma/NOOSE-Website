@@ -302,6 +302,7 @@ public static class NooseiRecordTypes
             ["NooseiConversation"] = "eigene KI-Chats; sie im Chat zu lesen wäre zirkulär",
             ["SavedSearch"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
             ["GraphCanvasLayout"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
+            ["TextSnippet"] = "private Schreibhilfe eines Agenten, kein Ermittlungsinhalt",
             ["LlmRequestLog"] = "NOOSEI-Kosten- und Betriebsmeta hinter der KI-Eigner-Achse",
             // searchable, but not openable: the hit already carries everything the row holds
             ["RadioChannel"] = "die Trefferzeile ist schon der ganze Kanal — Frequenz und Bezeichnung; "

@@ -81,6 +81,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     public DbSet<SavedSearch> SavedSearch => Set<SavedSearch>();
     public DbSet<GraphCanvasLayout> GraphCanvasLayouts => Set<GraphCanvasLayout>();
+    public DbSet<TextSnippet> Textbausteine => Set<TextSnippet>();
 
     // factions
     public DbSet<Faction> Factions => Set<Faction>();
@@ -734,6 +735,17 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(g => g.Name).HasMaxLength(120).IsRequired();
             b.HasOne<Agent>().WithMany().HasForeignKey(g => g.AgentId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(g => g.AgentId);
+        });
+
+        modelBuilder.Entity<TextSnippet>(b =>
+        {
+            b.Property(s => s.AgentId).HasMaxLength(64);
+            b.Property(s => s.Name).HasMaxLength(80).IsRequired();
+            b.Property(s => s.Text).HasMaxLength(4000).IsRequired();
+            // cascade, like the saved search: a deleted account takes its own conveniences with it
+            b.HasOne<Agent>().WithMany().HasForeignKey(s => s.AgentId).OnDelete(DeleteBehavior.Cascade);
+            // one name per agent; the picker shows names, and two alike would be a coin toss
+            b.HasIndex(s => new { s.AgentId, s.Name }).IsUnique();
         });
 
         modelBuilder.Entity<Faction>(b =>

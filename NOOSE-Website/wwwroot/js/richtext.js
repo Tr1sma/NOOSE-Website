@@ -848,12 +848,20 @@ const BEFEHLE = [
     { id: 'toc', name: 'Inhaltsverzeichnis', beschreibung: 'Liste der Überschriften', aktion: 'toc', suche: ['inhalt', 'verzeichnis', 'toc'] },
 ];
 
-function haengeBefehlsMenueAn(element, editor) {
+function haengeBefehlsMenueAn(element, editor, dotnetRef, bausteine) {
     const huelle = element.parentElement;
     if (!huelle) {
         return null;
     }
-    const zustand = { tot: false, offen: false, index: 0, treffer: [], start: 0, laenge: 0, masse: null, tasten: null };
+    const zustand = { tot: false, offen: false, index: 0, treffer: [], start: 0, laenge: 0, masse: null, tasten: null, dotnetRef, laeuft: false };
+    // the agent's own phrases join the static block formats: same menu, same filter, one extra group
+    const alle = BEFEHLE.concat((bausteine || []).map((b) => ({
+        id: 'baustein:' + b.id,
+        name: b.name,
+        beschreibung: b.vorschau || 'Eigener Textbaustein',
+        baustein: b.id,
+        suche: [(b.name || '').toLowerCase()],
+    })));
     element.__nooseBefehle = zustand;
 
     const panel = document.createElement('div');
@@ -902,6 +910,27 @@ function haengeBefehlsMenueAn(element, editor) {
         const start = zustand.start;
         const laenge = zustand.laenge;
         schliessen();
+        if (befehl.baustein) {
+            // .NET owns the text: the placeholders resolve there, and only there. The typed "/wort" stays
+            // until the answer is in - a failed round trip would otherwise eat the line and insert nothing.
+            if (zustand.dotnetRef && !zustand.laeuft) {
+                zustand.laeuft = true;
+                zustand.dotnetRef.invokeMethodAsync('OnSnippetRequested', befehl.baustein)
+                    .then((html) => {
+                        if (!html) {
+                            return;
+                        }
+                        if (laenge > 0) {
+                            editor.deleteText(start, laenge, 'user');
+                        }
+                        editor.setSelection(start, 0, 'silent');
+                        fuegeHtmlEin(element, html);
+                    })
+                    .catch(() => { /* ignore */ })
+                    .finally(() => { zustand.laeuft = false; });
+            }
+            return;
+        }
         if (laenge > 0) {
             editor.deleteText(start, laenge, 'user');
         }
@@ -957,7 +986,7 @@ function haengeBefehlsMenueAn(element, editor) {
             return;
         }
         const suche = treffer[1].toLowerCase();
-        const gefiltert = BEFEHLE.filter((befehl) => befehl.suche.some((wort) => wort.startsWith(suche)));
+        const gefiltert = alle.filter((befehl) => befehl.suche.some((wort) => wort.startsWith(suche)));
         if (gefiltert.length === 0) {
             schliessen();
             return;
@@ -1784,8 +1813,8 @@ function fordereInhaltsverzeichnisAn(element) {
         });
 }
 
-// inserts the list built by .NET at the caret
-export function setInhaltsverzeichnis(element, html) {
+// inserts markup built by .NET at the caret; the table of contents and a text snippet both land here
+function fuegeHtmlEin(element, html) {
     const editor = element && element.__nooseQuill;
     if (!editor || !html) {
         return;
@@ -1796,6 +1825,11 @@ export function setInhaltsverzeichnis(element, html) {
     editor.updateContents(new Delta().retain(bereich.index).concat(eingefuegt), 'user');
     editor.setSelection(bereich.index + eingefuegt.length(), 0, 'silent');
     editor.focus();
+}
+
+// inserts the list built by .NET at the caret
+export function setInhaltsverzeichnis(element, html) {
+    fuegeHtmlEin(element, html);
 }
 
 // the line after the given one, or null at the document end
@@ -2026,7 +2060,7 @@ function haengeAuswahlBlaseAn(element, editor) {
     return zustand;
 }
 
-export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel, profil) {
+export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen, kompakt, entwurfSchluessel, profil, bausteine) {
     await ladeQuill();
     if (!element) {
         return;
@@ -2172,7 +2206,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     element.__nooseQuill = editor;
     if (!kompakt) {
         haengeBlockKuerzelAn(editor);
-        haengeBefehlsMenueAn(element, editor);
+        haengeBefehlsMenueAn(element, editor, dotnetRef, bausteine);
         haengeSuchenAn(element);
         haengeVollbildAn(element);
         haengeEntwurfAn(element, editor, dotnetRef, entwurfSchluessel);
@@ -2322,6 +2356,7 @@ export function destroyRichText(element) {
     if (befehle) {
         befehle.tot = true;
         befehle.offen = false;
+        befehle.dotnetRef = null;
         if (befehle.tasten) {
             element.removeEventListener('keydown', befehle.tasten, true);
         }

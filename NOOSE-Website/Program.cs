@@ -290,6 +290,7 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddSearchProviders();
 builder.Services.AddHostedService<SearchIndexBackfillWorker>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
+builder.Services.AddScoped<ITextSnippetService, TextSnippetService>();
 builder.Services.AddScoped<IFactionService, FactionService>();
 builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();
 builder.Services.AddScoped<IPartyService, PartyService>();

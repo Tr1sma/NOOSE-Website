@@ -1,0 +1,64 @@
+@* Create or edit one personal text snippet; hands the input back to the panel. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Immediate="true"
+                          AutoFocus="true" MaxLength="80"
+                          HelperText="Danach suchst du ihn: Schrägstrich und die ersten Buchstaben." />
+            <MudTextField @bind-Value="_text" Label="Text" Variant="Variant.Outlined" Lines="8"
+                          Immediate="true" MaxLength="4000"
+                          HelperText="Platzhalter wie {{Name}} oder {{Datum}} bleiben hier stehen und werden erst beim Einfügen ersetzt." />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_text))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public int Sorting { get; set; }
+
+    private string _name = string.Empty;
+    private string _text = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _name = Name ?? string.Empty;
+        _text = Text ?? string.Empty;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(new TextSnippetInput
+        {
+            Name = _name,
+            Text = _text,
+            Sorting = Sorting,
+        }));
+
+    /// <summary>Opens the dialog and returns what was entered, or null when it was cancelled.</summary>
+    public static async Task<TextSnippetInput?> ShowAsync(IDialogService dialog, TextSnippet? existing)
+    {
+        var parameters = new DialogParameters<TextSnippetDialog>
+        {
+            { x => x.Name, existing?.Name },
+            { x => x.Text, existing?.Text },
+            { x => x.Sorting, existing?.Sorting ?? 0 },
+        };
+        var reference = await dialog.ShowAsync<TextSnippetDialog>(
+            existing is null ? "Neuer Textbaustein" : "Textbaustein bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: TextSnippetInput input } ? input : null;
+    }
+}

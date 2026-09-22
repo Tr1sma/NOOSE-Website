@@ -33,6 +33,8 @@ public static class MentionVisuals
         nameof(Document) => Icons.Material.Filled.Article,
         nameof(Source) => Icons.Material.Filled.AttachFile,
         nameof(TextImage) => Icons.Material.Filled.Image,
+        // not a mention at all: the snippet list borrows this picker rather than cloning it
+        nameof(TextSnippet) => Icons.Material.Filled.ShortText,
         nameof(Agent) => Icons.Material.Filled.Person,
         _ => Icons.Material.Filled.Link,
     };
@@ -53,6 +55,7 @@ public static class MentionVisuals
         nameof(Document) => "Dokument",
         nameof(Source) => "Quelle",
         nameof(Agent) => "Agent",
+        nameof(TextSnippet) => "Baustein",
         _ => "",
     };
 }

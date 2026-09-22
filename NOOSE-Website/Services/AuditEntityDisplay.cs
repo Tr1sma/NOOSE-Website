@@ -35,6 +35,7 @@ public static class AuditEntityDisplay
         "MeetingSignOff" => "Abmeldung (Besprechung)",
         "Absence" => "Abmeldung",
         "Feedback" => "Feedback-Meldung",
+        "TextSnippet" => "Textbaustein",
         "KassenBuchung" => "Kassenbuchung",
         "FinancingRequest" => "Finanzierungsantrag",
         "FinancingRequestLine" => "Finanzierungsposition (Antrag)",
@@ -96,6 +97,8 @@ public static class AuditEntityDisplay
         "Absence" => "/abmeldungen/uebersicht",
         // feedback entries have no detail page either; point at the feedback hub
         "Feedback" => "/feedback",
+        // a snippet has no page of its own; it lives in a section of the owner's profile
+        "TextSnippet" => "/profil",
         "KassenBuchung" => $"/kasse/buchung/{id}",
         "FinancingRequest" => $"/finanzierungen/{id}",
         // catalog positions and config have no own page; point at the section that edits them

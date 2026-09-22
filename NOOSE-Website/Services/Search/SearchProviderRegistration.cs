@@ -69,6 +69,7 @@ public static class SearchProviderRegistration
         services.AddScoped<ISearchProvider, SavedSearchSearchProvider>();
         services.AddScoped<ISearchProvider, GraphCanvasLayoutSearchProvider>();
         services.AddScoped<ISearchProvider, WatchlistEntrySearchProvider>();
+        services.AddScoped<ISearchProvider, TextSnippetSearchProvider>();
 
         // Verwaltung, Bewerbung und Protokolle
         services.AddScoped<ISearchProvider, RequestSearchProvider>();

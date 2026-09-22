@@ -203,5 +203,42 @@ internal static class GettingStartedChapter
                     new Step("Save", "Speichern und weiterarbeiten",
                         "Ein Hinweis nennt die Akte, an der dein Eintrag steht - und du bleibst, wo du warst."),
                 ]),
+
+            new Article("art-textbausteine", "textbausteine", "Textbausteine",
+                "Sätze, die du ständig neu tippst - einmal hinterlegen, mit einem Schrägstrich abrufen.",
+                """
+                <p>Ein <strong>Textbaustein</strong> ist ein Stück Text, das du immer wieder schreibst -
+                der Kopf eines Protokolls, die Formel „Observation ohne Feststellung“, der Satz, mit
+                dem du einen Kontakt bestätigst. Du hinterlegst ihn einmal und holst ihn danach mit zwei
+                Handgriffen.</p>
+                <p>Angelegt werden Bausteine unter <em>Mein Profil</em> im Abschnitt
+                <em>Textbausteine</em>. Sie gehören <strong>dir allein</strong>: niemand sonst sieht sie,
+                niemand sonst kann sie ändern.</p>
+                <p>Abgerufen wird ein Baustein mit einem <strong>Schrägstrich</strong>, gefolgt von den
+                ersten Buchstaben seines Namens. In einem gewöhnlichen Feld - Vermerk an der Akte,
+                Taskforce-Chat, Dok, Observation - tippst du ihn am Wortanfang ans Ende dessen, was schon
+                dasteht. Im <strong>Text-Editor</strong> der Dokumente und Berichte stehen die Bausteine in
+                demselben Menü wie Überschriften und Listen: Schrägstrich am <strong>Anfang einer Zeile</strong>.</p>
+                <p>Ein Schrägstrich <strong>mitten in einem Wort</strong> tut nichts. „Vinewood/Ost“
+                bleibt also einfach stehen - sonst klappte dir die Liste beim Tippen dauernd auf.</p>
+                <p>In einem Baustein darfst du <strong>Platzhalter</strong> benutzen.
+                <em>{{Name}}</em> und <em>{{Aktenzeichen}}</em> beziehen sich auf die Akte, an der du gerade
+                schreibst; <em>{{Datum}}</em>, <em>{{Uhrzeit}}</em>, <em>{{Agent}}</em> und
+                <em>{{Dienstgrad}}</em> auf dich und den Moment. Schreibst du in einem Feld ohne Akte, bleibt
+                <em>{{Name}}</em> sichtbar stehen - dann gehört dort etwas hin, das die Seite nicht wissen
+                kann. Im Text-Editor ist das immer so: er weiß nicht, an welcher Akte er hängt, also bleiben
+                die beiden Akten-Platzhalter dort stehen und du setzt sie selbst ein.</p>
+                <p>Verwechsle das nicht mit den <em>Vorlagen</em> unter Einstellungen: die pflegt die
+                Führung für alle, Textbausteine pflegst du für dich.</p>
+                """,
+                Steps:
+                [
+                    new Step("ShortText", "Baustein anlegen",
+                        "Unter „Mein Profil“ im Abschnitt „Textbausteine“ einen Namen und den Text eintragen."),
+                    new Step("Keyboard", "Mit Schrägstrich holen",
+                        "„/“ am Wortanfang tippen und weiterschreiben - die Liste grenzt sich mit jedem Buchstaben ein."),
+                    new Step("AutoFixHigh", "Platzhalter füllen sich",
+                        "Name und Aktenzeichen kommen aus der Akte, Datum, Uhrzeit und Dienstgrad von dir."),
+                ]),
         ]);
 }
