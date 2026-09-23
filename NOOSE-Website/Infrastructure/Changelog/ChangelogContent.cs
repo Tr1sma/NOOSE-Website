@@ -27,7 +27,7 @@ public static class ChangelogContent
     /// and a line that kept its number from a release of seventy would sit above every line of a release of
     /// six. Only the revision opens the update branch that writes the order with them.
     /// </remarks>
-    public const int Revision = 2;
+    public const int Revision = 3;
 
     /// <param name="Key">Stable handle; renaming one orphans the old row and creates a second.</param>
     /// <param name="LegacyKey">The key this line shipped under before it moved into another release.</param>
@@ -261,7 +261,7 @@ public static class ChangelogContent
             Fix("2.1.24-entfuehrung-auswahl", "Die Auswahl „Kompromittierte Akte\" bietet nur noch echte Akten "
                 + "an – Handbuch-Artikel und Glossarbegriffe standen fälschlich mit drin.", "Akten"),
             Fix("2.1.25-erste-schritte", "Der Punkt „Menü angepasst\" in den ersten Schritten verweist jetzt "
-                + "auf das Zahnrad im Menü, statt ins Leere zu führen.", "Bedienung"),
+                + "auf den Knopf „Navigation anpassen\" oben im Menü, statt ins Leere zu führen.", "Bedienung"),
             Fix("2.1.26-rechtstexte", "Geteilte Links auf Datenschutz und Nutzungsbedingungen zeigen jetzt eine "
                 + "Vorschaukarte statt einer nackten Adresse.", "Öffentlich"),
             Fix("2.1.27-glossar-wortmitte", "Eine Worterklärung erscheint nicht mehr mitten in einem längeren "

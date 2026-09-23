@@ -73,8 +73,8 @@ internal static class GettingStartedChapter
             new Article("art-menue-anpassen", "menue-anpassen", "Das Menü anpassen",
                 "Favoriten setzen, Einträge ausblenden, Startseite wählen.",
                 """
-                <p>Du musst nicht mit dem Menü leben, wie es ist. Über das Zahnrad in der Menüleiste kannst du
-                <strong>Einträge ausblenden</strong>, die du nie brauchst, und die Reihenfolge ändern.</p>
+                <p>Du musst nicht mit dem Menü leben, wie es ist. Über den Knopf <em>Navigation anpassen</em>
+                oben im Menü (drei Schieberegler) kannst du <strong>Einträge ausblenden</strong>, die du nie brauchst, und die Reihenfolge ändern.</p>
                 <p>Seiten und einzelne Akten lassen sich als <strong>Favorit</strong> anheften; sie stehen
                 danach ganz oben. Und du kannst festlegen, welche Seite nach dem Anmelden zuerst erscheint -
                 nicht jeder fängt sinnvollerweise im Lagezentrum an.</p>
@@ -82,7 +82,7 @@ internal static class GettingStartedChapter
                 Steps:
                 [
                     new Step("Tune", "Menü anpassen öffnen",
-                        "Das Zahnrad unten in der Menüleiste öffnet die Einstellungen der Navigation."),
+                        "Der Knopf „Navigation anpassen“ oben im Menü (drei Schieberegler) öffnet die Einstellungen der Navigation."),
                     new Step("VisibilityOff", "Unnötiges ausblenden",
                         "Ausgeblendete Einträge sind nicht gesperrt - du erreichst sie weiter über die Suche."),
                     new Step("PushPin", "Favoriten anheften",

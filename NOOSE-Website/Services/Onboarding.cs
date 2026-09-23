@@ -57,7 +57,7 @@ public static class Onboarding
                 "Such dir eine Personen- oder Fraktionsakte und sieh dir ihre Abschnitte an.",
                 "FolderShared", "/personen", done.Contains(StepRecord)),
             new("menue", "Menü angepasst",
-                "Im Menü links unten auf das Zahnrad: blende aus, was du nie brauchst, und hefte an, was du täglich öffnest.",
+                "Oben im Menü auf den Knopf „Navigation anpassen“ (drei Schieberegler): blende aus, was du nie brauchst, und hefte an, was du täglich öffnest.",
                 "Tune", null, MenuTouched(prefs)),
         ];
     }
