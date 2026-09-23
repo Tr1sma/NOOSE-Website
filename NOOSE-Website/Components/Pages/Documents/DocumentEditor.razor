@@ -213,6 +213,8 @@ else
             {
                 var document = await DocumentService.CreateAsync(input, _user);
                 id = document.Id;
+                // stored from here on: a failing source link below must not leave the text offered as unsaved
+                await _editor.MarkSavedAsync();
 
                 // Attach as a source when created from a record. Taskforce docs stay internal via
                 // Document.OwnerTaskforceId, so the source row itself need not be marked internal-only

@@ -1,4 +1,8 @@
 // quill interop
+import {
+    ladeEntwurfsDb, entwurfSchreiben, entwurfLesen, entwurfLoeschen, entwurfAufraeumen, istAbgelaufen,
+    vormerken, abmelden, ENTWURF_VERZOEGERUNG,
+} from './entwurf.js?v=1';
 
 let quillLadenPromise = null;
 let tabellenModulPromise = null; // table handler
@@ -1284,118 +1288,18 @@ function haengeSuchenAn(element) {
 
 // ---- draft recovery (IndexedDB) ----
 // Unsaved text is kept in the browser so a broken circuit or an accidental navigation cannot swallow a long
-// report. IndexedDB, not localStorage: base64 images would blow the 5 MB string quota on the first screenshot.
-const ENTWURF_DB = 'noose-rte';
-const ENTWURF_STORE = 'entwuerfe';
-// Seven, not thirty: the content is the full text in the clear, classified documents and personnel notes
-// included, and it sits in a browser profile that outlives the session. The sweep only runs when an editor is
-// opened, so the logout form wipes the whole store outright (window.nooseEntwuerfeLoeschen in App.razor).
-const ENTWURF_ALTER_TAGE = 7;
-const ENTWURF_VERZOEGERUNG = 800;
-
-let entwurfDbPromise = null;
-let entwurfAufgeraeumt = false;
-
-function ladeEntwurfsDb() {
-    if (entwurfDbPromise) {
-        return entwurfDbPromise;
-    }
-    entwurfDbPromise = new Promise((resolve) => {
-        if (!window.indexedDB) {
-            resolve(null);
-            return;
-        }
-        try {
-            const anfrage = window.indexedDB.open(ENTWURF_DB, 1);
-            anfrage.onupgradeneeded = () => {
-                const db = anfrage.result;
-                if (!db.objectStoreNames.contains(ENTWURF_STORE)) {
-                    db.createObjectStore(ENTWURF_STORE, { keyPath: 'schluessel' });
-                }
-            };
-            anfrage.onsuccess = () => resolve(anfrage.result);
-            anfrage.onerror = () => resolve(null);
-        } catch (e) {
-            // private mode and hardened browsers may throw right here
-            resolve(null);
-        }
-    });
-    return entwurfDbPromise;
-}
-
-function entwurfSchreiben(db, eintrag) {
-    return new Promise((resolve) => {
-        try {
-            const tx = db.transaction(ENTWURF_STORE, 'readwrite');
-            tx.objectStore(ENTWURF_STORE).put(eintrag);
-            tx.oncomplete = () => resolve(true);
-            tx.onerror = () => resolve(false);
-        } catch (e) {
-            resolve(false);
-        }
-    });
-}
-
-function entwurfLesen(db, schluessel) {
-    return new Promise((resolve) => {
-        try {
-            const anfrage = db.transaction(ENTWURF_STORE, 'readonly').objectStore(ENTWURF_STORE).get(schluessel);
-            anfrage.onsuccess = () => resolve(anfrage.result || null);
-            anfrage.onerror = () => resolve(null);
-        } catch (e) {
-            resolve(null);
-        }
-    });
-}
-
-function entwurfLoeschen(db, schluessel) {
-    return new Promise((resolve) => {
-        try {
-            const tx = db.transaction(ENTWURF_STORE, 'readwrite');
-            tx.objectStore(ENTWURF_STORE).delete(schluessel);
-            tx.oncomplete = () => resolve(true);
-            tx.onerror = () => resolve(false);
-        } catch (e) {
-            resolve(false);
-        }
-    });
-}
-
-// stale drafts of any field are dropped once per session, so nothing prehistoric resurfaces
-function entwurfAufraeumen(db) {
-    if (entwurfAufgeraeumt) {
-        return;
-    }
-    entwurfAufgeraeumt = true;
-    try {
-        const grenze = Date.now() - ENTWURF_ALTER_TAGE * 86400000;
-        const tx = db.transaction(ENTWURF_STORE, 'readwrite');
-        const speicher = tx.objectStore(ENTWURF_STORE);
-        const lauf = speicher.openCursor();
-        lauf.onsuccess = () => {
-            const cursor = lauf.result;
-            if (!cursor) {
-                return;
-            }
-            if (!cursor.value || cursor.value.zeit < grenze) {
-                cursor.delete();
-            }
-            cursor.continue();
-        };
-    } catch (e) {
-        /* best effort */
-    }
-}
+// report. The store, the sweep and the logout wipe live in entwurf.js, shared with the plain text fields.
 
 // key = agent + scope, supplied by the component; the plain text never lands in the key
 function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
     if (!schluessel) {
         return null;
     }
-    const zustand = { schluessel, basis: leseHtml(editor), schreiben: null, tot: false };
+    // angeboten: the html on offer while the banner is up; the first keystroke answers it
+    const zustand = { schluessel, basis: leseHtml(editor), schreiben: null, tot: false, angeboten: null };
     element.__nooseEntwurf = zustand;
 
-    ladeEntwurfsDb().then(async (db) => {
+    zustand.geprueft = ladeEntwurfsDb().then(async (db) => {
         if (!db || zustand.tot) {
             return;
         }
@@ -1404,26 +1308,37 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
         if (!eintrag || zustand.tot) {
             return;
         }
-        if (Date.now() - eintrag.zeit > ENTWURF_ALTER_TAGE * 86400000) {
+        if (istAbgelaufen(eintrag)) {
             entwurfLoeschen(db, schluessel);
             return;
         }
         const aktuell = leseHtml(editor);
-        if (eintrag.html === aktuell) {
+        // the text on screen or the saved state itself (a drop that never arrived): nothing to recover
+        if (eintrag.html === aktuell || eintrag.html === zustand.basis) {
             entwurfLoeschen(db, schluessel);
             return;
         }
-        // the user already typed on: their text wins, the stored draft must not pop up over it
-        if (leseHtml(editor) !== zustand.basis) {
-            return;
+        // Offered even when the first keystrokes came before this read: holding it back let the pending write
+        // overwrite a draft nobody had seen. That write waits for the answer instead.
+        if (zustand.schreiben) {
+            clearTimeout(zustand.schreiben);
+            zustand.schreiben = 0;
         }
+        abmelden(zustand);
+        zustand.angeboten = eintrag.html;
         dotnetRef.invokeMethodAsync('OnDraftFound', eintrag.zeit).catch(() => { });
-    });
+    }).catch(() => { });
 
     // Named, and hung on the state, so teardown can still flush a write that is only waiting out its debounce.
     // Cancelling it outright lost exactly the last sentence somebody typed before clicking away - the one case
     // the draft exists for. Deliberately without a "tot" check: by then the editor is already gone.
     zustand.jetztSchreiben = async () => {
+        // after the check: a write that ran first would overwrite the stored draft before anyone saw it
+        await zustand.geprueft;
+        if (zustand.angeboten !== null) {
+            // the offer pauses writing; the answer to it writes again
+            return;
+        }
         const db = await ladeEntwurfsDb();
         if (!db) {
             return;
@@ -1440,15 +1355,38 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
         dotnetRef.invokeMethodAsync('OnDraftSaved', eintrag.zeit).catch(() => { });
     };
 
-    editor.on('text-change', () => {
+    // closing the tab or reloading must not cost the keystrokes still waiting out the debounce
+    zustand.sofort = () => {
+        abmelden(zustand);
+        if (!zustand.schreiben) {
+            return;
+        }
+        clearTimeout(zustand.schreiben);
+        zustand.schreiben = 0;
+        zustand.jetztSchreiben().catch(() => { });
+    };
+
+    editor.on('text-change', (delta, vorher, quelle) => {
         if (zustand.tot) {
             return;
+        }
+        // Typing past the offer answers it: the stored text is about to be overwritten, and the buttons would
+        // then restore what was just typed while the offered draft is already gone. A change from the page
+        // itself - a template, a reset - answers nothing, so it must not overwrite the draft still on offer.
+        if (zustand.angeboten !== null) {
+            if (quelle !== 'user') {
+                return;
+            }
+            zustand.angeboten = null;
+            dotnetRef.invokeMethodAsync('OnDraftFound', 0).catch(() => { });
         }
         if (zustand.schreiben) {
             clearTimeout(zustand.schreiben);
         }
+        vormerken(zustand);
         zustand.schreiben = setTimeout(() => {
             zustand.schreiben = 0;
+            abmelden(zustand);
             if (zustand.tot) {
                 return;
             }
@@ -1459,24 +1397,23 @@ function haengeEntwurfAn(element, editor, dotnetRef, schluessel) {
     return zustand;
 }
 
-/// applies the stored draft; returns the fresh html or null when there is none
+/// applies the offered draft; returns the fresh html or null when there is no offer (any more)
 export async function entwurfAnwenden(element) {
     const editor = element && element.__nooseQuill;
     const zustand = element && element.__nooseEntwurf;
     if (!editor || !zustand) {
         return null;
     }
-    const db = await ladeEntwurfsDb();
-    if (!db) {
-        return null;
-    }
-    const eintrag = await entwurfLesen(db, zustand.schluessel);
-    if (!eintrag) {
+    // exactly what was offered: the store may hold something newer by now - another tab, or the keystrokes
+    // that answered the offer a moment before this click arrived
+    const html = zustand.angeboten;
+    zustand.angeboten = null;
+    if (html === null) {
         return null;
     }
     const beschriftungen = element.__nooseErwaehnung ? element.__nooseErwaehnung.beschriftungen : null;
     editor.setText('');
-    editor.clipboard.dangerouslyPasteHTML(tokenZuChip(eintrag.html, beschriftungen));
+    editor.clipboard.dangerouslyPasteHTML(tokenZuChip(html, beschriftungen));
     // the baseline stays the server content: until the next save the restored text is unsaved and
     // must keep autosaving, otherwise a second disconnect would swallow it after all
     editor.focus();
@@ -1488,9 +1425,15 @@ export async function entwurfVerwerfen(element) {
     if (!zustand) {
         return;
     }
+    zustand.angeboten = null;
     const db = await ladeEntwurfsDb();
     if (db) {
         await entwurfLoeschen(db, zustand.schluessel);
+    }
+    // what was typed before the offer came is unsaved too, and the offer held its write back
+    const editor = element.__nooseQuill;
+    if (editor && !zustand.tot && leseHtml(editor).length > 0 && leseHtml(editor) !== zustand.basis) {
+        zustand.jetztSchreiben().catch(() => { });
     }
 }
 
@@ -1514,12 +1457,30 @@ export async function entwurfAlsGespeichertMarkieren(element) {
     if (!zustand) {
         return;
     }
+    // The saved state is what the page read for its save, not what the editor shows once the answer is back:
+    // whatever was typed during the round trip is still unsaved and stays a draft.
+    const gespeichert = zustand.gelesen !== null && zustand.gelesen !== undefined
+        ? zustand.gelesen
+        : (editor ? leseHtml(editor) : zustand.basis);
+    zustand.gelesen = null;
+    zustand.angeboten = null;
+    zustand.basis = gespeichert;
+    if (editor && leseHtml(editor) !== gespeichert) {
+        // typed on meanwhile: the pending write (or a fresh one) keeps the newer text
+        if (!zustand.schreiben) {
+            zustand.jetztSchreiben().catch(() => { });
+        }
+        return;
+    }
+    // baseline first and the pending write gone: a write landing during the delete would bring the draft back
+    if (zustand.schreiben) {
+        clearTimeout(zustand.schreiben);
+        zustand.schreiben = 0;
+    }
+    abmelden(zustand);
     const db = await ladeEntwurfsDb();
     if (db) {
         await entwurfLoeschen(db, zustand.schluessel);
-    }
-    if (editor) {
-        zustand.basis = leseHtml(editor);
     }
 }
 
@@ -2199,7 +2160,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
         }
         // debounce
         timer = setTimeout(() => {
-            dotnetRef.invokeMethodAsync('OnHtmlChanged', leseHtml(editor));
+            // a disposed component or a lost circuit rejects; that is no error worth a console line
+            dotnetRef.invokeMethodAsync('OnHtmlChanged', leseHtml(editor)).catch(() => { });
         }, 300);
     });
 
@@ -2307,7 +2269,15 @@ export function setHtml(element, html, beschriftungen) {
 
 export function getHtml(element) {
     const editor = element && element.__nooseQuill;
-    return editor ? leseHtml(editor) : '';
+    if (!editor) {
+        return '';
+    }
+    const html = leseHtml(editor);
+    // a save reads the text here first; marking it saved later compares against exactly this
+    if (element.__nooseEntwurf) {
+        element.__nooseEntwurf.gelesen = html;
+    }
+    return html;
 }
 
 /// moves the caret to the nth heading (h1-h3, document order) and scrolls it into view
@@ -2381,6 +2351,7 @@ export function destroyRichText(element) {
     const entwurf = element.__nooseEntwurf;
     if (entwurf) {
         entwurf.tot = true;
+        abmelden(entwurf);
         if (entwurf.schreiben) {
             // flush before cancelling: the pending write holds the newest keystrokes
             clearTimeout(entwurf.schreiben);

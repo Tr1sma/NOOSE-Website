@@ -16,7 +16,7 @@
                           HelperText="Ein Satz, ohne Formatierung. Genau dieser Text steht später in der Erklär-Blase." />
 
             <MudText Typo="Typo.subtitle2" Class="mt-2">Ausführlich (optional)</MudText>
-            <RichTextEditor @bind-Value="_explanationHtml" MinHeight="140px"
+            <RichTextEditor @ref="_explanationEditor" @bind-Value="_explanationHtml" MinHeight="140px"
                             DraftKey='@($"glossar:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}")' />
 
             <MudSelect T="string" @bind-Value="_articleId" Label="Vertiefender Artikel (optional)"
@@ -57,7 +57,8 @@
     private string? _articleId;
     private bool _isVisible = true;
 
-    protected override void OnParametersSet()
+    // once: a nested dialog re-renders this one, and re-applying the preset then threw away what was typed
+    protected override void OnInitialized()
     {
         if (Preset is { } p)
         {
@@ -72,9 +73,18 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    private void Save()
-        => MudDialog.Close(DialogResult.Ok(new GlossaryTermInput(
+    private RichTextEditor? _explanationEditor;
+
+    private async Task Save()
+    {
+        // read straight from the editor: the bound value trails the last keystrokes by the change debounce
+        if (_explanationEditor is not null)
+        {
+            _explanationHtml = await _explanationEditor.GetHtmlAsync();
+        }
+        MudDialog.Close(DialogResult.Ok(new GlossaryTermInput(
             _term, _synonyms, _shortDefinition, _explanationHtml, _articleId, _isVisible)));
+    }
 
     /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
     public static async Task<GlossaryTermInput?> ShowAsync(

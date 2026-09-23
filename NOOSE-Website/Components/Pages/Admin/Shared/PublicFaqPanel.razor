@@ -419,17 +419,19 @@ else
         }
 
         var entry = _view.Rubriken.SelectMany(r => r.Entries).FirstOrDefault(e => e.Id == id);
-        if (_mayEdit && entry is not null && _answerEditor is not null)
+        if (_mayEdit && entry is not null && _answerEditor is { } editor)
         {
             try
             {
-                var html = await _answerEditor.GetHtmlAsync();
+                var html = await editor.GetHtmlAsync();
                 // the loaded value is already sanitized, so compare on the sanitized form to avoid false dirties
                 var dirty = !string.Equals(HtmlCleanup.Clean(html), _editAnswer, StringComparison.Ordinal)
                     || !string.Equals(_editQuestion.Trim(), entry.Question, StringComparison.Ordinal);
                 if (dirty)
                 {
                     await SaveEntryAsync(entry, html);
+                    // before the editor unmounts: its teardown would write the stored answer back as a draft
+                    await editor.MarkSavedAsync();
                     Snackbar.Add("Frage automatisch gespeichert.", Severity.Info);
                     await LoadAsync();
                 }
@@ -460,6 +462,8 @@ else
                 // only once the row is stored: a failed save must keep the browser draft
                 await editor.MarkSavedAsync();
             }
+            // the new baseline only after it stored: a failed save must still count as unsaved on collapse
+            _editAnswer = HtmlCleanup.Clean(html);
             Snackbar.Add("Frage gespeichert.", Severity.Success);
             await LoadAsync();
         }
@@ -471,7 +475,6 @@ else
         {
             _saving = false;
         }
-        _editAnswer = HtmlCleanup.Clean(html);
     }
 
     private Task SaveEntryAsync(PublicFaqEntryRow entry, string html)

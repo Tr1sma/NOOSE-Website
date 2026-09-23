@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Akte bearbeiten" : "Neue Person") · NOOSE</PageTitle>
 
@@ -41,7 +42,8 @@ else
             </MudItem>
             <MudItem xs="12">
                 <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
-                              Label="Beschreibung" Lines="3" HelperText="@MentionInput.Hint" />
+                              Label="Beschreibung" Lines="3" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "beschreibung")' />
             </MudItem>
             @if (!IsEdit)
             {
@@ -108,6 +110,9 @@ else
     private MudForm _form = default!;
     private PersonInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the page; dropped once the save went through
+    private string DraftScope => IsEdit ? $"person:{Id}" : "person:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -183,6 +188,7 @@ else
             if (IsEdit)
             {
                 await PersonService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/personen/{Id}");
             }
@@ -201,6 +207,7 @@ else
                 }
 
                 var person = await PersonService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Akte {person.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/personen/{person.Id}");
             }

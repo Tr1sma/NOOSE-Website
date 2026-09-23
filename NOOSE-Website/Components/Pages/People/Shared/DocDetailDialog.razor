@@ -5,6 +5,7 @@
 @inject IPersonGroupService GroupService
 @inject IPersonService PersonService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudDialog>
     <DialogContent>
@@ -98,6 +99,7 @@
         try
         {
             await DocService.RefreshAsync(Doc.Id, input, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), DocDialog.EditDraftScope(Doc.Id));
             Snackbar.Add("Dok aktualisiert.", Severity.Success);
             await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, Doc.PersonId, input, User);
             MudDialog.Close(DialogResult.Ok(true));

@@ -3,6 +3,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
@@ -159,7 +160,9 @@
 
     private async Task NewAsync()
     {
-        var input = await SourceDialog.ShowAsync(DialogService, User, showInternalToggle: EntityType == nameof(Taskforce));
+        var draftScope = SourceDialog.NewDraftScope(EntityType, EntityId);
+        var input = await SourceDialog.ShowAsync(DialogService, User, showInternalToggle: EntityType == nameof(Taskforce),
+            draftScope: draftScope);
         if (input is null)
         {
             return;
@@ -175,6 +178,7 @@
         try
         {
             await SourceService.CreateAsync(EntityType, EntityId, input, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), draftScope);
             Snackbar.Add("Quelle gespeichert.", Severity.Success);
             await LoadAsync();
         }

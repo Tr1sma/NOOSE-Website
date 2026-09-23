@@ -5,6 +5,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Aufgabe bearbeiten" : "Neue Aufgabe") · NOOSE</PageTitle>
 
@@ -34,7 +35,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <JobForm @key="_loadedId" Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" />
+        <JobForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" />
     </MudForm>
     @if (IsEdit)
     {
@@ -97,6 +98,9 @@ else
     private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
     private readonly List<LinkInput> _references = new();
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"aufgabe:{Id}" : "aufgabe:neu";
     private bool _load = true;
     private bool _noAccess;
     private bool _saves;
@@ -199,12 +203,14 @@ else
             if (IsEdit)
             {
                 await JobService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/aufgaben/{Id}");
             }
             else
             {
                 var job = await JobService.CreateAsync(_input, _agentIds.ToList(), _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
 
                 // A failed individual link does not abort creation; errors are collected.
                 var error = new List<string>();

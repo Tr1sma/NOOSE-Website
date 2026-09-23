@@ -8,6 +8,7 @@
 @inject IProfileSuggestionService SuggestionService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Eintrag bearbeiten" : "Neuer Eintrag") · NOOSE</PageTitle>
 
@@ -170,7 +171,8 @@ else
                 </MudGrid>
 
                 <MentionInput Text="@(_input.Notes ?? string.Empty)" TextChanged="@(v => _input.Notes = v)"
-                              Label="Zusatznotiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
+                              Label="Zusatznotiz (optional)" Lines="2" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "notiz")' />
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                     <MudButton Href="@(IsEdit ? $"/asservatenkammer/eintrag/{Id}" : "/asservatenkammer")">Abbrechen</MudButton>
@@ -198,6 +200,9 @@ else
     private EvidenceEntryInput _input = new();
     private List<Agent> _agents = new();
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the page; dropped once the save went through
+    private string DraftScope => IsEdit ? $"asservat:{Id}" : "asservat:neu";
     private bool _isLeadership;
 
     private string _ownerKind = Noose;
@@ -416,6 +421,7 @@ else
             if (IsEdit)
             {
                 await Evidence.UpdateEntryAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 await ApplyNewItemImagesAsync();
                 Snackbar.Add("Eintrag aktualisiert.", Severity.Success);
                 Nav.NavigateTo($"/asservatenkammer/eintrag/{Id}");
@@ -423,6 +429,7 @@ else
             else
             {
                 var created = await Evidence.CreateEntryAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 await ApplyNewItemImagesAsync();
                 Snackbar.Add($"Eintrag {created.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/asservatenkammer/eintrag/{created.Id}");

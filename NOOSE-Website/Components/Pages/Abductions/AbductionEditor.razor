@@ -8,6 +8,7 @@
 @inject IPersonService PersonService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Entführung bearbeiten" : "Entführung dokumentieren") · NOOSE</PageTitle>
 
@@ -114,7 +115,8 @@ else
                 }
 
                 <MentionInput Text="@(_input.Notes ?? string.Empty)" TextChanged="@(v => _input.Notes = v)"
-                              Label="Notizen (optional)" Lines="2" HelperText="@MentionInput.Hint" />
+                              Label="Notizen (optional)" Lines="2" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "notizen")' />
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                     <MudButton Href="@(IsEdit ? $"/entfuehrungen/{Id}" : "/entfuehrungen")">Abbrechen</MudButton>
@@ -138,6 +140,9 @@ else
     private AbductionInput _input = new();
     private List<Agent> _agents = new();
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the page; dropped once the save went through
+    private string DraftScope => IsEdit ? $"entfuehrung:{Id}" : "entfuehrung:neu";
     private bool _isLeadership;
 
     private string _perpType = nameof(Faction);
@@ -278,12 +283,14 @@ else
             if (IsEdit)
             {
                 await AbductionService.UpdateAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Entführung aktualisiert.", Severity.Success);
                 Nav.NavigateTo($"/entfuehrungen/{Id}");
             }
             else
             {
                 var created = await AbductionService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Entführung {created.CaseNumber} dokumentiert.", Severity.Success);
                 Nav.NavigateTo($"/entfuehrungen/{created.Id}");
             }

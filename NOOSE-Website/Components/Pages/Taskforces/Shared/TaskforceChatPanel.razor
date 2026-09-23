@@ -50,8 +50,9 @@
     @if (_mayPost)
     {
         <div>
-            <MentionInput @bind-Text="_text" Placeholder="@Placeholder" OnSubmit="SendAsync"
-                          ImageOwnerType="@nameof(Taskforce)" ImageOwnerId="@TaskforceId" />
+            <MentionInput @ref="_input" @bind-Text="_text" Placeholder="@Placeholder" OnSubmit="SendAsync"
+                          ImageOwnerType="@nameof(Taskforce)" ImageOwnerId="@TaskforceId"
+                          DraftKey='@($"taskforce-chat:{TaskforceId}")' />
             <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="SendAsync" Disabled="@(_sends || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
@@ -77,6 +78,7 @@
     private bool _mayPost;
     private string? _myId;
     private string _text = string.Empty;
+    private MentionInput? _input;
     private List<Entry> _entries = new();
 
     private sealed record Entry(TaskforceMessage Msg, IReadOnlyList<MentionSegment> Segments);
@@ -139,6 +141,10 @@
         try
         {
             await ChatService.SendAsync(TaskforceId, _text, User);
+            if (_input is not null)
+            {
+                await _input.MarkSavedAsync();
+            }
             _text = string.Empty; // broadcaster refreshes the list
         }
         catch (Exception ex)

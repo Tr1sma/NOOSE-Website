@@ -38,6 +38,8 @@
         // opened - so on a shared station nothing would ever remove them. Inline rather than in a module:
         // the logout form is a plain post on a statically rendered page.
         window.nooseEntwuerfeLoeschen = function () {
+            // this page only: its flush on the way out must not write into the database being deleted
+            window.nooseEntwuerfeGesperrt = true;
             try { indexedDB.deleteDatabase('noose-rte'); } catch (e) { /* ignore */ }
             return true;
         };

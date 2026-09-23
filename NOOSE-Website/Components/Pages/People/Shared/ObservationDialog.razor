@@ -30,10 +30,12 @@
                 @* an observation has no secrecy flag of its own, so a pasted picture hangs on the person akte *@
                 <MentionInput Text="@(_input.Sighting ?? string.Empty)" TextChanged="@(v => _input.Sighting = v)"
                               Label="Beobachtung" Lines="3" HelperText="@MentionInput.Hint"
-                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId"
+                              DraftKey='@DraftKeys.In(DraftScope, "beobachtung")' />
                 <MentionInput Text="@(_input.Result ?? string.Empty)" TextChanged="@(v => _input.Result = v)"
                               Label="Ergebnis / Folgerung" Lines="2"
-                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId"
+                              DraftKey='@DraftKeys.In(DraftScope, "ergebnis")' />
 
                 <MudAutocomplete T="Agent" Label="Beobachtender Agent" @bind-Value="_agent"
                                  SearchFunc="@SearchAgents" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
@@ -107,6 +109,9 @@
     [Parameter] public string? ExistsOrgName { get; set; }
     [Parameter] public string? ExistsOrgCaseNumber { get; set; }
 
+    /// <summary>Browser draft scope of the text fields; the caller drops it once the observation is stored.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     private bool IsEdit => Exists is not null;
 
     private MudForm _form = default!;
@@ -135,6 +140,13 @@
     protected override async Task OnInitializedAsync()
     {
         _mayRealName = IsLeadership;
+        // before the first await: the fields render then, and their draft takes that text for the saved one
+        if (Exists is not null)
+        {
+            _input.Location = Exists.Location;
+            _input.Sighting = Exists.Sighting;
+            _input.Result = Exists.Result;
+        }
         _allAgents = await AgentService.GetSelectableAsync();
 
         if (Exists is null)
@@ -143,9 +155,6 @@
             return;
         }
 
-        _input.Location = Exists.Location;
-        _input.Sighting = Exists.Sighting;
-        _input.Result = Exists.Result;
         var startLocal = Exists.Start.ToLocalTime();
         _startDate = startLocal.Date;
         _startTime = startLocal.TimeOfDay;
@@ -234,7 +243,14 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Draft scope of a new observation on this person.</summary>
+    public static string NewDraftScope(string? personId) => $"observation:neu:{personId}";
+
+    /// <summary>Draft scope of an existing observation.</summary>
+    public static string EditDraftScope(string observationId) => $"observation:{observationId}";
+
     /// <summary>Shows the dialog (create) and returns the input, or null on cancel.</summary>
+    /// <remarks>The caller drops <see cref="NewDraftScope"/> once the observation is stored, not before.</remarks>
     public static async Task<ObservationInput?> ShowAsync(IDialogService dialog, bool isLeadership,
         string? defaultAgentId, string? personId)
     {
@@ -243,6 +259,7 @@
             { x => x.IsLeadership, isLeadership },
             { x => x.DefaultAgentId, defaultAgentId },
             { x => x.PersonId, personId },
+            { x => x.DraftScope, NewDraftScope(personId) },
         };
         var reference = await dialog.ShowAsync<ObservationDialog>("Neue Observation", parameters);
         var result = await reference.Result;
@@ -271,6 +288,7 @@
             { x => x.ExistsOrgName, orgName },
             { x => x.ExistsOrgCaseNumber, orgCaseNumber },
             { x => x.PersonId, obs.PersonId },
+            { x => x.DraftScope, EditDraftScope(obs.Id) },
         };
         var reference = await dialog.ShowAsync<ObservationDialog>("Observation bearbeiten", parameters);
         var result = await reference.Result;

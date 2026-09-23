@@ -3,6 +3,7 @@
 @inject IPersonGroupService GroupService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Personengruppe bearbeiten" : "Neue Personengruppe") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <GroupForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+        <GroupForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
                    ShowMembers="@(!IsEdit)" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     @if (IsEdit)
@@ -53,6 +54,9 @@ else
     private MudForm _form = default!;
     private PersonGroupInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"personengruppe:{Id}" : "personengruppe:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -124,12 +128,14 @@ else
             if (IsEdit)
             {
                 await GroupService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/personengruppen/{Id}");
             }
             else
             {
                 var group = await GroupService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Personengruppe {group.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/personengruppen/{group.Id}");
             }

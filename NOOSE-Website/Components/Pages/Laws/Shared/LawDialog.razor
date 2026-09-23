@@ -13,7 +13,8 @@
                           Required="true" RequiredError="Titel ist erforderlich"
                           Placeholder="z. B. Landfriedensbruch" />
             <MentionInput @bind-Text="_input.Text" Label="Gesetzestext" HelperText="@MentionInput.Hint"
-                          Lines="8" Required="true" RequiredError="Text ist erforderlich" />
+                          Lines="8" Required="true" RequiredError="Text ist erforderlich"
+                          DraftKey='@DraftKeys.In(DraftScope, "text")' />
             <MudTextField @bind-Value="_input.Sentence" Label="Strafmaß / Rechtsfolge (optional)" Variant="Variant.Outlined"
                           Placeholder="z. B. Freiheitsstrafe bis zu 3 Jahren oder Geldstrafe" />
         </MudStack>
@@ -33,9 +34,13 @@
 
     [Parameter] public LawInput? Preset { get; set; }
 
+    /// <summary>Browser draft scope of the law text; the caller drops it once the paragraph is stored.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     private LawInput _input = new();
 
-    protected override void OnParametersSet()
+    // once: a nested dialog re-renders this one, and re-applying the preset then threw away what was typed
+    protected override void OnInitialized()
     {
         if (Preset is not null)
         {
@@ -54,12 +59,18 @@
 
     private void Save() => MudDialog.Close(DialogResult.Ok(_input));
 
+    /// <summary>Draft scope of a new paragraph, or of the one with this id.</summary>
+    public static string DraftScopeFor(string? lawId) => string.IsNullOrEmpty(lawId) ? "gesetz:neu" : $"gesetz:{lawId}";
+
     /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
-    public static async Task<LawInput?> ShowAsync(IDialogService dialog, string title, LawInput? preset = null)
+    /// <remarks>The caller drops <see cref="DraftScopeFor"/> once the paragraph is stored, not before.</remarks>
+    public static async Task<LawInput?> ShowAsync(IDialogService dialog, string title, LawInput? preset = null,
+        string? lawId = null)
     {
         var parameters = new DialogParameters<LawDialog>
         {
             { x => x.Preset, preset },
+            { x => x.DraftScope, DraftScopeFor(lawId) },
         };
         var reference = await dialog.ShowAsync<LawDialog>(title, parameters,
             new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });

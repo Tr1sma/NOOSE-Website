@@ -2,6 +2,7 @@
 @inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -122,6 +123,7 @@
         try
         {
             await ObservationService.CreateAsync(PersonId, input, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), ObservationDialog.NewDraftScope(PersonId));
             Snackbar.Add("Observation gespeichert.", Severity.Success);
             await LoadAsync();
             await Changed.InvokeAsync();

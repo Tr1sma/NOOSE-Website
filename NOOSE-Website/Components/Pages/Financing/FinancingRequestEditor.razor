@@ -5,6 +5,7 @@
 @inject FinancingBroadcaster Broadcaster
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>Neuer Finanzierungsantrag · NOOSE</PageTitle>
 
@@ -123,7 +124,7 @@ else
 
                     <MentionInput @bind-Text="_justification" Label="Begründung" Lines="3" MaxLength="2000"
                                   Required="true" RequiredError="Eine Begründung ist erforderlich"
-                                  HelperText="@JustificationHint" />
+                                  HelperText="@JustificationHint" DraftKey="@DraftKey" />
                 </MudStack>
             </MudForm>
         </MudPaper>
@@ -182,6 +183,9 @@ else
     private bool _saving;
     private bool _isTeamLead;
     private ClaimsPrincipal _user = default!;
+
+    // the page only ever creates, so one draft per agent
+    private const string DraftKey = "finanzierung:neu:begruendung";
     private MudForm _form = default!;
     private MudAutocomplete<FinancingItem> _picker = default!;
     private FinancingItem? _pick;
@@ -265,6 +269,7 @@ else
                 Lines = _cart.Select(l => new FinancingRequestLineInput { ItemId = l.Item.Id, Quantity = l.Quantity }).ToList(),
             };
             var created = await Financing.CreateAsync(input, _user);
+            await TextDraft.DiscardAsync(JS, _user.GetAgentId(), DraftKey);
             Broadcaster.Report();
             Snackbar.Add($"Antrag {created.CaseNumber} eingereicht.", Severity.Success);
             Nav.NavigateTo($"/finanzierungen/{created.Id}");

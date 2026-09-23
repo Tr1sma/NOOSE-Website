@@ -49,10 +49,12 @@
 
     <MudItem xs="12">
         <MentionInput Text="@(Input.Targets ?? string.Empty)" TextChanged="@(v => Input.Targets = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "targets")'
                       Label="Ziele" Lines="2" />
     </MudItem>
     <MudItem xs="12">
         <MentionInput Text="@(Input.Description ?? string.Empty)" TextChanged="@(v => Input.Description = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "description")'
                       Label="Beschreibung" Lines="3" HelperText="@MentionInput.Hint" />
     </MudItem>
 </MudGrid>
@@ -101,6 +103,9 @@
 @code {
     [Parameter, EditorRequired] public PersonGroupInput Input { get; set; } = default!;
     /// <summary>Show the classification field, create-only.</summary>
+    /// <summary>Browser draft scope of the text fields; the editor drops it once the save went through.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     [Parameter] public bool ShowClassification { get; set; }
     [Parameter] public bool MayHighest { get; set; }
     /// <summary>Show the members section, create-only.</summary>

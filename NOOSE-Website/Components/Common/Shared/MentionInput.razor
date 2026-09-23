@@ -9,6 +9,7 @@
 @implements IAsyncDisposable
 
 @* display:contents keeps the wrapper out of layout: Class="flex-grow-1" still lands on a flex item *@
+<TextDraft @ref="_draft" DraftKey="@DraftKey" OnRestore="RestoreDraftAsync">
 <div @ref="_wrapper" style="display:contents">
 <MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
               Label="@Label" Placeholder="@Placeholder" HelperText="@HelperText" Variant="Variant.Outlined"
@@ -18,6 +19,7 @@
               OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
               OnKeyDown="OnKeyDown" />
 </div>
+</TextDraft>
 
 @if (_pickerOpen && _candidates.Count > 0)
 {
@@ -78,6 +80,13 @@
     /// <summary>Record id the pasted image belongs to; see <see cref="ImageOwnerType"/>.</summary>
     [Parameter] public string? ImageOwnerId { get; set; }
 
+    /// <summary>Keeps unsaved text in the browser under this key (<see cref="DraftKeys.In"/>); null keeps none.</summary>
+    /// <remarks>
+    /// Opt-in like the rich text editor's: the owner has to drop the draft after a successful save - through
+    /// <see cref="MarkSavedAsync"/>, or <see cref="TextDraft.DiscardScopeAsync"/> when a dialog saves after closing.
+    /// </remarks>
+    [Parameter] public string? DraftKey { get; set; }
+
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
     private string? _meId;
     private bool _isPartner;
@@ -87,6 +96,7 @@
     private ClaimsPrincipal? _user;
 
     private ElementReference _wrapper;
+    private TextDraft? _draft;
     private IJSObjectReference? _module;
     private DotNetObjectReference<MentionInput>? _ref;
     private bool _disposed;
@@ -124,11 +134,25 @@
     private List<MentionHit> _snippetCandidates = new();
     private bool _snippetOpen;
 
+    // false until the first parameters are in: that first text is the start, not a change from outside
+    private bool _parametersSeen;
+    private string? _seenDraftKey;
+
     protected override async Task OnParametersSetAsync()
     {
+        // a new key comes with a new field in the browser, which reads its start from the page itself
+        var fromOutside = _parametersSeen && DraftKey == _seenDraftKey;
+        _parametersSeen = true;
+        _seenDraftKey = DraftKey;
         if (_text != (Text ?? string.Empty))
         {
             _text = Text ?? string.Empty;
+            // set from outside - a record that loaded late, a reset after sending, a template; typing never
+            // lands here, because OnTextChanged already holds the same text when the owner hands it back
+            if (fromOutside && _draft is not null)
+            {
+                await _draft.SetBaselineAsync(_text);
+            }
             await ReferencesRefreshAsync();
         }
     }
@@ -209,6 +233,7 @@
         CloseSnippets();
         await TextChanged.InvokeAsync(_text);
         await ReferencesRefreshAsync();
+        await NoteChangeAsync();
     }
 
 
@@ -222,6 +247,7 @@
         ClosePicker();
         await TextChanged.InvokeAsync(_text);
         await ReferencesRefreshAsync();
+        await NoteChangeAsync();
     }
 
     private async Task RemoveTokenAsync(int index)
@@ -235,7 +261,27 @@
         _text = _text.Remove(t.Start, t.Length);
         await TextChanged.InvokeAsync(_text);
         await ReferencesRefreshAsync();
+        await NoteChangeAsync();
     }
+
+    /// <summary>Takes the offered draft over as if it had just been typed.</summary>
+    private async Task RestoreDraftAsync(string text)
+    {
+        _text = text.Length > MaxLength ? text[..MaxLength] : text;
+        ClosePicker();
+        CloseSnippets();
+        await TextChanged.InvokeAsync(_text);
+        await ReferencesRefreshAsync();
+    }
+
+    // text set from here fires no input event in the browser, so the draft would miss it
+    private Task NoteChangeAsync() => _draft?.NoteChangeAsync(_text) ?? Task.CompletedTask;
+
+    /// <summary>Call after a successful save or send; the browser drops the draft. Safe to call always.</summary>
+    public Task MarkSavedAsync() => _draft?.MarkSavedAsync() ?? Task.CompletedTask;
+
+    /// <summary>The keys this field really wrote a draft under; see <see cref="TextDraft.WrittenKeys"/>.</summary>
+    public IReadOnlyCollection<string> DraftKeysWritten => _draft?.WrittenKeys ?? [];
 
     private async Task ReferencesRefreshAsync()
     {
@@ -346,6 +392,7 @@
         await TextChanged.InvokeAsync(_text);
         await ReferencesRefreshAsync();
         StateHasChanged();
+        await NoteChangeAsync();
     }
 
     /// <summary>Reported by the module instead of marshalling megabytes that would be rejected anyway.</summary>

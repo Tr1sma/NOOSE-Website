@@ -8,6 +8,7 @@
 @inject IFactionService FactionService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? "Neuer Informant" : "Informant bearbeiten") · NOOSE</PageTitle>
 
@@ -88,7 +89,8 @@ else
                 </MudSelect>
             </MudItem>
             <MudItem xs="12">
-                <MentionInput @bind-Text="_description" Label="Beschreibung" Lines="2" HelperText="@MentionInput.Hint" />
+                <MentionInput @bind-Text="_description" Label="Beschreibung" Lines="2" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "beschreibung")' />
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudSelect T="string" @bind-Value="_handlerId" Label="Führungsagent" Required="true"
@@ -108,7 +110,8 @@ else
                 <MudTextField @bind-Value="_contact" Label="Kontakt" />
             </MudItem>
             <MudItem xs="12">
-                <MentionInput @bind-Text="_notes" Label="Notizen" Lines="2" HelperText="@MentionInput.Hint" />
+                <MentionInput @bind-Text="_notes" Label="Notizen" Lines="2" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "notizen")' />
             </MudItem>
         </MudGrid>
 
@@ -122,6 +125,9 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the page; dropped once the save went through
+    private string DraftScope => string.IsNullOrEmpty(Id) ? "informant:neu" : $"informant:{Id}";
     private bool _load = true;
     private bool _forbidden;
     private bool _isNew;
@@ -239,11 +245,13 @@ else
             if (_isNew)
             {
                 var newId = await Service.CreateAsync(input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Nav.NavigateTo($"/informanten/{newId}");
             }
             else
             {
                 await Service.UpdateAsync(Id!, input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Nav.NavigateTo($"/informanten/{Id}");
             }
         }

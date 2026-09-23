@@ -114,13 +114,15 @@
                    RecordsReference, which resolves a ticket as classified, so a participant below the desk could
                    paste a picture they then cannot see. The attachment below is gated by TicketVisibility and is
                    the right path for a screenshot here *@
-                <MentionInput @bind-Text="_draft" Label="Notiz" Lines="3"
-                              MaxLength="@TicketRules.MaxMessageLength" />
+                <MentionInput @ref="_noteInput" @bind-Text="_draft" Label="Notiz" Lines="3"
+                              MaxLength="@TicketRules.MaxMessageLength" DraftKey="@ComposerDraftKey" />
             }
             else
             {
-                <MudTextField @bind-Value="_draft" Label="Antwort an den Bürger"
-                              Lines="3" Variant="Variant.Outlined" MaxLength="@TicketRules.MaxMessageLength" />
+                <TextDraft @ref="_replyDraft" DraftKey="@ComposerDraftKey" OnRestore="@(t => _draft = t)">
+                    <MudTextField @bind-Value="_draft" Label="Antwort an den Bürger"
+                                  Lines="3" Variant="Variant.Outlined" MaxLength="@TicketRules.MaxMessageLength" />
+                </TextDraft>
             }
             <ImageAttachmentPicker @bind-Picked="_attachment" MaxBytes="@AttachmentStore.MaxBytes"
                                    Disabled="_busy" />
@@ -194,6 +196,11 @@
     private IReadOnlyList<PublicTemplateRow> _templates = Array.Empty<PublicTemplateRow>();
     private bool _templatesLoaded;
     private string _draft = string.Empty;
+    private MentionInput? _noteInput;
+    private TextDraft? _replyDraft;
+
+    // a ticket shows the internal thread and the citizen thread side by side: one draft each
+    private string ComposerDraftKey => $"ticket:{TicketId}:{(IsInternal ? "notiz" : "antwort")}";
     private ImageAttachmentPicker.PickedImage? _attachment;
     private long? _suggestCost;
     private LlmQuotaStatus? _suggestQuota;
@@ -297,6 +304,19 @@
         }
     }
 
+    // the composer that just sent; whichever of the two is on screen
+    private async Task ComposerSavedAsync()
+    {
+        if (_noteInput is not null)
+        {
+            await _noteInput.MarkSavedAsync();
+        }
+        if (_replyDraft is not null)
+        {
+            await _replyDraft.MarkSavedAsync();
+        }
+    }
+
     private async Task SendAsync()
     {
         _busy = true;
@@ -315,6 +335,7 @@
             {
                 await Tickets.ReplyToCitizenAsync(TicketId, _draft, User, upload);
             }
+            await ComposerSavedAsync();
             _draft = string.Empty;
             _attachment = null;
             // the line belongs to the draft that just left; above an empty composer it reads as the next one

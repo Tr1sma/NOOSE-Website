@@ -128,7 +128,9 @@
             }
             else
             {
-                <MentionInput @bind-Text="_text" Lines="3" Placeholder="@Placeholder" OnSubmit="SendAsync" />
+                @* never for the applicant: the portal keeps nothing in the browser *@
+                <MentionInput @ref="_input" @bind-Text="_text" Lines="3" Placeholder="@Placeholder" OnSubmit="SendAsync"
+                              DraftKey='@(IsApplicantView ? null : $"bewerbung:{BewerbungId}:{Audience}")' />
             }
             <MudStack Row="true" AlignItems="AlignItems.Center"
                       Justify="@(CollapsibleComposer ? Justify.SpaceBetween : Justify.FlexEnd)" Class="mt-1">
@@ -176,6 +178,7 @@
     private bool _composerOpen;
     private string? _editingId;
     private string _editText = string.Empty;
+    private MentionInput? _input;
     private bool _editSaving;
     private List<BewerbungMessage> _messages = new();
     private Dictionary<string, IReadOnlyList<MentionSegment>> _segments = new();
@@ -359,6 +362,10 @@
             else
             {
                 await BewerbungService.PostToApplicantAsync(BewerbungId, content, User);
+            }
+            if (_input is not null)
+            {
+                await _input.MarkSavedAsync();
             }
             _text = string.Empty;
             _html = string.Empty;

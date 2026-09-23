@@ -256,15 +256,18 @@ else
     private async Task DoneAsync(MeetingAgendaItem item, bool done)
     {
         // the open editor holds the newest text, so keep it when only the flag flips
-        var html = _expandedId == item.Id && _itemEditor is not null
-            ? await _itemEditor.GetHtmlAsync()
-            : item.NotesHtml;
-        await RunAsync(() => MeetingService.AgendaItemNoteAsync(item.Id, html, done, User));
-        // keep the dirty baseline in sync so the collapse does not re-save the same note
-        if (_expandedId == item.Id)
+        var open = _expandedId == item.Id ? _itemEditor : null;
+        var html = open is not null ? await open.GetHtmlAsync() : item.NotesHtml;
+        await RunAsync(async () =>
         {
-            _noteHtml = HtmlCleanup.Clean(html);
-        }
+            await MeetingService.AgendaItemNoteAsync(item.Id, html, done, User);
+            // only a stored note is the new baseline: after a failed save the collapse still has to save it
+            if (open is not null)
+            {
+                await open.MarkSavedAsync();
+                _noteHtml = HtmlCleanup.Clean(html);
+            }
+        });
     }
 
     private async Task AddAsync()

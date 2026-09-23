@@ -5,6 +5,7 @@
 @inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -129,6 +130,7 @@
         try
         {
             await DocService.CreateAsync(PersonId, input, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), DocDialog.NewDraftScope(PersonId));
             Snackbar.Add("Dok gespeichert.", Severity.Success);
             await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, PersonId, input, User);
             await LoadAsync();

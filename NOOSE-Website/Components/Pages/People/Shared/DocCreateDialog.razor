@@ -80,7 +80,8 @@
                     </MudAlert>
                 }
                 <MentionInput Text="@(_input.Reason ?? string.Empty)" TextChanged="@(v => _input.Reason = v)"
-                              Label="Grund" Lines="2" HelperText="@MentionInput.Hint" />
+                              Label="Grund" Lines="2" HelperText="@MentionInput.Hint"
+                              DraftKey='@DraftKeys.In(DraftScope, "grund")' />
 
                 @* Prefer linking an existing record; otherwise free text. *@
                 <MudRadioGroup T="string" @bind-Value="Type">
@@ -109,7 +110,8 @@
                 <MudTextField @bind-Value="_input.Faction" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
                               HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
                 <MentionInput Text="@(_input.ReceivedInformation ?? string.Empty)" TextChanged="@(v => _input.ReceivedInformation = v)"
-                              Label="Erhaltene Informationen" Lines="3" />
+                              Label="Erhaltene Informationen" Lines="3"
+                              DraftKey='@DraftKeys.In(DraftScope, "info")' />
                 <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
             </MudStack>
         </MudForm>
@@ -220,7 +222,12 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Draft scope of the text fields: one new dok at a time, the person is only picked in here.</summary>
+    /// <remarks>Not "dok:neu": that is where DocDialog's per-person scopes start, and dropping it would take them along.</remarks>
+    public const string DraftScope = "dok-erfassung:neu";
+
     /// <summary>Shows the dialog and returns the input (incl. person assignment), or null on cancel.</summary>
+    /// <remarks>The caller drops <see cref="DraftScope"/> once the dok is stored, not before.</remarks>
     public static async Task<DocCreateResult?> ShowAsync(IDialogService dialog, bool isLeadership)
     {
         var parameters = new DialogParameters<DocCreateDialog> { { x => x.IsLeadership, isLeadership } };

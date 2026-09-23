@@ -3,6 +3,7 @@
 @inject IAppointmentService AppointmentService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Termin bearbeiten" : "Neuer Termin") · NOOSE</PageTitle>
 
@@ -32,7 +33,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <AppointmentForm Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" @key="_loadedId" />
+        <AppointmentForm DraftScope="@DraftScope" Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" @key="_loadedId" />
     </MudForm>
     @if (IsEdit)
     {
@@ -59,6 +60,9 @@ else
     private AppointmentInput? _input;
     private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"termin:{Id}" : "termin:neu";
     private bool _load = true;
     private bool _noAccess;
     private bool _saves;
@@ -142,12 +146,14 @@ else
             if (IsEdit)
             {
                 await AppointmentService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/kalender/{Id}");
             }
             else
             {
                 var appointment = await AppointmentService.CreateAsync(_input, _agentIds.ToList(), _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Termin {appointment.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/kalender/{appointment.Id}");
             }

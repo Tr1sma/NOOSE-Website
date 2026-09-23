@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Gesetzbuch · NOOSE</PageTitle>
 
@@ -129,6 +130,7 @@ else
         try
         {
             await LawService.CreateAsync(input, _user);
+            await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), LawDialog.DraftScopeFor(null));
             Snackbar.Add("Paragraf angelegt.", Severity.Success);
             await LoadAsync();
         }
@@ -147,7 +149,7 @@ else
             Title = law.Title,
             Text = law.Text,
             Sentence = law.Sentence,
-        });
+        }, law.Id);
         if (input is null)
         {
             return;
@@ -155,6 +157,7 @@ else
         try
         {
             await LawService.RefreshAsync(law.Id, input, _user);
+            await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), LawDialog.DraftScopeFor(law.Id));
             Snackbar.Add("Paragraf gespeichert.", Severity.Success);
             await LoadAsync();
         }

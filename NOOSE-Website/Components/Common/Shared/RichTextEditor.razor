@@ -170,7 +170,7 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=20");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=21");
             _ref = DotNetObjectReference.Create(this);
             // the editor types a caption line; the stored row carries figure/figcaption
             Value = RichTextFigure.ToEditor(Value);
@@ -348,8 +348,10 @@ else if (_lastCost is { } cost)
     private long? _draftFound;
 
     /// <summary>Agent-bound draft scope; without one the browser keeps nothing.</summary>
+    // nobody who cannot save keeps a draft: it would be offered on every visit and never go away
     private string? DraftScope =>
-        !Compact && !string.IsNullOrWhiteSpace(DraftKey) && _user?.GetAgentId() is { Length: > 0 } me
+        !Compact && !string.IsNullOrWhiteSpace(DraftKey) && _user is { } user && user.MayContribute()
+            && user.GetAgentId() is { Length: > 0 } me
             ? me + ":" + DraftKey
             : null;
 
@@ -368,7 +370,7 @@ else if (_lastCost is { } cost)
         }
         try
         {
-            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=20");
+            await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=21");
             await module.InvokeVoidAsync("entwurfVerwerfenNachSchluessel", agentId + ":" + draftKey);
         }
         catch (JSDisconnectedException)
@@ -381,7 +383,7 @@ else if (_lastCost is { } cost)
         }
     }
 
-    /// <summary>Called from JS when a browser-local draft for this field exists.</summary>
+    /// <summary>Called from JS when a browser-local draft for this field exists, and with 0 once typing answered it.</summary>
     [JSInvokable]
     public Task OnDraftFound(long zeit)
     {
@@ -389,7 +391,7 @@ else if (_lastCost is { } cost)
         {
             return Task.CompletedTask;
         }
-        _draftFound = zeit;
+        _draftFound = zeit > 0 ? zeit : null;
         StateHasChanged();
         return Task.CompletedTask;
     }

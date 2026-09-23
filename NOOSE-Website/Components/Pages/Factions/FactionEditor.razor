@@ -3,6 +3,7 @@
 @inject IFactionService FactionService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Fraktion bearbeiten" : "Neue Fraktion") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <FactionForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="@(!IsEdit && _mayHighest)"
+        <FactionForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="@(!IsEdit && _mayHighest)"
                      IsLeadership="_isLeadership" ShowMembers="@(!IsEdit)" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     @if (IsEdit)
@@ -53,6 +54,9 @@ else
     private MudForm _form = default!;
     private FactionInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"fraktion:{Id}" : "fraktion:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -135,12 +139,14 @@ else
             if (IsEdit)
             {
                 await FactionService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/fraktionen/{Id}");
             }
             else
             {
                 var faction = await FactionService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Fraktion {faction.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/fraktionen/{faction.Id}");
             }

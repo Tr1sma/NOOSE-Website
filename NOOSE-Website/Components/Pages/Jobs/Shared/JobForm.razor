@@ -65,6 +65,7 @@
 
     <MudItem xs="12">
         <MentionInput Text="@(Input.Description ?? string.Empty)" TextChanged="@(v => Input.Description = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "description")'
                       Label="Beschreibung (optional)" Lines="4"
                       HelperText="@($"Worum geht es bei dieser Aufgabe? {MentionInput.Hint}")" />
     </MudItem>
@@ -74,6 +75,9 @@
     [Parameter, EditorRequired] public JobInput Input { get; set; } = default!;
 
     /// <summary>Show multi-assignment (create only).</summary>
+    /// <summary>Browser draft scope of the text fields; the editor drops it once the save went through.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     [Parameter] public bool ShowAssignment { get; set; }
 
     /// <summary>Selected agent ids (two-way bound).</summary>

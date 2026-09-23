@@ -24,9 +24,11 @@
                               MaxLength="@PublicTemplateRules.TitleMaxLength" AutoFocus="true"
                               HelperText="Nur intern sichtbar: so heißt die Vorlage in der Auswahl." />
 
-                <MudTextField @bind-Value="_text" Label="Text an den Bürger" Variant="Variant.Outlined"
-                              Lines="14" Immediate="true" Required="true" RequiredError="Text ist erforderlich"
-                              MaxLength="@PublicTemplateRules.MaxLength" Counter="@PublicTemplateRules.MaxLength" />
+                <TextDraft DraftKey='@DraftKeys.In(DraftScopeFor(Existing?.Id, Kind), "text")' OnRestore="@(t => _text = t)">
+                    <MudTextField @bind-Value="_text" Label="Text an den Bürger" Variant="Variant.Outlined"
+                                  Lines="14" Immediate="true" Required="true" RequiredError="Text ist erforderlich"
+                                  MaxLength="@PublicTemplateRules.MaxLength" Counter="@PublicTemplateRules.MaxLength" />
+                </TextDraft>
 
                 @* the four tokens this system fills, plus the redaction; anything else is refused on save *@
                 <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
@@ -107,7 +109,12 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Draft scope of a template; a new one is scoped to its kind, the panel opens one per kind.</summary>
+    public static string DraftScopeFor(string? templateId, PublicTemplateKind kind)
+        => string.IsNullOrEmpty(templateId) ? $"buerger-vorlage:neu:{kind}" : $"buerger-vorlage:{templateId}";
+
     /// <summary>Shows the create/edit dialog; returns null on cancel.</summary>
+    /// <remarks>The caller drops <see cref="DraftScopeFor"/> once the template is stored, not before.</remarks>
     public static async Task<PublicTemplateInput?> ShowAsync(IDialogService dialog, string title,
         PublicTemplateRow? existing = null, PublicTemplateKind kind = PublicTemplateKind.TicketEingang,
         int sortOrder = 0)

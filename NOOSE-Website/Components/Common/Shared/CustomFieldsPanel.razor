@@ -1,6 +1,7 @@
 @using System.Globalization
 @inject ICustomFieldValueService ValueService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -36,7 +37,8 @@
             {
                 case CustomFieldType.Multiline:
                     <MentionInput Label="@label" Lines="3" HelperText="@MentionInput.Hint"
-                                  Text="@(_values[id] ?? string.Empty)" TextChanged="@(v => _values[id] = v)" />
+                                  Text="@(_values[id] ?? string.Empty)" TextChanged="@(v => _values[id] = v)"
+                                  DraftKey="@(_mayWrite ? DraftKeys.In(DraftScope, id) : null)" />
                     break;
                 case CustomFieldType.Number:
                     <MudNumericField T="decimal?" Label="@label" Variant="Variant.Outlined" Culture="@CultureInfo.InvariantCulture"
@@ -79,6 +81,9 @@
     private List<CustomFieldValueDisplay> _fields = new();
     private readonly Dictionary<string, string?> _values = new();
 
+    // every free-text field of the record under one scope; one save stores them all
+    private string DraftScope => $"zusatzfelder:{EntityType}:{EntityId}";
+
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
@@ -103,6 +108,7 @@
         try
         {
             await ValueService.SetAsync(EntityType, EntityId, _values, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), DraftScope);
             Snackbar.Add("Zusatzfelder gespeichert.", Severity.Success);
             await LoadAsync();
         }

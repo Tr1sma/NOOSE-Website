@@ -31,11 +31,13 @@
                                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link"
                                       Placeholder="https://…" />
                         <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      DraftKey='@DraftKeys.In(DraftScope, "text")'
                                       Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
                     case SourceType.FreeText:
                         <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      DraftKey='@DraftKeys.In(DraftScope, "text")'
                                       Label="Inhalt" Lines="5" HelperText="@MentionInput.Hint"
                                       Required="true" RequiredError="Bitte einen Text eingeben" />
                         break;
@@ -64,6 +66,7 @@
                             Neues Dokument erstellen
                         </MudButton>
                         <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      DraftKey='@DraftKeys.In(DraftScope, "text")'
                                       Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
@@ -107,6 +110,7 @@
                             </MudAutocomplete>
                         }
                         <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      DraftKey='@DraftKeys.In(DraftScope, "text")'
                                       Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
@@ -129,6 +133,7 @@
                             Erlaubt: PDF, Bilder, Office-Dokumente, Text, ZIP – max. @(Storage.MaxBytes / (1024 * 1024)) MB.
                         </MudText>
                         <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      DraftKey='@DraftKeys.In(DraftScope, "text")'
                                       Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
                 }
@@ -145,6 +150,9 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter] public bool IsLeadership { get; set; }
+
+    /// <summary>Browser draft scope of the text field; the caller drops it once the source is stored.</summary>
+    [Parameter] public string? DraftScope { get; set; }
 
     /// <summary>Viewer's classification scope for the document picker.</summary>
     [Parameter] public DocumentViewerScope DocumentScope { get; set; }
@@ -277,14 +285,20 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Draft scope of a new source on this record.</summary>
+    public static string NewDraftScope(string entityType, string entityId) => $"quelle:neu:{entityType}:{entityId}";
+
     /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
-    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user, bool showInternalToggle = false)
+    /// <remarks>The caller drops <paramref name="draftScope"/> once the source is stored, not before.</remarks>
+    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user, bool showInternalToggle = false,
+        string? draftScope = null)
     {
         var parameters = new DialogParameters<SourceDialog>
         {
             { x => x.IsLeadership, user.IsLeadership() },
             { x => x.DocumentScope, DocumentViewerScope.From(user) },
             { x => x.ShowInternalToggle, showInternalToggle },
+            { x => x.DraftScope, draftScope },
         };
         var reference = await dialog.ShowAsync<SourceDialog>("Quelle hinzufügen", parameters);
         var result = await reference.Result;

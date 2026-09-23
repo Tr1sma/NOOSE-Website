@@ -375,6 +375,10 @@ public static class ChangelogContent
                 + "danach unter den Favoriten und im Schnellzugriff und öffnet die Liste wieder genau so. "
                 + "Das Aufgaben-Board behält seine Filter außerdem jetzt auch, wenn du die Seite neu lädst.",
                 "Bedienung"),
+            Neu("2.2.08-entwuerfe", "Was du in ein Dok, eine Observation, einen Vermerk, den Taskforce-Chat oder "
+                + "die Beschreibung einer Akte tippst, hebt dein Browser jetzt mit auf. Reißt die Verbindung ab "
+                + "oder schließt du einen Dialog aus Versehen, bietet dir das Feld den Text beim nächsten Öffnen "
+                + "wieder an. Bisher konnte das nur der Text-Editor.", "Bedienung"),
         ]),
     ];
 }

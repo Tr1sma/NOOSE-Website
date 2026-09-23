@@ -98,7 +98,7 @@ else
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Beschreibung</MudText>
                 <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" Ai="TextAssistContext.Activity" Mentions="true"
                                 OnSaveRequested="SaveAsync"
-                                DraftKey='@(_edit ? $"aktivitaet:{Id}" : "aktivitaet:neu")' />
+                                DraftKey="@DraftKey" />
             </div>
         </MudStack>
     </MudPaper>
@@ -111,6 +111,12 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private RichTextEditor _editor = default!;
+
+    // a new activity started from a faction belongs to that faction: another one must not be offered its text
+    private string DraftKey => _edit ? $"aktivitaet:{Id}"
+        : PreFactionId is { Length: > 0 } faction ? $"aktivitaet:neu:fraktion:{faction}"
+        : PreGroupId is { Length: > 0 } group ? $"aktivitaet:neu:gruppe:{group}"
+        : "aktivitaet:neu";
     private MudAutocomplete<AgentActivityOrgRef> _orgAuto = default!;
     private ClaimsPrincipal _user = default!;
 

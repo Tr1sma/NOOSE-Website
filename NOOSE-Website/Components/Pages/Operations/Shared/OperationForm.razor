@@ -66,15 +66,18 @@
 
     <MudItem xs="12">
         <MentionInput Text="@(Input.Expiry ?? string.Empty)" TextChanged="@(v => Input.Expiry = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "expiry")'
                       Label="Ablauf" Lines="4"
                       HelperText="@($"Verlauf des Einsatzes. {MentionInput.Hint}")" />
     </MudItem>
     <MudItem xs="12">
         <MentionInput Text="@(Input.Result ?? string.Empty)" TextChanged="@(v => Input.Result = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "result")'
                       Label="Ergebnis" Lines="3" HelperText="Ausgang/Resultat des Einsatzes." />
     </MudItem>
     <MudItem xs="12">
         <MentionInput Text="@(Input.Remarks ?? string.Empty)" TextChanged="@(v => Input.Remarks = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "remarks")'
                       Label="Bemerkungen" Lines="3"
                       HelperText="Interne Vermerke (getrennt von Ablauf/Ergebnis)." />
     </MudItem>
@@ -83,6 +86,9 @@
 @code {
     [Parameter, EditorRequired] public OperationInput Input { get; set; } = default!;
     /// <summary>Show classification in the form (create only).</summary>
+    /// <summary>Browser draft scope of the text fields; the editor drops it once the save went through.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     [Parameter] public bool ShowClassification { get; set; }
     [Parameter] public bool MayHighest { get; set; }
     [Parameter] public bool IsLeadership { get; set; }

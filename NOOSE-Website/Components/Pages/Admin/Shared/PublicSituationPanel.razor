@@ -53,10 +53,13 @@ else
 
                 @* plain text, not a RichTextEditor: line breaks are the whole formatting, and the text goes out
                    without HtmlCleanup *@
-                <MudTextField @bind-Value="_input.Note" Label="Einschätzung" Variant="Variant.Outlined"
-                              Lines="5" MaxLength="@SituationRules.MaxNote" Disabled="@(!_mayEdit)"
-                              Counter="@SituationRules.MaxNote"
-                              HelperText="Klartext. Zeilenumbrüche bleiben erhalten, Formatierung gibt es nicht." />
+                <TextDraft @ref="_noteDraft" DraftKey='@(_mayEdit ? "gefahrenlage:einschaetzung" : null)'
+                           OnRestore="@(t => _input.Note = t)">
+                    <MudTextField @bind-Value="_input.Note" Label="Einschätzung" Variant="Variant.Outlined"
+                                  Lines="5" MaxLength="@SituationRules.MaxNote" Disabled="@(!_mayEdit)"
+                                  Counter="@SituationRules.MaxNote"
+                                  HelperText="Klartext. Zeilenumbrüche bleiben erhalten, Formatierung gibt es nicht." />
+                </TextDraft>
 
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary"
@@ -135,6 +138,8 @@ else
         await LoadAsync();
     }
 
+    private TextDraft? _noteDraft;
+
     private async Task LoadAsync()
     {
         _load = true;
@@ -168,6 +173,11 @@ else
         try
         {
             await Situation.SetAsync(_input, _user);
+            // before the reload below unmounts the field, or its teardown writes the stored note back
+            if (_noteDraft is not null)
+            {
+                await _noteDraft.MarkSavedAsync();
+            }
             Snackbar.Add("Gefahrenlage gespeichert.", Severity.Success);
             await LoadAsync();
         }

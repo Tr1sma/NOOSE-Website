@@ -3,6 +3,7 @@
 @inject ITaskforceService TaskforceService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Taskforce bearbeiten" : "Neue Taskforce") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <TaskforceForm @key="_loadedId" Input="_input" IsLeadership="_isLeadership" />
+        <TaskforceForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" IsLeadership="_isLeadership" />
     </MudForm>
     @if (IsEdit)
     {
@@ -58,6 +59,9 @@ else
     private MudForm _form = default!;
     private TaskforceInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"taskforce:{Id}" : "taskforce:neu";
     private bool _isLeadership;
     private bool _load = true;
     private bool _saves;
@@ -123,12 +127,14 @@ else
             if (IsEdit)
             {
                 await TaskforceService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/taskforces/{Id}");
             }
             else
             {
                 var taskforce = await TaskforceService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Taskforce {taskforce.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/taskforces/{taskforce.Id}");
             }

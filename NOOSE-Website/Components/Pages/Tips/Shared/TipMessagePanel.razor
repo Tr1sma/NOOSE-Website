@@ -80,8 +80,10 @@
         @* a closed tip takes no new message, but an old one of your own stays correctable *@
         @if (CanWrite && !Closed)
         {
-            <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")"
-                          Lines="3" Variant="Variant.Outlined" MaxLength="@TipRules.MaxMessageLength" />
+            <TextDraft @ref="_replyDraft" DraftKey="@ComposerDraftKey" OnRestore="@(t => _draft = t)">
+                <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")"
+                              Lines="3" Variant="Variant.Outlined" MaxLength="@TipRules.MaxMessageLength" />
+            </TextDraft>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudButton OnClick="SendAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Send">
@@ -137,6 +139,10 @@
     private IReadOnlyList<PublicTemplateRow> _templates = Array.Empty<PublicTemplateRow>();
     private bool _templatesLoaded;
     private string _draft = string.Empty;
+    private TextDraft? _replyDraft;
+
+    // the internal note and the message to the tipster sit side by side: one draft each
+    private string ComposerDraftKey => $"hinweis:{TipId}:{(IsInternal ? "notiz" : "nachricht")}";
     private bool _load = true;
     private bool _busy;
     private string? _loadedId;
@@ -211,6 +217,10 @@
             else
             {
                 await Tips.AskCitizenAsync(TipId, _draft, User);
+            }
+            if (_replyDraft is not null)
+            {
+                await _replyDraft.MarkSavedAsync();
             }
             _draft = string.Empty;
             await LoadAsync();

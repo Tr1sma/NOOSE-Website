@@ -3,6 +3,7 @@
 @inject IOperationService OperationService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Operation bearbeiten" : "Neue Operation") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <OperationForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+        <OperationForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
                        IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     @if (IsEdit)
@@ -53,6 +54,9 @@ else
     private MudForm _form = default!;
     private OperationInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"operation:{Id}" : "operation:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -128,12 +132,14 @@ else
             if (IsEdit)
             {
                 await OperationService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/operationen/{Id}");
             }
             else
             {
                 var operation = await OperationService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Operation {operation.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/operationen/{operation.Id}");
             }

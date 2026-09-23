@@ -217,6 +217,11 @@
         }
         // saved first, so what goes outside is what stands in the fields
         await StoreAsync();
+        // the text is stored now, whatever the publish step does next
+        if (_editor is not null)
+        {
+            await _editor.MarkSavedAsync();
+        }
         await Profiles.PublishAsync(_input.Id, User);
         Snackbar.Add("Profil veröffentlicht.", Severity.Success);
     });

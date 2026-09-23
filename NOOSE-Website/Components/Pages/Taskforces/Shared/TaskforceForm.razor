@@ -25,16 +25,21 @@
 
     <MudItem xs="12">
         <MentionInput Text="@(Input.Purpose ?? string.Empty)" TextChanged="@(v => Input.Purpose = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "purpose")'
                       Label="Sinn / Zweck" Lines="4"
                       HelperText="@($"Auftrag und Ziel der Taskforce. {MentionInput.Hint}")" />
     </MudItem>
     <MudItem xs="12">
         <MentionInput Text="@(Input.Remarks ?? string.Empty)" TextChanged="@(v => Input.Remarks = v)"
+                      DraftKey='@DraftKeys.In(DraftScope, "remarks")'
                       Label="Bemerkungen" Lines="3" HelperText="Interne Vermerke." />
     </MudItem>
 </MudGrid>
 
 @code {
     [Parameter, EditorRequired] public TaskforceInput Input { get; set; } = default!;
+    /// <summary>Browser draft scope of the text fields; the editor drops it once the save went through.</summary>
+    [Parameter] public string? DraftScope { get; set; }
+
     [Parameter] public bool IsLeadership { get; set; }
 }

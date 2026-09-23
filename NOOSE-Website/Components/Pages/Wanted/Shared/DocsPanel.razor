@@ -4,6 +4,7 @@
 @inject IPersonService PersonService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
@@ -175,6 +176,7 @@ else
                 personId = doc.PersonId;
                 Snackbar.Add($"Neue Akte „{result.NewName}“ samt Dok angelegt.", Severity.Success);
             }
+            await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DocCreateDialog.DraftScope);
             // optionally enroll person in the linked record
             await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, personId, result.Input, _user);
             await LoadAsync();

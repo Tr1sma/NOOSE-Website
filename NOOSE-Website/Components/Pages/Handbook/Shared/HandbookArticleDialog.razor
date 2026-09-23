@@ -34,7 +34,7 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Direkte Anrede, kurze Sätze. Ein Fachwort beim ersten Auftreten erklären.
             </MudText>
-            <RichTextEditor @bind-Value="_contentHtml" MinHeight="260px"
+            <RichTextEditor @ref="_contentEditor" @bind-Value="_contentHtml" MinHeight="260px"
                             DraftKey='@($"handbuch:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}:anleitung")' />
 
             <MudText Typo="Typo.subtitle2" Class="mt-2">Im Rollenspiel bedeutet das … (optional)</MudText>
@@ -42,7 +42,7 @@
                 Was dieselbe Sache im Spiel bedeutet. Steht später in einem abgesetzten Kasten, damit man
                 Anleitung und Spielregel auseinanderhalten kann.
             </MudText>
-            <RichTextEditor @bind-Value="_roleplayHtml" MinHeight="140px"
+            <RichTextEditor @ref="_roleplayEditor" @bind-Value="_roleplayHtml" MinHeight="140px"
                             DraftKey='@($"handbuch:{(string.IsNullOrEmpty(EntityId) ? "neu" : EntityId)}:rollenspiel")' />
 
             <MudStack Row="true" Spacing="2">
@@ -100,7 +100,8 @@
     private int _sortOrder;
     private bool _isVisible = true;
 
-    protected override void OnParametersSet()
+    // once: a nested dialog re-renders this one, and re-applying the preset then threw away what was typed
+    protected override void OnInitialized()
     {
         if (Preset is { } p)
         {
@@ -123,10 +124,24 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    private void Save()
-        => MudDialog.Close(DialogResult.Ok(new HandbookArticleInput(
+    private RichTextEditor? _contentEditor;
+    private RichTextEditor? _roleplayEditor;
+
+    private async Task Save()
+    {
+        // read straight from the editors: the bound value trails the last keystrokes by the change debounce
+        if (_contentEditor is not null)
+        {
+            _contentHtml = await _contentEditor.GetHtmlAsync();
+        }
+        if (_roleplayEditor is not null)
+        {
+            _roleplayHtml = await _roleplayEditor.GetHtmlAsync();
+        }
+        MudDialog.Close(DialogResult.Ok(new HandbookArticleInput(
             _chapterId, _slug, _title, _summary, _contentHtml, _roleplayHtml,
             _diagramKey, _navKey, _sortOrder, _isVisible)));
+    }
 
     /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
     public static async Task<HandbookArticleInput?> ShowAsync(

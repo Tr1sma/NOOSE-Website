@@ -387,6 +387,11 @@ else
         }
 
         await StoreAsync();
+        // the text is stored now, whatever the publish step does next
+        if (_editor is not null)
+        {
+            await _editor.MarkSavedAsync();
+        }
         var outcome = await Wanted.PublishAsync(Id, justification, User);
         Snackbar.Add(outcome == PublicWantedPublishOutcome.Published
             ? "Ausschreibung veröffentlicht."

@@ -5,6 +5,7 @@
 @inject IPublicTemplateService Templates
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Textbausteine für Nachrichten an Bürger. Die beiden Eingangsbestätigungen gehen <em>automatisch</em>
@@ -135,16 +136,16 @@ else
         var siblings = _rows.Where(r => r.Kind == kind).ToList();
         var next = siblings.Count == 0 ? 10 : siblings.Max(r => r.SortOrder) + 10;
         var input = await PublicTemplateDialog.ShowAsync(DialogService, "Neue Vorlage", kind: kind, sortOrder: next);
-        await SaveAsync(input, "Vorlage angelegt.");
+        await SaveAsync(input, "Vorlage angelegt.", PublicTemplateDialog.DraftScopeFor(null, kind));
     }
 
     private async Task EditAsync(PublicTemplateRow row)
     {
         var input = await PublicTemplateDialog.ShowAsync(DialogService, "Vorlage bearbeiten", existing: row);
-        await SaveAsync(input, "Vorlage gespeichert.");
+        await SaveAsync(input, "Vorlage gespeichert.", PublicTemplateDialog.DraftScopeFor(row.Id, row.Kind));
     }
 
-    private async Task SaveAsync(PublicTemplateInput? input, string success)
+    private async Task SaveAsync(PublicTemplateInput? input, string success, string draftScope)
     {
         if (input is null)
         {
@@ -153,6 +154,7 @@ else
         try
         {
             await Templates.SaveAsync(input, _user);
+            await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), draftScope);
             Snackbar.Add(success, Severity.Success);
             await LoadAsync();
         }

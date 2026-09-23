@@ -273,5 +273,38 @@ internal static class GettingStartedChapter
                     new Step("Bolt", "Wieder öffnen",
                         "Unter den Favoriten im Menü oder mit Strg+K - die Liste steht sofort wieder so da."),
                 ]),
+
+            new Article("art-entwuerfe", "entwuerfe", "Nichts geht verloren",
+                "Was du tippst, hebt dein Browser auf - auch wenn die Verbindung abreißt.",
+                """
+                <p>Die Seite hängt an einer ständigen Verbindung zum Server. Reißt sie ab - WLAN weg, Server
+                neu gestartet, Rechner im Ruhezustand -, meldet sich oben der Hinweis zum Wiederverbinden. Was
+                du bis dahin getippt hast, ist trotzdem nicht weg: jedes längere Textfeld legt deinen Text
+                laufend in <strong>deinem Browser</strong> ab, als <strong>Entwurf</strong>.</p>
+                <p>Öffnest du dasselbe Feld wieder - nach dem Neuladen, beim nächsten <em>Neues Dok</em>, am
+                nächsten Tag -, steht darunter <em>Nicht gespeicherter Entwurf gefunden</em>. Mit
+                <em>Wiederherstellen</em> steht der Text wieder im Feld, mit <em>Verwerfen</em> ist er weg.
+                Tippst du einfach weiter, verschwindet der Hinweis: dann gilt, was du jetzt schreibst.</p>
+                <p>Das gilt für den Text-Editor der Dokumente und Berichte und für die gewöhnlichen Textfelder:
+                Doks, Observationen, Vermerke, Taskforce-Chat, Schnellerfassung und die Beschreibungen in den
+                Formularen der Akten. Auch ein Dialog, den du aus Versehen mit Escape oder einem Klick daneben
+                schließt, verliert nichts - <em>Abbrechen</em> übrigens auch nicht. Ein Entwurf verschwindet
+                erst, wenn du <strong>erfolgreich speicherst</strong>. Schlägt das Speichern fehl, bleibt er
+                stehen.</p>
+                <p>Kurze Begründungen in Entscheidungsdialogen hebt die Seite bewusst nicht auf: ein Grund, der
+                plötzlich unter einer anderen Entscheidung steht, wäre schlimmer als gar keiner.</p>
+                <p>Entwürfe liegen <strong>nur auf diesem Gerät</strong> und nur für dich. Nach sieben Tagen
+                fallen sie weg, beim <em>Abmelden</em> sofort alle. An einem fremden Rechner meldest du dich
+                deshalb immer ab.</p>
+                """,
+                Steps:
+                [
+                    new Step("CloudOff", "Verbindung weg",
+                        "Einfach weitertippen - das Feld hebt deinen Text im Browser auf."),
+                    new Step("Restore", "Wiederherstellen",
+                        "Beim nächsten Öffnen des Felds den Hinweis darunter anklicken."),
+                    new Step("Save", "Speichern räumt auf",
+                        "Erst ein erfolgreiches Speichern löscht den Entwurf."),
+                ]),
         ]);
 }

@@ -2,6 +2,7 @@
 @inject IDialogService DialogService
 @inject IObservationService ObservationService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudDialog>
     <DialogContent>
@@ -89,6 +90,7 @@
         try
         {
             await ObservationService.RefreshAsync(Obs.Id, input, User);
+            await TextDraft.DiscardScopeAsync(JS, User.GetAgentId(), ObservationDialog.EditDraftScope(Obs.Id));
             Snackbar.Add("Observation aktualisiert.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }

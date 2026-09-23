@@ -10,8 +10,9 @@
     @if (_mayWrite)
     {
         <MudStack Spacing="2">
-            <MentionInput @bind-Text="_newText" Placeholder="@Placeholder" OnSubmit="AddAsync"
-                          ImageOwnerType="@EntityType" ImageOwnerId="@EntityId" />
+            <MentionInput @ref="_newInput" @bind-Text="_newText" Placeholder="@Placeholder" OnSubmit="AddAsync"
+                          ImageOwnerType="@EntityType" ImageOwnerId="@EntityId"
+                          DraftKey='@($"vermerk:neu:{EntityType}:{EntityId}")' />
             <MudStack Row="true" Justify="Justify.FlexEnd">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newText))">
@@ -63,9 +64,10 @@
                 @if (_editingId == e.K.Id)
                 {
                     <div class="mt-1">
-                        <MentionInput @bind-Text="_editText" Lines="3" AutoFocus="true"
+                        <MentionInput @ref="_editInput" @bind-Text="_editText" Lines="3" AutoFocus="true"
                                       Placeholder="@PlaceholderEdit" OnSubmit="SaveEditAsync"
-                                      ImageOwnerType="@EntityType" ImageOwnerId="@EntityId" />
+                                      ImageOwnerType="@EntityType" ImageOwnerId="@EntityId"
+                                      DraftKey='@($"vermerk:{e.K.Id}")' />
                         <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-1">
                             <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                        OnClick="CancelEdit">Abbrechen</MudButton>
@@ -101,6 +103,8 @@
     private bool _mayWrite;
     private bool _canShareChildren;
     private string _newText = string.Empty;
+    private MentionInput? _newInput;
+    private MentionInput? _editInput;
     private string? _editingId;
     private string _editText = string.Empty;
     private bool _editSaving;
@@ -145,6 +149,10 @@
         try
         {
             await CommentService.CreateAsync(EntityType, EntityId, _newText, User);
+            if (_newInput is not null)
+            {
+                await _newInput.MarkSavedAsync();
+            }
             _newText = string.Empty;
             Snackbar.Add("Kommentar gespeichert.", Severity.Success);
             await LoadAsync();
@@ -181,6 +189,11 @@
         try
         {
             await CommentService.EditAsync(_editingId, _editText, User);
+            // before the field goes: its teardown would otherwise write the saved text back as a draft
+            if (_editInput is not null)
+            {
+                await _editInput.MarkSavedAsync();
+            }
             _editingId = null;
             _editText = string.Empty;
             Snackbar.Add("Kommentar gespeichert.", Severity.Success);

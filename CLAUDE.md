@@ -273,7 +273,7 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=15`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=21`, `entwurf.js?v=1`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
 - **Ablehnen, Schließen und eine nicht bestandene Sicherheitsüberprüfung sperren 14 Tage.** Die Dauer, das
   Aktiv-Prädikat (`IstBlacklist || GesperrtBis > jetzt`, es gibt keine `IstAktiv`-Spalte) und die
   Lokal→UTC-Umrechnung des `MudDatePicker` liegen zusammen in `Services/BewerbungssperreRules.cs`. Die Sperre
@@ -312,6 +312,14 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   `:anleitung`/`:rollenspiel`, Tagesordnung `tagesordnung:{item.Id}`). Nach erfolgreichem Speichern
   `MarkSavedAsync()` rufen, sonst bietet der nächste Aufruf den gespeicherten Text erneut an. `Compact="true"`
   (nur Bewerberchat) = schlanke Leiste, kein Entwurf, kein Slash-Menü.
+- **Einfache Textfelder sichern ihren Entwurf genauso — über `DraftKey` an `MentionInput`** (bzw. ein
+  `<TextDraft>` um ein `MudTextField`). Ablage, Sieben-Tage-Grenze und Löschung beim Abmelden teilen sich Editor
+  und Felder in `wwwroot/js/entwurf.js` (von `richtext.js` importiert, `?v=` an **beiden** Stellen gleich).
+  Ein Formular vergibt einen **Bereich** (`DraftKeys.In(DraftScope, "feld")`), und wer speichert, verwirft ihn
+  **nach** dem erfolgreichen Schreiben: `TextDraft.DiscardScopeAsync(JS, agentId, scope)` — bei Dialogen der
+  Aufrufer, weil der Dialog vor dem Speichern schließt. Nur Speichern oder *Verwerfen* löschen einen Entwurf,
+  *Abbrechen* nicht. Bürgerportal und öffentliche Seiten sichern nichts (Anonymitätszusage).
+  `TextDraftScanTests` verlangt für jedes Feld ab drei Zeilen einen Schlüssel oder einen Ausnahmegrund.
 - **Checklisten, Einzüge und Ausrichtung sind Quill-Klassen im gespeicherten HTML** (`data-checked`,
   `ql-indent-N`, `ql-align-*`). `HtmlCleanup` erlaubt genau `data-checked` — keine pauschale `data-*`-Freigabe.
   Reine Leseansichten laden kein `quill.snow.css`; die Darstellung steht deshalb zusätzlich in `app.css` unter

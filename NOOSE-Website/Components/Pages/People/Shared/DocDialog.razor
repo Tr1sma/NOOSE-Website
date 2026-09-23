@@ -49,7 +49,8 @@
                 @* a dok has no secrecy flag of its own, so a pasted picture hangs on the person akte *@
                 <MentionInput Text="@(_input.Reason ?? string.Empty)" TextChanged="@(v => _input.Reason = v)"
                               Label="Grund" Lines="2" HelperText="@MentionInput.Hint"
-                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId"
+                              DraftKey='@DraftKeys.In(DraftScope, "grund")' />
 
                 @* Prefer linking an existing record; otherwise free text. *@
                 @if (_orgHidden)
@@ -89,7 +90,8 @@
                               HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
                 <MentionInput Text="@(_input.ReceivedInformation ?? string.Empty)" TextChanged="@(v => _input.ReceivedInformation = v)"
                               Label="Erhaltene Informationen" Lines="3"
-                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId" />
+                              ImageOwnerType="@nameof(Person)" ImageOwnerId="@PersonId"
+                              DraftKey='@DraftKeys.In(DraftScope, "info")' />
                 <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
             </MudStack>
         </MudForm>
@@ -113,6 +115,9 @@
 
     [Parameter] public string? ExistsOrgName { get; set; }
     [Parameter] public string? ExistsOrgCaseNumber { get; set; }
+
+    /// <summary>Browser draft scope of the text fields; the caller drops it once the dok is stored.</summary>
+    [Parameter] public string? DraftScope { get; set; }
 
     private bool IsEdit => Exists is not null;
 
@@ -221,13 +226,22 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Draft scope of a new dok on this person.</summary>
+    public static string NewDraftScope(string? personId) => $"dok:neu:{personId}";
+
+    /// <summary>Draft scope of an existing dok.</summary>
+    public static string EditDraftScope(string docId) => $"dok:{docId}";
+
     /// <summary>Shows the dialog and returns the input, or null on cancel.</summary>
+    /// <remarks>The caller drops <see cref="NewDraftScope"/> once the dok is stored, not before: a failed save
+    /// leaves the browser draft as the only copy of the text.</remarks>
     public static async Task<PersonDocInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? personId)
     {
         var parameters = new DialogParameters<DocDialog>
         {
             { x => x.IsLeadership, isLeadership },
             { x => x.PersonId, personId },
+            { x => x.DraftScope, NewDraftScope(personId) },
         };
         var reference = await dialog.ShowAsync<DocDialog>("Neues Dok", parameters);
         var result = await reference.Result;
@@ -256,6 +270,7 @@
             { x => x.ExistsOrgName, orgName },
             { x => x.ExistsOrgCaseNumber, orgCaseNumber },
             { x => x.PersonId, doc.PersonId },
+            { x => x.DraftScope, EditDraftScope(doc.Id) },
         };
         var reference = await dialog.ShowAsync<DocDialog>("Dok bearbeiten", parameters);
         var result = await reference.Result;

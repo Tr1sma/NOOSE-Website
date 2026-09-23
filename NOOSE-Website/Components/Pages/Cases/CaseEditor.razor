@@ -3,6 +3,7 @@
 @inject ICaseService CaseService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Vorgang bearbeiten" : "Neuer Vorgang") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <CaseForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+        <CaseForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
                   IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     @if (IsEdit)
@@ -53,6 +54,9 @@ else
     private MudForm _form = default!;
     private CaseInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"vorgang:{Id}" : "vorgang:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -125,12 +129,14 @@ else
             if (IsEdit)
             {
                 await CaseService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/vorgaenge/{Id}");
             }
             else
             {
                 var @case = await CaseService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Vorgang {@case.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/vorgaenge/{@case.Id}");
             }

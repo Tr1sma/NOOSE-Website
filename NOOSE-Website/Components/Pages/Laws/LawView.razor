@@ -3,6 +3,7 @@
 @inject ILinkService LinkService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>@(_law is null ? "Gesetzbuch" : $"{_law.Paragraph} {_law.Title}") · NOOSE</PageTitle>
 
@@ -147,7 +148,7 @@ else
             Title = _law.Title,
             Text = _law.Text,
             Sentence = _law.Sentence,
-        });
+        }, _law.Id);
         if (input is null)
         {
             return;
@@ -155,6 +156,7 @@ else
         try
         {
             await LawService.RefreshAsync(_law.Id, input, _user);
+            await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), LawDialog.DraftScopeFor(_law.Id));
             Snackbar.Add("Paragraf gespeichert.", Severity.Success);
             await LoadAsync();
         }

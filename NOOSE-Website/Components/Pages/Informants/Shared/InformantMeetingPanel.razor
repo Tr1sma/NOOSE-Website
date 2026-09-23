@@ -16,7 +16,8 @@
                 <MudTextField @bind-Value="_location" Label="Ort" />
             </MudItem>
             <MudItem xs="12">
-                <MentionInput @bind-Text="_content" Label="Inhalt / Meldung" Lines="3" HelperText="@MentionInput.Hint" />
+                <MentionInput @ref="_contentInput" @bind-Text="_content" Label="Inhalt / Meldung" Lines="3"
+                              HelperText="@MentionInput.Hint" DraftKey='@($"informant-treffen:{InformantId}")' />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
@@ -57,6 +58,7 @@ else
     private DateTime? _date = DateTime.Today;
     private string? _location;
     private string? _content;
+    private MentionInput? _contentInput;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -68,6 +70,10 @@ else
         {
             await Service.AddMeetingAsync(InformantId,
                 new InformantMeetingInput(_date ?? DateTime.UtcNow, _location, _content), User);
+            if (_contentInput is not null)
+            {
+                await _contentInput.MarkSavedAsync();
+            }
             _location = null;
             _content = null;
             _date = DateTime.Today;

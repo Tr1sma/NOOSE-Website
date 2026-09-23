@@ -3,6 +3,7 @@
 @inject IPartyService PartyService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsEdit ? "Partei bearbeiten" : "Neue Partei") · NOOSE</PageTitle>
 
@@ -25,7 +26,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <PartyForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+        <PartyForm DraftScope="@DraftScope" @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
                    ShowMembers="@(!IsEdit)" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     @if (IsEdit)
@@ -53,6 +54,9 @@ else
     private MudForm _form = default!;
     private PartyInput? _input;
     private ClaimsPrincipal _user = default!;
+
+    // one scope for every text field of the form; dropped once the save went through
+    private string DraftScope => IsEdit ? $"partei:{Id}" : "partei:neu";
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _load = true;
@@ -123,12 +127,14 @@ else
             if (IsEdit)
             {
                 await PartyService.RefreshAsync(Id!, _input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add("Änderungen gespeichert.", Severity.Success);
                 Nav.NavigateTo($"/parteien/{Id}");
             }
             else
             {
                 var party = await PartyService.CreateAsync(_input, _user);
+                await TextDraft.DiscardScopeAsync(JS, _user.GetAgentId(), DraftScope);
                 Snackbar.Add($"Partei {party.CaseNumber} angelegt.", Severity.Success);
                 Nav.NavigateTo($"/parteien/{party.Id}");
             }

@@ -13,6 +13,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudDialog>
     <DialogContent>
@@ -38,9 +39,11 @@
                     <QuickRecordPicker Allowed="QuickCapture.CommentTargets" @bind-Value="_noteTarget"
                                        Label="Akte" Placeholder="Akte suchen …" Disabled="@NoteTargetLocked"
                                        HelperText="@NoteTargetHelper" />
-                    <MentionInput @bind-Text="_noteText" Lines="4" Placeholder="@NotePlaceholder"
+                    @* one draft per record: a pasted picture belongs to its record, and so does an unsaved note *@
+                    <MentionInput @ref="_noteInput" @bind-Text="_noteText" Lines="4" Placeholder="@NotePlaceholder"
                                   Disabled="@(_noteTarget is null)" OnSubmit="NoteAsync"
-                                  ImageOwnerType="@(_noteTarget?.Category)" ImageOwnerId="@(_noteTarget?.TargetId)" />
+                                  ImageOwnerType="@(_noteTarget?.Category)" ImageOwnerId="@(_noteTarget?.TargetId)"
+                                  DraftKey="@NoteDraftKey" />
                 </MudStack>
             </MudTabPanel>
 
@@ -55,7 +58,8 @@
                         <MudDatePicker @bind-Date="_activityDate" Label="Datum" Variant="Variant.Outlined" />
                         <MudTimePicker @bind-Time="_activityTime" Label="Uhrzeit" Variant="Variant.Outlined" AmPm="false" />
                     </MudStack>
-                    <MentionInput @bind-Text="_activityText" Lines="3" Placeholder="@ActivityPlaceholder" />
+                    <MentionInput @ref="_activityInput" @bind-Text="_activityText" Lines="3" Placeholder="@ActivityPlaceholder"
+                                  DraftKey="schnellerfassung:aktivitaet" />
                     <QuickRecordPicker Allowed="QuickCapture.ActivityTargets" @bind-Value="_activityOrg"
                                        Label="Fraktion oder Gruppe (optional)" Placeholder="Suchen …"
                                        HelperText="Verknüpft die Aktivität mit der Akte; bei einer Fraktion frischt das ihre Aktualität auf." />
@@ -108,11 +112,15 @@
     private QuickHit? _noteTarget;
     private string _noteText = string.Empty;
 
+    private string? NoteDraftKey => _noteTarget is { } t ? $"schnellerfassung:vermerk:{t.Category}:{t.TargetId}" : null;
+
     private string _activityTitle = string.Empty;
     private string? _activityKind;
     private DateTime? _activityDate;
     private TimeSpan? _activityTime;
     private string _activityText = string.Empty;
+    private MentionInput? _noteInput;
+    private MentionInput? _activityInput;
     private QuickHit? _activityOrg;
     private List<string> _kinds = new();
     private bool _kindsLoaded;
@@ -199,6 +207,16 @@
         try
         {
             await CommentService.CreateAsync(target.Category, target.TargetId, _noteText, user);
+            if (_noteInput is not null)
+            {
+                await _noteInput.MarkSavedAsync();
+            }
+            // The text stays in the field when another record is picked, so a record it was written under first
+            // still holds it as a draft - and would later offer a note that is already posted here.
+            foreach (var key in (_noteInput?.DraftKeysWritten ?? []).Where(k => k != NoteDraftKey).ToList())
+            {
+                await TextDraft.DiscardAsync(JS, user.GetAgentId(), key);
+            }
             // deliberately no navigation: keeping the page the agent was on is the whole point
             Snackbar.Add($"Vermerk an „{target.Name}“ gespeichert.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
@@ -240,6 +258,10 @@
                     : new List<AgentActivityOrgRef>(),
             };
             await ActivityService.CreateAsync(input, user);
+            if (_activityInput is not null)
+            {
+                await _activityInput.MarkSavedAsync();
+            }
             Snackbar.Add("Aktivität festgehalten.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }

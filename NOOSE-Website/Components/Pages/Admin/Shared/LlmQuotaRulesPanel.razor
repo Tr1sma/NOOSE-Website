@@ -151,7 +151,7 @@ else
     <MudText Typo="Typo.subtitle2" Class="mt-6 mb-2">Hausregel für NOOSEI</MudText>
     <MudTextField @bind-Value="_addendum" Label="Zusatzhinweis (optional)" Lines="3" Variant="Variant.Outlined"
                   Disabled="!_mayEdit" Counter="@NooseiPrompts.MaxAddendumChars" MaxLength="@NooseiPrompts.MaxAddendumChars"
-                  HelperText="Wird hinter die festen Regeln gehängt, z. B. „Nutze immer Codenamen, nie Klarnamen." Kann Regeln ergänzen, aber keine entfernen." />
+                  HelperText="Wird hinter die festen Regeln gehängt, z. B. „Nutze immer Codenamen, nie Klarnamen.“ Kann Regeln ergänzen, aber keine entfernen." />
 
     @if (_mayEdit)
     {
