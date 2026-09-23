@@ -19,7 +19,8 @@
             </MudTooltip>
         }
 
-        @if (_prefs.Favorites.Count > 0)
+        @* saved views share the favorites panel, so either one is reason enough for the button *@
+        @if (_prefs.Favorites.Count > 0 || VisibleViews.Any())
         {
             <MudTooltip Text="Favoriten" Placement="Placement.Right">
                 <MudIconButton Icon="@Icons.Material.Filled.Star"
@@ -75,6 +76,15 @@
                 @foreach (var fav in _prefs.Favorites)
                 {
                     @Favorite(fav)
+                }
+                @if (VisibleViews.Any())
+                {
+                    <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 mud-text-secondary">Meine Ansichten</MudText>
+                    @foreach (var view in VisibleViews)
+                    {
+                        @* no active highlight: NavLink ignores the query, so every view of a list would light up at once *@
+                        <MudNavLink Href="@view.Route" Match="NavLinkMatch.All" ActiveClass="" Icon="@view.Icon">@view.Label</MudNavLink>
+                    }
                 }
             }
             else
@@ -238,6 +248,24 @@
             <MudNavLink Href="@fav.Route" Match="NavLinkMatch.Prefix" Icon="@fav.Icon">@fav.Label</MudNavLink>
         }
     };
+
+    // filtered before counting, so the rail button and the heading never stand over a list with nothing in it;
+    // the same per-circuit policy snapshot gates the drawer's own entries
+    private IEnumerable<SavedView> VisibleViews => _prefs.SavedViews.Where(ViewAllowed);
+
+    // a view gates like the list it opens; partners reach a list only through a record type released to their rank
+    private bool ViewAllowed(SavedView view)
+        => _user?.IsPartner() == true
+            ? PartnerViewAllowed(view.Route)
+            : NavCatalog.ByRoute(view.Route) is { } e && _policyOk.GetValueOrDefault(NavSectionPolicy.For(e.Section));
+
+    private bool PartnerViewAllowed(string route)
+    {
+        var path = SavedViewRules.PathOf(route);
+        return PartnerTabCatalog.All.Any(t =>
+            string.Equals("/" + t.RoutePrefix, path, StringComparison.OrdinalIgnoreCase)
+            && PartnerTypeAllowed("partner." + t.TypeKey));
+    }
 
     // partner page favorite "partner.<Type>" still within the rank's allowed set
     private bool PartnerTypeAllowed(string? key)

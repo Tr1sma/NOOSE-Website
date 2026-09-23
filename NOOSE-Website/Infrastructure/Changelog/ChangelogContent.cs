@@ -370,6 +370,11 @@ public static class ChangelogContent
             Neu("2.2.06-textbausteine", "Du kannst dir eigene Textbausteine anlegen: Sätze, die du immer "
                 + "wieder schreibst, holst du mit einem Schrägstrich in jedes Textfeld. Platzhalter wie "
                 + "Name, Aktenzeichen und Datum füllen sich dabei von selbst.", "Bedienung"),
+            Neu("2.2.07-ansichten", "Auf den Listen der Personen, Fraktionen, Vorgänge und Operationen und "
+                + "auf dem Aufgaben-Board merkst du dir eine gefilterte Auswahl unter einem Namen. Sie steht "
+                + "danach unter den Favoriten und im Schnellzugriff und öffnet die Liste wieder genau so. "
+                + "Das Aufgaben-Board behält seine Filter außerdem jetzt auch, wenn du die Seite neu lädst.",
+                "Bedienung"),
         ]),
     ];
 }

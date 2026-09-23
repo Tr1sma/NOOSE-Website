@@ -240,5 +240,38 @@ internal static class GettingStartedChapter
                     new Step("AutoFixHigh", "Platzhalter füllen sich",
                         "Name und Aktenzeichen kommen aus der Akte, Datum, Uhrzeit und Dienstgrad von dir."),
                 ]),
+
+            new Article("art-listen-ansichten", "listen-ansichten", "Listen-Ansichten",
+                "Eine gefilterte Liste unter einem Namen merken und mit einem Klick wieder öffnen.",
+                """
+                <p>Wer jeden Tag dieselbe Auswahl braucht - etwa alle <em>Verdachtsfälle</em>, deren Akte
+                <em>rot</em> ist -, muss die Filter nicht jedes Mal neu einstellen. Eine
+                <strong>Ansicht</strong> merkt sich die Liste zusammen mit ihren Filtern.</p>
+                <p>Das geht auf den Listen der <em>Personen</em>, <em>Fraktionen</em>, <em>Vorgänge</em> und
+                <em>Operationen</em> und auf dem <em>Aufgaben-Board</em>. Stell die Filter ein, öffne oben
+                rechts <em>Ansichten</em> und wähle <em>Diese Ansicht merken</em>. Ohne gesetzten Filter ist
+                der Eintrag abgeblendet - die ungefilterte Liste öffnet ohnehin jeder Klick im Menü.</p>
+                <p>Gemerkte Ansichten findest du an drei Stellen: im selben Menü auf ihrer Liste, im Menü
+                links unter den <em>Favoriten</em> in der Gruppe <em>Meine Ansichten</em> und im
+                <strong>Schnellzugriff</strong> (Strg+K) mit dem Hinweis <em>Ansicht</em>. Ein Klick öffnet
+                die Liste genau so, wie du sie gemerkt hast - auch dann, wenn du gerade schon auf ihr bist.</p>
+                <p>Merkst du dir auf einer Liste eine Ansicht unter einem Namen, den <strong>diese Liste</strong>
+                schon hat, <strong>ersetzt</strong> sie die alte; der Dialog sagt dir das vorher. Auf einer
+                anderen Liste darf derselbe Name ruhig noch einmal vorkommen. Löschen kannst du eine Ansicht
+                mit dem Papierkorb im Menü ihrer Liste oder über den Knopf <em>Navigation anpassen</em> oben
+                im Menü links, Reiter <em>Ansichten</em>. Mehr als zwanzig Ansichten sind nicht vorgesehen.</p>
+                <p>Ansichten gehören <strong>dir allein</strong>, so wie deine Favoriten. Wer eine Ansicht
+                öffnet, sieht darin trotzdem nur, was er auch ohne sie sehen dürfte. Im öffentlichen
+                Demo-Zugang gibt es keine Ansichten: dort teilen sich alle Besucher ein Konto.</p>
+                """,
+                Steps:
+                [
+                    new Step("FilterList", "Filter einstellen",
+                        "Auf der Liste Einstufung, Aktualität, Status oder Suchbegriff wählen."),
+                    new Step("BookmarkAdd", "Ansicht merken",
+                        "Oben rechts „Ansichten“ öffnen, „Diese Ansicht merken“ wählen und einen Namen vergeben."),
+                    new Step("Bolt", "Wieder öffnen",
+                        "Unter den Favoriten im Menü oder mit Strg+K - die Liste steht sofort wieder so da."),
+                ]),
         ]);
 }

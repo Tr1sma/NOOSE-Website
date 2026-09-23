@@ -21,11 +21,13 @@
         <MudAutocomplete T="PaletteItem" @ref="_auto" SearchFunc="Search" ToStringFunc="@(i => i?.Label ?? string.Empty)"
                          ValueChanged="SelectedAsync" Placeholder="Akte suchen oder Befehl wählen…"
                          Variant="Variant.Outlined" MinCharacters="0" Immediate="true" Clearable="true"
-                         ResetValueOnEmptyText="true" AutoFocus="true"
+                         ResetValueOnEmptyText="true" AutoFocus="true" MaxItems="@null"
                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search">
             <ItemTemplate Context="i">
                 @* MudAutocomplete has no group headers, so the kind has to live in the row itself: without the
-                   trailing chip a record hit and a static command are indistinguishable. *@
+                   trailing chip a record hit and a static command are indistinguishable. MaxItems is lifted
+                   because its default of 10 cut the list after the favourites - saved views, recents and even the
+                   "Alles durchsuchen" funnel fell off the end without a trace. *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width:100%">
                     <MudIcon Icon="@i.Icon" Size="Size.Small"
                              Color="@(i.Kind == PaletteKind.Record ? Color.Info : Color.Primary)" />
@@ -59,6 +61,7 @@
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
     private List<PaletteItem> _commands = new();
     private List<PaletteItem> _favorites = new();
+    private List<PaletteItem> _views = new();
     private List<PaletteItem> _recents = new();
 
     protected override async Task OnInitializedAsync()
@@ -161,6 +164,10 @@
             _favorites = prefs.Favorites
                 .Select(f => new PaletteItem(f.Label, null, f.Icon, f.Route, PaletteKind.Favorite))
                 .ToList();
+            // the list's name as subtitle: two views called "Rot" on two lists would otherwise look alike
+            _views = prefs.SavedViews
+                .Select(s => new PaletteItem(s.Label, NavCatalog.ByRoute(s.Route)?.Label, s.Icon, s.Route, PaletteKind.View))
+                .ToList();
             var favRoutes = prefs.Favorites.Select(f => f.Route).ToHashSet(StringComparer.Ordinal);
             _recents = prefs.Recents
                 .Where(r => !favRoutes.Contains(r.Route))
@@ -180,14 +187,16 @@
         var result = new List<PaletteItem>();
         if (string.IsNullOrEmpty(v))
         {
-            // empty query: favorites and recents first, then the command list
+            // empty query: favorites, saved views and recents first, then the command list
             result.AddRange(_favorites);
+            result.AddRange(_views);
             result.AddRange(_recents);
             result.AddRange(_commands);
         }
         else
         {
             result.AddRange(_favorites.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
+            result.AddRange(_views.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
             result.AddRange(_commands.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -255,11 +264,12 @@
 
     /// <summary>What a row is, for the trailing chip. Icons come from the catalog, so the palette and the result
     /// list can never label the same category differently.</summary>
-    private enum PaletteKind { Command, Favorite, Recent, Record, Search, Noosei }
+    private enum PaletteKind { Command, Favorite, View, Recent, Record, Search, Noosei }
 
     private static string Badge(PaletteItem item) => item.Kind switch
     {
         PaletteKind.Favorite => "Favorit",
+        PaletteKind.View => "Ansicht",
         PaletteKind.Recent => "Zuletzt",
         PaletteKind.Record => item.TypeName ?? "Akte",
         PaletteKind.Search => "Suche",

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
+using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Models.Navigation;
 
 namespace NOOSE_Website.Services;
@@ -153,6 +154,34 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
         => string.IsNullOrWhiteSpace(stepKey)
             ? Task.CompletedTask
             : MutateAsync(agentId, p => p.OnboardingDone.Add(stepKey), cancellationToken, notify: false);
+
+    // notifies: the drawer and the header menus list the views, and both should see a save at once
+    public async Task<SavedViewOutcome> SaveViewAsync(string agentId, string label, string route, string icon,
+        CancellationToken cancellationToken = default)
+    {
+        // refused before the lock, so a nameless or foreign route costs no write
+        if (string.IsNullOrWhiteSpace(agentId) || IsSharedDemo(agentId)
+            || SavedViewRules.Normalise(label).Length == 0 || !SavedViewRules.IsLocalRoute(route))
+        {
+            return SavedViewOutcome.Invalid;
+        }
+        var outcome = SavedViewOutcome.Invalid;
+        await MutateAsync(agentId, p => outcome = SavedViewRules.Add(p.SavedViews, label, route, icon), cancellationToken);
+        return outcome;
+    }
+
+    public Task RemoveViewAsync(string agentId, string viewId, CancellationToken cancellationToken = default)
+        => IsSharedDemo(agentId)
+            ? Task.CompletedTask
+            : MutateAsync(agentId, p => SavedViewRules.Remove(p.SavedViews, viewId), cancellationToken);
+
+    /// <summary>The public demo's one account, which every anonymous visitor shares.</summary>
+    /// <remarks>
+    /// Favourites are shared there too, but their labels come from the catalogue. A view name is free text, so one
+    /// visitor could write a sentence every later visitor reads. The header hides the button; this closes the rest.
+    /// </remarks>
+    private static bool IsSharedDemo(string agentId)
+        => string.Equals(agentId, DemoIdentity.AgentId, StringComparison.Ordinal);
 
     /// <summary>One writer at a time per agent, because the read-modify-write below is not atomic.</summary>
     /// <remarks>

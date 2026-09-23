@@ -9,6 +9,7 @@
 <PageHeader Icon="@Icons.Material.Filled.FolderSpecial" Title="Vorgänge"
             Subtitle="Übergeordnete Ermittlungsakte: bündelt Personen, Operationen, Observationen und Doks zu einem Vorgang mit eigenem Status.">
     <Actions>
+        <SavedViewButton BaseRoute="/vorgaenge" Filters="FilterState" OnApply="ApplyViewAsync" />
         <AuthorizeView Policy="@Policies.Leadership">
             <MudButton Href="/papierkorb?tab=vorgaenge" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
         </AuthorizeView>
@@ -139,6 +140,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private int _loadGeneration;
     private string _search = string.Empty;
     private CaseStatus? _statusFilter;
     private Classification? _classification;
@@ -153,22 +155,56 @@ else
     protected override async Task OnInitializedAsync()
     {
         // restore the view from the URL so back-navigation and shared links keep the filters
-        _search = QueryState.Read(Nav, "q") ?? string.Empty;
-        _statusFilter = QueryState.ReadEnum<CaseStatus>(Nav, "status");
-        _classification = QueryState.ReadEnum<Classification>(Nav, "einstufung");
-        _recency = QueryState.ReadEnum<RecencyLevel>(Nav, "aktualitaet");
-        _archive = QueryState.ReadEnum<ArchiveFilter>(Nav, "archiv") ?? ArchiveFilter.Active;
+        ReadFilters(new Uri(Nav.Uri).Query);
 
         await LoadAsync();
+    }
+
+    private void ReadFilters(string query)
+    {
+        _search = QueryState.Read(query, "q") ?? string.Empty;
+        _statusFilter = QueryState.ReadEnum<CaseStatus>(query, "status");
+        _classification = QueryState.ReadEnum<Classification>(query, "einstufung");
+        _recency = QueryState.ReadEnum<RecencyLevel>(query, "aktualitaet");
+        _archive = QueryState.ReadEnum<ArchiveFilter>(query, "archiv") ?? ArchiveFilter.Active;
+    }
+
+    // a saved view, the palette or the menu landing on this list while it shows: the instance is reused
+    private async Task ApplyViewAsync(string query)
+    {
+        var archive = _archive;
+        ReadFilters(query);
+        // the archive filter is the one that lives on the server
+        if (_archive == archive)
+        {
+            return;
+        }
+        _load = true;
+        try
+        {
+            await LoadAsync();
+        }
+        catch
+        {
+            // no endless spinner; the button tells the agent the reload failed
+            _load = false;
+            throw;
+        }
     }
 
     // the archive filter is server-side, so switching it reloads rather than filtering in place
     private async Task LoadAsync()
     {
+        // a view can land while a load still runs; only the newest may write the rows
+        var generation = ++_loadGeneration;
         var user = (await AuthStateTask).User;
         var cases = await CaseService.GetListAsync(ViewerScope.From(user), _archive);
         var settings = await Recency.GetSettingsAsync(nameof(Case));
         var now = DateTime.UtcNow;
+        if (generation != _loadGeneration)
+        {
+            return;
+        }
         _rows = cases.Select(v =>
         {
             var referenceUtc = v.ModifiedAt ?? v.CreatedAt;
@@ -240,12 +276,17 @@ else
         }
     }
 
-    private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav,
+    /// <summary>The filters as query pairs: written to the address, and what a saved view keeps.</summary>
+    private (string Name, string? Value)[] FilterState =>
+    [
         ("q", _search),
         ("status", _statusFilter?.ToString()),
         ("einstufung", _classification?.ToString()),
         ("aktualitaet", _recency?.ToString()),
-        ("archiv", _archive == ArchiveFilter.Active ? null : _archive.ToString()));
+        ("archiv", _archive == ArchiveFilter.Active ? null : _archive.ToString()),
+    ];
+
+    private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav, FilterState);
 
     private bool Filter(CaseRow z)
     {

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Data;
+using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Models.Navigation;
 using NOOSE_Website.Services;
 
@@ -492,6 +493,164 @@ public sealed class NavPreferencesServiceTests : IDisposable
         await NewService().MarkOnboardingStepAsync("a1", marker);
 
         Assert.Empty(Stored("a1").OnboardingDone);
+    }
+
+    // ---------------------------------------------------------------- saved list views
+
+    [Fact]
+    public async Task SaveViewAsync_persists_the_view_and_a_second_save_of_the_name_replaces_it()
+    {
+        SeedAgent("a1");
+        var svc = NewService();
+
+        var first = await svc.SaveViewAsync("a1", "Rot", "/personen?aktualitaet=Red", "i");
+        var again = await svc.SaveViewAsync("a1", "rot", "/personen?aktualitaet=Red&einstufung=SuspicionCase", "i");
+
+        Assert.Equal(SavedViewOutcome.Added, first);
+        Assert.Equal(SavedViewOutcome.Replaced, again);
+        var view = Assert.Single(Stored("a1").SavedViews);
+        Assert.Equal("/personen?aktualitaet=Red&einstufung=SuspicionCase", view.Route);
+    }
+
+    [Fact]
+    public async Task SaveViewAsync_keeps_views_apart_from_favorites()
+    {
+        // a favorite without page key or record would share one id with every other view and break reordering
+        SeedAgent("a1");
+
+        await NewService().SaveViewAsync("a1", "Rot", "/personen?aktualitaet=Red", "i");
+
+        var stored = Stored("a1");
+        Assert.Empty(stored.Favorites);
+        Assert.Single(stored.SavedViews);
+    }
+
+    [Theory]
+    [InlineData("", "/personen?q=x")]
+    [InlineData("Rot", "//evil.example")]
+    [InlineData("Rot", "https://evil.example")]
+    public async Task SaveViewAsync_refuses_without_writing(string label, string route)
+    {
+        SeedAgent("a1");
+
+        var outcome = await NewService().SaveViewAsync("a1", label, route, "i");
+
+        Assert.Equal(SavedViewOutcome.Invalid, outcome);
+        Assert.Empty(Stored("a1").SavedViews);
+    }
+
+    [Fact]
+    public async Task SaveViewAsync_does_nothing_without_an_agent()
+    {
+        SeedAgent("a1");
+
+        var outcome = await NewService().SaveViewAsync("", "Rot", "/personen?aktualitaet=Red", "i");
+
+        Assert.Equal(SavedViewOutcome.Invalid, outcome);
+        Assert.Empty(Stored("a1").SavedViews);
+    }
+
+    [Fact]
+    public async Task SaveViewAsync_refuses_the_shared_demo_account()
+    {
+        // every anonymous demo visitor is this one agent, and a view name is free text the next visitor would read
+        SeedAgent(DemoIdentity.AgentId);
+
+        var outcome = await NewService().SaveViewAsync(DemoIdentity.AgentId, "Irgendwas", "/personen?q=x", "i");
+
+        Assert.Equal(SavedViewOutcome.Invalid, outcome);
+        Assert.Empty(Stored(DemoIdentity.AgentId).SavedViews);
+    }
+
+    [Fact]
+    public async Task RemoveViewAsync_leaves_the_shared_demo_account_alone()
+    {
+        SeedAgent(DemoIdentity.AgentId, new NavPreferences
+        {
+            SavedViews = [new SavedView("v1", "Rot", "/personen?aktualitaet=Red", "i")],
+        });
+
+        await NewService().RemoveViewAsync(DemoIdentity.AgentId, "v1");
+
+        Assert.Single(Stored(DemoIdentity.AgentId).SavedViews);
+    }
+
+    [Fact]
+    public async Task SaveViewAsync_reports_a_full_list_and_keeps_it()
+    {
+        var prefs = new NavPreferences();
+        for (var i = 0; i < SavedViewRules.Cap; i++)
+        {
+            prefs.SavedViews.Add(new SavedView($"id{i}", $"Ansicht {i}", "/personen?q=" + i, "i"));
+        }
+        SeedAgent("a1", prefs);
+
+        var outcome = await NewService().SaveViewAsync("a1", "Neu", "/personen?q=neu", "i");
+
+        Assert.Equal(SavedViewOutcome.Full, outcome);
+        Assert.Equal(SavedViewRules.Cap, Stored("a1").SavedViews.Count);
+    }
+
+    [Fact]
+    public async Task RemoveViewAsync_takes_the_view_out()
+    {
+        SeedAgent("a1", new NavPreferences
+        {
+            SavedViews = [new SavedView("v1", "Rot", "/personen?aktualitaet=Red", "i"),
+                          new SavedView("v2", "Blau", "/fraktionen?q=x", "i")],
+        });
+
+        await NewService().RemoveViewAsync("a1", "v1");
+
+        Assert.Equal("v2", Assert.Single(Stored("a1").SavedViews).Id);
+    }
+
+    [Fact]
+    public async Task Saving_a_view_notifies_so_drawer_and_header_redraw()
+    {
+        SeedAgent("a1");
+        var svc = NewService();
+        var fired = false;
+        svc.Changed += () => fired = true;
+
+        await svc.SaveViewAsync("a1", "Rot", "/personen?aktualitaet=Red", "i");
+
+        Assert.True(fired);
+    }
+
+    /// <summary>The save and the recents push of the next navigation write the same blob.</summary>
+    [Fact]
+    public async Task A_saved_view_survives_a_recents_push_in_flight_at_the_same_time()
+    {
+        SeedAgent("a1");
+        var service = NewService();
+
+        await Task.WhenAll(
+            service.SaveViewAsync("a1", "Rot", "/personen?aktualitaet=Red", "i"),
+            service.PushRecentAsync("a1", PageRecent("/personen")));
+
+        var stored = Stored("a1");
+        Assert.Single(stored.SavedViews);
+        Assert.Single(stored.Recents);
+    }
+
+    [Fact]
+    public async Task A_blob_written_before_saved_views_existed_reads_as_none()
+    {
+        // raw JSON without the property: System.Text.Json has to leave the initializer standing, not hand out null
+        using (var db = _ctx.NewContext())
+        {
+            var a = Seed.Agent("a1");
+            a.NavPreferencesJson = """{"StartRoute":"/personen","Favorites":[]}""";
+            db.Users.Add(a);
+            db.SaveChanges();
+        }
+
+        var prefs = await NewService().GetAsync("a1");
+
+        Assert.NotNull(prefs.SavedViews);
+        Assert.Empty(prefs.SavedViews);
+        Assert.Equal("/personen", prefs.StartRoute);
     }
 
 }

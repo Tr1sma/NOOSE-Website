@@ -47,6 +47,14 @@ public sealed class NavPreferences
     /// </remarks>
     public bool GlossarBlasen { get; set; } = true;
 
+    /// <summary>List views the agent named and kept: a route plus its filters, in the order they were saved.</summary>
+    /// <remarks>
+    /// Beside <see cref="Favorites"/>, not inside it: a favorite is identified by its page key or record, and a view
+    /// has neither - every one would share the same id and break reordering. Keeping them apart also keeps a saved
+    /// view from ticking the "menu customised" onboarding step, which reads <see cref="Favorites"/>.
+    /// </remarks>
+    public List<SavedView> SavedViews { get; set; } = [];
+
     /// <summary>Schema version for future migrations.</summary>
     public int Version { get; set; } = 2;
 }
@@ -57,6 +65,15 @@ public sealed record NavFavorite(
     string? Key,
     string? EntityType,
     string? EntityId,
+    string Label,
+    string Route,
+    string Icon);
+
+/// <summary>A named list view: a relative route that carries its filters in the query.</summary>
+/// <param name="Id">Stable handle for deleting; the name can be overwritten, the id stays.</param>
+/// <param name="Icon">Snapshot of the list's menu icon, as a favorite keeps it.</param>
+public sealed record SavedView(
+    string Id,
     string Label,
     string Route,
     string Icon);

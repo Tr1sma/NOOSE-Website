@@ -1,0 +1,75 @@
+@* Asks for the name of a list view about to be remembered; the button does the saving. *@
+@using NOOSE_Website.Models.Navigation
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudTextField @bind-Value="_name" Label="Name der Ansicht" Variant="Variant.Outlined" Immediate="true"
+                          AutoFocus="true" MaxLength="@SavedViewRules.MaxLabelLength"
+                          Placeholder="z. B. Verdachtsfälle, Aktualität rot"
+                          HelperText="Unter diesem Namen steht die Ansicht im Menü und im Schnellzugriff (Strg+K)." />
+            @if (Taken)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    Diese Liste hat schon eine Ansicht mit diesem Namen – sie wird durch diese ersetzt.
+                </MudAlert>
+            }
+            else if (Full)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                    Mehr als @SavedViewRules.Cap Ansichten sind nicht vorgesehen. Lösch eine alte oder nimm den Namen
+                    einer vorhandenen, um sie zu ersetzen.
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!MaySave)">
+            @(Taken ? "Ersetzen" : "Merken")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>This list's views, to warn before a name overwrites one; names overwrite only within a list.</summary>
+    [Parameter] public IReadOnlyList<SavedView> OnThisList { get; set; } = [];
+
+    /// <summary>How many views the agent keeps across all lists; the cap counts them all.</summary>
+    [Parameter] public int Total { get; set; }
+
+    private string _name = string.Empty;
+
+    private bool Taken => SavedViewRules.IsTaken(OnThisList, _name);
+
+    // the cap stops a new name only; replacing one needs no free slot
+    private bool Full => Total >= SavedViewRules.Cap;
+
+    private bool MaySave => SavedViewRules.Normalise(_name).Length > 0 && (Taken || !Full);
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+    {
+        if (MaySave)
+        {
+            MudDialog.Close(DialogResult.Ok(SavedViewRules.Normalise(_name)));
+        }
+    }
+
+    /// <summary>Opens the dialog and returns the chosen name, or null when it was cancelled.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog, IReadOnlyList<SavedView> onThisList, int total)
+    {
+        var parameters = new DialogParameters<SavedViewDialog>
+        {
+            { x => x.OnThisList, onThisList },
+            { x => x.Total, total },
+        };
+        var reference = await dialog.ShowAsync<SavedViewDialog>("Diese Ansicht merken", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string name } ? name : null;
+    }
+}

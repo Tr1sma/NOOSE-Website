@@ -115,6 +115,14 @@ public sealed class OnboardingTests
     public void An_untouched_menu_leaves_the_step_open()
         => Assert.False(Done(Fresh(), "menue"));
 
+    [Fact]
+    public void A_saved_list_view_alone_leaves_the_menu_step_open()
+        // the step asks for hiding and pinning; remembering a filter is neither, which is why views are not favorites
+        => Assert.False(Done(new NavPreferences
+        {
+            SavedViews = [new SavedView("v1", "Rot", "/personen?aktualitaet=Red", "x")],
+        }, "menue"));
+
     // --- completion -------------------------------------------------------
 
     [Fact]

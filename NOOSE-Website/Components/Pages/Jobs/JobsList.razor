@@ -1,24 +1,23 @@
 @page "/aufgaben"
 @inject IJobService JobService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 
 <PageTitle>Aufgaben-Board · NOOSE</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Aufgaben-Board</MudText>
-    <MudSpacer />
-    <AuthorizeView Policy="@Policies.Leadership">
-        <MudButton Href="/papierkorb?tab=aufgaben" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
-    </AuthorizeView>
-    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
-        <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
-    </AuthorizeView>
-</MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Gemeinsames Team-Board: Karten per Drag &amp; Drop zwischen den Spalten verschieben, um den Status zu ändern.
-</MudText>
+<PageHeader Icon="@Icons.Material.Filled.AssignmentTurnedIn" Title="Aufgaben-Board"
+            Subtitle="Gemeinsames Team-Board: Karten per Drag & Drop zwischen den Spalten verschieben, um den Status zu ändern.">
+    <Actions>
+        <SavedViewButton BaseRoute="/aufgaben" Filters="FilterState" OnApply="ApplyViewAsync" />
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Href="/papierkorb?tab=aufgaben" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 @if (_load)
 {
@@ -119,6 +118,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private int _loadGeneration;
     private bool _onlyMy;
     private string _search = string.Empty;
     private JobPriority? _priorityFilter;
@@ -129,13 +129,62 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        // restore the view from the URL; "meine" goes into the server query, so it is read before loading
+        ReadFilters(new Uri(Nav.Uri).Query);
         await LoadAsync();
     }
 
+    private void ReadFilters(string query)
+    {
+        _search = QueryState.Read(query, "q") ?? string.Empty;
+        _onlyMy = QueryState.ReadFlag(query, "meine");
+        _priorityFilter = QueryState.ReadEnum<JobPriority>(query, "prio");
+    }
+
+    // a saved view, the palette or the menu landing on this board while it shows: the instance is reused
+    private async Task ApplyViewAsync(string query)
+    {
+        var onlyMy = _onlyMy;
+        ReadFilters(query);
+        if (_onlyMy == onlyMy)
+        {
+            _container?.Refresh();
+            return;
+        }
+        try
+        {
+            await LoadAsync();
+        }
+        catch
+        {
+            // no endless spinner; the button tells the agent the reload failed
+            _load = false;
+            throw;
+        }
+    }
+
+    /// <summary>The filters as query pairs: written to the address, and what a saved view keeps.</summary>
+    private (string Name, string? Value)[] FilterState =>
+    [
+        ("q", _search),
+        ("meine", _onlyMy ? "1" : null),
+        ("prio", _priorityFilter?.ToString()),
+    ];
+
+    // the board used to keep its filters in memory only, so not even a reload survived them
+    private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav, FilterState);
+
     private async Task LoadAsync()
     {
+        // a view can land while a load still runs; only the newest may write the board
+        var generation = ++_loadGeneration;
         _load = true;
-        _all = await JobService.GetTeamBoardAsync(_onlyMy, _user);
+        var rows = await JobService.GetTeamBoardAsync(_onlyMy, _user);
+        if (generation != _loadGeneration)
+        {
+            return;
+        }
+        _all = rows;
         _load = false;
         _container?.Refresh();
     }
@@ -143,19 +192,22 @@ else
     private async Task OnlyMySelected(bool value)
     {
         _onlyMy = value;
+        await PersistFiltersAsync();
         await LoadAsync();
     }
 
-    private void SearchModified(string value)
+    private Task SearchModified(string value)
     {
         _search = value ?? string.Empty;
         _container?.Refresh();
+        return PersistFiltersAsync();
     }
 
-    private void PrioritySelected(JobPriority? priority)
+    private Task PrioritySelected(JobPriority? priority)
     {
         _priorityFilter = priority;
         _container?.Refresh();
+        return PersistFiltersAsync();
     }
 
     /// <summary>Client-side filter; the "only mine" filter runs server-side.</summary>

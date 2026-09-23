@@ -1,0 +1,206 @@
+@* "Remember this view" for a list header: keeps the route plus its filters and lists the views kept for this list. *@
+@using NOOSE_Website.Models.Navigation
+@using NOOSE_Website.Navigation
+@implements IDisposable
+@inject INavPreferencesService NavPrefs
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<SavedViewButton> Logger
+
+@* not for the public demo: every visitor shares one account, and a view name is free text the next one would read *@
+@if (!string.IsNullOrEmpty(_agentId) && !_isDemo)
+{
+    <MudMenu Label="Ansichten" StartIcon="@Icons.Material.Filled.BookmarkBorder" Variant="Variant.Text"
+             Color="Color.Default" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+        <MudMenuItem Icon="@Icons.Material.Filled.BookmarkAdd" OnClick="SaveAsync" Disabled="@(!HasFilter)">
+            Diese Ansicht merken
+        </MudMenuItem>
+        @if (!HasFilter)
+        {
+            <MudText Typo="Typo.caption" Class="d-block px-4 pb-2 mud-text-secondary" Style="max-width:280px;">
+                Setz erst einen Filter – die ungefilterte Liste öffnet ohnehin jeder Klick im Menü.
+            </MudText>
+        }
+        @if (_mine.Count > 0)
+        {
+            <MudDivider Class="my-1" />
+            @foreach (var view in _mine)
+            {
+                <MudMenuItem Icon="@Icons.Material.Filled.FilterList" OnClick="@(() => Apply(view))">
+                    <div class="d-flex align-center gap-2" style="min-width:220px;">
+                        <span class="flex-grow-1">@view.Label</span>
+                        @* the row applies the view; the bin inside it must not *@
+                        <span @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Default"
+                                           OnClick="@(() => RemoveAsync(view))"
+                                           aria-label="@($"Ansicht „{view.Label}“ löschen")" />
+                        </span>
+                    </div>
+                </MudMenuItem>
+            }
+        }
+    </MudMenu>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    /// <summary>The list's own route without a query; its views are filed under it.</summary>
+    [Parameter, EditorRequired] public string BaseRoute { get; set; } = string.Empty;
+
+    /// <summary>The page's filter pairs, exactly as it writes them to the address.</summary>
+    /// <remarks>Taken from the page and not from the address bar, which still shows the state before the last change.</remarks>
+    [Parameter, EditorRequired] public (string Name, string? Value)[] Filters { get; set; } = [];
+
+    /// <summary>Receives the query of a navigation that lands on this list while it is already showing.</summary>
+    [Parameter, EditorRequired] public EventCallback<string> OnApply { get; set; }
+
+    private string? _agentId;
+    private bool _isDemo;
+    private IReadOnlyList<SavedView> _all = [];
+    private IReadOnlyList<SavedView> _mine = [];
+    private bool _subscribed;
+
+    private bool HasFilter => QueryState.AnySet(Filters);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _agentId = user.GetAgentId();
+            _isDemo = user.IsDemo();
+        }
+        await LoadAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // prerender is a static snapshot: subscribing there leaks a handler onto a circuit that never lives
+        if (firstRender && RendererInfo.IsInteractive && !_subscribed)
+        {
+            Nav.LocationChanged += OnLocationChanged;
+            NavPrefs.Changed += OnPrefsChanged;
+            _subscribed = true;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrEmpty(_agentId))
+        {
+            return;
+        }
+        try
+        {
+            var prefs = await NavPrefs.GetAsync(_agentId);
+            _all = prefs.SavedViews.ToList();
+            _mine = SavedViewRules.ForRoute(_all, BaseRoute);
+        }
+        catch (Exception ex)
+        {
+            // a header button must never cost the list below it
+            Logger.LogDebug(ex, "Gespeicherte Ansichten konnten nicht geladen werden.");
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrEmpty(_agentId) || _isDemo || !HasFilter)
+        {
+            return;
+        }
+        var name = await SavedViewDialog.ShowAsync(DialogService, _mine, _all.Count);
+        if (name is null)
+        {
+            return;
+        }
+        var route = QueryState.BuildRoute(BaseRoute, Filters);
+        var icon = NavCatalog.ByRoute(BaseRoute)?.Icon ?? Icons.Material.Filled.FilterList;
+        try
+        {
+            var outcome = await NavPrefs.SaveViewAsync(_agentId, name, route, icon);
+            var (message, severity) = outcome switch
+            {
+                SavedViewOutcome.Added => ($"Ansicht „{name}“ gemerkt – du findest sie unter den Favoriten und mit Strg+K.", Severity.Success),
+                SavedViewOutcome.Replaced => ($"Ansicht „{name}“ ersetzt.", Severity.Success),
+                SavedViewOutcome.Full => ($"Mehr als {SavedViewRules.Cap} Ansichten sind nicht vorgesehen.", Severity.Warning),
+                _ => ("Die Ansicht ließ sich nicht merken.", Severity.Error),
+            };
+            Snackbar.Add(message, severity);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    // a navigation rather than a callback, so the address bar and the back button see the same step as the list
+    private void Apply(SavedView view) => Nav.NavigateTo(view.Route);
+
+    private async Task RemoveAsync(SavedView view)
+    {
+        if (string.IsNullOrEmpty(_agentId) || _isDemo)
+        {
+            return;
+        }
+        try
+        {
+            await NavPrefs.RemoveViewAsync(_agentId, view.Id);
+            Snackbar.Add($"Ansicht „{view.Label}“ gelöscht.", Severity.Info);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <remarks>
+    /// Blazor reuses the page instance when only the query changes, and the page reads its filters once - so a view
+    /// opened from the palette, the drawer or this very menu would change the address and nothing else. The button
+    /// sits on every such list anyway and hands the new query over. <c>replaceState</c> raises no event, so the
+    /// agent's own typing never comes back through here.
+    /// </remarks>
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var path = SavedViewRules.PathOf(Nav.ToBaseRelativePath(e.Location));
+        if (!string.Equals(path, SavedViewRules.PathOf(BaseRoute), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        var query = new Uri(e.Location).Query;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await OnApply.InvokeAsync(query);
+            }
+            catch (Exception ex)
+            {
+                // the filters already show the view while the rows are the old ones - say so rather than kill the circuit
+                Logger.LogWarning(ex, "Ansicht konnte nicht angewandt werden: {Route}", e.Location);
+                Snackbar.Add("Die Liste ließ sich nicht neu laden – die Einträge passen noch nicht zu den Filtern. "
+                    + "Versuch es gleich noch einmal.", Severity.Error);
+            }
+        });
+    }
+
+    private void OnPrefsChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+
+    public void Dispose()
+    {
+        if (_subscribed)
+        {
+            Nav.LocationChanged -= OnLocationChanged;
+            NavPrefs.Changed -= OnPrefsChanged;
+        }
+    }
+}

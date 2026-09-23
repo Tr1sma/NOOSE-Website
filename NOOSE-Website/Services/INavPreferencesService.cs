@@ -47,6 +47,12 @@ public interface INavPreferencesService
     /// <summary>Records that an agent reached one onboarding step. Idempotent, and cheap enough to call blind.</summary>
     Task MarkOnboardingStepAsync(string agentId, string stepKey, CancellationToken cancellationToken = default);
 
+    /// <summary>Saves a list view under a name; the same name overwrites. Rules in <see cref="SavedViewRules"/>.</summary>
+    Task<SavedViewOutcome> SaveViewAsync(string agentId, string label, string route, string icon, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes one saved list view by its id.</summary>
+    Task RemoveViewAsync(string agentId, string viewId, CancellationToken cancellationToken = default);
+
     /// <summary>Stable id for a favorite (used for reordering).</summary>
     static string FavoriteId(NavFavorite f)
         => f.Kind == "page" ? $"page:{f.Key}" : $"record:{f.EntityType}:{f.EntityId}";

@@ -1,4 +1,4 @@
-@* Per-account navigation customizer: hide/show, drag-reorder, favorites, start page. *@
+@* Per-account navigation customizer: hide/show, drag-reorder, favorites, saved views, start page. *@
 @using NOOSE_Website.Navigation
 @using NOOSE_Website.Models.Navigation
 @inject INavPreferencesService NavPrefs
@@ -81,6 +81,40 @@
                         </MudDropContainer>
                     }
                 </MudTabPanel>
+
+                @* the demo visitors share one account; they get no views, so the tab would only explain a missing button *@
+                @if (!_user.IsDemo())
+                {
+                    <MudTabPanel Text="Ansichten" Icon="@Icons.Material.Filled.BookmarkBorder">
+                        @if (_prefs.SavedViews.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Noch keine Ansichten. Stell auf einer Liste Filter ein und wähle oben rechts
+                                <i>Ansichten</i> → <i>Diese Ansicht merken</i>.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                Gemerkte Listen mit ihren Filtern. Sie stehen im Menü unter den Favoriten und im Schnellzugriff.
+                            </MudText>
+                            @foreach (var view in _prefs.SavedViews)
+                            {
+                                <MudPaper Class="d-flex align-center pa-2 mb-1" Elevation="1">
+                                    <MudIcon Icon="@view.Icon" Class="mr-2" Size="Size.Small" />
+                                    <MudText Typo="Typo.body2">@view.Label</MudText>
+                                    @if (NavCatalog.ByRoute(view.Route) is { } list)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="ml-2 mud-text-secondary">@list.Label</MudText>
+                                    }
+                                    <MudSpacer />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   OnClick="@(() => RemoveViewAsync(view))" aria-label="Ansicht entfernen" />
+                                </MudPaper>
+                            }
+                        }
+                    </MudTabPanel>
+                }
 
                 <MudTabPanel Text="Startseite" Icon="@Icons.Material.Filled.Home">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Welche Seite soll nach dem Login zuerst geöffnet werden?</MudText>
@@ -205,6 +239,10 @@
 
     private Task RemoveFavoriteAsync(NavFavorite f)
         => RunAsync(() => NavPrefs.ToggleFavoriteAsync(_agentId, f));
+
+    // the one place a view can still be removed once its list is out of reach
+    private Task RemoveViewAsync(SavedView view)
+        => RunAsync(() => NavPrefs.RemoveViewAsync(_agentId, view.Id));
 
     private Task OnGlossarBlasenChangedAsync(bool enabled)
         => RunAsync(() => NavPrefs.SetGlossarBlasenAsync(_agentId, enabled));
