@@ -392,7 +392,8 @@ public static class ChangelogContent
                 + "gibst ihnen ein Stichwort oder beobachtest sie alle.", "Bedienung"),
             Neu("2.2.12-posteingang", "Unten in der Glocke führt „Alle Benachrichtigungen“ auf eine eigene Seite: "
                 + "dort findest du auch ältere Meldungen als die zwanzig neuesten, filterst nach Art und Zeitraum und "
-                + "holst eine versehentlich angeklickte Meldung mit „Als ungelesen markieren“ zurück.", "Bedienung"),
+                + "holst eine versehentlich angeklickte Meldung mit „Als ungelesen markieren“ zurück.", "Bedienung",
+                "2.2.11-posteingang"),
         ]),
     ];
 }
