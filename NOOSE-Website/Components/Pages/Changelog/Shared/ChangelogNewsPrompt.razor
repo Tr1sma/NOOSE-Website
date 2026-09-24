@@ -59,7 +59,17 @@
             return;
         }
 
-        var openAll = await ChangelogNewsDialog.ShowAsync(DialogService, news);
+        // outside the error boundary: a throw here would end the whole circuit
+        bool openAll;
+        try
+        {
+            openAll = await ChangelogNewsDialog.ShowAsync(DialogService, news);
+        }
+        catch
+        {
+            /* best effort */
+            return;
+        }
 
         // stamped on close, whichever way: a window torn down by a reload was never read and comes back
         try

@@ -63,6 +63,8 @@
         CloseButton = true,
         CloseOnEscapeKey = true,
         BackdropClick = true,
+        // a navigation would dismiss it unread and still stamp it
+        CloseOnNavigation = false,
     };
 
     private static string Lead(int count) => count == 1

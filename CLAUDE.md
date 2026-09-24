@@ -588,6 +588,11 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
   stehen und melden nichts. Gestempelt wird beim Schließen, mit der **Lesezeit**; `/neuerungen` stempelt selbst
   und bekommt kein Fenster; ein erster Besuch überhaupt stempelt still. Wie viel das Fenster zeigt, steht in
   `ChangelogNewsFlash.PreviewLines` (Rest: „… und N weitere").
+  **Zwei Einstellungen, die nicht zurückgedreht werden dürfen:** `CloseOnNavigation = false` am Dialog — MudBlazor
+  schließt Dialoge sonst bei jedem Pfadwechsel mit *Abbrechen*, und das Fenster wäre ungelesen gestempelt; und
+  `SetNeuerungenLastSeenAsync` rückt den Stempel **nur vor**, sonst setzt ein spät geschlossenes Fenster in einem
+  Tab die schon gelesene Seite im anderen zurück. Der Prompt steht außerhalb der `ErrorBoundary`; jede Ausnahme
+  darin muss gefangen werden, sonst endet der Circuit.
 - **Eine Zeile in eine andere Fassung verschieben:** ihr neuer `Key` muss zur neuen Fassung passen
   (`Every_shipped_version_and_key_uses_sequential_two_digit_updates` fordert das), und genau deshalb darf
   man ihn nicht einfach umschreiben: der Seeder fände die alte Zeile nicht wieder, ließe sie in der alten
