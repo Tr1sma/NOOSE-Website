@@ -15,8 +15,8 @@ namespace NOOSE_Website.Infrastructure.Changelog;
 /// release gets the running build on the first start after it shipped; an older one stays unnumbered for good.
 /// </para>
 /// <para>
-/// Seed through a context that carries the audit interceptor. The release CreatedAt it stamps is what the login hint
-/// compares against; a bare context leaves it at default and the hint then reports nothing, silently and forever.
+/// Seed through a context that carries the audit interceptor. The CreatedAt it stamps on each line is what the update
+/// window compares against; a bare context leaves it at default and the window then reports nothing, silently and forever.
 /// </para>
 /// </remarks>
 public static class ChangelogSeeder

@@ -54,39 +54,45 @@ public sealed class ChangelogService(IDbContextFactory<AppDbContext> dbFactory) 
         // would be a lie and a wall of text; the caller stamps instead, so the next real release counts.
         if (lastSeenUtc is not { } since)
         {
-            return new ChangelogNewsFlash(0, null);
+            return ChangelogNewsFlash.None;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // CreatedAt, not Date: a retroactive release carries a date from the past but arrives now, and one
-        // published this morning must still count for somebody who last looked yesterday evening.
-        var fresh = await db.Aenderungsfassungen.AsNoTracking()
-            .Where(r => r.IsVisible && r.CreatedAt > since)
+        // Per line, not per release: a release gathers lines over several deploys, and one appended to it this
+        // morning is news for somebody who last looked yesterday. CreatedAt, not the release Date, for the same
+        // reason a retroactive release counts: it carries a date from the past but arrives now.
+        // latest update first, so the preview cap cuts the oldest; one seeding pass shares one stamp and keeps
+        // its authored order
+        var lines = await db.Aenderungseintraege.AsNoTracking()
+            .Where(e => e.IsVisible && e.CreatedAt > since)
+            .OrderByDescending(e => e.CreatedAt).ThenBy(e => e.SortOrder).ThenBy(e => e.Title)
+            .ToListAsync(cancellationToken);
+        if (lines.Count == 0)
+        {
+            return ChangelogNewsFlash.None;
+        }
+
+        // flat WHERE IN, like the timeline; a hidden release hides its lines here as it does on the page
+        var ids = lines.Select(e => e.ReleaseId).Distinct().ToList();
+        var releases = await db.Aenderungsfassungen.AsNoTracking()
+            .Where(r => ids.Contains(r.Id) && r.IsVisible)
             .OrderByDescending(r => r.Date).ThenByDescending(r => r.SortOrder)
-            .Select(r => new { r.Id, r.Version })
             .ToListAsync(cancellationToken);
-        if (fresh.Count == 0)
+
+        var byRelease = lines.GroupBy(e => e.ReleaseId).ToDictionary(g => g.Key, g => g.ToList());
+        var views = releases
+            .Select(r => new ChangelogReleaseView(r.Id, r.Version, r.Date, r.Title, r.BuildNumber,
+                byRelease[r.Id].Select(e => new ChangelogEntryView(e.Id, e.Kind, e.Title, e.Area)).ToList()))
+            .ToList();
+        if (views.Count == 0)
         {
-            return new ChangelogNewsFlash(0, null);
+            return ChangelogNewsFlash.None;
         }
 
-        var ids = fresh.Select(r => r.Id).ToList();
-        var carrying = await db.Aenderungseintraege.AsNoTracking()
-            .Where(e => ids.Contains(e.ReleaseId) && e.IsVisible)
-            .Select(e => e.ReleaseId)
-            .ToListAsync(cancellationToken);
-        if (carrying.Count == 0)
-        {
-            return new ChangelogNewsFlash(0, null);
-        }
-
-        // the newest release that actually carries a line, not simply the newest: the page hides a release
-        // whose entries are all withdrawn, so naming that one sent the reader looking for a version that is
-        // not on /neuerungen at all
-        var withEntries = carrying.ToHashSet(StringComparer.Ordinal);
-        var newest = fresh.FirstOrDefault(r => withEntries.Contains(r.Id));
-        return new ChangelogNewsFlash(carrying.Count, newest?.Version);
+        // the newest release that actually carries a new line, not simply the newest: naming one whose lines
+        // are all withdrawn sent the reader looking for a version that is not on /neuerungen at all
+        return new ChangelogNewsFlash(views.Sum(v => v.Entries.Count), views[0].Version, views);
     }
 
     public async Task<List<ChangelogRelease>> GetReleasesAsync(CancellationToken cancellationToken = default)

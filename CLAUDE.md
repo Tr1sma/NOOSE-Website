@@ -578,8 +578,16 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
 - **Neue Fassung:** `SeededRelease` mit Version im Format `X.X.XX` anlegen. **Die Build-Nummer nicht eintragen** —
   `BuildNumber.txt` ist gitignored und beim Schreiben unbekannt; `ChangelogSeeder` stempelt sie beim ersten
   Start nach dem Deploy auf die neueste Fassung ohne Stempel.
-- **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` der Fassung ist
-  das, womit die Login-Hinweiskarte vergleicht; ohne Interceptor meldet sie still und dauerhaft nichts.
+- **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` **jeder Zeile**
+  ist das, womit das Neuerungen-Fenster vergleicht; ohne Interceptor meldet es still und dauerhaft nichts.
+- **Das Neuerungen-Fenster zählt Zeilen, nicht Fassungen.** `ChangelogNewsPrompt` (im `MainLayout`, erst nach
+  dem ersten interaktiven Render, nicht über der Wartungsseite) holt über `GetNewsSinceAsync` jede sichtbare
+  Zeile mit `ErstelltAm` nach `NeuerungenLastSeenUtc` und öffnet `ChangelogNewsDialog`. Eine Fassung sammelt
+  Zeilen über mehrere Deploys (2.2.06–2.2.10 kamen einzeln in 2.2.00); die alte Karte verglich die Fassung und
+  übersah deshalb jede angehängte Zeile. Umformulieren (Revision) und Umziehen (`LegacyKey`) lassen `ErstelltAm`
+  stehen und melden nichts. Gestempelt wird beim Schließen, mit der **Lesezeit**; `/neuerungen` stempelt selbst
+  und bekommt kein Fenster; ein erster Besuch überhaupt stempelt still. Wie viel das Fenster zeigt, steht in
+  `ChangelogNewsFlash.PreviewLines` (Rest: „… und N weitere").
 - **Eine Zeile in eine andere Fassung verschieben:** ihr neuer `Key` muss zur neuen Fassung passen
   (`Every_shipped_version_and_key_uses_sequential_two_digit_updates` fordert das), und genau deshalb darf
   man ihn nicht einfach umschreiben: der Seeder fände die alte Zeile nicht wieder, ließe sie in der alten

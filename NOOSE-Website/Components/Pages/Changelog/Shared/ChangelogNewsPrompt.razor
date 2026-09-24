@@ -1,0 +1,82 @@
+@* Opens the news window once after an update. Renders nothing itself. *@
+@inject IChangelogService ChangelogService
+@inject INavPreferencesService NavPreferences
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // after the first interactive render only: prerendering has no dialog provider to show it in
+        if (!firstRender || AuthState is null)
+        {
+            return;
+        }
+
+        var user = (await AuthState).User;
+        // the changelog is an internal page; a partner cannot open it, so do not advertise it either
+        if (!user.IsInternalAgent())
+        {
+            return;
+        }
+        var agentId = user.GetAgentId();
+        if (string.IsNullOrEmpty(agentId))
+        {
+            return;
+        }
+        // the page itself is the acknowledgement and stamps on its own
+        if (OnChangelogPage())
+        {
+            return;
+        }
+
+        ChangelogNewsFlash news;
+        // read time, not close time: a line added while the window is open still counts next visit
+        var readAt = DateTime.UtcNow;
+        try
+        {
+            var lastSeen = (await NavPreferences.GetAsync(agentId)).NeuerungenLastSeenUtc;
+
+            // never looked: stamp now and stay quiet. Greeting a new agent with the whole history as
+            // "new since your last visit" would be both untrue and a wall of text.
+            if (lastSeen is null)
+            {
+                await NavPreferences.SetNeuerungenLastSeenAsync(agentId, readAt);
+                return;
+            }
+
+            news = await ChangelogService.GetNewsSinceAsync(lastSeen);
+        }
+        catch
+        {
+            /* best effort */
+            return;
+        }
+        if (news.Count == 0)
+        {
+            return;
+        }
+
+        var openAll = await ChangelogNewsDialog.ShowAsync(DialogService, news);
+
+        // stamped on close, whichever way: a window torn down by a reload was never read and comes back
+        try
+        {
+            await NavPreferences.SetNeuerungenLastSeenAsync(agentId, readAt);
+        }
+        catch { /* best effort */ }
+
+        if (openAll)
+        {
+            Nav.NavigateTo("/neuerungen");
+        }
+    }
+
+    private bool OnChangelogPage()
+    {
+        var path = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+        return string.Equals(path, "/neuerungen", StringComparison.OrdinalIgnoreCase);
+    }
+}

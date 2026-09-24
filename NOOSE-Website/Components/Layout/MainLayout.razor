@@ -99,9 +99,6 @@
                 </MudAlert>
             }
 
-            @* One-off note that a new release landed; silent unless there is something to say. *@
-            <ChangelogHintCard />
-
             @* Announcement banner, maintained by leadership/admins under /einstellungen?tab=system. *@
             @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {
@@ -143,6 +140,8 @@
             else
             {
                 <NavBreadcrumbs />
+                @* once after an update: what changed since the last visit; not over the maintenance page *@
+                <ChangelogNewsPrompt />
                 @* safety net: a single page error must not kill the whole circuit *@
                 <ErrorBoundary @key="CurrentPath">
                     <ChildContent>

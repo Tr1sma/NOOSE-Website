@@ -384,6 +384,9 @@ public static class ChangelogContent
                 + "letzten Besuch eingetragen haben – etwa „Einstufung geändert, 1 Dok und 3 Kommentare“. Im "
                 + "Zeitstrahl trägt jeder dieser Einträge ein „Neu“, und ein Klick filtert auf genau sie. Was "
                 + "du selbst eingetragen hast, zählt nicht mit.", "Akten"),
+            Besser("2.2.10-neuerungen-fenster", "Nach einem Update zeigt dir die Seite beim ersten Aufruf in einem "
+                + "kleinen Fenster, was sich geändert hat – mit einem Knopf zu allen Neuerungen. Bisher stand dort "
+                + "nur eine Karte mit der Anzahl, und die hat manche Neuerung übersehen.", "Bedienung"),
         ]),
     ];
 }
