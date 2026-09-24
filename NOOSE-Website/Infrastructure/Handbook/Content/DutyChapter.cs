@@ -123,9 +123,27 @@ internal static class DutyChapter
                 Akte, der du folgst, eine Entscheidung über deinen Antrag.</p>
                 <p>Jede Benachrichtigung führt mit einem Klick genau dorthin, wo etwas passiert ist. Gelesene
                 verschwinden aus der Zahl, nicht aus der Liste.</p>
+                <p>Die Glocke zeigt nur die zwanzig neuesten. Alles davor steht unter <em>Alle
+                Benachrichtigungen</em> ganz unten in der Glocke: dort kannst du nach Art und Zeitraum filtern,
+                nur die ungelesenen zeigen und seitenweise zurückblättern.</p>
+                <p>Hast du etwas versehentlich angeklickt, holst du den Merker dort zurück: <em>Als ungelesen
+                markieren</em>. Die Meldung zählt dann wieder in der Glocke, und unter <em>Nur ungelesene</em>
+                findest du sie im Posteingang auch dann, wenn sie älter als die zwanzig neuesten ist. Solange eine
+                Meldung zu einer beobachteten Akte ungelesen ist, kommt zu dieser Akte keine zweite dazu - die
+                offene sagt ja schon, dass sich dort etwas getan hat.</p>
                 <p>Ein Teil davon geht zusätzlich nach <strong>Discord</strong>. Was dort ankommt, ist bewusst
                 inhaltsarm - eine Zeile, die sagt, dass es etwas gibt, nicht was es ist.</p>
-                """),
+                """,
+                NavKey: "benachrichtigungen",
+                Steps:
+                [
+                    new Step("Inbox", "Alle Benachrichtigungen öffnen",
+                        "Ganz unten in der Glocke - oder im Menü unter Mein Dienst."),
+                    new Step("FilterAlt", "Eingrenzen",
+                        "Nach Art, Zeitraum oder nur ungelesene. Den Filter kannst du dir als Ansicht merken."),
+                    new Step("MarkEmailUnread", "Merker zurückholen",
+                        "Der Knopf am Zeilenende markiert wieder als ungelesen, ohne die Akte zu öffnen."),
+                ]),
 
             new Article("art-schnellerfassung", "schnellerfassung", "Schnell etwas festhalten",
                 "Die Wege, die weniger als eine Minute brauchen.",

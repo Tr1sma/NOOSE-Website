@@ -285,6 +285,14 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   case-sensitiv; aus `NAME` ein `Name` zu machen schaltet die `███████`-Schwärzung für jede daraus gebaute
   Nachricht still ab. `TextAssistService` lehnt eine NOOSEI-Korrektur deshalb hart ab, wenn Anzahl **oder**
   Schreibweise dieser Tokens abweicht (Kontext `RecruitingTemplate`).
+- **Eine ungelesene Benachrichtigung hält ihr Ziel offen.** `WatchlistFanout` unterdrückt „Akte geändert“,
+  solange zur selben Akte eine ungelesen ist; `NotifyOnceAsync`/`NotifyManyOnceAsync` (nur die Ticket-Wege)
+  falten eine neue Meldung gleicher Art und gleichen `Href` auf die jüngste ungelesene und setzen deren
+  `CreatedAt` neu. Alle anderen Arten (`NotifyAsync`, Erwähnungen) legen einfach eine weitere Zeile an. Wer im
+  Posteingang (`/benachrichtigungen`) **wieder als ungelesen** markiert, macht die alte Meldung damit wieder
+  offen — bei einer beobachteten Akte kommt bis zum Lesen keine neue dazu. Gewollt, im Handbuch erklärt. Der Posteingang ist nur intern (`Policies.InternalAgent`); die Glocke hängt auch
+  im öffentlichen Kopf und zeigt den Link deshalb nur bei `IsInternalAgent()`. Die Seitenzahl steht bewusst
+  **nicht** in der Adresse: eine gemerkte Ansicht würde sie mitnehmen.
 - **`NOOSE-Website/BuildNumber.txt` erhöht sich automatisch bei jedem echten Build** (`dotnet build`/`watch`/`publish`, MSBuild-Target in der `.csproj`; IDE-Design-Time-Builds sind ausgenommen) und wird als `1.0.<Zahl>` auf `/einstellungen?tab=status` angezeigt. Datei ist **gitignored** (`.gitignore` Zeile 386) → taucht nie in `git status` auf und wird nicht mitcommittet; die Prod-Nummer wächst allein über `deploy.ps1`.
 - **Bild-Paste in ein Plaintext-Feld legt die Datei ab und schreibt nur ein Token.** `MentionInput` nimmt per
   Strg+V ein Clipboard-Bild an, sobald `ImageOwnerType`/`ImageOwnerId` gesetzt sind (Opt-in wie der @-Picker);
