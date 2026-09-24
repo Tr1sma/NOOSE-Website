@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
@@ -8,6 +9,9 @@ public interface IWatchlistService
 {
     /// <summary>Caller follows the record (no-op if already followed); gated on visibility.</summary>
     Task FollowAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Caller follows many records in one save; reactivates unfollowed rows instead of adding twice.</summary>
+    Task<BatchOutcome> FollowManyAsync(IReadOnlyCollection<(string Type, string Id)> records, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Caller unfollows the record (soft-delete; no-op if not followed).</summary>
     Task UnfollowAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

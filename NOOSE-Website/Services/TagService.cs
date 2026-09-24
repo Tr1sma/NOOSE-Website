@@ -136,4 +136,66 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<BatchOutcome> AddManyAsync(IReadOnlyCollection<(string Type, string Id)> records,
+        IReadOnlyCollection<string> tagIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        var wanted = RecordBatch.Normalize(records);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var requested = tagIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+        var tags = await db.Tags.Where(t => requested.Contains(t.Id))
+            .OrderBy(t => t.Name)
+            .Select(t => new { t.Id, t.Name })
+            .ToListAsync(cancellationToken);
+        if (tags.Count == 0)
+        {
+            throw new InvalidOperationException("Kein gültiges Stichwort gewählt.");
+        }
+        var tagIdSet = tags.Select(t => t.Id).ToList();
+
+        var scope = ViewerScope.From(actor);
+        var refused = 0;
+        var visible = new List<(string Type, string Id)>();
+        foreach (var r in wanted)
+        {
+            if (!RecordBatch.Taggable.Contains(r.Type)
+                || !await RecordBatch.ExistsAndVisibleAsync(db, r.Type, r.Id, scope, cancellationToken))
+            {
+                refused++;
+                continue;
+            }
+            visible.Add(r);
+        }
+
+        var ids = visible.Select(v => v.Id).Distinct().ToList();
+        var present = (await db.TagMappings.AsNoTracking()
+                .Where(z => ids.Contains(z.EntityId) && tagIdSet.Contains(z.TagId))
+                .Select(z => new { z.EntityType, z.EntityId, z.TagId })
+                .ToListAsync(cancellationToken))
+            .Select(z => (z.EntityType, z.EntityId, z.TagId))
+            .ToHashSet();
+
+        var changed = 0;
+        foreach (var (type, id) in visible)
+        {
+            // add only: a batch never takes a tag away
+            var added = tags.Where(t => !present.Contains((type, id, t.Id))).ToList();
+            if (added.Count == 0)
+            {
+                continue;
+            }
+            db.TagMappings.AddRange(added.Select(t => new TagMapping { TagId = t.Id, EntityType = type, EntityId = id }));
+            // TagMapping is not IAuditable: log against the record, like SetAsync
+            db.AuditLogs.Add(ManualAudit.Row(type, id, AuditAction.Modified, actor,
+                new Dictionary<string, object?[]> { ["Tags hinzugefügt"] = [null, string.Join(", ", added.Select(t => t.Name))] }));
+            changed++;
+        }
+        if (changed > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return new BatchOutcome(changed, visible.Count - changed, refused);
+    }
 }

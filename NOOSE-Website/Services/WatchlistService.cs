@@ -4,6 +4,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
@@ -55,6 +56,65 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
             });
         }
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<BatchOutcome> FollowManyAsync(IReadOnlyCollection<(string Type, string Id)> records,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        var agentId = actor.GetAgentId();
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            throw new UnauthorizedAccessException("Ohne Dienstkonto lässt sich nichts beobachten.");
+        }
+        var wanted = RecordBatch.Normalize(records);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var scope = ViewerScope.From(actor);
+        var refused = 0;
+        var visible = new List<(string Type, string Id)>();
+        foreach (var r in wanted)
+        {
+            if (!RecordBatch.Followable.Contains(r.Type)
+                || !await RecordBatch.ExistsAndVisibleAsync(db, r.Type, r.Id, scope, cancellationToken))
+            {
+                refused++;
+                continue;
+            }
+            visible.Add(r);
+        }
+
+        // unfollowed rows included: they are reactivated rather than added twice
+        var ids = visible.Select(v => v.Id).Distinct().ToList();
+        var mine = await db.Watchlists.IgnoreQueryFilters()
+            .Where(w => w.AgentId == agentId && ids.Contains(w.EntityId))
+            .ToListAsync(cancellationToken);
+
+        var done = 0;
+        foreach (var (type, id) in visible)
+        {
+            var rows = mine.Where(w => w.EntityType == type && w.EntityId == id).ToList();
+            if (rows.Any(w => !w.IsDeleted))
+            {
+                continue;
+            }
+            if (rows.FirstOrDefault() is { } old)
+            {
+                old.IsDeleted = false;
+                old.DeletedAt = null;
+                old.DeletedById = null;
+            }
+            else
+            {
+                db.Watchlists.Add(new WatchlistEntry { AgentId = agentId, EntityType = type, EntityId = id });
+            }
+            done++;
+        }
+        if (done > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return new BatchOutcome(done, visible.Count - done, refused);
     }
 
     public async Task UnfollowAsync(string entityType, string entityId, ClaimsPrincipal actor,

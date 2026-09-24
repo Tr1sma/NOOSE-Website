@@ -1935,6 +1935,27 @@ div.vis-tooltip {
     overflow: hidden;
 }
 
+/* selection bar on /suche: no rail pane here, so none of the evidence bar's negative margin */
+.auswahl-aktionsleiste {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.suche-treffer-gewaehlt {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+/* a row the selection cannot take: visible for context, inert to the click */
+.suche-treffer-inaktiv {
+    opacity: 0.45;
+    cursor: default;
+}
+
 /* ---- FAQ accordion on /info/faq ---- */
 /* Native <details>, because that page renders without a circuit: the open state arrives from the server and the
    browser does the folding. Two nesting levels, one set of rules; the section is the heavier of the two. */

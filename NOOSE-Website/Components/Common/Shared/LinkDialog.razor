@@ -356,6 +356,8 @@
     [Parameter] public IReadOnlyList<string>? AllowedTypes { get; set; }
     /// <summary>Already-linked or otherwise blocked ids per type.</summary>
     [Parameter] public IReadOnlyDictionary<string, IReadOnlyList<string>>? Excluded { get; set; }
+    /// <summary>Type the picker opens with; ignored when the viewer is not offered it.</summary>
+    [Parameter] public string? InitialType { get; set; }
     // no Designation parameter: the title is set by ShowAsync, and a documented parameter the component never
     // read was a trap - setting it changed nothing, silently
     [Parameter] public string LabelCaption { get; set; } = "Bezeichnung (optional)";
@@ -387,7 +389,9 @@
             _docScope = DocumentViewerScope.From(user);
             _scope = ViewerScope.From(user);
         }
-        _targetType = ShownTypes.Select(t => t.Value).FirstOrDefault() ?? nameof(Person);
+        _targetType = InitialType is { } initial && ShownTypes.Any(t => t.Value == initial)
+            ? initial
+            : ShownTypes.Select(t => t.Value).FirstOrDefault() ?? nameof(Person);
         await TypeSwitchedAsync();
     }
 
@@ -673,7 +677,7 @@
     public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? sourceType = null,
         IReadOnlyList<string>? allowedTypes = null, IReadOnlyDictionary<string, IReadOnlyList<string>>? excluded = null,
         string designation = "Verknüpfung", string labelCaption = "Bezeichnung (optional)",
-        string labelPlaceholder = "z. B. siehe auch / Quelle für")
+        string labelPlaceholder = "z. B. siehe auch / Quelle für", string? initialType = null)
     {
         var parameters = new DialogParameters<LinkDialog>
         {
@@ -683,6 +687,7 @@
             { x => x.Excluded, excluded },
             { x => x.LabelCaption, labelCaption },
             { x => x.LabelPlaceholder, labelPlaceholder },
+            { x => x.InitialType, initialType },
         };
         var reference = await dialog.ShowAsync<LinkDialog>($"{designation} hinzufügen", parameters);
         var result = await reference.Result;

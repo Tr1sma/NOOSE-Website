@@ -58,6 +58,11 @@ internal static class GettingStartedChapter
                 überall ein Suchfeld. Tippen, mit den Pfeiltasten auswählen, Enter.</p>
                 <p>Findest du nichts, liegt es oft nicht am Suchbegriff, sondern an den Rechten: Akten, die du
                 nicht sehen darfst, tauchen in den Treffern gar nicht erst auf.</p>
+                <p>Aus den Treffern heraus arbeitest du auch <strong>gleich weiter</strong>: <em>Auswählen</em> setzt
+                Kästchen an die Akten. Hake an, was zusammengehört - auch über mehrere Suchen hinweg - und nutze die
+                Leiste unten: <em>Verknüpfen</em> hängt alle an eine Akte, etwa einen Vorgang, <em>Stichwort</em> gibt
+                allen dasselbe Stichwort, <em>Beobachten</em> nimmt sie auf deine Beobachtungsliste. Kommentare,
+                Quellen und Protokolle lassen sich nicht auswählen, nur die Akten selbst.</p>
                 """,
                 NavKey: "suche",
                 Steps:
@@ -68,6 +73,8 @@ internal static class GettingStartedChapter
                         "Schon nach wenigen Buchstaben erscheinen Treffer. Pfeiltasten wählen aus, Enter öffnet."),
                     new Step("FilterAlt", "Auf einen Typ eingrenzen",
                         "Auf der Suchseite grenzt die Leiste über den Treffern auf Personen, Fraktionen und so weiter ein."),
+                    new Step("Checklist", "Mehrere Akten auf einmal",
+                        "Über den Treffern „Auswählen“ drücken, anhaken und unten verknüpfen, verschlagworten oder beobachten."),
                 ]),
 
             new Article("art-menue-anpassen", "menue-anpassen", "Das Menü anpassen",

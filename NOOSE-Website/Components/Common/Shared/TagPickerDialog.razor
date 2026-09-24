@@ -115,14 +115,15 @@
     private static Color ColourBy(string? colour) => Enum.TryParse<Color>(colour, out var c) ? c : Color.Default;
 
     /// <summary>Shows the picker; returns selected tag IDs or null on cancel.</summary>
-    public static async Task<List<string>?> ShowAsync(IDialogService dialog, List<string> alreadySet, System.Security.Claims.ClaimsPrincipal user)
+    public static async Task<List<string>?> ShowAsync(IDialogService dialog, List<string> alreadySet, System.Security.Claims.ClaimsPrincipal user,
+        string title = "Tags zuordnen")
     {
         var parameters = new DialogParameters<TagPickerDialog>
         {
             { x => x.AlreadySet, alreadySet },
             { x => x.User, user },
         };
-        var reference = await dialog.ShowAsync<TagPickerDialog>("Tags zuordnen", parameters);
+        var reference = await dialog.ShowAsync<TagPickerDialog>(title, parameters);
         var result = await reference.Result;
         return result is { Canceled: false, Data: List<string> ids } ? ids : null;
     }

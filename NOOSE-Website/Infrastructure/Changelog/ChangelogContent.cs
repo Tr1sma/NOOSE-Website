@@ -387,6 +387,9 @@ public static class ChangelogContent
             Besser("2.2.10-neuerungen-fenster", "Nach einem Update zeigt dir die Seite beim ersten Aufruf in einem "
                 + "kleinen Fenster, was sich geändert hat – mit einem Knopf zu allen Neuerungen. Bisher stand dort "
                 + "nur eine Karte mit der Anzahl, und die hat manche Neuerung übersehen.", "Bedienung"),
+            Neu("2.2.11-mehrfachauswahl", "In der Suche wählst du über „Auswählen“ mehrere Akten auf einmal aus – "
+                + "auch über mehrere Suchbegriffe hinweg – und verknüpfst sie in einem Schritt mit einem Vorgang, "
+                + "gibst ihnen ein Stichwort oder beobachtest sie alle.", "Bedienung"),
         ]),
     ];
 }
