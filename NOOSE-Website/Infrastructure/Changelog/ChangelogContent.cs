@@ -387,6 +387,9 @@ public static class ChangelogContent
             Besser("2.2.10-neuerungen-fenster", "Nach einem Update zeigt dir die Seite beim ersten Aufruf in einem "
                 + "kleinen Fenster, was sich geändert hat – mit einem Knopf zu allen Neuerungen. Bisher stand dort "
                 + "nur eine Karte mit der Anzahl, und die hat manche Neuerung übersehen.", "Bedienung"),
+            Neu("2.2.11-posteingang", "Unten in der Glocke führt „Alle Benachrichtigungen“ auf eine eigene Seite: "
+                + "dort findest du auch ältere Meldungen als die zwanzig neuesten, filterst nach Art und Zeitraum und "
+                + "holst eine versehentlich angeklickte Meldung mit „Als ungelesen markieren“ zurück.", "Bedienung"),
         ]),
     ];
 }

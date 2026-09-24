@@ -27,6 +27,8 @@ public static class NavCatalog
             Description: "Eigene Stammdaten, Codename und Kontaktangaben"),
         new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.MeinDienst, NavArea.MeinDienst,
             Description: "Akten, denen du folgst — mit Änderungshinweis"),
+        new NavEntry("benachrichtigungen", "/benachrichtigungen", Icons.Material.Filled.Notifications, "Benachrichtigungen", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "Alle eigenen Benachrichtigungen — filtern, blättern, wieder als ungelesen markieren"),
         new NavEntry("aufgaben", "/aufgaben", Icons.Material.Filled.AssignmentTurnedIn, "Aufgaben-Board", NavSection.MeinDienst, NavArea.MeinDienst,
             Description: "To-dos des Teams als Board — für alle Agenten sichtbar"),
         new NavEntry("aktivitaeten", "/aktivitaeten", Icons.Material.Filled.Bolt, "Dienst-Aktivitäten", NavSection.MeinDienst, NavArea.MeinDienst,

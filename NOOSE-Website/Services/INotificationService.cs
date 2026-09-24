@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Notifications;
 
 namespace NOOSE_Website.Services;
 
@@ -42,4 +43,16 @@ public interface INotificationService
 
     /// <summary>Mark all of the caller's unread notifications as read.</summary>
     Task AllAsReadAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>One filtered page of the caller's own notifications, newest first.</summary>
+    Task<NotificationInboxPage> GetInboxAsync(ClaimsPrincipal actor, NotificationInboxQuery query,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The types the caller has received, with their counts; feeds the inbox filter.</summary>
+    Task<List<NotificationTypeCount>> GetOwnTypesAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Mark one of the caller's read notifications as unread again.</summary>
+    /// <remarks>It counts as open again: the watchlist fan-out skips its record while it is unread, and a folding
+    /// notice (tickets) lands on it when it is the newest unread one for that target.</remarks>
+    Task AsUnreadMarkAsync(string notificationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

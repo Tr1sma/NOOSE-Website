@@ -1,4 +1,4 @@
-@* Topbar bell: unread badge + dropdown of latest; click marks read and navigates. Live updates via NotificationBroadcaster. *@
+@* Topbar bell: unread badge + dropdown of latest; click marks read and navigates; the full list is /benachrichtigungen. Live updates via NotificationBroadcaster. *@
 @implements IAsyncDisposable
 @inject INotificationService NotificationService
 @inject NotificationBroadcaster Broadcaster
@@ -44,6 +44,12 @@
                         </MudMenuItem>
                     }
                 </div>
+            }
+            @* the bell also hangs in the public header; citizens, applicants and partners have no inbox page *@
+            @if (User.IsInternalAgent())
+            {
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Inbox" Href="/benachrichtigungen">Alle Benachrichtigungen</MudMenuItem>
             }
         </div>
     </MudMenu>

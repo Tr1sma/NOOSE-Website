@@ -2,6 +2,7 @@ using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Notifications;
 using NOOSE_Website.Services;
 using NSubstitute;
 
@@ -663,12 +664,317 @@ public class NotificationServiceTests
         Assert.Null(db.Notifications.Single(n => n.Id == row.Id).ReadAt);
     }
 
-    private static Notification NewRow(string recipientId, string title, DateTime createdAt, DateTime? readAt = null)
+    // ---- GetInboxAsync -----------------------------------------------------
+
+    private static readonly DateTime Day = new(2026, 5, 10, 12, 0, 0, DateTimeKind.Utc);
+
+    private static NotificationInboxQuery Inbox(int page = 1, int pageSize = 10, NotificationType[]? types = null,
+        DateTime? fromUtc = null, DateTime? toUtc = null, bool onlyUnread = false)
+        => new(types ?? [], fromUtc, toUtc, onlyUnread, page, pageSize);
+
+    [Fact]
+    public async Task GetInboxAsync_ReturnsOnlyOwn_EvenInsideTheWindow()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "eigen", Day));
+            seed.Notifications.Add(NewRow("other", "fremd", Day.AddMinutes(1)));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(),
+            Inbox(fromUtc: Day.AddHours(-1), toUtc: Day.AddHours(1)));
+
+        Assert.Equal(1, page.Total);
+        Assert.Equal("eigen", Assert.Single(page.Items).Title);
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_PagesWithoutGapOrDouble_EvenOnEqualStamps()
+    {
+        using var ctx = new SqliteTestContext();
+        var rows = Enumerable.Range(0, 25).Select(i => NewRow("agent-1", $"n{i}", Day)).ToList();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.AddRange(rows);
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var me = ClaimsPrincipalBuilder.Agent("agent-1").Build();
+
+        var seen = new List<string>();
+        for (var p = 1; p <= 3; p++)
+        {
+            var page = await svc.GetInboxAsync(me, Inbox(page: p));
+            Assert.Equal(25, page.Total);
+            Assert.Equal(3, page.PageCount);
+            Assert.Equal(p, page.Page);
+            seen.AddRange(page.Items.Select(n => n.Id));
+        }
+
+        // one broadcast stamps many rows alike; the id breaks the tie, so the pages line up
+        Assert.Equal(rows.Select(r => r.Id).OrderDescending(StringComparer.Ordinal), seen);
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_ClampsAPageBeyondTheEnd_ToTheLastPage()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            for (var i = 0; i < 12; i++)
+            {
+                seed.Notifications.Add(NewRow("agent-1", $"n{i:00}", Day.AddMinutes(i)));
+            }
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(), Inbox(page: 9));
+
+        Assert.Equal(2, page.Page);
+        Assert.Equal(2, page.PageCount);
+        Assert.Equal(new[] { "n01", "n00" }, page.Items.Select(n => n.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_ClampsThePageSize()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            for (var i = 0; i < 12; i++)
+            {
+                seed.Notifications.Add(NewRow("agent-1", $"n{i}", Day.AddMinutes(i)));
+            }
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(), Inbox(pageSize: 1));
+
+        Assert.Equal(10, page.Items.Count);
+        Assert.Equal(2, page.PageCount);
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_FiltersByType()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "erwaehnt", Day, type: NotificationType.Mention));
+            seed.Notifications.Add(NewRow("agent-1", "aufgabe", Day, type: NotificationType.JobAssigned));
+            seed.Notifications.Add(NewRow("agent-1", "konto", Day, type: NotificationType.Account));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(),
+            Inbox(types: [NotificationType.Mention, NotificationType.JobAssigned]));
+
+        Assert.Equal(new[] { "aufgabe", "erwaehnt" }, page.Items.Select(n => n.Title).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_Window_IncludesItsStart_AndExcludesItsEnd()
+    {
+        using var ctx = new SqliteTestContext();
+        var from = Day;
+        var to = Day.AddDays(1);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "davor", from.AddSeconds(-1)));
+            seed.Notifications.Add(NewRow("agent-1", "start", from));
+            seed.Notifications.Add(NewRow("agent-1", "drin", from.AddHours(5)));
+            seed.Notifications.Add(NewRow("agent-1", "ende", to));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(),
+            Inbox(fromUtc: from, toUtc: to));
+
+        Assert.Equal(new[] { "drin", "start" }, page.Items.Select(n => n.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_OnlyUnread_LeavesTheReadOnesOut()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "offen", Day));
+            seed.Notifications.Add(NewRow("agent-1", "gelesen", Day, readAt: Day));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(), Inbox(onlyUnread: true));
+
+        Assert.Equal("offen", Assert.Single(page.Items).Title);
+    }
+
+    [Fact]
+    public async Task GetInboxAsync_Anonymous_ReturnsAnEmptyPage()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "u", Day));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var page = await svc.GetInboxAsync(ClaimsPrincipalBuilder.Anonymous(), Inbox());
+
+        Assert.Empty(page.Items);
+        Assert.Equal(0, page.Total);
+        Assert.Equal(1, page.PageCount);
+    }
+
+    // ---- GetOwnTypesAsync --------------------------------------------------
+
+    [Fact]
+    public async Task GetOwnTypesAsync_CountsOnlyOwn()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(NewRow("agent-1", "a", Day, type: NotificationType.Mention));
+            seed.Notifications.Add(NewRow("agent-1", "b", Day, type: NotificationType.Mention));
+            seed.Notifications.Add(NewRow("agent-1", "c", Day, type: NotificationType.Followup));
+            seed.Notifications.Add(NewRow("other", "d", Day, type: NotificationType.Financing));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        var types = await svc.GetOwnTypesAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        Assert.Equal(2, types.Count);
+        Assert.Equal(2, types.Single(t => t.Type == NotificationType.Mention).Count);
+        Assert.Equal(1, types.Single(t => t.Type == NotificationType.Followup).Count);
+    }
+
+    // ---- AsUnreadMarkAsync -------------------------------------------------
+
+    [Fact]
+    public async Task AsUnreadMarkAsync_MarksOwnReadAsUnread_AndBroadcasts()
+    {
+        using var ctx = new SqliteTestContext();
+        var row = NewRow("agent-1", "u", Day, readAt: Day);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.AsUnreadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        using var db = ctx.NewContext();
+        Assert.Null(db.Notifications.Single(n => n.Id == row.Id).ReadAt);
+        Assert.Equal(new[] { "agent-1" }, broadcasts);
+    }
+
+    [Fact]
+    public async Task AsUnreadMarkAsync_OthersNotification_IsNoOp()
+    {
+        using var ctx = new SqliteTestContext();
+        var row = NewRow("other", "u", Day, readAt: Day);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.AsUnreadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        using var db = ctx.NewContext();
+        Assert.Equal(Day, db.Notifications.Single(n => n.Id == row.Id).ReadAt);
+        Assert.Empty(broadcasts);
+    }
+
+    [Fact]
+    public async Task AsUnreadMarkAsync_AlreadyUnread_IsNoOp()
+    {
+        using var ctx = new SqliteTestContext();
+        var row = NewRow("agent-1", "u", Day);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.AsUnreadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        Assert.Empty(broadcasts);
+    }
+
+    [Fact]
+    public async Task AsUnreadMarkAsync_Anonymous_IsNoOp()
+    {
+        using var ctx = new SqliteTestContext();
+        var row = NewRow("agent-1", "u", Day, readAt: Day);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        await svc.AsUnreadMarkAsync(row.Id, ClaimsPrincipalBuilder.Anonymous());
+
+        using var db = ctx.NewContext();
+        Assert.Equal(Day, db.Notifications.Single(n => n.Id == row.Id).ReadAt);
+    }
+
+    [Fact]
+    public async Task AsUnreadMarkAsync_ReopenedNotice_CollectsTheNextOneForItsTarget()
+    {
+        using var ctx = new SqliteTestContext();
+        // tickets are the ones that fold (NotifyOnceAsync); a mention would simply add a row
+        var row = NewRow("agent-1", "alt", Day, readAt: Day, type: NotificationType.PublicTicketInternal, href: "/tickets/1");
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var me = ClaimsPrincipalBuilder.Agent("agent-1").Build();
+
+        await svc.AsUnreadMarkAsync(row.Id, me);
+        await svc.NotifyOnceAsync("agent-1", NotificationType.PublicTicketInternal, "neu", "/tickets/1");
+
+        // the unread notice is the summary for its target: it is refreshed, not joined by a second row
+        using var db = ctx.NewContext();
+        var only = Assert.Single(db.Notifications.Where(n => n.RecipientId == "agent-1"));
+        Assert.Equal(row.Id, only.Id);
+        Assert.Equal("neu", only.Title);
+        Assert.Null(only.ReadAt);
+    }
+
+    private static Notification NewRow(string recipientId, string title, DateTime createdAt, DateTime? readAt = null,
+        NotificationType type = NotificationType.Account, string? href = null)
         => new()
         {
             RecipientId = recipientId,
-            Type = NotificationType.Account,
+            Type = type,
             Title = title,
+            Href = href,
             CreatedAt = createdAt,
             ReadAt = readAt,
         };

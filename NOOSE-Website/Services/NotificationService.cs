@@ -6,6 +6,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Notifications;
 
 namespace NOOSE_Website.Services;
 
@@ -308,5 +309,90 @@ public class NotificationService(
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(agentId);
+    }
+
+    public async Task<NotificationInboxPage> GetInboxAsync(ClaimsPrincipal actor, NotificationInboxQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        // recipient is always the caller — derive from principal, never a parameter
+        var agentId = actor.GetAgentId();
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            return NotificationInboxPage.Empty;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = db.Notifications.Where(n => n.RecipientId == agentId);
+        if (query.Types.Count > 0)
+        {
+            var types = query.Types.Distinct().ToList();
+            rows = rows.Where(n => types.Contains(n.Type));
+        }
+        if (query.FromUtc is { } from)
+        {
+            rows = rows.Where(n => n.CreatedAt >= from);
+        }
+        if (query.ToUtc is { } to)
+        {
+            rows = rows.Where(n => n.CreatedAt < to);
+        }
+        if (query.OnlyUnread)
+        {
+            rows = rows.Where(n => n.ReadAt == null);
+        }
+
+        var total = await rows.CountAsync(cancellationToken);
+        var size = Math.Clamp(query.PageSize, 10, 100);
+        var pageCount = Math.Max(1, (total + size - 1) / size);
+        // an old address or a shrunken filter must not land on an empty page
+        var page = Math.Clamp(query.Page, 1, pageCount);
+
+        var items = await rows
+            .OrderByDescending(n => n.CreatedAt)
+            // equal stamps (one broadcast) would otherwise swap between pages
+            .ThenByDescending(n => n.Id)
+            .Skip((page - 1) * size)
+            .Take(size)
+            .ToListAsync(cancellationToken);
+        return new NotificationInboxPage(items, total, page, pageCount);
+    }
+
+    public async Task<List<NotificationTypeCount>> GetOwnTypesAsync(ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        var agentId = actor.GetAgentId();
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            return new();
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var counts = await db.Notifications
+            .Where(n => n.RecipientId == agentId)
+            .GroupBy(n => n.Type)
+            .Select(g => new NotificationTypeCount(g.Key, g.Count()))
+            .ToListAsync(cancellationToken);
+        return counts
+            .OrderBy(c => NotificationTypeDisplay.Name(c.Type), StringComparer.CurrentCulture)
+            .ToList();
+    }
+
+    public async Task AsUnreadMarkAsync(string notificationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        var agentId = actor.GetAgentId();
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            return;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var n = await db.Notifications.FirstOrDefaultAsync(x => x.Id == notificationId, cancellationToken);
+        // only own notification, and only one that is read
+        if (n is null || n.RecipientId != agentId || n.ReadAt is null)
+        {
+            return;
+        }
+        n.ReadAt = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        broadcaster.Report(n.RecipientId);
     }
 }

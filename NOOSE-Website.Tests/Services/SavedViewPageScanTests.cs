@@ -28,12 +28,13 @@ public sealed class SavedViewPageScanTests
     }
 
     [Fact]
-    public void The_five_lists_carry_the_button()
+    public void The_six_lists_carry_the_button()
     {
         // if this ever drops the guards below have quietly stopped guarding anything
         var names = ListsWithTheButton().Select(l => Path.GetFileName(l.Name)).Order().ToArray();
 
-        Assert.Equal(["CasesList.razor", "FactionsList.razor", "JobsList.razor", "OperationsList.razor", "PeopleList.razor"],
+        Assert.Equal(["CasesList.razor", "FactionsList.razor", "JobsList.razor", "NotificationInbox.razor", "OperationsList.razor",
+            "PeopleList.razor"],
             names);
     }
 
