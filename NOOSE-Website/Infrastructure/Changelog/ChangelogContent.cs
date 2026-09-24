@@ -26,8 +26,10 @@ public static class ChangelogContent
     /// <c>LegacyKey</c>, but that pass rewrites only the key and the release - the sort order stays behind,
     /// and a line that kept its number from a release of seventy would sit above every line of a release of
     /// six. Only the revision opens the update branch that writes the order with them.
+    /// Raised to 4 when 2.2.07 and 2.2.08 were cut to fit the 300-character title column; longer, they failed
+    /// the whole seeding batch on MySQL.
     /// </remarks>
-    public const int Revision = 3;
+    public const int Revision = 4;
 
     /// <param name="Key">Stable handle; renaming one orphans the old row and creates a second.</param>
     /// <param name="LegacyKey">The key this line shipped under before it moved into another release.</param>
@@ -371,14 +373,13 @@ public static class ChangelogContent
                 + "wieder schreibst, holst du mit einem Schrägstrich in jedes Textfeld. Platzhalter wie "
                 + "Name, Aktenzeichen und Datum füllen sich dabei von selbst.", "Bedienung"),
             Neu("2.2.07-ansichten", "Auf den Listen der Personen, Fraktionen, Vorgänge und Operationen und "
-                + "auf dem Aufgaben-Board merkst du dir eine gefilterte Auswahl unter einem Namen. Sie steht "
-                + "danach unter den Favoriten und im Schnellzugriff und öffnet die Liste wieder genau so. "
-                + "Das Aufgaben-Board behält seine Filter außerdem jetzt auch, wenn du die Seite neu lädst.",
-                "Bedienung"),
+                + "auf dem Aufgaben-Board merkst du dir eine gefilterte Auswahl unter einem Namen – sie steht "
+                + "dann unter den Favoriten und im Schnellzugriff. Das Aufgaben-Board behält seine Filter "
+                + "jetzt auch, wenn du die Seite neu lädst.", "Bedienung"),
             Neu("2.2.08-entwuerfe", "Was du in ein Dok, eine Observation, einen Vermerk, den Taskforce-Chat oder "
                 + "die Beschreibung einer Akte tippst, hebt dein Browser jetzt mit auf. Reißt die Verbindung ab "
                 + "oder schließt du einen Dialog aus Versehen, bietet dir das Feld den Text beim nächsten Öffnen "
-                + "wieder an. Bisher konnte das nur der Text-Editor.", "Bedienung"),
+                + "wieder an.", "Bedienung"),
         ]),
     ];
 }

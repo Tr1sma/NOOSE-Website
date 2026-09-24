@@ -500,6 +500,35 @@ public sealed class ChangelogTests
     }
 
     /// <summary>The wording rule, as far as a test can hold it: no jargon that only the author would use.</summary>
+    /// <summary>Every shipped line fits the column the seeder writes it into.</summary>
+    /// <remarks>
+    /// SQLite ignores the declared length, MySQL rejects the row - and the seeder saves all new lines in one batch,
+    /// so a single long line kept every line of a release off the page without a red test anywhere.
+    /// </remarks>
+    [Fact]
+    public void Every_shipped_line_fits_its_column()
+    {
+        using var ctx = new SqliteTestContext();
+        using var db = ctx.NewContext();
+        var entry = db.Model.FindEntityType(typeof(ChangelogEntry))!;
+        var release = db.Model.FindEntityType(typeof(ChangelogRelease))!;
+        int Max(Microsoft.EntityFrameworkCore.Metadata.IEntityType type, string property)
+            => type.FindProperty(property)!.GetMaxLength()
+               ?? throw new InvalidOperationException($"{type.ClrType.Name}.{property} hat keine Länge.");
+
+        var offenders = ChangelogContent.Releases
+            .SelectMany(r => r.Entries.Select(e => (r, e)))
+            .Where(x => x.e.Title.Length > Max(entry, nameof(ChangelogEntry.Title))
+                || (x.e.Area?.Length ?? 0) > Max(entry, nameof(ChangelogEntry.Area))
+                || x.e.Key.Length > Max(entry, nameof(ChangelogEntry.SeedKey))
+                || x.r.Title.Length > Max(release, nameof(ChangelogRelease.Title))
+                || x.r.Version.Length > Max(release, nameof(ChangelogRelease.Version)))
+            .Select(x => $"{x.e.Key} ({x.e.Title.Length} Zeichen)")
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void No_shipped_line_talks_about_the_technology()
     {
