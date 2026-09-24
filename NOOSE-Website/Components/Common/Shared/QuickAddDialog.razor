@@ -283,7 +283,8 @@
             || !string.IsNullOrWhiteSpace(_activityKind))
         {
             var ok = await ConfirmDialog.ShowAsync(DialogService, "Ausführlich erfassen?",
-                "Titel, Art und Text nimmt das ausführliche Formular nicht mit – nur die gewählte Organisation.");
+                "Titel, Art und Text nimmt das ausführliche Formular nicht mit – nur die gewählte Organisation.",
+                "Zum Formular", Color.Warning);
             if (!ok)
             {
                 return;
