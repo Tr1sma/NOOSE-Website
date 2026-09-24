@@ -23,15 +23,15 @@ else
             {
                 <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary d-block">@group.Key</MudText>
             }
-            @foreach (var section in group)
+            @foreach (var entry in group)
             {
                 <MudButton FullWidth="true"
-                           Variant="@(IsActive(section) ? Variant.Filled : Variant.Text)"
-                           Color="@(IsActive(section) ? Color.Primary : Color.Default)"
-                           StartIcon="@section.Icon"
-                           OnClick="@(() => ActivateAsync(section.Slug))"
-                           aria-current="@(IsActive(section) ? "true" : null)">
-                    @section.Label
+                           Variant="@(IsActive(entry) ? Variant.Filled : Variant.Text)"
+                           Color="@(IsActive(entry) ? Color.Primary : Color.Default)"
+                           StartIcon="@entry.Icon"
+                           OnClick="@(() => ActivateAsync(entry.Slug))"
+                           aria-current="@(IsActive(entry) ? "true" : null)">
+                    @entry.Label
                 </MudButton>
             }
         }
