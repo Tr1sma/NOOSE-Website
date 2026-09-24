@@ -297,13 +297,15 @@ public sealed class FinancingItemSearchProvider(IDbContextFactory<AppDbContext> 
                 || (i.Category != null && i.Category.Contains(s))
                 || (i.Description != null && i.Description.Contains(s)));
         }
-        return await q.OrderBy(i => i.Sorting).Take(query.PerCategory)
-            .Select(i => new SearchHit(nameof(FinancingItem), i.Id, i.Name,
+        var rows = await q.OrderBy(i => i.Sorting).Take(query.PerCategory)
+            .Select(i => new { i.Id, i.Name, i.Category, i.Description }).ToListAsync(cancellationToken);
+        // joined in memory: MySQL cannot run the OUTER APPLY an array join in the projection becomes
+        return rows.Select(i => new SearchHit(nameof(FinancingItem), i.Id, i.Name,
                 string.Join(" · ", new[] { i.Category, i.Description }.Where(p => p != null)), string.Empty)
             {
                 Href = "/finanzierungen?tab=katalog",
             })
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 }
 
