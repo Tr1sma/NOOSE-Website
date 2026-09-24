@@ -6,9 +6,19 @@
     var href = SearchNavigation.For(Hit);
 }
 
-<MudPaper Class="@(href is null ? "pa-3" : "pa-3 cursor-pointer")" Elevation="1"
-          @onclick="@(() => Open(href))">
+<MudPaper Class="@RowClass(href)" Elevation="1" @onclick="@(() => ActivateAsync(href))"
+          aria-disabled="@(SelectMode && !Selectable ? "true" : null)"
+          title="@(SelectMode && !Selectable ? "Nur Akten lassen sich auswählen, keine Inhalte, Protokolle oder eigenen Einträge." : null)">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        @if (SelectMode && Selectable)
+        {
+            @* the checkbox is the keyboard target; a focusable row would scroll the page on space *@
+            <span @onclick:stopPropagation="true">
+                <MudCheckBox T="bool" Value="Picked" ValueChanged="@(_ => OnToggle.InvokeAsync(Hit))"
+                             Dense="true" Size="Size.Small" Color="Color.Primary" Class="ma-0"
+                             aria-label="@($"{Hit.Title} auswählen")" />
+            </span>
+        }
         @* the type chip is what keeps three dozen categories legible at a glance *@
         <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
                  Icon="@SearchCatalog.Icon(Hit.Category)">@SearchCatalog.German(Hit.Category)</MudChip>
@@ -60,6 +70,17 @@
                 <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Class="mud-text-secondary" />
             </MudTooltip>
         }
+        else if (SelectMode)
+        {
+            @* leaving the page would drop the selection, so the record opens beside it *@
+            <MudSpacer />
+            <span @onclick:stopPropagation="true">
+                <MudTooltip Text="In neuem Tab öffnen">
+                    <MudIconButton Href="@href" Target="_blank" Icon="@Icons.Material.Filled.OpenInNew"
+                                   Size="Size.Small" aria-label="In neuem Tab öffnen" />
+                </MudTooltip>
+            </span>
+        }
     </MudStack>
 
     @if (!string.IsNullOrWhiteSpace(Hit.Snippet))
@@ -72,10 +93,32 @@
 @code {
     [Parameter, EditorRequired] public SearchHit Hit { get; set; } = default!;
 
+    /// <summary>Selection mode: a click picks the hit instead of opening it.</summary>
+    [Parameter] public bool SelectMode { get; set; }
+
+    [Parameter] public bool Selectable { get; set; }
+
+    [Parameter] public bool Picked { get; set; }
+
+    [Parameter] public EventCallback<SearchHit> OnToggle { get; set; }
+
     private string? When() => Hit.Timestamp?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 
-    private void Open(string? href)
+    private string RowClass(string? href) => SelectMode
+        ? Selectable ? $"pa-3 cursor-pointer{(Picked ? " suche-treffer-gewaehlt" : string.Empty)}" : "pa-3 suche-treffer-inaktiv"
+        : href is null ? "pa-3" : "pa-3 cursor-pointer";
+
+    private async Task ActivateAsync(string? href)
     {
+        // in selection mode a row never navigates
+        if (SelectMode)
+        {
+            if (Selectable)
+            {
+                await OnToggle.InvokeAsync(Hit);
+            }
+            return;
+        }
         // a hit whose category has no page is not clickable; never guess a route
         if (href is not null)
         {

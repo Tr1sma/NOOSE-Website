@@ -37,6 +37,10 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem), nameof(Hinweis), nameof(Ticket),
     ];
 
+    /// <summary>What an operation or taskforce lists as involved: people and organisations, nothing else.</summary>
+    public static readonly IReadOnlyList<string> InvolvedTypes =
+        [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)];
+
     public Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default)
         => GetForRecordAsync(entityType, entityId, new ViewerScope(isLeadership, isLeadership, meId, null), kind, cancellationToken);
 
@@ -339,6 +343,97 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
 
         // links touching a faction affect its threat score -> recompute
         await ThreatNewCalculateAsync(sourceType, sourceId, targetType, targetId, cancellationToken);
+    }
+
+    public async Task<BatchOutcome> CreateManyAsync(string anchorType, string anchorId,
+        IReadOnlyCollection<(string Type, string Id)> targets, string? label, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        var wanted = RecordBatch.Normalize(targets);
+        var trimmed = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+        if (trimmed is { Length: > 200 })
+        {
+            throw new InvalidOperationException("Die Bezeichnung darf höchstens 200 Zeichen lang sein.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var scope = ViewerScope.From(actor);
+        if (!RecordBatch.LinkAnchors.Contains(anchorType)
+            || !await RecordBatch.ExistsAndVisibleAsync(db, anchorType, anchorId, scope, cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Mit dieser Akte lässt sich nicht gesammelt verknüpfen.");
+        }
+
+        var allowed = RecordBatch.LinkTargetsFor(anchorType);
+        var refused = 0;
+        var candidates = new List<(string Type, string Id)>();
+        foreach (var t in wanted)
+        {
+            if (!allowed.Contains(t.Type) || (t.Type == anchorType && t.Id == anchorId)
+                || !await RecordBatch.ExistsAndVisibleAsync(db, t.Type, t.Id, scope, cancellationToken))
+            {
+                refused++;
+                continue;
+            }
+            candidates.Add(t);
+        }
+
+        // one query for both directions; automatic colleague links count as linked too
+        var ids = candidates.Select(c => c.Id).Distinct().ToList();
+        var existing = (await db.Links.AsNoTracking()
+                .Where(v => v.Kind == LinkKind.Default
+                    && ((v.SourceType == anchorType && v.SourceId == anchorId && ids.Contains(v.TargetId))
+                        || (v.TargetType == anchorType && v.TargetId == anchorId && ids.Contains(v.SourceId))))
+                .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId })
+                .ToListAsync(cancellationToken))
+            .Select(v => v.SourceType == anchorType && v.SourceId == anchorId ? (v.TargetType, v.TargetId) : (v.SourceType, v.SourceId))
+            .ToHashSet();
+
+        var created = candidates.Where(c => !existing.Contains(c)).ToList();
+        foreach (var c in created)
+        {
+            db.Links.Add(new Link
+            {
+                SourceType = anchorType,
+                SourceId = anchorId,
+                TargetType = c.Type,
+                TargetId = c.Id,
+                Label = trimmed,
+                Kind = LinkKind.Default,
+            });
+        }
+        if (created.Count > 0)
+        {
+            // one save: one audit batch and one follower fan-out for the whole selection
+            await db.SaveChangesAsync(cancellationToken);
+            await RecalculateOnceAsync(created.Append((anchorType, anchorId)), cancellationToken);
+        }
+        return new BatchOutcome(created.Count, candidates.Count - created.Count, refused);
+    }
+
+    /// <summary>Recomputes each touched faction and person once; the links stand even if a score fails.</summary>
+    private async Task RecalculateOnceAsync(IEnumerable<(string Type, string Id)> records, CancellationToken cancellationToken)
+    {
+        foreach (var (type, id) in records.Distinct())
+        {
+            try
+            {
+                if (type == nameof(Faction))
+                {
+                    await threat.NewCalculateAsync(id, cancellationToken);
+                }
+                else if (type == nameof(Person))
+                {
+                    await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch { /* best effort */ }
+        }
     }
 
     /// <summary>Recomputes the threat score of each faction involved in the link (no-op for non-factions).</summary>

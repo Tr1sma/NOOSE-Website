@@ -22,4 +22,7 @@ public interface ITagService
 
     /// <summary>Replaces a record's tag assignments with the given set (diff update).</summary>
     Task SetAsync(string entityType, string entityId, IEnumerable<string> tagIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds tags to many records in one save; never removes a tag.</summary>
+    Task<BatchOutcome> AddManyAsync(IReadOnlyCollection<(string Type, string Id)> records, IReadOnlyCollection<string> tagIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

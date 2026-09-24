@@ -262,6 +262,12 @@ zuletzt die Architektur-Grenze.
 
 **Aufwand:** mittel | **Jury-Schnitt:** 6 | **Blickwinkel:** Vorhandene Infrastruktur als Hebel
 
+> **Umgesetzt am 24.09.2026** – als Auswahlmodus auf `/suche` mit Leiste am Fuß (verknüpfen, verschlagworten,
+> beobachten; nur hinzufügen). Auswählbar sind nur Akten-Treffer; welche Aktentypen was können, entscheidet
+> `Services/RecordBatch.cs`, und die drei Dienste schreiben je Aktion in **einem** Speichervorgang. Der
+> „Achtung"-Hinweis unten gilt nur für Stichworte: Verknüpfung und Beobachtung laufen durch den Audit-Interceptor.
+> Einzelheiten in `docs/superpowers/plans/2026-09-24-mehrfachauswahl-suche.md`.
+
 **Was es tut.** Suchtreffer bekommen Auswahlkästchen und eine Leiste am Fuß: die markierten Akten gemeinsam mit einem Vorgang verknüpfen, mit einem Stichwort versehen oder auf die Beobachtungsliste nehmen.
 
 **Warum.** Eine Recherche endet heute in einer Trefferliste, aus der man jede Akte einzeln öffnen und einzeln verknüpfen muss – bei acht Treffern acht Rundreisen. Die Verknüpfungs-, Stichwort- und Beobachtungs-Dienste sind alle da, nur der Weg von einem Suchergebnis dorthin fehlt.

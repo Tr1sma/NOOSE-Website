@@ -273,7 +273,7 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=21`, `entwurf.js?v=1`, `textbild.js?v=1`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=21`, `entwurf.js?v=1`, `textbild.js?v=1`, `app.js?v=4`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor`, `KeyboardShortcuts.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
 - **Ablehnen, Schließen und eine nicht bestandene Sicherheitsüberprüfung sperren 14 Tage.** Die Dauer, das
   Aktiv-Prädikat (`IstBlacklist || GesperrtBis > jetzt`, es gibt keine `IstAktiv`-Spalte) und die
   Lokal→UTC-Umrechnung des `MudDatePicker` liegen zusammen in `Services/BewerbungssperreRules.cs`. Die Sperre
@@ -378,6 +378,15 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   Abstand sind **ein** Besuch (`RecordVisits`), damit Neuladen und Prerendern die Markierungen nicht löschen.
   Eine Akte bekommt die Zeile nur, wenn sie ihre Besuche über `LogViewAsync` protokolliert und einen
   `historie`-Abschnitt hat; `SinceLastVisitScanTests` hält die Verdrahtung.
+- **Mehrfachauswahl in der Suche: die Typregeln stehen in `Services/RecordBatch.cs`, nicht auf der Seite.**
+  `LinkService.CreateManyAsync`, `TagService.AddManyAsync` und `WatchlistService.FollowManyAsync` erzwingen sie
+  selbst (`Linkable`, `LinkAnchors`/`LinkTargetsFor`, `Taggable` = die `Tagged`-Kategorien, `Followable`), weil
+  `Visibility.IsRecordVisibleAsync` einen unbekannten Typ als sichtbar beantwortet und die Personalakte nur am Rang
+  misst — `RecordBatch.ExistsAndVisibleAsync` schließt beides. Jede Sammelaktion beginnt mit
+  `Permission.RequireWriteAccess` und speichert **einmal**: acht Saves hießen acht Beobachter-Wellen, die gegen die
+  „schon ungelesen"-Prüfung rennen. Nur `TagMapping` bekommt `ManualAudit.Row`; `Link` und `WatchlistEntry` laufen
+  durch den Audit-Interceptor — eine zusätzliche Zeile wäre doppelt. Die gewählte Akte ist die **Quelle** jeder
+  neuen Verknüpfung; ein Bürgerhinweis ist bewusst kein Anker (Hinweis→Person heißt „übernommen").
 - **Bewerbungs-Anschreiben nie auf `{{...}}` „normalisieren"** — `BewerbungTemplateRenderer` schwärzt `\bNAME\b` zu `███████`, damit der Agent gegenüber Bewerbern anonym bleibt; `{{Agent}}` würde stattdessen den Codename ausliefern. `DocumentTemplates` ist dieselbe Tabelle für Bibliothek **und** Bewerbung → Consumer müssen nach `Category` (`RecruitingSeeder.TemplateCategory`) filtern.
 - **`SearchNavigation.For` gibt `null` statt zu raten.** Der alte `_ => "/personen/{id}"`-Fallback öffnete für einen
   Kommentar an einer Fraktion eine *Personenakte mit der Fraktions-Id* — eine falsche Akte, lautlos. Ein Treffer ohne
@@ -446,7 +455,7 @@ die Formen und setzt das Buch zusammen, der Text steht **eine Datei je Kapitel**
 (plus `GlossaryContent.cs`). Der Seeder schreibt ihn beim Start ein und fasst **nie** an, was jemand
 redaktionell bearbeitet hat (`IstAngepasst`). Dieselbe Konfliktregel wie beim Changelog.
 
-Bestand: 9 Kapitel, 97 Artikel, 169 Glossarbegriffe, 15 Schaubilder, 40 Schritt-Karten.
+Bestand: 9 Kapitel, 97 Artikel, 169 Glossarbegriffe, 15 Schaubilder, 41 Schritt-Karten.
 
 - **Ton:** direkte Anrede, kurze Sätze, Klicknamen kursiv. Ein Fachwort beim ersten Auftreten erklären —
   genau dort greift später auch die Erklär-Blase aus dem Glossar.

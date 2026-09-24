@@ -1,0 +1,135 @@
+@using NOOSE_Website.Services.Search
+@inject ILinkService LinkService
+@inject ITagService TagService
+@inject IWatchlistService WatchlistService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudPaper Elevation="8" Class="auswahl-aktionsleiste">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <MudIcon Icon="@Icons.Material.Filled.Checklist" Color="Color.Primary" />
+        <MudMenu Variant="Variant.Text" Dense="true" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                 Disabled="@(Picked.Count == 0)" AnchorOrigin="Origin.TopLeft" TransformOrigin="Origin.BottomLeft"
+                 Label="@($"{Picked.Count} ausgewählt")">
+            @foreach (var hit in Picked)
+            {
+                <MudMenuItem Icon="@SearchCatalog.Icon(hit.Category)">
+                    <div class="d-flex align-center gap-2" style="min-width:240px;">
+                        <span class="flex-grow-1">
+                            @hit.Title
+                            <span class="mud-text-secondary"> · @SearchCatalog.German(hit.Category)</span>
+                        </span>
+                        @* the row does nothing; only the cross inside it removes *@
+                        <span @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           OnClick="@(() => OnRemove.InvokeAsync(hit))"
+                                           aria-label="@($"{hit.Title} aus der Auswahl nehmen")" />
+                        </span>
+                    </div>
+                </MudMenuItem>
+            }
+        </MudMenu>
+        @if (OutsideResults > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                davon @OutsideResults nicht in dieser Trefferliste
+            </MudText>
+        }
+        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="OnAll">Alle</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="OnNone" Disabled="@(Picked.Count == 0)">Keine</MudButton>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Link"
+                   Disabled="@(_busy || LinkCount == 0)" OnClick="LinkAsync">Verknüpfen … (@LinkCount)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Label"
+                   Disabled="@(_busy || TagCount == 0)" OnClick="TagAsync">Stichwort … (@TagCount)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.StarBorder"
+                   Disabled="@(_busy || FollowCount == 0)" OnClick="FollowAsync">Beobachten (@FollowCount)</MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    /// <summary>Picked hits, across every search since selection mode was switched on.</summary>
+    [Parameter, EditorRequired] public IReadOnlyCollection<SearchHit> Picked { get; set; } = [];
+
+    /// <summary>Picked hits the current result list does not show.</summary>
+    [Parameter] public int OutsideResults { get; set; }
+
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    [Parameter] public EventCallback OnAll { get; set; }
+
+    [Parameter] public EventCallback OnNone { get; set; }
+
+    [Parameter] public EventCallback<SearchHit> OnRemove { get; set; }
+
+    private bool _busy;
+
+    private int LinkCount => SearchSelection.Refs(Picked, SearchBatchAction.Link).Count;
+    private int TagCount => SearchSelection.Refs(Picked, SearchBatchAction.Tag).Count;
+    private int FollowCount => SearchSelection.Refs(Picked, SearchBatchAction.Follow).Count;
+
+    private async Task LinkAsync()
+    {
+        // picked records of an anchor's type are blocked in the picker: no record links to itself
+        var excluded = Picked
+            .GroupBy(h => h.Category, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(h => h.TargetId).ToList(), StringComparer.Ordinal);
+        var anchor = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(),
+            allowedTypes: RecordBatch.LinkAnchors.ToList(), excluded: excluded,
+            designation: "Gemeinsame Verknüpfung", labelCaption: "Bezeichnung für alle (optional)",
+            initialType: nameof(Case));
+        if (anchor is null)
+        {
+            return;
+        }
+
+        var accepted = RecordBatch.LinkTargetsFor(anchor.TargetType);
+        var targets = SearchSelection.Refs(Picked, SearchBatchAction.Link).Where(r => accepted.Contains(r.Type)).ToList();
+        await RunAsync(SearchBatchAction.Link, targets.Count,
+            () => LinkService.CreateManyAsync(anchor.TargetType, anchor.TargetId, targets, anchor.Label, User),
+            anchor.Display is { Length: > 0 } name ? $"„{name}“: " : string.Empty);
+    }
+
+    private async Task TagAsync()
+    {
+        var tagIds = await TagPickerDialog.ShowAsync(DialogService, [], User, "Stichworte hinzufügen");
+        if (tagIds is not { Count: > 0 })
+        {
+            return;
+        }
+        var targets = SearchSelection.Refs(Picked, SearchBatchAction.Tag);
+        await RunAsync(SearchBatchAction.Tag, targets.Count, () => TagService.AddManyAsync(targets, tagIds, User));
+    }
+
+    private async Task FollowAsync()
+    {
+        var targets = SearchSelection.Refs(Picked, SearchBatchAction.Follow);
+        await RunAsync(SearchBatchAction.Follow, targets.Count, () => WatchlistService.FollowManyAsync(targets, User));
+    }
+
+    private async Task RunAsync(SearchBatchAction action, int targets, Func<Task<BatchOutcome>> write, string prefix = "")
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var outcome = targets == 0 ? new BatchOutcome(0, 0, 0) : await write();
+            var skipped = Picked.Count - targets;
+            var severity = outcome.Done > 0 ? Severity.Success
+                : outcome.Refused > 0 ? Severity.Warning
+                : Severity.Info;
+            Snackbar.Add(prefix + SearchSelection.Summary(action, outcome, skipped), severity);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

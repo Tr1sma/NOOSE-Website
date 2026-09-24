@@ -111,6 +111,19 @@ else
             <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear"
                        OnClick="@(() => FacetAsync(null))">Filter aufheben</MudButton>
         }
+        @if (_mayAct)
+        {
+            @if (_selectMode)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="ExitSelect">Auswahl beenden</MudButton>
+            }
+            else
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Checklist"
+                           Disabled="@(_results.Total == 0)" OnClick="EnterSelect">Auswählen</MudButton>
+            }
+        }
     </MudStack>
 
     @if (_results.Incomplete.Count > 0)
@@ -175,17 +188,31 @@ else
                                 <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Size="Size.Small" Class="mud-text-secondary" />
                             </MudTooltip>
                         }
+                        @if (_selectMode && group.Hit.Any(SearchSelection.IsSelectable))
+                        {
+                            var whole = group.Hit.Where(SearchSelection.IsSelectable).All(h => _picked.ContainsKey(SearchSelection.Key(h)));
+                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                       OnClick="@(() => PickGroup(group, !whole))">@(whole ? "Keine dieser Gruppe" : "Alle dieser Gruppe")</MudButton>
+                        }
                     </MudStack>
                     <MudStack Spacing="2">
                         @foreach (var t in group.Hit)
                         {
-                            <SearchHitRow Hit="t" />
+                            <SearchHitRow Hit="t" SelectMode="_selectMode" Selectable="@SearchSelection.IsSelectable(t)"
+                                          Picked="@_picked.ContainsKey(SearchSelection.Key(t))" OnToggle="Toggle" />
                         }
                     </MudStack>
                 </div>
             }
         </MudStack>
     }
+}
+
+@* outside the result branches: the picks survive a running search *@
+@if (_mayAct && _selectMode)
+{
+    <SearchSelectionBar Picked="_picked.Values" OutsideResults="OutsideResults" User="_user"
+                        OnAll="PickAllShown" OnNone="PickNone" OnRemove="Toggle" />
 }
 
 @code {
@@ -214,6 +241,11 @@ else
 
     private string? _appliedQ;
 
+    // selection mode: only for agents who may write, and never cleared by a new search
+    private bool _mayAct;
+    private bool _selectMode;
+    private readonly Dictionary<string, SearchHit> _picked = new(StringComparer.Ordinal);
+
     /// <summary>Derived, not hand-written: a hardcoded list of tagless categories goes stale on the next one.</summary>
     private static readonly string TagScopeHint =
         "Ein Tag-Filter wirkt nur auf Kategorien mit Stichwort-Zuordnung. Ohne Zuordnung und damit ausgelassen: "
@@ -229,6 +261,7 @@ else
     {
         _user = (await AuthStateTask).User;
         _agentId = _user.GetAgentId();
+        _mayAct = _user.MayWrite();
         // partners: no internal tag vocabulary
         if (!_user.IsPartner())
         {
@@ -318,9 +351,6 @@ else
         }
     }
 
-    /// <summary>Re-runs only the categories the budget cut off and merges them in.</summary>
-    /// <remarks>The one place the page restricts categories server-side — and it says so on a button rather than
-    /// doing it silently.</remarks>
     /// <summary>The onboarding marker for "searched once"; there is no search log to mine it from later.</summary>
     private async Task StampSearchAsync()
     {
@@ -331,6 +361,9 @@ else
         try { await NavPrefs.MarkOnboardingStepAsync(id, Onboarding.StepSearch); } catch { /* best effort */ }
     }
 
+    /// <summary>Re-runs only the categories the budget cut off and merges them in.</summary>
+    /// <remarks>The one place the page restricts categories server-side — and it says so on a button rather than
+    /// doing it silently.</remarks>
     private async Task SearchRestAsync()
     {
         if (_results.Incomplete.Count == 0)
@@ -360,6 +393,91 @@ else
         finally
         {
             _load = false;
+        }
+    }
+
+    private int OutsideResults
+    {
+        get
+        {
+            var shown = _results.Groups.SelectMany(g => g.Hit).Select(SearchSelection.Key).ToHashSet(StringComparer.Ordinal);
+            return _picked.Keys.Count(k => !shown.Contains(k));
+        }
+    }
+
+    private void EnterSelect()
+    {
+        if (_mayAct)
+        {
+            _selectMode = true;
+        }
+    }
+
+    private void ExitSelect()
+    {
+        _selectMode = false;
+        _picked.Clear();
+    }
+
+    private void Toggle(SearchHit hit)
+    {
+        if (!_mayAct || !SearchSelection.IsSelectable(hit))
+        {
+            return;
+        }
+        if (!_picked.Remove(SearchSelection.Key(hit)))
+        {
+            Pick([hit]);
+        }
+    }
+
+    private void PickGroup(SearchResultGroup group, bool pick)
+    {
+        if (!_mayAct)
+        {
+            return;
+        }
+        if (pick)
+        {
+            Pick(group.Hit);
+            return;
+        }
+        foreach (var hit in group.Hit)
+        {
+            _picked.Remove(SearchSelection.Key(hit));
+        }
+    }
+
+    private void PickAllShown()
+    {
+        if (_mayAct)
+        {
+            Pick(Shown().SelectMany(g => g.Hit));
+        }
+    }
+
+    private void PickNone() => _picked.Clear();
+
+    /// <summary>Adds selectable hits up to the batch cap and says so when it stops short.</summary>
+    private void Pick(IEnumerable<SearchHit> hits)
+    {
+        var full = false;
+        foreach (var hit in hits.Where(SearchSelection.IsSelectable))
+        {
+            if (_picked.ContainsKey(SearchSelection.Key(hit)))
+            {
+                continue;
+            }
+            if (_picked.Count >= RecordBatch.Max)
+            {
+                full = true;
+                break;
+            }
+            _picked[SearchSelection.Key(hit)] = hit;
+        }
+        if (full)
+        {
+            Snackbar.Add($"Höchstens {RecordBatch.Max} Akten auf einmal.", Severity.Warning);
         }
     }
 

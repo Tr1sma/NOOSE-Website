@@ -59,7 +59,8 @@
 @code {
 
     /// <summary>The types this panel offers; the same list goes to the picker and to the service.</summary>
-    private static readonly string[] OrgTypes = [nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party)];
+    // qualified: the injected property shadows the class name
+    private static readonly IReadOnlyList<string> OrgTypes = NOOSE_Website.Services.LinkService.InvolvedTypes;
     [Parameter, EditorRequired] public string OperationId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
