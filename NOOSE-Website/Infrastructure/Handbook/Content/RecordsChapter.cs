@@ -239,6 +239,36 @@ internal static class RecordsChapter
                 """,
                 NavKey: "watchlist"),
 
+            new Article("art-neu-seit-besuch", "neu-seit-besuch", "Was ist neu an dieser Akte?",
+                "Was andere eingetragen haben, seit du zuletzt drin warst.",
+                """
+                <p>Öffnest du eine Akte, die du schon kennst, steht über den Abschnitten eine Zeile wie
+                <em>„Seit deinem letzten Besuch am 16.09. um 14:20: Einstufung geändert, 1 Dok und 3
+                Kommentare“</em>. Sie fasst zusammen, was <strong>andere</strong> seitdem eingetragen haben.
+                Was du selbst geschrieben hast, zählt nicht mit - das kennst du ja.</p>
+                <p>Ein Klick auf <em>Im Zeitstrahl ansehen</em> springt in den <strong>Zeitstrahl</strong> der
+                Akte. Dort trägt jeder dieser Einträge ein <em>Neu</em>, und der Knopf <em>Neu</em> ganz vorn
+                in der Filterleiste blendet alles andere aus.</p>
+                <p>Ein <strong>Besuch</strong> ist nicht jeder Seitenaufruf. Wer die Akte öffnet, einer
+                Verknüpfung folgt und zurückkommt, ist noch beim selben Besuch - die Markierungen bleiben
+                stehen, auch nach dem Neuladen. Erst nach einer halben Stunde Pause beginnt ein neuer.</p>
+                <p>Es zählt, <strong>wann</strong> etwas eingetragen wurde, nicht wann es passiert ist. Eine
+                Observation, die jemand heute für letzte Woche nachträgt, steht im Zeitstrahl weit unten - und
+                ist trotzdem neu.</p>
+                <p>Die Zeile gibt es an Personen, Fraktionen, Parteien, Personengruppen, Vorgängen, Operationen
+                und Taskforces. Beim ersten Öffnen einer Akte erscheint sie nicht, und auch nicht, wenn nichts
+                dazugekommen ist.</p>
+                """,
+                Steps:
+                [
+                    new Step("FiberNew", "Zeile lesen",
+                        "Oben auf der Akte steht, was andere seit deinem letzten Besuch eingetragen haben."),
+                    new Step("Timeline", "In den Zeitstrahl springen",
+                        "Im Zeitstrahl ansehen öffnet den Abschnitt. Jeder neue Eintrag trägt ein Neu."),
+                    new Step("FilterList", "Nur Neues zeigen",
+                        "Der Knopf Neu vorn in der Filterleiste blendet alles andere aus."),
+                ]),
+
             new Article("art-aktualitaet", "aktualitaet", "Die Aktualitäts-Ampel",
                 "Grün, gelb, rot - wie alt die Angaben einer Akte sind.",
                 """

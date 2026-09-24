@@ -380,6 +380,10 @@ public static class ChangelogContent
                 + "die Beschreibung einer Akte tippst, hebt dein Browser jetzt mit auf. Reißt die Verbindung ab "
                 + "oder schließt du einen Dialog aus Versehen, bietet dir das Feld den Text beim nächsten Öffnen "
                 + "wieder an.", "Bedienung"),
+            Neu("2.2.09-neu-seit-besuch", "Öffnest du eine Akte wieder, steht oben, was andere seit deinem "
+                + "letzten Besuch eingetragen haben – etwa „Einstufung geändert, 1 Dok und 3 Kommentare“. Im "
+                + "Zeitstrahl trägt jeder dieser Einträge ein „Neu“, und ein Klick filtert auf genau sie. Was "
+                + "du selbst eingetragen hast, zählt nicht mit.", "Akten"),
         ]),
     ];
 }

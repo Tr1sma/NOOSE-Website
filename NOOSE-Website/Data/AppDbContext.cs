@@ -324,6 +324,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             // counter-intelligence cockpit: window + per-agent scans
             b.HasIndex(a => a.Timestamp);
             b.HasIndex(a => new { a.AgentId, a.Timestamp });
+            // own views of one record: "new since your last visit"
+            b.HasIndex(a => new { a.AgentId, a.EntityType, a.EntityId, a.Timestamp });
         });
 
         modelBuilder.Entity<ThreatScoreHistory>(b =>

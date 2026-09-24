@@ -14,6 +14,14 @@ else
 {
     <MudStack Spacing="3">
         <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+            @if (_newCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.FiberNew"
+                         Variant="@(_onlyNew ? Variant.Filled : Variant.Outlined)"
+                         Color="Color.Warning" OnClick="@(() => _onlyNew = !_onlyNew)">
+                    Neu (@_newCount)
+                </MudChip>
+            }
             @foreach (var k in _exists)
             {
                 <MudChip T="string" Size="Size.Small"
@@ -48,6 +56,11 @@ else
                                 {
                                     <MudText Typo="Typo.body1"><b>@e.Title</b></MudText>
                                 }
+                                @if (IsNew(e))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                             Class="ma-0">Neu</MudChip>
+                                }
                             </MudStack>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                                 @e.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(e.ActorName ?? "System")
@@ -80,14 +93,21 @@ else
     [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
+    /// <summary>Last view of the viewer's previous visit; entries entered after it by others read "Neu".</summary>
+    [Parameter] public DateTime? NewSince { get; set; }
+
     private bool _load = true;
     private IReadOnlyList<TimelineEntry> _all = Array.Empty<TimelineEntry>();
     private List<TimelineCategory> _exists = new();
     private readonly HashSet<TimelineCategory> _active = new();
     private Dictionary<TimelineCategory, int> _counter = new();
+    private string? _meId;
+    private int _newCount;
+    private bool _onlyNew;
 
     protected override async Task OnInitializedAsync()
     {
+        _meId = User.GetAgentId();
         _all = await TimelineService.GetTimelineAsync(EntityType, EntityId, User);
         _exists = _all.Select(e => e.Category).Distinct().OrderBy(k => (int)k).ToList();
         _counter = _all.GroupBy(e => e.Category).ToDictionary(g => g.Key, g => g.Count());
@@ -97,9 +117,25 @@ else
             _active.Add(k);
         }
         _load = false;
+        CountNew();
     }
 
-    private IEnumerable<TimelineEntry> Filtered() => _all.Where(e => _active.Contains(e.Category));
+    // the page may learn the visit only after this panel exists
+    protected override void OnParametersSet() => CountNew();
+
+    private void CountNew()
+    {
+        _newCount = _all.Count(IsNew);
+        if (_newCount == 0)
+        {
+            _onlyNew = false;
+        }
+    }
+
+    private bool IsNew(TimelineEntry e) => RecordVisits.IsNew(e, NewSince, _meId);
+
+    private IEnumerable<TimelineEntry> Filtered()
+        => _all.Where(e => _active.Contains(e.Category) && (!_onlyNew || IsNew(e)));
 
     private void Toggle(TimelineCategory k)
     {

@@ -1,0 +1,74 @@
+@* One line above a record: what others entered since the viewer's previous visit. Renders nothing otherwise. *@
+@using NOOSE_Website.Models.Timeline
+@inject ITimelineService TimelineService
+@inject NavigationManager Nav
+
+@if (!_closed && Since is { } since && _summary.Length > 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3 no-print"
+              Icon="@Icons.Material.Filled.FiberNew"
+              ShowCloseIcon="true" CloseIconClicked="@(() => _closed = true)">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.body2">
+                Seit deinem letzten Besuch @RecordVisits.VisitLabel(since.ToLocalTime(), DateTime.Now):
+                <b>@_summary</b>
+            </MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Timeline" OnClick="OpenTimeline">Im Zeitstrahl ansehen</MudButton>
+        </MudStack>
+    </MudAlert>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Last view of the viewer's previous visit; null hides the line.</summary>
+    [Parameter] public DateTime? Since { get; set; }
+
+    /// <summary>Rail slug of the record's timeline section.</summary>
+    [Parameter] public string TimelineSlug { get; set; } = "historie";
+
+    private string _summary = string.Empty;
+    private (string Type, string Id, DateTime? Since)? _loadedFor;
+    private bool _closed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // prerendering would build the whole timeline a second time for a line nobody sees yet
+        if (!RendererInfo.IsInteractive)
+        {
+            return;
+        }
+        var key = (EntityType, EntityId, Since);
+        if (_loadedFor == key)
+        {
+            return;
+        }
+        _loadedFor = key;
+        _closed = false;
+        _summary = string.Empty;
+        if (Since is not { } since)
+        {
+            return;
+        }
+
+        try
+        {
+            var fresh = await TimelineService.GetNewSinceAsync(EntityType, EntityId, User, since);
+            // the page moved on to another record while this one loaded
+            if (_loadedFor == key)
+            {
+                _summary = RecordVisits.Summarise(fresh);
+            }
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    // the rail listens for navigations and reads ?tab= again; the page keeps its record
+    private void OpenTimeline() => Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", TimelineSlug));
+}

@@ -237,6 +237,11 @@ zuletzt die Architektur-Grenze.
 
 **Aufwand:** mittel | **Jury-Schnitt:** 6.3 | **Blickwinkel:** Alltag des einzelnen Agenten
 
+> **Umgesetzt am 24.09.2026** – ohne neue Tabelle. Der letzte Besuch kommt aus dem Zugriffsprotokoll, das
+> jede Akte ohnehin schreibt (neu ist nur ein Index), und Aufrufe mit weniger als 30 Minuten Abstand gelten als
+> ein Besuch. Zeile und *Neu*-Markierung stehen auf den sieben Akten, die Besuche protokollieren und einen
+> Zeitstrahl-Abschnitt haben. Einzelheiten in `docs/superpowers/plans/2026-09-23-neu-seit-besuch.md`.
+
 **Was es tut.** Beim Öffnen einer Akte markiert der Zeitstrahl, was seit dem eigenen letzten Aufruf dazugekommen ist, und eine Zeile oben fasst es zusammen (»3 neue Vermerke, 1 Dok, Einstufung geändert«).
 
 **Warum.** Eine gut gepflegte Personenakte hat 15 Abschnitte. Wer sie nach einer Woche wieder aufmacht, muss jeden Abschnitt einzeln nach Zeitstempeln absuchen, um zu erkennen, was passiert ist. Für beobachtete Akten kommt zwar eine Benachrichtigung, aber sie sagt nur »geändert«, nicht was.

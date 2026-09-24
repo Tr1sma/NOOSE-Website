@@ -11,6 +11,11 @@ public interface ITimelineService
         string entityType, string entityId, ClaimsPrincipal viewer,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Visible events entered after sinceUtc by anyone but the viewer, newest first.</summary>
+    Task<IReadOnlyList<TimelineEntry>> GetNewSinceAsync(
+        string entityType, string entityId, ClaimsPrincipal viewer, DateTime sinceUtc,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Merged visible events of several records in one pass, newest first; records the viewer may not see contribute nothing.</summary>
     Task<IReadOnlyList<TimelineEntry>> GetTimelineForRecordsAsync(
         IReadOnlyList<(string Type, string Id)> records, ClaimsPrincipal viewer,

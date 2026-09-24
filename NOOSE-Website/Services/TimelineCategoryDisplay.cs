@@ -32,6 +32,36 @@ public static class TimelineCategoryDisplay
         _ => category.ToString(),
     };
 
+    /// <summary>A count with its German noun: "1 Kommentar", "3 Kommentare".</summary>
+    public static string Counted(TimelineCategory category, int count)
+    {
+        var (one, many) = category switch
+        {
+            TimelineCategory.Asset => ("Anlage", "Anlagen"),
+            TimelineCategory.Change => ("Änderung", "Änderungen"),
+            TimelineCategory.Deletion => ("Löschung", "Löschungen"),
+            TimelineCategory.Restoration => ("Wiederherstellung", "Wiederherstellungen"),
+            TimelineCategory.Classification => ("Einstufung", "Einstufungen"),
+            TimelineCategory.Doc => ("Dok", "Doks"),
+            TimelineCategory.Observation => ("Observation", "Observationen"),
+            TimelineCategory.Photo => ("Foto", "Fotos"),
+            TimelineCategory.Relation => ("Beziehung", "Beziehungen"),
+            TimelineCategory.Membership => ("Mitgliedschaft", "Mitgliedschaften"),
+            TimelineCategory.Allocation => ("Zuteilung", "Zuteilungen"),
+            TimelineCategory.Link => ("Verknüpfung", "Verknüpfungen"),
+            TimelineCategory.Comment => ("Kommentar", "Kommentare"),
+            TimelineCategory.Source => ("Quelle", "Quellen"),
+            TimelineCategory.Followup => ("Wiedervorlage", "Wiedervorlagen"),
+            TimelineCategory.Activity => ("Aktivität", "Aktivitäten"),
+            TimelineCategory.Agenda => ("Tagesordnungspunkt", "Tagesordnungspunkte"),
+            TimelineCategory.Attendance => ("Anwesenheit", "Anwesenheiten"),
+            TimelineCategory.SignOff => ("Abmeldung", "Abmeldungen"),
+            TimelineCategory.ThreatScore => ("Score-Änderung", "Score-Änderungen"),
+            _ => (Name(category), Name(category)),
+        };
+        return $"{count} {(count == 1 ? one : many)}";
+    }
+
     /// <summary>Theme colour for a category.</summary>
     public static Color Colour(TimelineCategory category) => category switch
     {
