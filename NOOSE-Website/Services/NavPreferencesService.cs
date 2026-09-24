@@ -141,9 +141,12 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
     public Task SetChronikLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.ChronikLastSeenUtc = seenUtc, cancellationToken, notify: false);
 
-    // same shape as the chronicle marker: the hint card reads it, the drawer shows nothing
+    // same shape as the chronicle marker: the update window reads it, the drawer shows nothing.
+    // Forward only: a window closed late in one tab must not undo the page read in another.
     public Task SetNeuerungenLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
-        => MutateAsync(agentId, p => p.NeuerungenLastSeenUtc = seenUtc, cancellationToken, notify: false);
+        => MutateAsync(agentId, p => p.NeuerungenLastSeenUtc = p.NeuerungenLastSeenUtc is { } seen && seen > seenUtc
+            ? seen
+            : seenUtc, cancellationToken, notify: false);
 
     public Task SetGlossarBlasenAsync(string agentId, bool enabled, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.GlossarBlasen = enabled, cancellationToken);

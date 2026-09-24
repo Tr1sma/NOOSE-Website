@@ -115,6 +115,10 @@ else
             }
             else
             {
+            @if (TabOn("historie"))
+            {
+                <SinceLastVisitBar EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" Since="_since" />
+            }
             <RecordSectionRail>
                 @if (TabOn("steckbrief"))
                 {
@@ -262,7 +266,7 @@ else
                 @if (TabOn("historie"))
                 {
                 <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
-                    <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
+                    <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" NewSince="_since" @key="_historyKey" />
                 </RecordSection>
                 }
                 @if (!_isPartner)
@@ -290,6 +294,8 @@ else
     private Timer? _timer;
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
+    // last view of the previous visit, read before this one is logged
+    private DateTime? _since;
     private PublicWantedBanner? _publicBanner;
 
     // Slugs of every section on this page; the rail owns which one is active.
@@ -323,9 +329,11 @@ else
         _loadedId = Id;
         _load = true;
         _person = null;
+        _since = null;
         await LoadAsync();
         if (_person is not null)
         {
+            _since = await AccessLog.PreviousVisitAsync(nameof(Person), _person.Id);
             await AccessLog.LogViewAsync(nameof(Person), _person.Id);
         }
     }

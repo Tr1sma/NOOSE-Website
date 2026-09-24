@@ -10,7 +10,7 @@ public interface IChangelogService
     /// <summary>Visible releases newest first, each with its visible lines; releases without lines are dropped.</summary>
     Task<List<ChangelogReleaseView>> GetTimelineAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>How much arrived since the agent last looked. Null stamp means "first visit" and counts nothing.</summary>
+    /// <summary>The lines that arrived since the agent last looked. Null stamp means "first visit" and yields none.</summary>
     Task<ChangelogNewsFlash> GetNewsSinceAsync(DateTime? lastSeenUtc, CancellationToken cancellationToken = default);
 
     /// <summary>Every release including hidden ones, newest first; for the editor.</summary>

@@ -1,0 +1,89 @@
+@* What changed since the agent last looked, shown once after an update; the full list lives on /neuerungen. *@
+@* wrap, not clip, on phones *@
+<MudDialog ActionsClass="flex-wrap gap-2">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudIcon Icon="@Icons.Material.Filled.NewReleases" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Neu auf der Seite</MudText>
+            @if (News.NewestVersion is { } version)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Fassung @version</MudChip>
+            }
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@Lead(News.Count)</MudText>
+
+        @* capped height, so a long release scrolls inside the window instead of pushing the buttons away *@
+        <div style="max-height:55vh;overflow-y:auto;">
+            @foreach (var release in News.Preview())
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1" Style="font-weight:600;">
+                    Fassung @release.Version@(string.IsNullOrWhiteSpace(release.Title) ? "" : $" · {release.Title}")
+                </MudText>
+                @foreach (var entry in release.Entries)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start" Class="mb-2">
+                        <MudIcon Icon="@ChangelogKindDisplay.Icon(entry.Kind)" Color="@ChangelogKindDisplay.Colour(entry.Kind)"
+                                 Size="Size.Small" Class="mt-1" title="@ChangelogKindDisplay.Name(entry.Kind)" />
+                        <div>
+                            <MudText Typo="Typo.body2">@entry.Title</MudText>
+                            @if (!string.IsNullOrWhiteSpace(entry.Area))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@entry.Area</MudText>
+                            }
+                        </div>
+                    </MudStack>
+                }
+            }
+        </div>
+
+        @* outside the scroll box, so the pointer to the rest is never scrolled away *@
+        @if (News.Hidden() is > 0 and var hidden)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@More(hidden)</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Schließen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.ArrowForward"
+                   OnClick="OpenAll">Alle Neuerungen ansehen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ChangelogNewsFlash News { get; set; } = ChangelogNewsFlash.None;
+
+    private static readonly DialogOptions Options = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = true,
+        CloseOnEscapeKey = true,
+        BackdropClick = true,
+        // a navigation would dismiss it unread and still stamp it
+        CloseOnNavigation = false,
+    };
+
+    private static string Lead(int count) => count == 1
+        ? "Seit deinem letzten Besuch ist eine Neuerung dazugekommen:"
+        : $"Seit deinem letzten Besuch sind {count} Neuerungen dazugekommen:";
+
+    private static string More(int hidden) => hidden == 1
+        ? "… und eine weitere Neuerung."
+        : $"… und {hidden} weitere Neuerungen.";
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(false));
+    private void OpenAll() => MudDialog.Close(DialogResult.Ok(true));
+
+    /// <summary>Shows the news; true when the agent asked for the full list.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, ChangelogNewsFlash news)
+    {
+        var parameters = new DialogParameters<ChangelogNewsDialog> { { x => x.News, news } };
+        var reference = await dialog.ShowAsync<ChangelogNewsDialog>("Neu auf der Seite", parameters, Options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

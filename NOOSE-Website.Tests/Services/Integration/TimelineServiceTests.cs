@@ -709,4 +709,141 @@ public sealed class TimelineServiceTests
         Assert.Equal("Mitglied aufgenommen", entry.Title);
         Assert.Equal("Falcon", entry.ActorName);
     }
+
+    // ---------- new since the last visit ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_Entries_CarryTheActingAgentsId()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Comments.Add(new Comment
+            {
+                EntityType = "Person", EntityId = "p1", Text = "Vermerk", AuthorName = "Adler",
+                CreatedById = "a1", CreatedAt = Utc(1),
+            });
+            db.ClassificationHistory.Add(new ClassificationHistory
+            {
+                EntityType = "Person", EntityId = "p1", Value = Classification.SuspicionCase,
+                Timestamp = Utc(2), AgentName = "Bussard", AgentId = "a2",
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "Person", EntityId = "p1", Action = AuditAction.Modified,
+                AgentName = "Condor", AgentId = "a3", Timestamp = Utc(3),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Equal("a1", Assert.Single(result, e => e.Category == TimelineCategory.Comment).ActorId);
+        Assert.Equal("a2", Assert.Single(result, e => e.Category == TimelineCategory.Classification).ActorId);
+        Assert.Equal("a3", Assert.Single(result, e => e.Category == TimelineCategory.Change).ActorId);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_Tip_CarriesNeitherTheSubmittersNameNorHisId()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                Status = PublicWantedStatus.Veroeffentlicht, CreatedAt = Utc(1),
+            });
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "profil1", WantedId = "f1",
+                Text = "Am Hafen gesehen.", CreatedAt = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(Hinweis), EntityId = "h1", Action = AuditAction.Created,
+                AgentName = "Zivilist", AgentId = "civil-1", Timestamp = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var tip = Assert.Single(result, e => e.Title == "Bürgerhinweis eingegangen");
+        Assert.Null(tip.ActorName);
+        Assert.Null(tip.ActorId);
+    }
+
+    [Fact]
+    public async Task GetNewSinceAsync_LeavesOutTheViewersOwnAndEverythingBeforeTheVisit()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Comments.Add(new Comment { Id = "c-old", EntityType = "Person", EntityId = "p1", Text = "alt", CreatedById = "other", CreatedAt = Utc(1) });
+            db.Comments.Add(new Comment { Id = "c-mine", EntityType = "Person", EntityId = "p1", Text = "meiner", CreatedById = "lead", CreatedAt = Utc(5) });
+            db.Comments.Add(new Comment { Id = "c-new", EntityType = "Person", EntityId = "p1", Text = "neu", CreatedById = "other", CreatedAt = Utc(5) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "Person", EntityId = "p1", Action = AuditAction.Modified, AgentId = "lead", Timestamp = Utc(6) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "Person", EntityId = "p1", Action = AuditAction.Modified, AgentId = "other", Timestamp = Utc(6) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetNewSinceAsync("Person", "p1", Leader(), Utc(3));
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, e => Assert.Equal("other", e.ActorId));
+        Assert.Contains(result, e => e.Category == TimelineCategory.Comment && e.Detail == "neu");
+        Assert.Contains(result, e => e.Category == TimelineCategory.Change);
+    }
+
+    [Fact]
+    public async Task GetNewSinceAsync_JudgesAnObservationByWhenItWasEntered()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            // happened before the visit, entered after it: new
+            db.Observations.Add(new Observation
+            {
+                PersonId = "p1", Start = Utc(1), Location = "Hafen", CreatedById = "other", CreatedAt = Utc(5),
+            });
+            // dated after the visit, but already there when the viewer looked: not new
+            db.Observations.Add(new Observation
+            {
+                PersonId = "p1", Start = Utc(6), Location = "Pier", CreatedById = "other", CreatedAt = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetNewSinceAsync("Person", "p1", Leader(), Utc(3));
+
+        var entry = Assert.Single(result);
+        Assert.Contains("Hafen", entry.Title);
+        Assert.Equal(Utc(1), entry.Timestamp);
+    }
+
+    [Fact]
+    public async Task GetNewSinceAsync_ClassifiedPerson_Junior_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", configure: p => p.IsClassified = true));
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "geheim", CreatedById = "other", CreatedAt = Utc(5) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetNewSinceAsync("Person", "p1", Junior(), Utc(3));
+
+        Assert.Empty(result);
+    }
 }

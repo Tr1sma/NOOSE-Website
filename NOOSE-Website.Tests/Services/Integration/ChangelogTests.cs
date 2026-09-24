@@ -49,7 +49,7 @@ public sealed class ChangelogTests
 
     /// <summary>Seeds through an intercepted context, as production does.</summary>
     /// <remarks>
-    /// Not a detail: the release CreatedAt the hint card compares against is written by the audit interceptor.
+    /// Not a detail: the line CreatedAt the update window compares against is written by the audit interceptor.
     /// Seeding through a bare context leaves it at default and the "new since your last visit" count reads zero.
     /// </remarks>
     private static async Task SeedAsync(
@@ -341,6 +341,183 @@ public sealed class ChangelogTests
         Assert.Equal("1.1", flash.NewestVersion);
     }
 
+    /// <summary>A release gathers lines over several deploys; the ones appended later are news too.</summary>
+    [Fact]
+    public async Task A_line_appended_to_an_existing_release_is_news()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededRelease[] grown =
+        [
+            new("1.0", new DateTime(2026, 8, 25), "Der Anfang",
+            [
+                new("1.0-a", ChangelogKind.Neu, "Erste Zeile.", "Fahndung"),
+                new("1.0-b", ChangelogKind.Behoben, "Zweite Zeile.", null),
+                new("1.0-c", ChangelogKind.Verbessert, "Dritte Zeile.", "Akten"),
+            ]),
+        ];
+        await SeedAsync(ctx, grown, 1, "1.0.200");
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+
+        Assert.Equal(1, flash.Count);
+        Assert.Equal("1.0", flash.NewestVersion);
+        var release = Assert.Single(flash.Releases);
+        var line = Assert.Single(release.Entries);
+        Assert.Equal("Dritte Zeile.", line.Title);
+        Assert.Equal("Akten", line.Area);
+    }
+
+    [Fact]
+    public async Task A_reworded_line_is_not_news()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        await SeedAsync(ctx, OneRelease("Umformuliert."), 2, "1.0.200");
+
+        Assert.Contains((await service.GetTimelineAsync()).Single().Entries, e => e.Title == "Umformuliert.");
+        Assert.Equal(0, (await service.GetNewsSinceAsync(afterFirstSeeding)).Count);
+    }
+
+    /// <summary>Six lines once moved into release 2.2.00; the move must not announce them a second time.</summary>
+    [Fact]
+    public async Task A_line_moved_into_another_release_is_not_news()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededRelease[] moved =
+        [
+            new("1.0", new DateTime(2026, 8, 25), "Der Anfang",
+                [new("1.0-a", ChangelogKind.Neu, "Erste Zeile.", "Fahndung")]),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+                [new("1.1-00-b", ChangelogKind.Behoben, "Zweite Zeile.", null, "1.0-b")]),
+        ];
+        await SeedAsync(ctx, moved, 2, "1.0.200");
+
+        await using (var check = ctx.NewContext())
+        {
+            var row = await check.Aenderungseintraege.SingleAsync(e => e.SeedKey == "1.1-00-b");
+            Assert.Equal("1.1", (await check.Aenderungsfassungen.SingleAsync(r => r.Id == row.ReleaseId)).Version);
+        }
+        Assert.Equal(0, (await service.GetNewsSinceAsync(afterFirstSeeding)).Count);
+    }
+
+    [Fact]
+    public async Task News_sits_under_its_releases_newest_first_in_authored_order()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededRelease[] more =
+        [
+            new("1.0", new DateTime(2026, 8, 25), "Der Anfang",
+            [
+                new("1.0-a", ChangelogKind.Neu, "Erste Zeile.", "Fahndung"),
+                new("1.0-b", ChangelogKind.Behoben, "Zweite Zeile.", null),
+                new("1.0-c", ChangelogKind.Verbessert, "Nachgereicht.", null),
+            ]),
+            new("1.1", new DateTime(2026, 9, 10), "Danach",
+            [
+                new("1.1-a", ChangelogKind.Neu, "Zuerst gelesen.", null),
+                new("1.1-b", ChangelogKind.Behoben, "Danach gelesen.", null),
+            ]),
+        ];
+        await SeedAsync(ctx, more, 1, "1.0.200");
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+
+        Assert.Equal(3, flash.Count);
+        Assert.Equal("1.1", flash.NewestVersion);
+        Assert.Equal(["1.1", "1.0"], flash.Releases.Select(r => r.Version));
+        Assert.Equal(["Zuerst gelesen.", "Danach gelesen."], flash.Releases[0].Entries.Select(e => e.Title));
+        Assert.Equal(["Nachgereicht."], flash.Releases[1].Entries.Select(e => e.Title));
+        Assert.Equal("Danach", flash.Releases[0].Title);
+    }
+
+    /// <summary>Somebody who skipped two updates reads the later one first; the cap then cuts the older.</summary>
+    [Fact]
+    public async Task Within_a_release_the_latest_update_comes_first()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededEntry[] earlier =
+        [
+            new("1.0-a", ChangelogKind.Neu, "Erste Zeile.", "Fahndung"),
+            new("1.0-b", ChangelogKind.Behoben, "Zweite Zeile.", null),
+            new("1.0-c", ChangelogKind.Neu, "Früheres Update, erste.", null),
+            new("1.0-d", ChangelogKind.Neu, "Früheres Update, zweite.", null),
+        ];
+        await SeedAsync(ctx, [new("1.0", new DateTime(2026, 8, 25), "Der Anfang", earlier)], 1, "1.0.200");
+        await Task.Delay(20);
+        await SeedAsync(ctx,
+            [new("1.0", new DateTime(2026, 8, 25), "Der Anfang",
+                [.. earlier, new("1.0-e", ChangelogKind.Verbessert, "Späteres Update.", null)])],
+            1, "1.0.300");
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+
+        Assert.Equal(
+            ["Späteres Update.", "Früheres Update, erste.", "Früheres Update, zweite."],
+            flash.Releases.Single().Entries.Select(e => e.Title));
+        Assert.Equal("Späteres Update.", flash.Preview(1).Single().Entries.Single().Title);
+    }
+
+    /// <summary>A hidden release is off the page, so its lines must not be announced either.</summary>
+    [Fact]
+    public async Task A_hidden_release_announces_nothing()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, OneRelease(), 1, "1.0.100");
+
+        var (service, _) = NewHost(ctx);
+        var afterFirstSeeding = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        ChangelogContent.SeededRelease[] two =
+        [
+            .. OneRelease(),
+            new("1.1", new DateTime(2026, 9, 10), "Noch nicht",
+                [new("1.1-a", ChangelogKind.Neu, "Kommt später.", null)]),
+        ];
+        await SeedAsync(ctx, two, 1, "1.0.200");
+        await using (var db = ctx.NewContext())
+        {
+            var release = await db.Aenderungsfassungen.SingleAsync(r => r.Version == "1.1");
+            release.IsVisible = false;
+            await db.SaveChangesAsync();
+        }
+
+        var flash = await service.GetNewsSinceAsync(afterFirstSeeding);
+
+        Assert.Equal(0, flash.Count);
+        Assert.Empty(flash.Releases);
+        Assert.Null(flash.NewestVersion);
+    }
+
     // --- permissions ------------------------------------------------------
 
     [Fact]
@@ -500,6 +677,35 @@ public sealed class ChangelogTests
     }
 
     /// <summary>The wording rule, as far as a test can hold it: no jargon that only the author would use.</summary>
+    /// <summary>Every shipped line fits the column the seeder writes it into.</summary>
+    /// <remarks>
+    /// SQLite ignores the declared length, MySQL rejects the row - and the seeder saves all new lines in one batch,
+    /// so a single long line kept every line of a release off the page without a red test anywhere.
+    /// </remarks>
+    [Fact]
+    public void Every_shipped_line_fits_its_column()
+    {
+        using var ctx = new SqliteTestContext();
+        using var db = ctx.NewContext();
+        var entry = db.Model.FindEntityType(typeof(ChangelogEntry))!;
+        var release = db.Model.FindEntityType(typeof(ChangelogRelease))!;
+        int Max(Microsoft.EntityFrameworkCore.Metadata.IEntityType type, string property)
+            => type.FindProperty(property)!.GetMaxLength()
+               ?? throw new InvalidOperationException($"{type.ClrType.Name}.{property} hat keine Länge.");
+
+        var offenders = ChangelogContent.Releases
+            .SelectMany(r => r.Entries.Select(e => (r, e)))
+            .Where(x => x.e.Title.Length > Max(entry, nameof(ChangelogEntry.Title))
+                || (x.e.Area?.Length ?? 0) > Max(entry, nameof(ChangelogEntry.Area))
+                || x.e.Key.Length > Max(entry, nameof(ChangelogEntry.SeedKey))
+                || x.r.Title.Length > Max(release, nameof(ChangelogRelease.Title))
+                || x.r.Version.Length > Max(release, nameof(ChangelogRelease.Version)))
+            .Select(x => $"{x.e.Key} ({x.e.Title.Length} Zeichen)")
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void No_shipped_line_talks_about_the_technology()
     {
@@ -523,7 +729,7 @@ public sealed class ChangelogTests
         Assert.Empty(offenders);
     }
 
-    /// <summary>The card names a version the reader can actually find on the page.</summary>
+    /// <summary>The window names a version the reader can actually find on the page.</summary>
     /// <remarks>
     /// A release whose lines are all withdrawn is not rendered, so announcing it sent the reader looking for a
     /// version that is not on /neuerungen at all. The count is unaffected - it only ever counted visible lines.

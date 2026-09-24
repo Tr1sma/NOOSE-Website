@@ -28,7 +28,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
     private sealed record Raw(
         DateTime Timestamp, TimelineCategory Category, string Title, string? Detail,
         string? ActorName, string? ActorId, string? Href,
-        IReadOnlyList<AuditDisplay.FieldChange>? Changes);
+        IReadOnlyList<AuditDisplay.FieldChange>? Changes, DateTime? RecordedAt = null);
 
     public async Task<IReadOnlyList<TimelineEntry>> GetTimelineAsync(
         string entityType, string entityId, ClaimsPrincipal viewer,
@@ -39,6 +39,15 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         var actorIds = new HashSet<string>();
         await BuildAsync(db, entityType, entityId, viewer, raw, actorIds, cancellationToken);
         return await MaterializeAsync(db, raw, actorIds, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TimelineEntry>> GetNewSinceAsync(
+        string entityType, string entityId, ClaimsPrincipal viewer, DateTime sinceUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var all = await GetTimelineAsync(entityType, entityId, viewer, cancellationToken);
+        var meId = viewer.GetAgentId();
+        return all.Where(e => RecordVisits.IsNew(e, sinceUtc, meId)).ToList();
     }
 
     public async Task<IReadOnlyList<TimelineEntry>> GetTimelineForRecordsAsync(
@@ -105,31 +114,31 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         foreach (var log in await db.AuditLogs
             .Where(a => types.Contains(a.EntityType) && auditIds.Contains(a.EntityId)
                 && a.EntityType != nameof(Link))
-            .Select(a => new { a.Timestamp, a.EntityType, a.Action, a.ChangesJson, a.AgentName })
+            .Select(a => new { a.Timestamp, a.EntityType, a.Action, a.ChangesJson, a.AgentName, a.AgentId })
             .ToListAsync(cancellationToken))
         {
             var (kat, title) = TimelineDisplay.MapAudit(log.EntityType, log.Action);
             // a tip carries the submitting account as its actor, and an agent may report through his civilian
             // identity — naming him on the file he reported about is exactly what the promise forbids
-            var actor = TipAnonymity.HidesActor(log.EntityType) ? null : log.AgentName;
-            raw.Add(new Raw(log.Timestamp, kat, title, null, actor, null, null,
-                AuditDisplay.Parse(log.ChangesJson, entityType: log.EntityType)));
+            var hidden = TipAnonymity.HidesActor(log.EntityType);
+            raw.Add(new Raw(log.Timestamp, kat, title, null, hidden ? null : log.AgentName, hidden ? null : log.AgentId,
+                null, AuditDisplay.Parse(log.ChangesJson, entityType: log.EntityType)));
         }
 
         // ---- 2) classification history ----
         foreach (var e in await db.ClassificationHistory
             .Where(e => e.EntityType == entityType && e.EntityId == entityId)
-            .Select(e => new { e.Value, e.Justification, e.Timestamp, e.AgentName })
+            .Select(e => new { e.Value, e.Justification, e.Timestamp, e.AgentName, e.AgentId })
             .ToListAsync(cancellationToken))
         {
             raw.Add(new Raw(e.Timestamp, TimelineCategory.Classification,
-                $"Einstufung: {ClassificationDisplay.Name(e.Value)}", e.Justification, e.AgentName, null, null, null));
+                $"Einstufung: {ClassificationDisplay.Name(e.Value)}", e.Justification, e.AgentName, e.AgentId, null, null));
         }
 
         // ---- 3) comments ----
         var comments = await db.Comments
             .Where(k => k.EntityType == entityType && k.EntityId == entityId)
-            .Select(k => new { k.Id, k.Text, k.AuthorName, k.CreatedAt })
+            .Select(k => new { k.Id, k.Text, k.AuthorName, k.CreatedAt, k.CreatedById })
             .ToListAsync(cancellationToken);
         if (isPartner)
         {
@@ -138,7 +147,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         foreach (var k in comments)
         {
             raw.Add(new Raw(k.CreatedAt, TimelineCategory.Comment,
-                "Kommentar", TimelineDisplay.Truncate(k.Text), k.AuthorName, null, null, null));
+                "Kommentar", TimelineDisplay.Truncate(k.Text), k.AuthorName, k.CreatedById, null, null));
         }
 
         // ---- 4) sources/attachments ----
@@ -219,7 +228,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         {
             var observations = await db.Observations
                 .Where(o => o.PersonId == entityId)
-                .Select(o => new { o.Id, o.Start, o.Location, o.Sighting, o.CreatedById })
+                .Select(o => new { o.Id, o.Start, o.Location, o.Sighting, o.CreatedById, o.CreatedAt })
                 .ToListAsync(cancellationToken);
             if (isPartner)
             {
@@ -229,8 +238,9 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             {
                 Remember(actorIds, o.CreatedById);
                 var title = string.IsNullOrWhiteSpace(o.Location) ? "Observation" : $"Observation – {o.Location}";
+                // placed by when it happened, judged new by when it was entered
                 raw.Add(new Raw(o.Start, TimelineCategory.Observation, title,
-                    TimelineDisplay.Truncate(o.Sighting), null, o.CreatedById, null, null));
+                    TimelineDisplay.Truncate(o.Sighting), null, o.CreatedById, null, null, o.CreatedAt));
             }
 
             // photos now surface via the audit fan-out (Person → PersonPhoto)
@@ -265,13 +275,13 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 .ToListAsync(cancellationToken);
             var activities = await db.AgentActivities
                 .Where(a => activityIds.Contains(a.Id))
-                .Select(a => new { a.Title, a.Kind, a.ActivityDate, a.ContentHtml, a.CreatedById })
+                .Select(a => new { a.Title, a.Kind, a.ActivityDate, a.ContentHtml, a.CreatedById, a.CreatedAt })
                 .ToListAsync(cancellationToken);
             foreach (var a in activities)
             {
                 Remember(actorIds, a.CreatedById);
                 var title = string.IsNullOrWhiteSpace(a.Kind) ? $"Aktivität: {a.Title}" : $"Aktivität ({a.Kind}): {a.Title}";
-                raw.Add(new Raw(a.ActivityDate, TimelineCategory.Activity, title, PlainSnippet(a.ContentHtml), null, a.CreatedById, null, null));
+                raw.Add(new Raw(a.ActivityDate, TimelineCategory.Activity, title, PlainSnippet(a.ContentHtml), null, a.CreatedById, null, null, a.CreatedAt));
             }
         }
     }
@@ -288,7 +298,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
 
         return raw
             .Select(r => new TimelineEntry(r.Timestamp, r.Category, r.Title, r.Detail,
-                ActorName(r, names), r.Href, r.Changes))
+                ActorName(r, names), r.Href, r.Changes, r.ActorId, r.RecordedAt))
             .OrderByDescending(e => e.Timestamp)
             .ToList();
     }

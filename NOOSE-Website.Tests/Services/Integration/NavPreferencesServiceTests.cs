@@ -396,6 +396,35 @@ public sealed class NavPreferencesServiceTests : IDisposable
 
         Assert.False(fired);
     }
+
+    // ---- the changelog marker ----
+
+    [Fact]
+    public async Task SetNeuerungenLastSeenAsync_moves_the_marker_forward()
+    {
+        SeedAgent("a1");
+        var earlier = new DateTime(2026, 9, 20, 8, 0, 0, DateTimeKind.Utc);
+        var later = earlier.AddHours(3);
+
+        await NewService().SetNeuerungenLastSeenAsync("a1", earlier);
+        await NewService().SetNeuerungenLastSeenAsync("a1", later);
+
+        Assert.Equal(later, Stored("a1").NeuerungenLastSeenUtc);
+    }
+
+    /// <summary>A window read in one tab and closed after the page was read in another must not reopen old news.</summary>
+    [Fact]
+    public async Task SetNeuerungenLastSeenAsync_never_moves_the_marker_back()
+    {
+        SeedAgent("a1");
+        var pageRead = new DateTime(2026, 9, 20, 8, 0, 0, DateTimeKind.Utc);
+
+        await NewService().SetNeuerungenLastSeenAsync("a1", pageRead);
+        await NewService().SetNeuerungenLastSeenAsync("a1", pageRead.AddMinutes(-5));
+
+        Assert.Equal(pageRead, Stored("a1").NeuerungenLastSeenUtc);
+    }
+
     // ---- the two fields the handbook added ----
 
     /// <summary>A property addition rides in the existing JSON column; this proves it actually round-trips.</summary>

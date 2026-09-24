@@ -163,8 +163,9 @@ internal static class ToolsChapter
                 <em>Verbessert</em>, <em>Behoben</em>.</p>
                 <p>Oben steht die Fassung, mit der du gerade arbeitest. Nenn sie, wenn du einen Fehler
                 meldest.</p>
-                <p>Nach dem Anmelden erscheint einmal eine Karte, wenn seit deinem letzten Besuch etwas
-                dazugekommen ist. Klickst du sie weg, ist sie weg - bis zum nächsten Mal.</p>
+                <p>Ist seit deinem letzten Besuch etwas dazugekommen, öffnet sich beim ersten Aufruf danach
+                einmal ein kleines Fenster mit den neuen Zeilen. <em>Alle Neuerungen ansehen</em> bringt dich
+                hierher; schließt du es, ist es weg - bis zum nächsten Update.</p>
                 """,
                 NavKey: "neuerungen"),
 

@@ -110,6 +110,10 @@ else
             }
             else
             {
+            @if (TabOn("historie"))
+            {
+                <SinceLastVisitBar EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" Since="_since" />
+            }
             <RecordSectionRail>
                 @if (TabOn("stammdaten"))
                 {
@@ -272,7 +276,7 @@ else
                 @if (TabOn("historie"))
                 {
                 <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
-                    <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
+                    <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" NewSince="_since" @key="_historyKey" />
                 </RecordSection>
                 }
                 @* NOOSEI-Kurzbrief: internal only *@
@@ -303,6 +307,8 @@ else
     private ClaimsPrincipal _user = default!;
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
+    // last view of the previous visit, read before this one is logged
+    private DateTime? _since;
 
     // every section slug on this page; the rail owns which one is active
     private static readonly string[] _tabs =
@@ -333,9 +339,11 @@ else
         _loadedId = Id;
         _load = true;
         _faction = null;
+        _since = null;
         await LoadAsync();
         if (_faction is not null)
         {
+            _since = await AccessLog.PreviousVisitAsync(nameof(Faction), _faction.Id);
             await AccessLog.LogViewAsync(nameof(Faction), _faction.Id);
         }
     }

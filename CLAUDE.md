@@ -362,6 +362,14 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
 - **Nachvollziehbarkeit:** Ein Schreibpfad, der den Interceptor umgeht (`ExecuteUpdate/Delete`/Raw-SQL) **oder** eine nicht-`IAuditable`-Zuordnung ändert (z. B. `TagMapping`), muss selbst eine Zeile via `ManualAudit.Row(entityType, entityId, …)` schreiben — gegen die **Akte** geloggt (⇒ Zeitstrahl + Chronik + Protokoll), bei reinen Config-Aktionen gegen einen Config-Typ (nur Protokoll). `ChangesJson` folgt der `{Feld:[alt,neu]}`-Form (`ManualAudit.Change`), sonst rendert `AuditDisplay.Parse` nichts.
 - **Ein Feld, dessen Inhalt nicht ins Änderungsprotokoll gehört, wird in `Infrastructure/Audit/AuditRedaction.cs` eingetragen** (Registry aus `(CLR-Typname, Property)`, vom `AuditSaveChangesInterceptor` beim **Schreiben** gefragt). Grund: **`/nachweis` liest jeder interne Agent** (`Policies.InternalAgent`) und `AuditLogQueryService` filtert nicht nach Typ — Ticket-Inhalte sind sonst führungs-only, ein Hinweis trägt eine Anonymitätszusage. Display-seitig zu filtern reicht nicht: `AuditDisplay.Parse` kennt den Entitätstyp nicht, und `Comment.Text` **soll** dort sichtbar bleiben. Preis: der alte Wert ist danach nirgends mehr rekonstruierbar (Wer/Wann bleiben).
 - **Neue Kind-/Anhang-Tabelle einer Akte** (auditiert, aber unsichtbar auf dem Zeitstrahl) → Fall in `TimelineService.AuditSourceAsync` (Fan-out per FK bzw. polymorph über `EntityType/EntityId`) **und** einen Titel in `TimelineDisplay.MapAudit` ergänzen — sonst erscheint sie generisch als „Akte geändert" oder gar nicht.
+- **„Neu seit deinem letzten Besuch" liest den Zeitstrahl, nicht die Abschnitte.** Eine neue Zeitstrahl-Quelle
+  gibt ihrem `Raw` die **`ActorId`** mit (sonst meldet die Akte dem Agenten sein eigenes Tun als neu) und, wenn
+  sie nach dem Ereignis- statt dem Erfassungszeitpunkt sortiert (wie Observation und Aktivität), auch
+  **`RecordedAt`** (sonst ist ein Nachtrag nie neu). Wo der Handelnde verborgen wird (`TipAnonymity`), bleibt
+  auch die Id leer. Der „letzte Besuch" kommt aus dem Zugriffsprotokoll: Aufrufe mit weniger als 30 Minuten
+  Abstand sind **ein** Besuch (`RecordVisits`), damit Neuladen und Prerendern die Markierungen nicht löschen.
+  Eine Akte bekommt die Zeile nur, wenn sie ihre Besuche über `LogViewAsync` protokolliert und einen
+  `historie`-Abschnitt hat; `SinceLastVisitScanTests` hält die Verdrahtung.
 - **Bewerbungs-Anschreiben nie auf `{{...}}` „normalisieren"** — `BewerbungTemplateRenderer` schwärzt `\bNAME\b` zu `███████`, damit der Agent gegenüber Bewerbern anonym bleibt; `{{Agent}}` würde stattdessen den Codename ausliefern. `DocumentTemplates` ist dieselbe Tabelle für Bibliothek **und** Bewerbung → Consumer müssen nach `Category` (`RecruitingSeeder.TemplateCategory`) filtern.
 - **`SearchNavigation.For` gibt `null` statt zu raten.** Der alte `_ => "/personen/{id}"`-Fallback öffnete für einen
   Kommentar an einer Fraktion eine *Personenakte mit der Fraktions-Id* — eine falsche Akte, lautlos. Ein Treffer ohne
@@ -570,8 +578,21 @@ Helfer, wie `Permission`); der Zustand liegt als Schlüsselmenge in `NavPreferen
 - **Neue Fassung:** `SeededRelease` mit Version im Format `X.X.XX` anlegen. **Die Build-Nummer nicht eintragen** —
   `BuildNumber.txt` ist gitignored und beim Schreiben unbekannt; `ChangelogSeeder` stempelt sie beim ersten
   Start nach dem Deploy auf die neueste Fassung ohne Stempel.
-- **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` der Fassung ist
-  das, womit die Login-Hinweiskarte vergleicht; ohne Interceptor meldet sie still und dauerhaft nichts.
+- **Seeden nur über einen Kontext mit Audit-Interceptor.** Das von ihm gestempelte `ErstelltAm` **jeder Zeile**
+  ist das, womit das Neuerungen-Fenster vergleicht; ohne Interceptor meldet es still und dauerhaft nichts.
+- **Das Neuerungen-Fenster zählt Zeilen, nicht Fassungen.** `ChangelogNewsPrompt` (im `MainLayout`, erst nach
+  dem ersten interaktiven Render, nicht über der Wartungsseite) holt über `GetNewsSinceAsync` jede sichtbare
+  Zeile mit `ErstelltAm` nach `NeuerungenLastSeenUtc` und öffnet `ChangelogNewsDialog`. Eine Fassung sammelt
+  Zeilen über mehrere Deploys (2.2.06–2.2.10 kamen einzeln in 2.2.00); die alte Karte verglich die Fassung und
+  übersah deshalb jede angehängte Zeile. Umformulieren (Revision) und Umziehen (`LegacyKey`) lassen `ErstelltAm`
+  stehen und melden nichts. Gestempelt wird beim Schließen, mit der **Lesezeit**; `/neuerungen` stempelt selbst
+  und bekommt kein Fenster; ein erster Besuch überhaupt stempelt still. Wie viel das Fenster zeigt, steht in
+  `ChangelogNewsFlash.PreviewLines` (Rest: „… und N weitere").
+  **Zwei Einstellungen, die nicht zurückgedreht werden dürfen:** `CloseOnNavigation = false` am Dialog — MudBlazor
+  schließt Dialoge sonst bei jedem Pfadwechsel mit *Abbrechen*, und das Fenster wäre ungelesen gestempelt; und
+  `SetNeuerungenLastSeenAsync` rückt den Stempel **nur vor**, sonst setzt ein spät geschlossenes Fenster in einem
+  Tab die schon gelesene Seite im anderen zurück. Der Prompt steht außerhalb der `ErrorBoundary`; jede Ausnahme
+  darin muss gefangen werden, sonst endet der Circuit.
 - **Eine Zeile in eine andere Fassung verschieben:** ihr neuer `Key` muss zur neuen Fassung passen
   (`Every_shipped_version_and_key_uses_sequential_two_digit_updates` fordert das), und genau deshalb darf
   man ihn nicht einfach umschreiben: der Seeder fände die alte Zeile nicht wieder, ließe sie in der alten
