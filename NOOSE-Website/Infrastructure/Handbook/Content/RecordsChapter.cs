@@ -129,6 +129,12 @@ internal static class RecordsChapter
                 <p>Vier dieser Bereiche haben eine <strong>eigene Aktualitäts-Ampel</strong>. Wer die
                 Mitgliederliste pflegt, setzt nur die Mitglieder-Ampel zurück - Stammdaten anzufassen zählt
                 nicht als „gepflegt“.</p>
+                <p>Eine <strong>Drogenroute gehört immer nur einer Fraktion</strong>. Trägst du eine Route ein,
+                die schon eine andere Fraktion hält, fragt die Seite vor dem Speichern nach. Bestätigst du, geht
+                die Route über: bei der anderen Fraktion verschwindet sie, und beide Akten vermerken den Wechsel in
+                ihrem Verlauf. Groß- und Kleinschreibung zählen dabei nicht - „Kokain Nord“ und „kokain nord“ sind
+                dieselbe Route. Eine Fraktion im Papierkorb oder im Archiv hält keine Route; holt man sie zurück
+                und eine andere Fraktion hat die Route inzwischen, fällt sie bei der zurückgeholten weg.</p>
                 """,
                 NavKey: "fraktionen"),
 

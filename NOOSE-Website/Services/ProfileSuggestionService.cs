@@ -108,6 +108,17 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
         {
             throw new InvalidOperationException($"Der Wert „{newValue}“ existiert bereits.");
         }
+        // the catalog misses classified routes, so the route table itself is asked; a merge would give one route to two factions
+        if (entry.Type == SuggestionType.DrugRoute && DrugRouteRules.Key(newValue) != DrugRouteRules.Key(entry.Value))
+        {
+            var key = DrugRouteRules.Key(newValue);
+            var inUse = await db.FactionDrugRoutes.Select(d => d.Designation).Distinct().ToListAsync(cancellationToken);
+            if (inUse.Any(d => DrugRouteRules.Key(d) == key))
+            {
+                throw new InvalidOperationException(
+                    $"Eine Route „{newValue}“ ist schon eingetragen. Umbenennen würde zwei Routen zusammenlegen – trag eine davon zuerst aus.");
+            }
+        }
 
         var oldValue = entry.Value;
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);

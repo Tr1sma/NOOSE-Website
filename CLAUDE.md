@@ -293,6 +293,17 @@ handgebaute Leiste, `aria-current`, Policy-Snapshot, tote `CollapsedGroups`) →
   offen — bei einer beobachteten Akte kommt bis zum Lesen keine neue dazu. Gewollt, im Handbuch erklärt. Der Posteingang ist nur intern (`Policies.InternalAgent`); die Glocke hängt auch
   im öffentlichen Kopf und zeigt den Link deshalb nur bei `IsInternalAgent()`. Die Seitenzahl steht bewusst
   **nicht** in der Adresse: eine gemerkte Ansicht würde sie mitnehmen.
+- **Eine Drogenroute gehört genau einer Fraktion.** „Dieselbe“ Route heißt gleicher Schlüssel
+  (`Services/DrugRouteRules.Key`: Groß-/Kleinschreibung und Leerzeichen zählen nicht); halten tun nur aktive
+  Fraktionen (Papierkorb und Archiv geben frei). `FactionService.CreateAsync`/`RefreshAsync` prüfen unter einem
+  prozessweiten Schloss (`RouteGate`, beim Anlegen bis zum Commit) und werfen `DrugRouteConflictException`, solange
+  ein Konflikt nicht in `FactionInput.ConfirmedRouteTakeovers` steht; eine bestätigte Übernahme entfernt die Zeile
+  beim Halter im selben Save und schreibt `ManualAudit` an **beide** Akten (Routenzeilen sind nicht auditiert).
+  Einen Halter, den der Handelnde nicht sehen darf, nennt die Prüfung nicht und lässt ihn nicht übernehmen.
+  `RestoreAsync`/`UnarchiveAsync` streichen, was inzwischen eine andere Fraktion hält; das Umbenennen im Katalog
+  lehnt ein Zusammenlegen ab. **Kein eindeutiger Index**: die Zeilen einer Fraktion im Papierkorb bleiben stehen,
+  und Altbestand darf doppelt sein, bis jemand speichert. Ein neuer Schreibweg auf `FraktionDrogenrouten` muss
+  durch dasselbe Schloss.
 - **`NOOSE-Website/BuildNumber.txt` erhöht sich automatisch bei jedem echten Build** (`dotnet build`/`watch`/`publish`, MSBuild-Target in der `.csproj`; IDE-Design-Time-Builds sind ausgenommen) und wird als `1.0.<Zahl>` auf `/einstellungen?tab=status` angezeigt. Datei ist **gitignored** (`.gitignore` Zeile 386) → taucht nie in `git status` auf und wird nicht mitcommittet; die Prod-Nummer wächst allein über `deploy.ps1`.
 - **Bild-Paste in ein Plaintext-Feld legt die Datei ab und schreibt nur ein Token.** `MentionInput` nimmt per
   Strg+V ein Clipboard-Bild an, sobald `ImageOwnerType`/`ImageOwnerId` gesetzt sind (Opt-in wie der @-Picker);

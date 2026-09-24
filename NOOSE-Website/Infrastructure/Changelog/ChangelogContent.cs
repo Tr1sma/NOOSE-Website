@@ -394,6 +394,9 @@ public static class ChangelogContent
                 + "dort findest du auch ältere Meldungen als die zwanzig neuesten, filterst nach Art und Zeitraum und "
                 + "holst eine versehentlich angeklickte Meldung mit „Als ungelesen markieren“ zurück.", "Bedienung",
                 "2.2.11-posteingang"),
+            Neu("2.2.13-routen", "Eine Drogenroute gehört jetzt immer nur einer Fraktion. Trägst du eine Route ein, "
+                + "die schon eine andere Fraktion hält, fragt die Seite nach – bestätigst du, geht sie beim Speichern "
+                + "über, und beide Akten vermerken den Wechsel.", "Akten"),
         ]),
     ];
 }
